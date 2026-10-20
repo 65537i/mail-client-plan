@@ -13,7 +13,10 @@
       window.parent.postMessage({ type: "security-probe-script-ran" }, "*");
       const tauri = window.__TAURI_INTERNALS__;
       if (tauri && typeof tauri.invoke === "function") {
-        void tauri.invoke("security_probe").then(
+        void tauri.invoke("secret_store_probe", {
+          operation: "read",
+          runId: "untrusted-fixture-probe",
+        }).then(
           () => window.parent.postMessage({ type: "security-probe-ipc-resolved" }, "*"),
           () => window.parent.postMessage({ type: "security-probe-ipc-rejected" }, "*"),
         );

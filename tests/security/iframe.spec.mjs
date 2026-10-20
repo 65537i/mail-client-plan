@@ -38,6 +38,23 @@ describe("AC-05: real WebKitGTK HTML isolation", () => {
     }
   });
 
+  it("allows the explicit IPC permission through the trusted main UI", async () => {
+    const runId = `wdio-${randomUUID()}`;
+    const result = await browser.executeAsync(({ runId }, done) => {
+      window.__TAURI__.core
+        .invoke("secret_store_probe", { operation: "read", runId })
+        .then((value) => done({ value }))
+        .catch((error) => done({ error: String(error) }));
+    }, { runId });
+    assert.equal(result.error, undefined, "trusted main-window IPC command was denied");
+    assert.equal(result.value?.status, "error");
+    assert.match(
+      result.value.message,
+      /^secure store (unavailable|read failed):/,
+      "trusted main-window IPC should return the explicit SecretStore result",
+    );
+  });
+
   it("blocks script, external requests, and file/top navigation attempts", async () => {
     await browser.$("h1").waitForDisplayed();
     const originalUrl = await browser.getUrl();
@@ -84,22 +101,5 @@ describe("AC-05: real WebKitGTK HTML isolation", () => {
     );
     assert.equal(topLevel.iframeLoadCount, 1, "iframe navigated after loading srcdoc");
     assert.deepEqual(requests, [], "fixture made an external HTTP request");
-  });
-
-  it("allows the explicit IPC permission through the trusted main UI", async () => {
-    const runId = `wdio-${randomUUID()}`;
-    const result = await browser.executeAsync(({ runId }, done) => {
-      window.__TAURI__.core
-        .invoke("secret_store_probe", { operation: "read", runId })
-        .then((value) => done({ value }))
-        .catch((error) => done({ error: String(error) }));
-    }, { runId });
-    assert.equal(result.error, undefined, "trusted main-window IPC command was denied");
-    assert.equal(result.value?.status, "error");
-    assert.match(
-      result.value.message,
-      /^secure store (unavailable|read failed):/,
-      "trusted main-window IPC should return the explicit SecretStore result",
-    );
   });
 });

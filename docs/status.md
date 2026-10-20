@@ -11,7 +11,7 @@
 
 - Tauri 2 + Vue 3 + strict TypeScriptの最小アプリ、Rust workspace、lockfileを追加。
 - Dev Containerを作成し、Docker Desktop上でlinux/arm64イメージをbuild。
-- 4 runner候補のネイティブbuild / 起動smoke test workflowを追加。GitHub Actions run 5でもUbuntuとmacOS 14 arm64は成功。WindowsはRust / protocol / SecretStore試験まで成功したが、重複したtrusted UI IPC probeでtimeout。実績のあるSecretStore IPCで到達確認し、不要なprobe commandとpermissionを削除して再検証予定。macOS 15 Intelはfail-fastでcancelled。
+- 4 runner候補のネイティブbuild / 起動smoke test workflowを追加。GitHub Actions run 6でもUbuntuとmacOS 14 arm64は成功。WindowsはRust / protocol / SecretStore試験まで成功したが、fixture test後のtrusted UI IPC checkがtimeout。check順をfixture注入前へ移し、攻撃fixtureは実在する許可済みSecretStore commandを試みる形で再検証予定。macOS 15 Intelはfail-fastでcancelled。
 - 独自IPC commandと不要なopener pluginを初期アプリから除去。基礎CSPを設定。
 - ADR-001へOS候補、runner候補、ツールチェーン、実機候補と未検証点を記載。
 - `smoke-test` featureはCI用buildのみで自動終了し、通常buildへは含めない。
@@ -58,8 +58,9 @@
 | GitHub Actions `native` run 3 (`984cc4a`) | Ubuntu 24.04 x64、macOS 14 arm64、macOS 15 Intelが成功。Windows 2025はAC-05 trusted UI IPCテストのWDIO hook timeoutで失敗。 |
 | GitHub Actions `native` run 4 (`82d7649`) | Ubuntu 24.04 x64、macOS 14 arm64、macOS 15 Intelが成功。Windows 2025もbuild、TLS / FTS5 / IMAP / SMTP、SecretStore試験まで成功したが、AC-05の`security_probe` IPCテストが30秒timeoutで失敗。ログではiframe specのtrusted UI IPC test hook timeoutを確認。 |
 | GitHub Actions `native` run 5 (`9560492`) | Ubuntu 24.04 x64とmacOS 14 arm64成功。Windows 2025はRust / protocol / SecretStore試験成功後、run 4と同じAC-05 trusted UI IPC hook timeout。SecretStore spec自体は成功。macOS 15 IntelはWindows失敗後にcancelled。 |
+| GitHub Actions `native` run 6 (`58e8f04`) | Ubuntu 24.04 x64とmacOS 14 arm64成功。Windows 2025はRust / protocol / SecretStore試験成功、SecretStore specも成功したが、iframe spec内のtrusted UI IPC testでrun 4/5同様のtimeout。macOS 15 Intelは未完了時点。 |
 | `xvfb-run -a dbus-run-session -- pnpm run test:security:desktop` | 成功。ローカルLinux実WebViewで2 specs pass（iframe isolationとtrusted UI IPCを含む）。 |
-| WDIO trusted UI command test | Windowsでtimeoutする重複`security_probe`を削除し、成功実績のある明示許可済み`secret_store_probe`の未登録synthetic ID読み出しでtrusted UI IPC到達を確認。Linux実WebView再確認とWindows CI再実行が必要 |
+| WDIO trusted UI command test | Windows timeoutはuntrusted fixture testに続くtrusted UI IPC test内で再現。IPC確認をfixture注入前へ移し、fixtureは許可済み`secret_store_probe`を合成IDで試すよう変更。Linux実WebView再確認とWindows CI再実行が必要 |
 | native workflow SecretStore success gate / Japanese FTS5 / IMAP / SMTP PoC | run 5でWindows / Ubuntu / macOS 14 arm64の該当PoC tests成功。macOS 15 IntelはWindows失敗後にcancelled。LinuxはGNOME Keyring DBus service待機後にWDIO実行 |
 | `actionlint -color .github/workflows/native.yml` (1.7.12) | 過去のworkflow更新時に成功。今回のworkflow変更なし |
 | `pnpm run check:production-security` | 成功。normal production buildにWDIO plugin / permissions / global Tauri APIなし |
