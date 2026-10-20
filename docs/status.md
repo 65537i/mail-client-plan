@@ -11,16 +11,16 @@
 
 - Tauri 2 + Vue 3 + strict TypeScriptの最小アプリ、Rust workspace、lockfileを追加。
 - Dev Containerを作成し、Docker Desktop上でlinux/arm64イメージをbuild。
-- 4 runner候補のネイティブbuild / 起動smoke test workflowを追加。GitHub Actions run 4ではUbuntuとmacOS両arch成功。WindowsはRust / protocol / SecretStore試験まで成功したが、trusted UI IPC試験がtimeout。IPC commandの返却値をowned `String`へ変更し、Windows runnerで再検証予定。
+- 4 runner候補のネイティブbuild / 起動smoke test workflowを追加。GitHub Actions run 5でもUbuntuとmacOS 14 arm64は成功。WindowsはRust / protocol / SecretStore試験まで成功したが、重複したtrusted UI IPC probeでtimeout。実績のあるSecretStore IPCで到達確認し、不要なprobe commandとpermissionを削除して再検証予定。macOS 15 Intelはfail-fastでcancelled。
 - 独自IPC commandと不要なopener pluginを初期アプリから除去。基礎CSPを設定。
 - ADR-001へOS候補、runner候補、ツールチェーン、実機候補と未検証点を記載。
 - `smoke-test` featureはCI用buildのみで自動終了し、通常buildへは含めない。
 - 00B HTML/IPC隔離PoCを追加。暫定判断と未検証条件を[ADR-003](./adr/ADR-003-html-isolation-poc.md)に記録。
 - 00B PoCとして合成攻撃HTMLを`sandbox=""`の`srcdoc` iframe内にのみ表示し、本文用CSPを設定。
-- 独自IPC command `security_probe`をTauri AppManifestで明示し、単独permissionをmain capabilityだけへ付与。
+- security-test専用IPC command `secret_store_probe`をTauri AppManifestで明示し、単独permissionをmain capabilityだけへ付与。
 - フロントは攻撃HTMLをトップDOMへ挿入せず、本文iframeにTauri APIを公開しない。
 - WebdriverIO 9.31.9 + Tauri service 1.5.0のembedded WebDriver試験を追加し、Linux WebKitGTKでAC-05攻撃fixtureを実行。
-- WebDriver plugin / IPC probe command / `withGlobalTauri` / WDIO capabilityを`security-test` featureと専用Tauri configに限定。production buildに含まれないことをスクリプトで検査。
+- WebDriver plugin / SecretStore probe command / `withGlobalTauri` / WDIO capabilityを`security-test` featureと専用Tauri configに限定。production buildに含まれないことをスクリプトで検査。
 - 4 native runner matrixへ実WebView試験を追加（GitHub Actions未実行）。
 - SecretStoreはLinux Secret Service / macOS Keychain / Windows Credential Managerを明示する`keyring` backendを`security-test` featureだけに追加。平文file fallbackは実装しない。
 - AC-06向けloopback TLS testでuntrusted certificate、hostname mismatch、STARTTLS refusalの各ケース後に合成認証payloadが0 bytesであることを確認。[ADR-004](./adr/ADR-004-secret-store-and-tls-poc.md)に暫定判断と限界を記録。
@@ -57,13 +57,14 @@
 | GitHub Actions `native` run 2 (`bf1bc71`) | Ubuntu 24.04 x64、macOS 14 arm64、macOS 15 Intelが成功。Windows 2025の`.exe`解決は修正されたが、AC-05 trusted UI button操作のWDIO workerがtimeoutで失敗。 |
 | GitHub Actions `native` run 3 (`984cc4a`) | Ubuntu 24.04 x64、macOS 14 arm64、macOS 15 Intelが成功。Windows 2025はAC-05 trusted UI IPCテストのWDIO hook timeoutで失敗。 |
 | GitHub Actions `native` run 4 (`82d7649`) | Ubuntu 24.04 x64、macOS 14 arm64、macOS 15 Intelが成功。Windows 2025もbuild、TLS / FTS5 / IMAP / SMTP、SecretStore試験まで成功したが、AC-05の`security_probe` IPCテストが30秒timeoutで失敗。ログではiframe specのtrusted UI IPC test hook timeoutを確認。 |
+| GitHub Actions `native` run 5 (`9560492`) | Ubuntu 24.04 x64とmacOS 14 arm64成功。Windows 2025はRust / protocol / SecretStore試験成功後、run 4と同じAC-05 trusted UI IPC hook timeout。SecretStore spec自体は成功。macOS 15 IntelはWindows失敗後にcancelled。 |
 | `xvfb-run -a dbus-run-session -- pnpm run test:security:desktop` | 成功。ローカルLinux実WebViewで2 specs pass（iframe isolationとtrusted UI IPCを含む）。 |
-| WDIO trusted UI command test | `executeAsync`内でTauri invokeを直接検証。Windows固有のtimeoutを受け、`security_probe`の返却型をborrowed `&'static str`からowned `String`へ変更。Linux実WebView再確認とWindows CI再実行が必要 |
-| native workflow SecretStore success gate / Japanese FTS5 / IMAP / SMTP PoC | run 4で全4 runnerの該当PoC tests成功。LinuxはGNOME Keyring DBus service待機後にWDIO実行 |
+| WDIO trusted UI command test | Windowsでtimeoutする重複`security_probe`を削除し、成功実績のある明示許可済み`secret_store_probe`の未登録synthetic ID読み出しでtrusted UI IPC到達を確認。Linux実WebView再確認とWindows CI再実行が必要 |
+| native workflow SecretStore success gate / Japanese FTS5 / IMAP / SMTP PoC | run 5でWindows / Ubuntu / macOS 14 arm64の該当PoC tests成功。macOS 15 IntelはWindows失敗後にcancelled。LinuxはGNOME Keyring DBus service待機後にWDIO実行 |
 | `actionlint -color .github/workflows/native.yml` (1.7.12) | 過去のworkflow更新時に成功。今回のworkflow変更なし |
 | `pnpm run check:production-security` | 成功。normal production buildにWDIO plugin / permissions / global Tauri APIなし |
 | `pnpm install --frozen-lockfile` | 成功。pnpm 12.14.0 |
-| Tauri生成ACL manifest | `security-test` buildで`security_probe`のallow/deny permissionを生成し、test capabilityからのみ解決 |
+| Tauri生成ACL manifest | `security-test` buildで`secret_store_probe`のallow/deny permissionを生成し、test capabilityからのみ解決 |
 | Linux実WebViewのscript/外部通信/top navigation / opaque origin | 上記WDIO試験で確認。file URLのOS-level resource readは直接未確認 |
 | 3OS実WebView攻撃試験 | 未確認。4 runnerとOS実機が必要 |
 | SecretStore backend拒否 | Linux sessionでdaemon不在時に明示エラーを確認。commandにfile fallbackなし。filesystem監視は未実施 |

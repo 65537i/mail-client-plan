@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { createServer } from "node:http";
 
@@ -86,16 +87,19 @@ describe("AC-05: real WebKitGTK HTML isolation", () => {
   });
 
   it("allows the explicit IPC permission through the trusted main UI", async () => {
-    const result = await browser.executeAsync((_args, done) => {
+    const runId = `wdio-${randomUUID()}`;
+    const result = await browser.executeAsync(({ runId }, done) => {
       window.__TAURI__.core
-        .invoke("security_probe")
+        .invoke("secret_store_probe", { operation: "read", runId })
         .then((value) => done({ value }))
         .catch((error) => done({ error: String(error) }));
-    }, {});
-    assert.deepEqual(
-      result,
-      { value: "security-probe-ok" },
-      "trusted main-window IPC command should resolve with its explicit permission",
+    }, { runId });
+    assert.equal(result.error, undefined, "trusted main-window IPC command was denied");
+    assert.equal(result.value?.status, "error");
+    assert.match(
+      result.value.message,
+      /^secure store (unavailable|read failed):/,
+      "trusted main-window IPC should return the explicit SecretStore result",
     );
   });
 });

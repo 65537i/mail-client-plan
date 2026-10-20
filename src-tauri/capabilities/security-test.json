@@ -5,7 +5,6 @@
   "windows": ["main"],
   "permissions": [
     "wdio:default",
-    "allow-security-probe",
     "allow-secret-store-probe"
   ]
 }

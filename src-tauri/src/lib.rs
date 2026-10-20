@@ -3,8 +3,7 @@ pub fn run() {
     let builder = tauri::Builder::default();
 
     #[cfg(feature = "security-test")]
-    let builder =
-        builder.invoke_handler(tauri::generate_handler![security_probe, secret_store_probe]);
+    let builder = builder.invoke_handler(tauri::generate_handler![secret_store_probe]);
 
     #[cfg(feature = "security-test")]
     let builder = builder
@@ -24,12 +23,6 @@ pub fn run() {
     builder
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
-}
-
-#[cfg(feature = "security-test")]
-#[tauri::command]
-fn security_probe() -> String {
-    "security-probe-ok".to_string()
 }
 
 #[cfg(feature = "security-test")]
