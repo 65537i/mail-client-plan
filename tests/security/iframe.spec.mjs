@@ -56,9 +56,12 @@ describe("AC-05: real WebKitGTK HTML isolation", () => {
   });
 
   it("blocks script, external requests, and file/top navigation attempts", async () => {
+    console.log("AC-05: waiting for trusted UI");
     await browser.$("h1").waitForDisplayed();
+    console.log("AC-05: trusted UI is ready");
     const originalUrl = await browser.getUrl();
 
+    console.log("AC-05: injecting hostile fixture");
     await browser.execute((html) => {
       window.__mailClientSecurityMessages = [];
       window.addEventListener("message", (event) => {
@@ -76,8 +79,10 @@ describe("AC-05: real WebKitGTK HTML isolation", () => {
       });
       frame.srcdoc = html;
     }, maliciousFixture.replaceAll("http://127.0.0.1:39871", probeUrl));
+    console.log("AC-05: fixture injection returned");
 
     await browser.pause(1500);
+    console.log("AC-05: post-load inspection started");
 
     const topLevel = await browser.execute(() => ({
       url: location.href,
@@ -90,6 +95,7 @@ describe("AC-05: real WebKitGTK HTML isolation", () => {
         document.querySelector("iframe")?.dataset.securityTestLoads,
       ),
     }));
+    console.log("AC-05: post-load inspection returned");
     assert.equal(topLevel.url, originalUrl, "top-level navigation changed");
     assert.deepEqual(topLevel.messages, [], "message fixture script executed");
     assert.equal(topLevel.title, "Mail Client", "top-level document changed");
