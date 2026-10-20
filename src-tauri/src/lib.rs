@@ -28,8 +28,8 @@ pub fn run() {
 
 #[cfg(feature = "security-test")]
 #[tauri::command]
-fn security_probe() -> &'static str {
-    "security-probe-ok"
+fn security_probe() -> String {
+    "security-probe-ok".to_string()
 }
 
 #[cfg(feature = "security-test")]
