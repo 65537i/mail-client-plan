@@ -1,0 +1,11 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "security-test",
+  "description": "WebDriver permissions for the security-test feature only",
+  "windows": ["main"],
+  "permissions": [
+    "wdio:default",
+    "allow-security-probe",
+    "allow-secret-store-probe"
+  ]
+}

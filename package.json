@@ -1,0 +1,35 @@
+{
+  "name": "mail-client",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "packageManager": "pnpm@12.14.0",
+  "engines": {
+    "node": "24.22.0"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc --noEmit && vite build",
+    "build:security-test": "vue-tsc --noEmit && vite build --mode security-test",
+    "preview": "vite preview",
+    "tauri": "tauri",
+    "check:production-security": "node scripts/check-production-build.mjs",
+    "test:security:desktop": "tauri build --no-bundle --ci --features security-test --config src-tauri/tauri.security-test.conf.json && wdio run wdio.security.conf.mjs"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "2.12.4",
+    "vue": "3.5.44"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "2.12.3",
+    "@vitejs/plugin-vue": "6.0.7",
+    "@wdio/cli": "9.31.9",
+    "@wdio/local-runner": "9.31.9",
+    "@wdio/mocha-framework": "9.31.9",
+    "@wdio/tauri-service": "1.5.0",
+    "@wdio/tauri-plugin": "1.5.0",
+    "typescript": "6.0.3",
+    "vite": "8.3.4",
+    "vue-tsc": "3.3.5"
+  }
+}

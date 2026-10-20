@@ -1,0 +1,33 @@
+<html>
+  <head>
+    <meta http-equiv="refresh" content="0;url=file:///etc/passwd" />
+    <style>
+      @import url("http://127.0.0.1:39871/probe.css");
+      body { background-image: url("http://127.0.0.1:39871/probe-image"); }
+    </style>
+  </head>
+  <body>
+    <h1>Synthetic hostile message</h1>
+    <script>
+      window.__securityProbeScriptRan = true;
+      window.parent.postMessage({ type: "security-probe-script-ran" }, "*");
+      const tauri = window.__TAURI_INTERNALS__;
+      if (tauri && typeof tauri.invoke === "function") {
+        void tauri.invoke("security_probe").then(
+          () => window.parent.postMessage({ type: "security-probe-ipc-resolved" }, "*"),
+          () => window.parent.postMessage({ type: "security-probe-ipc-rejected" }, "*"),
+        );
+      }
+      fetch("http://127.0.0.1:39871/probe-fetch");
+      window.top.location = "file:///etc/passwd";
+    </script>
+    <img src="http://127.0.0.1:39871/tracking-pixel" alt="" />
+    <img src="file:///etc/passwd" alt="local file probe" />
+    <img src="cid:untrusted@example.invalid" alt="CID probe" />
+    <iframe src="http://127.0.0.1:39871/nested-frame"></iframe>
+    <form action="http://127.0.0.1:39871/probe-form">
+      <button type="submit">Submit hostile form</button>
+    </form>
+    <a href="javascript:window.top.location='file:///etc/passwd'" target="_top">Open hostile link</a>
+  </body>
+</html>

@@ -1,0 +1,139 @@
+name: native
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: ubuntu-24.04-x64
+            runner: ubuntu-24.04
+          - platform: windows-2025-x64
+            runner: windows-2025
+          - platform: macos-14-arm64
+            runner: macos-14
+          - platform: macos-15-intel
+            runner: macos-15-intel
+    name: ${{ matrix.platform }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 12.14.0
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24.22.0
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install Linux system dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y \
+            build-essential \
+            curl \
+            file \
+            gnome-keyring \
+            libglib2.0-bin \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libssl-dev \
+            libwebkit2gtk-4.1-dev \
+            libxdo-dev \
+            pkg-config \
+            xvfb \
+            dbus-x11
+
+      - name: Install pinned Rust toolchain
+        run: rustup toolchain install 1.99.1 --profile minimal --component clippy --component rustfmt
+        shell: bash
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check Rust formatting
+        run: cargo fmt --all --check
+
+      - name: Test Rust workspace
+        run: cargo test --workspace --locked
+
+      - name: Lint Rust workspace
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+      - name: Type-check and build frontend
+        run: pnpm run build
+
+      - name: Build native application
+        run: pnpm exec tauri build --no-bundle --ci
+
+      - name: Verify production app excludes WebDriver
+        run: pnpm run check:production-security
+
+      - name: Build launch smoke-test application
+        run: cargo build --release --locked --features smoke-test --bin mail-client
+
+      - name: Launch and close application
+        if: runner.os == 'Linux'
+        run: xvfb-run -a dbus-run-session -- env WEBKIT_DISABLE_COMPOSITING_MODE=1 ./target/release/mail-client
+
+      - name: Launch and close application
+        if: runner.os == 'macOS'
+        run: ./target/release/mail-client
+
+      - name: Launch and close application
+        if: runner.os == 'Windows'
+        run: .\target\release\mail-client.exe
+
+      - name: Build security-test application
+        run: pnpm exec tauri build --no-bundle --ci --features security-test --config src-tauri/tauri.security-test.conf.json
+
+      - name: Test TLS authentication boundary
+        run: cargo test -p mail-client --features security-test --test tls_auth_boundary --locked
+
+      - name: Test Japanese FTS5 trigram search
+        run: cargo test -p mail-client --features search-poc --test japanese_trigram_search --locked
+
+      - name: Test async-imap candidate
+        run: cargo test -p mail-client --features imap-poc --test imap_candidate --locked
+
+      - name: Test SMTP candidate
+        run: cargo test -p mail-client --features smtp-poc --test smtp_candidate --locked
+
+      - name: Test real WebView security boundaries
+        if: runner.os == 'Linux'
+        run: |
+          xvfb-run -a dbus-run-session -- bash -c '
+            set -euo pipefail
+            eval "$(printf "\n" | gnome-keyring-daemon --unlock --components=secrets)"
+            gdbus wait --session --timeout=10 org.freedesktop.secrets
+            gdbus introspect --session \
+              --dest org.freedesktop.secrets \
+              --object-path /org/freedesktop/secrets >/dev/null
+            export MAIL_CLIENT_REQUIRE_SECRET_STORE=1
+            pnpm exec wdio run wdio.security.conf.mjs
+          '
+
+      - name: Test real WebView security boundaries
+        if: runner.os != 'Linux'
+        run: pnpm exec wdio run wdio.security.conf.mjs
+        env:
+          MAIL_CLIENT_REQUIRE_SECRET_STORE: "1"

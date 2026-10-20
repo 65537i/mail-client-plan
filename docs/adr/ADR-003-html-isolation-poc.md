@@ -1,0 +1,55 @@
+# ADR-003: HTML本文の隔離PoC
+
+- 状態: 暫定。Linux WebKitGTKのPoC試験は成功。3OS試験とファイルアクセスの直接観測が未完了
+- 決定日: 2026-10-20
+
+## 背景
+
+メール本文のHTMLは送信者が制御する未信頼データであり、トップレベルDOM、Tauri IPC、外部ネットワーク、ローカルファイルへの到達を許可しない。AC-05は3OSの実WebViewでscript、IPC、外部通信、file読取、トップ画面遷移がすべて0回であることを要求する。
+
+## 選択肢
+
+- 未信頼HTMLをトップレベルDOMへ挿入する: DOMとアプリ権限を共有するため不採用。
+- 平文のみ表示する: 安全な初期表示として採用可能だが、HTML表示のPoCにならない。
+- 未信頼HTMLをsandbox iframeへ隔離する: PoCとして選択。
+
+## 決定
+
+- 合成fixtureは`srcdoc`のiframeだけに渡し、`sandbox`を空にする。scripts、same-origin、forms、popups、downloads等の例外権限を追加しない。
+- PoC用iframe文書の先頭へCSPを追加し、default、script、connect、image、font、media、frame、object、form、baseの各sourceを拒否する。レイアウト確認用のinline styleのみを許可する。
+- アプリCSPの`frame-src`は`self`とする。現在のPoCは埋め込み`srcdoc`だけを使い、remote URLを読み込まない。
+- `security_probe`は固定文字列を返す副作用のないPoC commandとする。`AppManifest::commands`で登録して生成permissionを作り、main window capabilityだけに`allow-security-probe`を付与する。Tauriのアプリcommand permissionには`app:` prefixを付けない。
+- `security_probe`、WebdriverIOの両Rust plugin、frontend plugin、global Tauri API、WebDriver capabilityは`security-test` feature / configに限定する。通常buildではcommand登録もpermission生成も行わない。
+- fixtureからのIPCは実WebView未確認。現実装ではiframeのscript実行自体を禁止し、IPCに依存しない遮断を優先する。
+- 実製品ではRust側のallowlist sanitizerを別途必須とし、このfixtureを本文表示経路へ接続しない。CID、リンク操作、制御済み画像は未決定。
+
+## 実験条件と結果
+
+| 確認 | 結果 |
+|---|---|
+| Vue/TypeScript production build | 成功 |
+| Rust format / test / clippy | 成功。Rust testは0件。default / `security-test` feature双方をclippy |
+| Tauri production native build | Linux arm64で成功。`check-production-security`がWDIO dependency、permission、global API markerの不在を確認 |
+| Tauri test native build | Linux arm64で成功。test-only AppManifest ACLとWDIO pluginを含む |
+| Linux real WebView | WebKitGTK 2.50.6、Tauri 2.12.4。WDIO 9.31.9 + Tauri service 1.5.0 embedded providerで試験 |
+| HTML script / IPC marker | fixtureからのpostMessageなし。攻撃fixture scriptは実行されず、iframe側IPC試行も未実行 |
+| 外部HTTP通信 | loopback listenerで観測したfixture由来request 0件 |
+| top navigation / iframe境界 | main document URL / title不変、iframe loadは1回、parentの`contentDocument`アクセスは不可 |
+| main-window IPC | 明示permission付き`security_probe`をtrusted main UIから呼び出し成功 |
+| file URLを含むHTML | `file:///etc/passwd`へのmeta refresh / image probeを含む。iframe再navigationは観測せず。ただしOSレベルのfile open / image loadを直接計測していない |
+| macOS / Windows WebView | 未確認 |
+
+Linux PoCの結果はこの環境のWebKitGTKに限る。AC-05全体の合格やsanitizer不要の根拠にはしない。ローカルHTTP probeのrequest countとWebView navigation / top DOM変化 / IPC結果は確認したが、file URLのOSレベルopenを直接観測する試験は残る。
+
+## 制限と次の検証
+
+- これはPoC UIであり、sanitizer、MIME parser、CID変換、リンク一覧UIを実装していない。
+- `srcdoc` CSP、CSP継承、sandbox動作はWKWebView、WebView2でも実証が必要。
+- ACLはmain windowの許可範囲を制限する。iframe単位の権限分離をACLだけで保証したとは扱わない。
+- Linux WebDriver実装はsandbox opaque-origin frameへの切替を拒否した。iframe内部DOM・resource completionを直接読む代わりに親DOMからのアクセス拒否、load回数、ネットワークlistenerを確認した。file resourceの直接読取確認は別の計測が必要。
+- 3OSでAC-05の全攻撃を検証し、fileアクセスも含む観測方法を定めてから最終決定する。
+- SecretStoreの選定とsave/lock/reject/deleteはADR-004で別途検証する。
+
+## 再評価条件
+
+いずれかのWebViewでCSP / sandboxに差異がある、script/通信/navigationが到達する、またはsanitizerの設計に影響する場合は、平文表示を既定に維持し、方式を再評価する。
