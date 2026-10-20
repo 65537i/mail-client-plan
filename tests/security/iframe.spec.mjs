@@ -86,16 +86,16 @@ describe("AC-05: real WebKitGTK HTML isolation", () => {
   });
 
   it("allows the explicit IPC permission through the trusted main UI", async () => {
-    await browser.execute(() => {
-      const button = document.querySelector("button");
-      if (!(button instanceof HTMLButtonElement)) {
-        throw new Error("Expected the trusted UI IPC probe button");
-      }
-      button.click();
-    });
-    await browser.waitUntil(
-      async () => (await browser.$("output").getText()) === "security-probe-ok",
-      { timeout: 5000, timeoutMsg: "main-window command permission was not granted" },
+    const result = await browser.executeAsync((_args, done) => {
+      window.__TAURI__.core
+        .invoke("security_probe")
+        .then((value) => done({ value }))
+        .catch((error) => done({ error: String(error) }));
+    }, {});
+    assert.deepEqual(
+      result,
+      { value: "security-probe-ok" },
+      "trusted main-window IPC command should resolve with its explicit permission",
     );
   });
 });

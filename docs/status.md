@@ -11,7 +11,7 @@
 
 - Tauri 2 + Vue 3 + strict TypeScriptの最小アプリ、Rust workspace、lockfileを追加。
 - Dev Containerを作成し、Docker Desktop上でlinux/arm64イメージをbuild。
-- 4 runner候補のネイティブbuild / 起動smoke test workflowを追加。GitHub Actions run 2ではUbuntu、macOS arm64、macOS Intelが成功。WindowsはWDIO実WebViewテストでtimeout。Windowsではnative WebDriver click呼び出しが完了しない可能性があるため、信頼済みmain UIのbuttonをWebDriver execute内でクリックする方式へ変更し、Linux実WebViewで再検証済み。Windows runnerで再実行予定。
+- 4 runner候補のネイティブbuild / 起動smoke test workflowを追加。GitHub Actions run 3ではUbuntuとmacOS両arch成功、Windowsはtrusted UI IPC試験がtimeout。WDIO `executeAsync`内でTauri invokeを直接確認する方式へ整理し、Linux実WebViewで再検証済み。Windows runnerで再実行予定。
 - 独自IPC commandと不要なopener pluginを初期アプリから除去。基礎CSPを設定。
 - ADR-001へOS候補、runner候補、ツールチェーン、実機候補と未検証点を記載。
 - `smoke-test` featureはCI用buildのみで自動終了し、通常buildへは含めない。
@@ -55,9 +55,10 @@
 | `xvfb-run -a dbus-run-session -- ... gnome-keyring-daemon ... wdio.security.conf.mjs` | 成功。Linux WebKitGTKで2 specs pass。AC-06 Secret Service合成secretのsave/read/delete/delete後未登録を確認 |
 | GitHub Actions `native` run 1 (`79eae23`) | Ubuntu 24.04 x64とmacOS 14 arm64成功。Windows 2025はbuild・Rust tests・SMTP/IMAP PoCが成功した後、実WebView WDIOで実行ファイル`.exe` path不足により失敗。macOS 15 Intelはcancelled。 |
 | GitHub Actions `native` run 2 (`bf1bc71`) | Ubuntu 24.04 x64、macOS 14 arm64、macOS 15 Intelが成功。Windows 2025の`.exe`解決は修正されたが、AC-05 trusted UI button操作のWDIO workerがtimeoutで失敗。 |
+| GitHub Actions `native` run 3 (`984cc4a`) | Ubuntu 24.04 x64、macOS 14 arm64、macOS 15 Intelが成功。Windows 2025はAC-05 trusted UI IPCテストのWDIO hook timeoutで失敗。 |
 | `xvfb-run -a dbus-run-session -- pnpm run test:security:desktop` | 成功。ローカルLinux実WebViewで2 specs pass（iframe isolationとtrusted UI IPCを含む）。 |
-| WDIO trusted UI command test | WebDriver native clickのWindows timeoutを避けるため、execute内でtrusted top-level documentのbutton.click()を行い、その後5秒以内にIPC結果を確認する方式へ変更。Windows CI再実行待ち |
-| native workflow SecretStore success gate / Japanese FTS5 / IMAP / SMTP PoC | run 2でUbuntu/Windows/macOS両runnerの該当PoC tests成功。LinuxはGNOME Keyring DBus service待機後にWDIO実行 |
+| WDIO trusted UI command test | ボタンのイベント駆動から、WDIO `executeAsync`内でTauri invokeを直接行い結果をassertする方式へ変更。Windows CI再実行待ち |
+| native workflow SecretStore success gate / Japanese FTS5 / IMAP / SMTP PoC | run 3で全4 runnerの該当PoC tests成功。LinuxはGNOME Keyring DBus service待機後にWDIO実行 |
 | `actionlint -color .github/workflows/native.yml` (1.7.12) | 過去のworkflow更新時に成功。今回のworkflow変更なし |
 | `pnpm run check:production-security` | 成功。normal production buildにWDIO plugin / permissions / global Tauri APIなし |
 | `pnpm install --frozen-lockfile` | 成功。pnpm 12.14.0 |
