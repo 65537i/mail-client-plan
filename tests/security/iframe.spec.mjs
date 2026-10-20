@@ -86,7 +86,13 @@ describe("AC-05: real WebKitGTK HTML isolation", () => {
   });
 
   it("allows the explicit IPC permission through the trusted main UI", async () => {
-    await browser.$("button").click();
+    await browser.execute(() => {
+      const button = document.querySelector("button");
+      if (!(button instanceof HTMLButtonElement)) {
+        throw new Error("Expected the trusted UI IPC probe button");
+      }
+      button.click();
+    });
     await browser.waitUntil(
       async () => (await browser.$("output").getText()) === "security-probe-ok",
       { timeout: 5000, timeoutMsg: "main-window command permission was not granted" },
