@@ -14,7 +14,12 @@ export const config = {
     [
       "@wdio/tauri-service",
       {
-        appBinaryPath: path.join(root, "target/release/mail-client"),
+        appBinaryPath: path.join(
+          root,
+          "target",
+          "release",
+          process.platform === "win32" ? "mail-client.exe" : "mail-client",
+        ),
         driverProvider: "embedded",
         commandTimeout: 60_000,
       },

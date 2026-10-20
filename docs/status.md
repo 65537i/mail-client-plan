@@ -11,7 +11,7 @@
 
 - Tauri 2 + Vue 3 + strict TypeScriptの最小アプリ、Rust workspace、lockfileを追加。
 - Dev Containerを作成し、Docker Desktop上でlinux/arm64イメージをbuild。
-- 4 runner候補のネイティブbuild / 起動smoke test workflowを追加。workflow自体は未実行。
+- 4 runner候補のネイティブbuild / 起動smoke test workflowを追加。初回GitHub Actions runではUbuntuとmacOS arm64が成功。Windowsの実WebView testは`.exe` path不足で失敗、macOS Intel jobはcancelled。WDIO binary pathをWindows対応に修正し再実行予定。
 - 独自IPC commandと不要なopener pluginを初期アプリから除去。基礎CSPを設定。
 - ADR-001へOS候補、runner候補、ツールチェーン、実機候補と未検証点を記載。
 - `smoke-test` featureはCI用buildのみで自動終了し、通常buildへは含めない。
@@ -53,8 +53,10 @@
 | `pnpm exec tauri build --no-bundle --ci --features security-test --config src-tauri/tauri.security-test.conf.json` | 成功。Linux arm64 security-test app |
 | `xvfb-run -a dbus-run-session -- pnpm exec wdio run wdio.security.conf.mjs`（keyring daemonなし） | 成功。WebKitGTK 2.50.6、2 specs pass。AC-05はscript marker 0 / 外部HTTP request 0 / top URL不変 / iframe親DOMアクセス不可 / trusted UI IPC成功。AC-06はSecret Service不在時の明示エラーを確認 |
 | `xvfb-run -a dbus-run-session -- ... gnome-keyring-daemon ... wdio.security.conf.mjs` | 成功。Linux WebKitGTKで2 specs pass。AC-06 Secret Service合成secretのsave/read/delete/delete後未登録を確認 |
-| native workflow SecretStore success gate / Japanese FTS5 / IMAP / SMTP PoC | LinuxはGNOME Keyring DBus service待機後にWDIO実行。全runnerでsearch-poc / imap-poc / smtp-poc testを実行するstep追加。GitHub Actions未実行 |
-| `actionlint -color .github/workflows/native.yml` (1.7.12) | 過去のworkflow更新時に成功。今回のSMTP step追加後はactionlint未導入のため未実行 |
+| GitHub Actions `native` run 1 (`79eae23`) | Ubuntu 24.04 x64とmacOS 14 arm64成功。Windows 2025はbuild・Rust tests・SMTP/IMAP PoCが成功した後、実WebView WDIOで実行ファイル`.exe` path不足により失敗。macOS 15 Intelはcancelled。 |
+| WDIO Windows binary path | `wdio.security.conf.mjs`でWindows時に`mail-client.exe`を選ぶ修正を追加。node syntax check後にcommit/pushし、再実行する |
+| native workflow SecretStore success gate / Japanese FTS5 / IMAP / SMTP PoC | 上記runでUbuntu/Windows/macOS arm64の該当PoC testsは成功。LinuxはGNOME Keyring DBus service待機後にWDIO実行 |
+| `actionlint -color .github/workflows/native.yml` (1.7.12) | 過去のworkflow更新時に成功。今回のworkflow変更なし |
 | `pnpm run check:production-security` | 成功。normal production buildにWDIO plugin / permissions / global Tauri APIなし |
 | `pnpm install --frozen-lockfile` | 成功。pnpm 12.14.0 |
 | Tauri生成ACL manifest | `security-test` buildで`security_probe`のallow/deny permissionを生成し、test capabilityからのみ解決 |
