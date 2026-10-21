@@ -66,6 +66,11 @@ IMAP候補はTLS、SASL XOAUTH2、UID/UIDVALIDITY、IDLEの取消とpolling fall
 
 ### MIME制限adapterのPoC
 
+- 非同期版`read_source_async`を追加し、既存固定Tokioを`mime-poc`で有効化。借用したAsyncReadと絶対deadline、完了時に中断するFutureを受ける。deadlineはchunkごとに延長しない。ready cancellation → 期限 → readの優先順で、各loopの期限判定を明示し、即時read可能な入力でも期限超過後は読まない。loop間でyieldし連続ready入力でも他taskを進める。同期readerの中断をthread放置で模倣せず、Tokioのcancel-safeなreadを使用する。
+- TimedOut / Cancelledを型付きcauseへ追加し、I/O失敗・上限超過と同じくprefixを回収できる。readerはborrowしたままで、自動close / 再試行 / 未読stream消費をしない。呼び出し側はdropによるfuture取消ではなく、渡したcancellation Futureを完了させて回収経路をawaitする必要がある。関数futureやtask自体をdrop / abortした場合のprefix回収は保証しない。
+- 非同期6 tests追加。empty / small、50MiB -1 / 境界 / +1 / +100、ready取消と期限切れで0 bytes消費、途中取消、pending read中の取消・期限切れ、Interrupted後のI/O失敗、診断のprivate data非公開、未読streamの継続利用を確認。初回は期限切れタイマーの準備よりready readが先行する失敗を検出し、毎loopの期限比較を追加して修正。同期readとasync extensionの名前衝突も明示Read呼び出しで修正。最終的にLinux arm64でunit5 + integration22 = 27 tests、対象clippy / format / diff成功。
+- 非同期化は読み取り待機の制御だけで、同期MIME解析中のdeadline / cancellation / メモリ制限を提供しない。IMAP literalのframingや中断後のprotocol session再利用は未接続・未検証。raw streamをそのまま再利用できることをIMAP sessionの安全な継続と読み替えない。UI / IPC / 永続保存には未接続。
+
 - 入力stream向けにblocking `read_source(&mut impl Read)`を追加。16KiB単位で読み、原文50MiB + 1 byteまでで必ず判定する。50MiBちょうどはEOF確認後に成功、1 byte超過はエラーで停止し、残りのstreamを消費しない。上限超過で返すbytesは完全なメールではなくprefixであることをエラー表示に明記する。読み取り成功後のVecを既存`parse(&raw)`へ渡すPoCを試験した。
 - 読み取りエラー時は取得済みbytesと元のio::Errorを`into_parts()`で回収できる。Interruptedだけ再試行し、その他のI/O失敗をEOFや空の成功にしない。Display / Debugは本文・I/Oエラー文字列を伏せ、分類と保持bytes数のみを出す。Error::source経由の不用意なpath公開も避け、元のエラーは回収APIからのみ取得する。
 - 追加4 tests（unit計5 + integration16 = 21）でempty / small、short read、Interrupted後のI/O失敗、原文50MiBの-1 / 境界 / +1 / +100 byteを確認。超過後にstreamの残りが維持されること、部分原文と元エラーの回収、診断非公開もassert。Linux arm64で全21 testsと対象clippy / format / diff検査成功。依存・workflow変更なし。

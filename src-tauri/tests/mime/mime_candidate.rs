@@ -1,6 +1,9 @@
 use mail_client_lib::mime_poc::{self, MimeError};
 use mail_parser::{MessageParser, MimeHeaders, PartType};
 
+#[path = "async_source.rs"]
+mod async_source;
+
 #[test]
 fn ac04_decodes_rfc2047_subject_and_japanese_charsets() {
     for (charset, body) in [

@@ -1,10 +1,15 @@
 use std::{
     error::Error,
     fmt,
+    future::Future,
     io::{self, Read},
 };
 
 use mail_parser::{Message, MessageParser, PartType};
+use tokio::{
+    io::{AsyncRead, AsyncReadExt},
+    time::Instant,
+};
 
 pub const MAX_RAW_BYTES: usize = 50 * 1024 * 1024;
 pub const MAX_DECODED_BYTES: usize = 100 * 1024 * 1024;
@@ -46,6 +51,8 @@ pub struct SourceReadError {
 pub enum SourceReadCause {
     TooLarge,
     Io(io::Error),
+    TimedOut,
+    Cancelled,
 }
 
 impl SourceReadError {
@@ -57,6 +64,12 @@ impl SourceReadError {
 impl fmt::Display for SourceReadError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.cause {
+            SourceReadCause::TimedOut => {
+                f.write_str("MIME source read deadline expired; retained bytes may be incomplete")
+            }
+            SourceReadCause::Cancelled => {
+                f.write_str("MIME source read cancelled; retained bytes may be incomplete")
+            }
             SourceReadCause::TooLarge => {
                 f.write_str("MIME source exceeds 50 MiB; retained bytes are only a prefix")
             }
@@ -107,6 +120,56 @@ pub fn read_source(reader: &mut impl Read) -> Result<Vec<u8>, SourceReadError> {
                 });
             }
         }
+    }
+}
+
+/// Deadline applies to the whole read, not each chunk. A ready cancellation wins
+/// over a ready timeout/read; Tokio read is cancellation-safe.
+pub async fn read_source_async(
+    reader: &mut (impl AsyncRead + Unpin),
+    deadline: Instant,
+    cancellation: impl Future<Output = ()>,
+) -> Result<Vec<u8>, SourceReadError> {
+    let mut raw = Vec::new();
+    let mut chunk = [0u8; 16 * 1024];
+    tokio::pin!(cancellation);
+    loop {
+        let remaining = (MAX_RAW_BYTES + 1 - raw.len()).min(chunk.len());
+        let timeout = async {
+            if Instant::now() < deadline {
+                tokio::time::sleep_until(deadline).await;
+            }
+        };
+        let result = tokio::select! {
+            biased;
+            () = &mut cancellation => return Err(SourceReadError {
+                partial: raw, cause: SourceReadCause::Cancelled,
+            }),
+            () = timeout => return Err(SourceReadError {
+                partial: raw, cause: SourceReadCause::TimedOut,
+            }),
+            result = reader.read(&mut chunk[..remaining]) => result,
+        };
+        match result {
+            Ok(0) => return Ok(raw),
+            Ok(count) => {
+                raw.extend_from_slice(&chunk[..count]);
+                if raw.len() > MAX_RAW_BYTES {
+                    return Err(SourceReadError {
+                        partial: raw,
+                        cause: SourceReadCause::TooLarge,
+                    });
+                }
+            }
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+            Err(error) => {
+                return Err(SourceReadError {
+                    partial: raw,
+                    cause: SourceReadCause::Io(error),
+                });
+            }
+        }
+        tokio::task::yield_now().await;
     }
 }
 
@@ -273,7 +336,7 @@ mod tests {
         struct ShortReader(io::Cursor<&'static [u8]>);
         impl Read for ShortReader {
             fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
-                self.0.read(&mut buffer[..1])
+                Read::read(&mut self.0, &mut buffer[..1])
             }
         }
         let source = b"Content-Type: text/plain\r\n\r\nSynthetic";

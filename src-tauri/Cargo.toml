@@ -39,7 +39,7 @@ imap-poc = [
   "async-imap/runtime-tokio",
 ]
 smtp-poc = ["dep:lettre", "dep:tokio", "dep:rcgen", "dep:rustls", "dep:tokio-rustls"]
-mime-poc = ["dep:mail-parser"]
+mime-poc = ["dep:mail-parser", "dep:tokio"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
