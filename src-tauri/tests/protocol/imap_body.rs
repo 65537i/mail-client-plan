@@ -12,6 +12,9 @@ use tokio::{
 
 const SOURCE: &[u8] = b"Subject: Synthetic body\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nSynthetic literal\r\n)\r\nA0003 OK not a protocol response\r\n";
 
+#[path = "imap_body_tls.rs"]
+mod tls;
+
 #[derive(Clone, Copy)]
 enum FetchEnd {
     Complete,
@@ -29,11 +32,14 @@ enum FetchEnd {
     PartialOffset,
 }
 
-async fn owned_checked_fetch(
-    mut session: async_imap::Session<tokio::io::DuplexStream>,
+async fn owned_checked_fetch<T>(
+    mut session: async_imap::Session<T>,
     deadline: Instant,
     cancellation: impl std::future::Future<Output = ()>,
-) -> Result<(async_imap::Session<tokio::io::DuplexStream>, Vec<u8>), FetchFailure> {
+) -> Result<(async_imap::Session<T>, Vec<u8>), FetchFailure>
+where
+    T: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + std::fmt::Debug + Send,
+{
     let mut provisional = None;
     let timeout = async {
         if Instant::now() < deadline {
@@ -92,10 +98,13 @@ enum CheckedFetchError {
 }
 
 // Evaluation only: the candidate still buffers literals without a size gate.
-async fn checked_fetch(
-    session: &mut async_imap::Session<tokio::io::DuplexStream>,
+async fn checked_fetch<T>(
+    session: &mut async_imap::Session<T>,
     body: &mut Option<Vec<u8>>,
-) -> Result<(), CheckedFetchError> {
+) -> Result<(), CheckedFetchError>
+where
+    T: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + std::fmt::Debug + Send,
+{
     let tag = session
         .run_command("UID FETCH 8 (UID FLAGS BODY.PEEK[])")
         .await

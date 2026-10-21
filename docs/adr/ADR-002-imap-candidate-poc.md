@@ -54,6 +54,13 @@ IMAP候補はTLS、SASL XOAUTH2、UID/UIDVALIDITY、IDLEの取消とpolling fall
 
 ## 未達・採用gate
 
+### 実TCP / 検証済みTLSでのFETCH中断PoC
+
+- test限定のchecked_fetch / owned_checked_fetchをストリーム型で一般化。async-imap 0.12.0の公開Session APIと同じAsyncRead + AsyncWrite + Unpin + Debug + Send boundを使用し、既存DuplexStream試験に加えてloopback TCP上のrustls streamへ接続した。証明書は既存の合成localhost証明書設定を再利用し、hostname / 証明書検証を無効化していない。資格情報・本文は合成値のみ。
+- 新規2 testsは正常1ケースと中断4ケースを実行。正常時は一致tagged OKの検証後にSOURCE全bytesを返し、MIME解析と同じsessionでのNOOPに成功する。NOOPはFETCH成功の代用ではなく、返却sessionの再利用確認。本文途中 / 完全literal後の完了待ちそれぞれをcancel / deadlineで中断するとsessionを返さず破棄し、Cancelled / TimedOutと完全literalだけのprovisional回収を確認。peerは後続command 0 bytesとEOFまたはTLS close_notifyなしのUnexpectedEofを観測する。graceful TLS shutdownを保証する試験ではない。
+- Linux arm64でunit5 + IMAP20 + MIME42 = 67 tests、対象clippy `-D warnings` / format / diff成功。初回はSend bound不足でcompileに失敗し、公開Session APIのboundに合わせて修正。既存の欠陥再現2件は採用gate合格に数えない。
+- TLS終了の未検証範囲はこのimplicit TLS合成peerに限って縮小した。mailbox選択状態・Seen不変、実サーバ、STARTTLS後のFETCH中断、3OS、task abort / wrapper future自体のdrop時の回収、途中literal回収、読込allocation上限、unsolicited配送、account / folder / UIDVALIDITY所属は未達。製品コード・依存・workflow変更なし、本番採用blockerは維持する。
+
 ### 要求UIDと完全BODY応答の整合性PoC
 
 - test限定checked_fetchのUID判定を「UID 8がどこかにある」から「UID属性がちょうど1個で8」に変更。BodySectionのindexは部分取得originを表すためSome(0)も完全BODY[]とは扱わず拒否する。固定imap-proto 0.17.0の公開BodySection型（index: Option<u32>）とparser対応を配布sourceで確認した。本文重複の既存拒否も回帰試験へ追加した。
