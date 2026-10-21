@@ -5,7 +5,16 @@ use tokio::io::{AsyncWriteExt, BufReader};
 
 const SOURCE: &[u8] = b"Subject: Synthetic body\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nSynthetic literal\r\n)\r\nA0003 OK not a protocol response\r\n";
 
-async fn exercise_body_fetch(fragment_size: usize, truncate: bool) {
+#[derive(Clone, Copy)]
+enum FetchEnd {
+    Complete,
+    TruncatedLiteral,
+    No,
+    Bad,
+    MissingCompletion,
+}
+
+async fn exercise_fetch(fragment_size: usize, end: FetchEnd) {
     tokio::time::timeout(std::time::Duration::from_secs(3), async {
         let (client_stream, server_stream) = tokio::io::duplex(128);
         let server = tokio::spawn(async move {
@@ -37,7 +46,7 @@ async fn exercise_body_fetch(fragment_size: usize, truncate: bool) {
                 )
                 .await
                 .unwrap();
-            let bytes = if truncate {
+            let bytes = if matches!(end, FetchEnd::TruncatedLiteral) {
                 &SOURCE[..SOURCE.len() / 2]
             } else {
                 SOURCE
@@ -46,7 +55,26 @@ async fn exercise_body_fetch(fragment_size: usize, truncate: bool) {
                 stream.get_mut().write_all(chunk).await.unwrap();
                 tokio::task::yield_now().await;
             }
-            if truncate {
+            if matches!(end, FetchEnd::TruncatedLiteral) {
+                stream.get_mut().shutdown().await.unwrap();
+                return;
+            }
+            if !matches!(end, FetchEnd::Complete) {
+                stream.get_mut().write_all(b")\r\n").await.unwrap();
+                match end {
+                    FetchEnd::No => stream
+                        .get_mut()
+                        .write_all(b"A0003 NO synthetic failure\r\n")
+                        .await
+                        .unwrap(),
+                    FetchEnd::Bad => stream
+                        .get_mut()
+                        .write_all(b"A0003 BAD synthetic rejection\r\n")
+                        .await
+                        .unwrap(),
+                    FetchEnd::MissingCompletion => {}
+                    _ => unreachable!(),
+                }
                 stream.get_mut().shutdown().await.unwrap();
                 return;
             }
@@ -82,7 +110,7 @@ async fn exercise_body_fetch(fragment_size: usize, truncate: bool) {
             .uid_fetch("8", "(UID FLAGS BODY.PEEK[])")
             .await
             .unwrap();
-        if truncate {
+        if matches!(end, FetchEnd::TruncatedLiteral) {
             let mut saw_error = false;
             while let Some(result) = fetches.next().await {
                 assert!(
@@ -92,6 +120,19 @@ async fn exercise_body_fetch(fragment_size: usize, truncate: bool) {
                 saw_error = true;
             }
             assert!(saw_error, "truncated literal must report an error");
+            drop(fetches);
+            drop(session);
+        } else if !matches!(end, FetchEnd::Complete) {
+            let provisional = fetches.next().await.unwrap().unwrap();
+            assert_eq!(provisional.uid, Some(8));
+            assert_eq!(provisional.body(), Some(SOURCE));
+            assert!(mime_poc::parse(provisional.body().unwrap()).is_ok());
+            // Candidate limitation: stream termination does not prove tagged OK.
+            // Keep production adoption blocked until completion is observable.
+            assert!(
+                fetches.next().await.is_none(),
+                "re-evaluate the adoption blocker if the candidate starts reporting failure"
+            );
             drop(fetches);
             drop(session);
         } else {
@@ -126,11 +167,23 @@ async fn exercise_body_fetch(fragment_size: usize, truncate: bool) {
 #[tokio::test]
 async fn ac04_body_peek_reassembles_literals_and_preserves_unseen_flags() {
     for fragment_size in [1, 17, SOURCE.len()] {
-        exercise_body_fetch(fragment_size, false).await;
+        exercise_fetch(fragment_size, FetchEnd::Complete).await;
     }
 }
 
 #[tokio::test]
 async fn ac04_truncated_body_literal_is_not_a_successful_fetch() {
-    exercise_body_fetch(7, true).await;
+    exercise_fetch(7, FetchEnd::TruncatedLiteral).await;
+}
+
+#[tokio::test]
+async fn ac04_candidate_limitation_hides_tagged_no_or_bad_after_body() {
+    for end in [FetchEnd::No, FetchEnd::Bad] {
+        exercise_fetch(17, end).await;
+    }
+}
+
+#[tokio::test]
+async fn ac04_candidate_limitation_ends_without_tagged_completion() {
+    exercise_fetch(17, FetchEnd::MissingCompletion).await;
 }

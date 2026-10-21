@@ -54,6 +54,13 @@ IMAP候補はTLS、SASL XOAUTH2、UID/UIDVALIDITY、IDLEの取消とpolling fall
 
 ## 未達・採用gate
 
+### FETCH完了statusを失う採用blocker
+
+- async-imap 0.12.0のuid_fetchで完全literalを受信した後、(1)一致tagのNO、(2)一致tagのBAD、(3)tag付き完了応答なしのEOFを注入した。全ケースでSome(Ok(Fetch))の次がNoneとなりerrorを受け取れない。最初の「必ずerrorが出る」期待の2 testsは失敗した。MIME解析可能な本文やstream終端だけでコマンド成功と判断してはならない。
+- 配布sourceのparse.rsでparse_fetchesがtake_while(filter)を使い、filter_syncはResponse::Done { tag, .. }のtagだけを見て除外することを確認。NO / BADのstatusがcallerへ届かない。imap_stream.rsではbufferが空のEOFをNoneとするため、complete FETCHの後に完了tagが来ないケースも成功終端と区別できない。literal途中EOFの既存error試験は引き続き成功する。
+- 評価testsはcandidate_limitationの名前で現状の欠陥をassertする。これは採用gateを緩和せず、検出した非対応機能を記録するPoCである。固定版のこのAPI経路は本番採用不可。上流修正 / 別API / 別候補でtag付きOKと欠落時errorを明示取得できるまで採用しない。NO後にNOOP成功を確認しても元FETCHの成功証明にならず、代替策にしない。変更はtest fixtureと文書のみ、registry sourceや依存版は変更していない。
+- Linux arm64で新規2 tests（NO / BAD / EOFの3 scenario）を含むunit5 + IMAP12 + MIME42 = 59 tests、対象clippy / format / diff成功。ただし2件は欠陥を再現した成功でありAC-04や候補採用の合格ではない。3OS runtime・実サーバ・永続化は未検証。既存のliteral読込中size / cancellation / prefix保持の未達も維持する。
+
 ### IMAP本文取得とMIMEの接続PoC
 
 - `tests/protocol/imap_body.rs`をmime-poc有効時だけIMAP test targetへ追加し、native fullのIMAP stepを`--features imap-poc,mime-poc`へ変更。単独imap-pocの既存試験は維持。公開login APIで合成認証後にEXAMINEし、UID 8のBODY.PEEK[] literalをMIME adapterへ渡す。本文中に`)`やtag付き応答に似た行があっても原文を誤分割しないことを確認。切断fixtureでは部分literalを成功として返さず、sessionを破棄する。全体timeoutは各scenario 3秒。
