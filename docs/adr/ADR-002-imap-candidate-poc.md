@@ -54,6 +54,12 @@ IMAP候補はTLS、SASL XOAUTH2、UID/UIDVALIDITY、IDLEの取消とpolling fall
 
 ## 未達・採用gate
 
+### 完了確認可能な公開低レベルAPIの限定PoC
+
+- 配布sourceで公開run_command / read_responseとimap_proto再公開を確認し、test限定のchecked_fetchを追加した。固定UID 8を要求し、parsed Response::FetchのUID / BODY[]を一時保持し、run_commandが返したtagと一致するResponse::DoneのStatus::Ok後だけbytesを返す。NO / BADはRejected、tag前EOFはMissingCompletion、別tagはUnexpectedResponse、途中literal切断はIo、OKだが本文なしはMissingBody。元response / error文字列はtyped errorへ格納せず、本文をerrorへ含めない。未対応応答や重複本文はfail-closedに拒否する。
+- 新規2 testsで正常3種類のfragment、異常6 scenarioを検証し、正常時にはMIME解析と後続flags command / LOGOUTも確認。Linux arm64でunit5 + IMAP14 + MIME42 = 61 tests、対象clippy / format / diff成功。既存高レベルAPIの欠陥再現2件は維持し、成功を採用合格と読み替えない。新依存・workflow変更なし。
+- これはwire parserを新規作成せず候補のparsed responseを使うAPI評価に限る。本番adapterではなく、固定UID・DuplexStreamのみ。unsolicited応答の正規配送、account / folder / UIDVALIDITY scope、期限と取消を含むsessionの消費的所有権、literal読込前のallocation上限、失敗時prefix保持は未実装。高レベルuid_fetchは引き続き本番採用不可で、低レベル経路もこれらのgate解消まで本番へ接続しない。実サーバ・3OS runtimeは未検証。
+
 ### FETCH完了statusを失う採用blocker
 
 - async-imap 0.12.0のuid_fetchで完全literalを受信した後、(1)一致tagのNO、(2)一致tagのBAD、(3)tag付き完了応答なしのEOFを注入した。全ケースでSome(Ok(Fetch))の次がNoneとなりerrorを受け取れない。最初の「必ずerrorが出る」期待の2 testsは失敗した。MIME解析可能な本文やstream終端だけでコマンド成功と判断してはならない。

@@ -1,4 +1,8 @@
-use async_imap::{Client, types::Flag};
+use async_imap::{
+    Client,
+    imap_proto::{AttributeValue, Response, Status},
+    types::Flag,
+};
 use futures_util::StreamExt;
 use mail_client_lib::mime_poc;
 use tokio::io::{AsyncWriteExt, BufReader};
@@ -12,9 +16,80 @@ enum FetchEnd {
     No,
     Bad,
     MissingCompletion,
+    WrongTag,
+    MissingBody,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum CheckedFetchError {
+    Io,
+    MissingCompletion,
+    Rejected,
+    UnexpectedResponse,
+    MissingBody,
+}
+
+// Evaluation only: the candidate still buffers literals without a size gate.
+async fn checked_fetch(
+    session: &mut async_imap::Session<tokio::io::DuplexStream>,
+) -> Result<Vec<u8>, CheckedFetchError> {
+    let tag = session
+        .run_command("UID FETCH 8 (UID FLAGS BODY.PEEK[])")
+        .await
+        .map_err(|_| CheckedFetchError::Io)?;
+    let mut body = None;
+    loop {
+        let response = session
+            .read_response()
+            .await
+            .map_err(|_| CheckedFetchError::Io)?
+            .ok_or(CheckedFetchError::MissingCompletion)?;
+        match response.parsed() {
+            Response::Fetch(_, attributes) => {
+                if !attributes
+                    .iter()
+                    .any(|attr| matches!(attr, AttributeValue::Uid(8)))
+                {
+                    return Err(CheckedFetchError::UnexpectedResponse);
+                }
+                for attribute in attributes {
+                    if let AttributeValue::BodySection {
+                        section: None,
+                        data: Some(bytes),
+                        ..
+                    } = attribute
+                    {
+                        if body.is_some() {
+                            return Err(CheckedFetchError::UnexpectedResponse);
+                        }
+                        body = Some(bytes.to_vec());
+                    }
+                }
+            }
+            Response::Done {
+                tag: received,
+                status,
+                ..
+            } => {
+                if received != &tag {
+                    return Err(CheckedFetchError::UnexpectedResponse);
+                }
+                return if *status == Status::Ok {
+                    body.ok_or(CheckedFetchError::MissingBody)
+                } else {
+                    Err(CheckedFetchError::Rejected)
+                };
+            }
+            _ => return Err(CheckedFetchError::UnexpectedResponse),
+        }
+    }
 }
 
 async fn exercise_fetch(fragment_size: usize, end: FetchEnd) {
+    exercise_fetch_api(fragment_size, end, false).await;
+}
+
+async fn exercise_fetch_api(fragment_size: usize, end: FetchEnd, checked: bool) {
     tokio::time::timeout(std::time::Duration::from_secs(3), async {
         let (client_stream, server_stream) = tokio::io::duplex(128);
         let server = tokio::spawn(async move {
@@ -39,6 +114,15 @@ async fn exercise_fetch(fragment_size: usize, end: FetchEnd) {
                 b"* 1 EXISTS\r\n* OK [UIDVALIDITY 4242] stable\r\nA0002 OK [READ-ONLY] examined\r\n"
             ).await.unwrap();
             super::read_command(&mut stream, "A0003 UID FETCH 8 (UID FLAGS BODY.PEEK[])\r\n").await;
+            if matches!(end, FetchEnd::MissingBody) {
+                stream
+                    .get_mut()
+                    .write_all(b"A0003 OK no matching message\r\n")
+                    .await
+                    .unwrap();
+                stream.get_mut().shutdown().await.unwrap();
+                return;
+            }
             stream
                 .get_mut()
                 .write_all(
@@ -73,6 +157,11 @@ async fn exercise_fetch(fragment_size: usize, end: FetchEnd) {
                         .await
                         .unwrap(),
                     FetchEnd::MissingCompletion => {}
+                    FetchEnd::WrongTag => stream
+                        .get_mut()
+                        .write_all(b"A9999 OK unrelated command\r\n")
+                        .await
+                        .unwrap(),
                     _ => unreachable!(),
                 }
                 stream.get_mut().shutdown().await.unwrap();
@@ -106,6 +195,35 @@ async fn exercise_fetch(fragment_size: usize, end: FetchEnd) {
             .unwrap();
         let mailbox = session.examine("INBOX").await.unwrap();
         assert_eq!(mailbox.uid_validity, Some(4242));
+        if checked {
+            let result = checked_fetch(&mut session).await;
+            match end {
+                FetchEnd::Complete => {
+                    let raw = result.unwrap();
+                    assert_eq!(raw, SOURCE);
+                    assert!(mime_poc::parse(&raw).is_ok());
+                    let mut flags = session.uid_fetch("8", "(UID FLAGS)").await.unwrap();
+                    assert_eq!(flags.next().await.unwrap().unwrap().uid, Some(8));
+                    assert!(flags.next().await.is_none());
+                    drop(flags);
+                    session.logout().await.unwrap();
+                }
+                FetchEnd::No | FetchEnd::Bad => {
+                    assert_eq!(result, Err(CheckedFetchError::Rejected))
+                }
+                FetchEnd::MissingCompletion => {
+                    assert_eq!(result, Err(CheckedFetchError::MissingCompletion))
+                }
+                FetchEnd::WrongTag => {
+                    assert_eq!(result, Err(CheckedFetchError::UnexpectedResponse))
+                }
+                FetchEnd::TruncatedLiteral => assert_eq!(result, Err(CheckedFetchError::Io)),
+                FetchEnd::MissingBody => assert_eq!(result, Err(CheckedFetchError::MissingBody)),
+            }
+            drop(session);
+            server.await.unwrap();
+            return;
+        }
         let mut fetches = session
             .uid_fetch("8", "(UID FLAGS BODY.PEEK[])")
             .await
@@ -186,4 +304,25 @@ async fn ac04_candidate_limitation_hides_tagged_no_or_bad_after_body() {
 #[tokio::test]
 async fn ac04_candidate_limitation_ends_without_tagged_completion() {
     exercise_fetch(17, FetchEnd::MissingCompletion).await;
+}
+
+#[tokio::test]
+async fn ac04_checked_fetch_requires_matching_tagged_ok_before_returning_body() {
+    for size in [1, 17, SOURCE.len()] {
+        exercise_fetch_api(size, FetchEnd::Complete, true).await;
+    }
+}
+
+#[tokio::test]
+async fn ac04_checked_fetch_rejects_failure_missing_completion_and_wrong_tags() {
+    for end in [
+        FetchEnd::No,
+        FetchEnd::Bad,
+        FetchEnd::MissingCompletion,
+        FetchEnd::WrongTag,
+        FetchEnd::TruncatedLiteral,
+        FetchEnd::MissingBody,
+    ] {
+        exercise_fetch_api(17, end, true).await;
+    }
 }
