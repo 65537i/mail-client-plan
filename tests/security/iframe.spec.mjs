@@ -32,9 +32,12 @@ describe("AC-05: real WebKitGTK HTML isolation", () => {
 
   after(async () => {
     if (server?.listening) {
+      console.log(`AC-05: closing probe server after ${requests.length} requests`);
       await new Promise((resolve, reject) => {
         server.close((error) => (error ? reject(error) : resolve()));
+        server.closeAllConnections();
       });
+      console.log("AC-05: probe server closed");
     }
   });
 
