@@ -95,9 +95,10 @@ try {
   );
 
   const traceOutput = await readFile(tracePath, "utf8");
-  verifyMacosFileTrace(traceOutput, canaryName);
+  const { systemMetadataEvents } = verifyMacosFileTrace(traceOutput, canaryName);
+  console.log(`AC-05 macOS audit: separately classified fseventsd lstat64 events: ${systemMetadataEvents}.`);
 } finally {
   await rm(tempDirectory, { recursive: true, force: true });
 }
 
-console.log("AC-05 macOS file-access audit passed: canary absent from the fs_usage trace.");
+console.log("AC-05 macOS file-access audit passed: no unexpected canary events; full WebView process coverage remains unverified.");

@@ -5,8 +5,8 @@
 ## 現在の範囲
 
 - Phase 00、縦切り機能00B「危険な境界のPoC」のHTML/IPC実WebView試験をLinux arm64と4 native CI runnerで確認
-- SecretStore lock/access-denied、Windows/macOSでのfile URL OS-level直接観測、最低サポートOSの実機確認は未完了。macOS `fs_usage`とWindows Process Monitorを計測候補として調査したが、CI権限・出力解析を含む実証は未実施。00CではIMAPのsynthetic peer検証、SMTP候補のfinal response/RCPT拒否をloopback sinkで確認したが、候補採用判断は未完了。
-- Actions利用分を抑えるため、native workflowはmainへのpushでUbuntuのみ、PRと手動実行（workflow_dispatch）で全4 runnerを実行する。`docs/status.md`のみの変更はpush / PRともworkflowを起動しない。PR / release前のクロスOS検証は維持する。
+- SecretStore lock/access-denied、Windows/macOSのfile URL監査の完全性、最低サポートOSの実機確認は未完了。macOS run 22ではfs_usageでOS daemonのmetadata参照を検出したが、全WebKit process coverageは未証明。Windows Process Monitorは未実装。00CではIMAPのsynthetic peer検証、SMTP候補のfinal response/RCPT拒否をloopback sinkで確認したが、候補採用判断は未完了。
+- 待ち時間を抑えるため、nativeはmain pushでUbuntu / basic、PRで全4 runner / full。手動は対象OSとbasic / webview / fullを選べる（既定all / full）。Rust cacheと軽量Node試験の前倒しを追加。status-only起動除外とPRの全OS gateは維持。部分検証の成功を全体成功には数えない。操作は[CI計画](./03-ci-release.md)を参照。
 
 ## 実装
 
@@ -74,10 +74,12 @@
 | GitHub Actions `native` run 19 (`5794400`) | Ubuntu 24.04 x64の全チェック成功。Linuxの既存file-access auditとWebViewを確認。macOS専用harnessはpush時matrixの対象外のため未実行。 |
 | GitHub Actions `native` run 20 (`fc919fc`, 手動) | Ubuntu、Windows、macOS 14 arm64成功。macOS 15 IntelはWebView / SecretStoreの2 specs成功後、system-wide fs_usage traceのcanary名検出で失敗。アクセス元をログへ出さずtraceを削除していたため、WebView起因か別process起因かは確定不能。テスト完了から監査終了まで約76秒の余分な観測時間も確認。 |
 | run 20への対策（AC-05） | sudo側へのSIGINTだけでなく、pid fileに記録したfs_usage本体をsudoで明示停止するよう修正。監査がWebView試験中に終了した場合も失敗にする。canary検出は引き続き全processで失敗させ、最大10件のoperation / process-thread名と総件数だけを診断表示（生path / traceは非公開・削除）。Node回帰5 tests、構文検査、actionlint、diff検査成功。macOSでの再実行は未確認。 |
+| GitHub Actions [native run 22](https://github.com/65537i/mail-client-plan/actions/runs/39606500689) (`ef6259d`, 手動) | 調査時点でrun全体は進行中。macOS 14 arm64はWebView / SecretStore 2 specs成功、HTTP 0件後に監査失敗。内訳は`lstat64 / fseventsd.2298`の1件。OS daemonのmetadata参照をアプリの攻撃と区別していなかった。終了処理はWDIO終了から約1秒で判定でき、run 20の余分な約76秒は解消。Intel等の最終結果は未確認。 |
+| run 22対策とCI短縮（AC-00 / 05 / 22） | 利用者確認済みでfseventsdのlstat64だけを別集計・明示報告。それ以外のcanaryイベントと未知formatは失敗を維持。全WebView coverageは未証明、AC-05全体は未達。CIの15通りの手動選択、push / PR選択、出力CLI、監査分類を含むNode 12 tests成功。node構文、actionlint 1.7.12、diff検査成功。変更後のmacOS実機・Actions実行、キャッシュ効果の実測は未実施。 |
 | `xvfb-run -a dbus-run-session -- pnpm run test:security:desktop` | 成功。ローカルLinux実WebViewで2 specs pass（iframe isolationとtrusted UI IPCを含む）。 |
 | Linux file URL OS-level audit | native run 11で成功。`strace -ff -e trace=%file`がTauri/WebViewを含む88 processを追跡し、一時ディレクトリの合成canaryへのfile syscall 0件。ローカルはstrace未導入のためCIで実行 |
-| macOS / Windows file URL OS-level audit候補 | macOS `fs_usage -w -f filesys`はroot権限が必要でsystem-wide file activityを観測可能。Windows Microsoft Sysinternals Process Monitorはfile-system activityをfilter/log可能。どちらもhosted runner上での権限・capture/export・canary判定は未検証で、AC-05の証拠には数えない |
-| macOS file-access audit harness | `scripts/test-macos-file-access.mjs`を追加。`sudo -n fs_usage`の一時traceにTauri appのfilesystem activityがあることと、実行時生成canary名がないことを確認する設計。`node --check`、actionlint、ローカルLinux WebView 2 specs passは成功。run 19はLinuxのみのため、macOS runnerで未実行。観測権限・process名検出は未確認 |
+| macOS / Windows file URL OS-level audit候補 | macOS fs_usageのroot観測とdaemonイベント解析はrun 22 arm64で確認。全WebKit coverage / positive controlは未確認。Windows Microsoft Sysinternals Process Monitorはcapture/export・権限・process追跡を含め未実装。AC-05全体の合格には数えない |
+| macOS file-access audit harness | `scripts/test-macos-file-access.mjs`でsudoの一時traceを検証し、記録したfs_usage PIDを明示停止。Tauri appの観測を必須とし、fseventsd lstat64以外のcanaryイベントを拒否。生traceは削除。限定分類後のmacOS runner実行は未確認 |
 | `node --check` / `cargo fmt --all --check` / `git diff --check` | 成功。file audit harnessとWDIO設定を含む |
 | `pnpm run check:production-security` | 成功。production buildにtest-only IPC / WebDriver pluginなし |
 | WDIO trusted UI / hostile fixture tests | `executeAsync`内の明示許可IPC確認をfixture注入前に行い、HTTP probe server close時にactive connectionsを終了。run 9で4 runnerすべて成功 |
@@ -129,7 +131,7 @@
 
 ## 次の最小タスク
 
-- 修正commitでnativeを手動実行し、macOS Intelのcanary検出が続く場合はoperation / process-thread診断でアクセス元を特定する。WebView起因なら隔離経路を修正するまでAC-05未達、別processでも判定を無条件緩和せずprocess coverageを実証する。Windows Process Monitorの合成canary PoCと対象最低OSの実機試験も必要。
+- 新しいmainでnativeを`macos-14-arm64 / webview`に絞って検証し、次に必要に応じて`macos-15-intel / webview`で原因を確認する。旧runのRe-runではなくRun workflowを使う。節目に`all / full`を実行する。macOSの全WebKit process coverage / positive control、Windows Process Monitorの合成canary PoC、対象最低OSの実機試験も必要。
 - OS別SecretStore lock / access-deniedを試験し、実IMAP/SMTP実装後はAC-06契約をprotocol adapterへ接続する。
 - ADR-006のPoCを基にPhase 07で正規化version、FTS同期、短いqueryのscope付き制限検索、100k性能計測を実装・検証する。
 - ADR-002のasync-imap候補はIDLE cancellation / TLS transportのgateを通すまで採用確定しない。

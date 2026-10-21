@@ -10,21 +10,61 @@ on:
     paths-ignore:
       - docs/status.md
   workflow_dispatch:
+    inputs:
+      target:
+        description: Target OS (all for cross-OS validation)
+        type: choice
+        default: all
+        options:
+          - all
+          - ubuntu-24.04-x64
+          - windows-2025-x64
+          - macos-14-arm64
+          - macos-15-intel
+      mode:
+        description: Validation scope (partial modes are not full validation)
+        type: choice
+        default: full
+        options:
+          - basic
+          - webview
+          - full
 
 permissions:
   contents: read
 
 concurrency:
-  group: native-${{ github.workflow }}-${{ github.ref }}
+  group: native-${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}-${{ inputs.target || 'auto' }}-${{ inputs.mode || 'auto' }}
   cancel-in-progress: true
 
 jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      mode: ${{ steps.plan.outputs.mode }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24.22.0
+      - name: Test CI planning and macOS file trace diagnostics
+        run: node --test tests/ci/*.test.mjs tests/security/macos-file-trace.test.mjs
+      - name: Select validation scope
+        id: plan
+        run: node scripts/native-ci-plan.mjs
+        env:
+          CI_EVENT: ${{ github.event_name }}
+          CI_TARGET: ${{ inputs.target }}
+          CI_MODE: ${{ inputs.mode }}
+
   build:
+    needs: plan
     strategy:
       fail-fast: false
-      matrix:
-        include: ${{ fromJSON(github.event_name == 'push' && '[{"platform":"ubuntu-24.04-x64","runner":"ubuntu-24.04"}]' || '[{"platform":"ubuntu-24.04-x64","runner":"ubuntu-24.04"},{"platform":"windows-2025-x64","runner":"windows-2025"},{"platform":"macos-14-arm64","runner":"macos-14"},{"platform":"macos-15-intel","runner":"macos-15-intel"}]') }}
-    name: ${{ matrix.platform }}
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    name: ${{ matrix.platform }} (${{ needs.plan.outputs.mode }})
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 45
     steps:
@@ -64,62 +104,84 @@ jobs:
         run: rustup toolchain install 1.99.1 --profile minimal --component clippy --component rustfmt
         shell: bash
 
+      - name: Cache Rust dependencies and build outputs
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+          key: rust-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.platform }}-1.99.1-${{ hashFiles('Cargo.lock', '**/Cargo.toml', 'rust-toolchain.toml', '.cargo/config*') }}-${{ needs.plan.outputs.mode }}-${{ github.sha }}
+          restore-keys: |
+            rust-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.platform }}-1.99.1-${{ hashFiles('Cargo.lock', '**/Cargo.toml', 'rust-toolchain.toml', '.cargo/config*') }}-${{ needs.plan.outputs.mode }}-
+            rust-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.platform }}-1.99.1-${{ hashFiles('Cargo.lock', '**/Cargo.toml', 'rust-toolchain.toml', '.cargo/config*') }}-
+
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
 
       - name: Check Rust formatting
+        if: needs.plan.outputs.mode != 'webview'
         run: cargo fmt --all --check
 
       - name: Test Rust workspace
+        if: needs.plan.outputs.mode != 'webview'
         run: cargo test --workspace --locked
 
       - name: Lint Rust workspace
+        if: needs.plan.outputs.mode != 'webview'
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
 
       - name: Type-check and build frontend
+        if: needs.plan.outputs.mode != 'webview'
         run: pnpm run build
 
-      - name: Test macOS file trace diagnostics
-        run: node --test tests/security/macos-file-trace.test.mjs
-
       - name: Build native application
+        if: needs.plan.outputs.mode == 'full'
         run: pnpm exec tauri build --no-bundle --ci
 
       - name: Verify production app excludes WebDriver
+        if: needs.plan.outputs.mode == 'full'
         run: pnpm run check:production-security
 
       - name: Build launch smoke-test application
+        if: needs.plan.outputs.mode == 'full'
         run: cargo build --release --locked --features smoke-test --bin mail-client
 
       - name: Launch and close application
-        if: runner.os == 'Linux'
+        if: needs.plan.outputs.mode == 'full' && runner.os == 'Linux'
         run: xvfb-run -a dbus-run-session -- env WEBKIT_DISABLE_COMPOSITING_MODE=1 ./target/release/mail-client
 
       - name: Launch and close application
-        if: runner.os == 'macOS'
+        if: needs.plan.outputs.mode == 'full' && runner.os == 'macOS'
         run: ./target/release/mail-client
 
       - name: Launch and close application
-        if: runner.os == 'Windows'
+        if: needs.plan.outputs.mode == 'full' && runner.os == 'Windows'
         run: .\target\release\mail-client.exe
 
       - name: Build security-test application
+        if: needs.plan.outputs.mode != 'basic'
         run: pnpm exec tauri build --no-bundle --ci --features security-test --config src-tauri/tauri.security-test.conf.json
 
       - name: Test TLS authentication boundary
+        if: needs.plan.outputs.mode == 'full'
         run: cargo test -p mail-client --features security-test --test tls_auth_boundary --locked
 
       - name: Test Japanese FTS5 trigram search
+        if: needs.plan.outputs.mode == 'full'
         run: cargo test -p mail-client --features search-poc --test japanese_trigram_search --locked
 
       - name: Test async-imap candidate
+        if: needs.plan.outputs.mode == 'full'
         run: cargo test -p mail-client --features imap-poc --test imap_candidate --locked
 
       - name: Test SMTP candidate
+        if: needs.plan.outputs.mode == 'full'
         run: cargo test -p mail-client --features smtp-poc --test smtp_candidate --locked
 
       - name: Test real WebView security boundaries
-        if: runner.os == 'Linux'
+        if: needs.plan.outputs.mode != 'basic' && runner.os == 'Linux'
         run: |
           xvfb-run -a dbus-run-session -- bash -c '
             set -euo pipefail
@@ -133,13 +195,13 @@ jobs:
           '
 
       - name: Test real WebView security boundaries
-        if: runner.os == 'macOS'
+        if: needs.plan.outputs.mode != 'basic' && runner.os == 'macOS'
         run: pnpm run test:security:file-access:macos
         env:
           MAIL_CLIENT_REQUIRE_SECRET_STORE: "1"
 
       - name: Test real WebView security boundaries
-        if: runner.os == 'Windows'
+        if: needs.plan.outputs.mode != 'basic' && runner.os == 'Windows'
         run: pnpm exec wdio run wdio.security.conf.mjs
         env:
           MAIL_CLIENT_REQUIRE_SECRET_STORE: "1"
