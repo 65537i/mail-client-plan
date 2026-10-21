@@ -11,6 +11,9 @@ use tokio::{
     task::JoinHandle,
 };
 
+#[path = "smtp_tls.rs"]
+mod smtp_tls;
+
 struct SmtpTranscript {
     commands: Vec<String>,
     message: Vec<u8>,

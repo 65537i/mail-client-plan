@@ -2328,9 +2328,12 @@ dependencies = [
  "idna",
  "nom 8.0.0",
  "percent-encoding",
+ "rustls",
  "socket2",
  "tokio",
+ "tokio-rustls",
  "url",
+ "webpki-roots",
 ]
 
 [[package]]
@@ -3583,6 +3586,7 @@ version = "0.23.37"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "758025cb5fccfd3bc2fd74708fd4682be41d99e5dff73c377c0646c6012c73a4"
 dependencies = [
+ "log",
  "once_cell",
  "ring",
  "rustls-pki-types",
@@ -5270,6 +5274,15 @@ dependencies = [
  "pkg-config",
  "soup3-sys",
  "system-deps 6.2.2",
+]
+
+[[package]]
+name = "webpki-roots"
+version = "1.0.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1c1c8e20c8a38fc7d65abfe74eb7280e4aa667e8eec8bc84996d2874810748d9"
+dependencies = [
+ "rustls-pki-types",
 ]
 
 [[package]]

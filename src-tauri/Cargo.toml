@@ -38,7 +38,7 @@ imap-poc = [
   "dep:tokio-rustls",
   "async-imap/runtime-tokio",
 ]
-smtp-poc = ["dep:lettre", "dep:tokio"]
+smtp-poc = ["dep:lettre", "dep:tokio", "dep:rcgen", "dep:rustls", "dep:tokio-rustls"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
@@ -57,7 +57,7 @@ unicode-normalization = { version = "=0.1.25", optional = true }
 async-imap = { version = "=0.12.0", default-features = false, optional = true }
 base64 = { version = "=0.23.1", optional = true }
 futures-util = { version = "0.3", features = ["io"], optional = true }
-lettre = { version = "=0.11.23", default-features = false, features = ["smtp-transport", "tokio1"], optional = true }
+lettre = { version = "=0.11.23", default-features = false, features = ["smtp-transport", "tokio1-rustls-tls"], optional = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 keyring = { version = "=3.6.3", default-features = false, features = ["sync-secret-service", "crypto-rust"], optional = true }

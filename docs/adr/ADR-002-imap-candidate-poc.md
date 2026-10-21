@@ -18,7 +18,7 @@ IMAP候補はTLS、SASL XOAUTH2、UID/UIDVALIDITY、IDLEの取消とpolling fall
 
 | 候補 | 利点 | 残課題 | 現時点 |
 |---|---|---|---|
-| `lettre` 0.11.23 | Tokio async transport、SMTP final positive responseを`Response`として返し、negative responseは`Error::status`・transient/permanentで取得可能。MIT、Rust 1.85+ | DATA後の応答不明をunknownへ写像するのは呼び出し側責務。複数RCPTの個別結果は最初の拒否で中断される。production TLS builder設定は未評価 | 優先候補。未確定 |
+| `lettre` 0.11.23 | Tokio async transport、SMTP final positive responseを`Response`として返し、negative responseは`Error::status`・transient/permanentで取得可能。rustlsの暗黙TLS / 必須STARTTLSを合成sinkで確認。MIT、Rust 1.85+ | DATA後の応答不明をunknownへ写像するのは呼び出し側責務。複数RCPTの個別結果は最初の拒否で中断される。production adapter / trust store方針は未実装 | 優先候補。未確定 |
 
 ## 実験
 
@@ -29,8 +29,9 @@ IMAP候補はTLS、SASL XOAUTH2、UID/UIDVALIDITY、IDLEの取消とpolling fall
 - synthetic LOGIN後にCAPABILITYを確認し、IDLE対応peerではIDLE中断が`ManualInterrupt`となりDONE後に同じselected sessionでNOOP/LOGOUTできること、IDLE非対応peerではNOOP pollingへ進むことを確認する。
 - 合成証明書を`localhost`用に生成し、rustlsの通常のroot/hostname検証を維持してimplicit TLS streamを`Client`へ渡す経路と、STARTTLS OK応答後にraw streamを取り出してTLS upgradeしたうえで`Client`を作り直す経路を確認する。両経路でTLS成立後のみにXOAUTH2を送信する。統合fixtureで不可信証明書・hostname不一致・STARTTLS拒否時に認証データが0 bytesであることも確認する。
 - commandとqueryは固定fixture。ユーザー入力をrun_command / MATCH文字列等へ直接通す用途を認めない。mailbox名・search条件は型付きvalidatorとparameterizationをadapterに置く。
-- `smtp-poc` featureでは`lettre` default featuresを無効化し、`smtp-transport` / `tokio1`のみを有効化する。loopback scripted sinkでDATA final 250 response、DATA後final 550 responseのstatus取得、RCPT拒否時にDATAへ進まずQUITすることを試験する。SMTP transaction payloadは固定ASCII合成データで、外部relay・TLS・credentialsを使わない。
+- `smtp-poc` featureでは`lettre` default featuresを無効化し、`smtp-transport` / `tokio1-rustls-tls`を有効化する（Tokio / rustls / ring / webpki-rootsを含む）。rcgen / rustls / tokio-rustlsも同PoCだけで有効にする。loopback scripted sinkでDATA final 250 response、DATA後final 550 responseのstatus取得、RCPT拒否時にDATAへ進まずQUITすることを試験する。これらのtransaction testsは固定ASCII合成データで、外部relay・credentialsを使わない。
 - AC-13に向けた候補評価として、sinkがDATA終端まで受信した直後に接続を閉じる場合と、`250 2.0.0 queued`をCRLFなしで途中送信して閉じる場合を追加。両方でsend_rawが成功でもSMTP拒否statusでもないエラーを返し、sinkの本文とDATA回数1件を検査する。listenerを閉じず250ms監視し、この観測窓で自動再接続がないことも確認する。これは候補の単一send呼び出しの評価であり、永続Outboxのunknown分類・再起動復旧・長期間のretry禁止は証明しない。
+- SMTP TLS fixtureではrcgenのlocalhost証明書をtest専用rootとして明示的に信頼し、通常の証明書・hostname検証を維持する。`Tls::Wrapper`または`Tls::Required`を明示し、opportunistic / plaintext fallbackは使わない。`test_connection`でTLS後のEHLO → 合成AUTH PLAIN → NOOP → QUITを確認する。STARTTLS前にもAUTHをadvertiseするがclientはTLS確立まで認証しない。信頼しない証明書・信頼済みだがhostname不一致を両TLS方式で試し、rustlsのtyped InvalidCertificateをerror source chainから確認する。STARTTLS 454拒否・capabilityなしも別ケースで確認する。平文で観測してよいcommandはEHLO / STARTTLS / QUITだけに限定し、認証・本文データの漏出を拒否する。
 
 ## 結果
 
@@ -45,12 +46,14 @@ IMAP候補はTLS、SASL XOAUTH2、UID/UIDVALIDITY、IDLEの取消とpolling fall
 | SMTP final response | lettreがpositive final 250を`Response`で返し、DATA後の550拒否をpermanent error/status 550として保持することをloopback sinkで確認 |
 | SMTP RCPT拒否 | RCPT 550に対しDATAを送らずQUITすることをloopback sinkで確認。複数宛先の部分受理表示は未実装 |
 | SMTP lost / truncated final response | Linux arm64で2ケース成功。sinkは本文とDATA終端を受信済みだが、clientに最終受理応答はなく、statusなし・transient/permanentのいずれでもないエラーとなる。単一send呼び出し中と切断後250msの観測で再接続なし。CRLF未完の250も成功扱いにしない。SMTP候補testは計5件成功、対象clippy成功 |
+| SMTP TLS / 認証境界（AC-06） | Linux arm64で8ケース成功（暗黙TLS / 必須STARTTLSの成功2、証明書不可信2、hostname不一致2、STARTTLS拒否 / 未advertise各1）。成功時のみ暗号化後AUTH 1回、否定経路は認証0回。既存5件を含めSMTP 13 tests、対象clippy成功。IMAP 8 + 汎用TLS 3とのfeature併用でも計24 tests成功 |
 | 3OS build / CI | workflow matrixに同じin-memory testを追加。GitHub Actions未実行 |
 
 ## 未達・採用gate
 
 - malformed/large MIMEはこのcrateの責務外で、MIME候補の別PoCを行う。未対応IMAP extensionはcapabilityを確認して基本commandへfallbackし、存在しないextensionを仮定しない。
-- SMTP final response後の永続化kill / 接続切断によるOutboxのunknown分類、TLS設定・STARTTLS必須昇格、複数RCPTの個別失敗UXを別PoCで確認する。lost / truncated responseで候補がエラーを返すことは確認したが、SMTP `Error`だけで再送可否を決めず、DATA送出境界を記録するoutbox state machineが必要。
+- SMTP final response後の永続化kill / 接続切断によるOutboxのunknown分類、複数RCPTの個別失敗UXを別PoCで確認する。lost / truncated responseで候補がエラーを返すことは確認したが、SMTP `Error`だけで再送可否を決めず、DATA送出境界を記録するoutbox state machineが必要。
+- SMTP TLSは`test_connection`による接続・認証のPoCであり、TLS上の本文送信、OAuth2 mechanism、production adapterの入力検証 / OS trust store / timeout・取消方針は未実装。固定版lettreはTLS handshake errorをconnection errorに包むため、`is_tls()`だけで認証・TLSエラー分類を決めない。TLS検証失敗時のsource chainを評価する必要がある。
 - 3OS native compile / runtimeをCIで確認し、license、release/issue healthを再確認してから採用確定ADRへ変更する。
 - mailbox name、sequence set、FETCH query、custom command等に任意文字列を連結するAPI面がある。domain adapterで型・validation・constant queryを強制し、UIへ汎用command実行面を公開しない。
 
