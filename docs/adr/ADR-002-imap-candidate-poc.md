@@ -41,6 +41,7 @@ IMAP候補はTLS、SASL XOAUTH2、UID/UIDVALIDITY、IDLEの取消とpolling fall
 | Tokio integration | `cargo test -p mail-client --features imap-poc --test imap_candidate --locked` 成功 |
 | XOAUTH2 challenge/response | 合成payloadのchallenge flowを確認 |
 | UID semantics | SELECT UIDVALIDITYとUID FETCH responseを確認。実装側は必ず(account, folder, UIDVALIDITY, UID)でpersistし、sequence number単独参照を禁止 |
+| BODY.PEEK → MIME（AC-04前提） | imap-poc + mime-poc併用の新規2 tests。EXAMINE / UIDVALIDITY、UID FETCHのBODY.PEEK[]完全一致、1 / 17 / 全byte分割literalの全原文復元、MIME本文・診断、取得後のUID FLAGS / LOGOUT成功。literal途中切断はerrorで成功FETCHなし。Linux arm64でunit5 + IMAP10 + MIME42 = 57 tests、対象clippy / format / diff成功 |
 | IDLE cancellation | wait timeout stopで`ManualInterrupt`を確認。DONE送信後に同じselected sessionでNOOPとLOGOUTが成功 |
 | Fallback | IDLEをadvertiseしないpeerでIDLEを呼び出さずNOOP pollingとLOGOUTが成功 |
 | TLS | rustlsの証明書・hostname検証を使い、implicit TLSおよびSTARTTLS後のasync-imap stream再構成を確認。不可信証明書・hostname mismatch・STARTTLS拒否の全ケースでIMAP統合fixture上の認証データ0 bytesを確認 |
@@ -52,6 +53,12 @@ IMAP候補はTLS、SASL XOAUTH2、UID/UIDVALIDITY、IDLEの取消とpolling fall
 | 3OS build / CI | workflow matrixに同じin-memory testを追加。GitHub Actions未実行 |
 
 ## 未達・採用gate
+
+### IMAP本文取得とMIMEの接続PoC
+
+- `tests/protocol/imap_body.rs`をmime-poc有効時だけIMAP test targetへ追加し、native fullのIMAP stepを`--features imap-poc,mime-poc`へ変更。単独imap-pocの既存試験は維持。公開login APIで合成認証後にEXAMINEし、UID 8のBODY.PEEK[] literalをMIME adapterへ渡す。本文中に`)`やtag付き応答に似た行があっても原文を誤分割しないことを確認。切断fixtureでは部分literalを成功として返さず、sessionを破棄する。全体timeoutは各scenario 3秒。
+- fixtureのFLAGS ()は固定合成応答で、BODY.PEEK[]のwire選択とclientのflags解釈を確認したにとどまる。EXAMINEのread-only保護もあり、実IMAPサーバのSeen semanticsの証明ではない。認証はメモリ内DuplexStreamと合成値のみで、平文ネットワーク認証を製品へ許可する変更ではない。
+- async-imap自身がliteralをbufferしてからFetch::body()を返す。このPoCで指定長readerを内部へ差し込んでいないため、既存readerの読込前50MiB gateや部分原文回収がそのまま適用されるとは扱わない。実ネットワークに接続する前にliteral読込中のsize / timeout / cancellation / prefix保持とaccount-scoped参照を接続する必要がある。実サーバ、永続化、UI、3OS、解析中資源制限は未確認。actionlintは環境になく今回は未実行、workflowは既存stepのfeature指定だけを変更した。
 
 ### MIME候補の初期PoC
 

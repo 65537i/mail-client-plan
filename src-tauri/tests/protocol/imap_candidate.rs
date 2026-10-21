@@ -1,5 +1,9 @@
 use std::{io::ErrorKind, sync::Arc};
 
+#[cfg(feature = "mime-poc")]
+#[path = "imap_body.rs"]
+mod imap_body;
+
 use async_imap::extensions::idle::IdleResponse;
 use async_imap::types::{Capability, Flag};
 use async_imap::{Authenticator, Client};

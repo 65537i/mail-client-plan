@@ -174,7 +174,7 @@ jobs:
 
       - name: Test async-imap candidate
         if: needs.plan.outputs.mode == 'full'
-        run: cargo test -p mail-client --features imap-poc --test imap_candidate --locked
+        run: cargo test -p mail-client --features imap-poc,mime-poc --test imap_candidate --locked
 
       - name: Test SMTP candidate
         if: needs.plan.outputs.mode == 'full'
