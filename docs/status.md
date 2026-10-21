@@ -76,10 +76,13 @@
 | run 20への対策（AC-05） | sudo側へのSIGINTだけでなく、pid fileに記録したfs_usage本体をsudoで明示停止するよう修正。監査がWebView試験中に終了した場合も失敗にする。canary検出は引き続き全processで失敗させ、最大10件のoperation / process-thread名と総件数だけを診断表示（生path / traceは非公開・削除）。Node回帰5 tests、構文検査、actionlint、diff検査成功。macOSでの再実行は未確認。 |
 | GitHub Actions [native run 22](https://github.com/65537i/mail-client-plan/actions/runs/39606500689) (`ef6259d`, 手動) | 調査時点でrun全体は進行中。macOS 14 arm64はWebView / SecretStore 2 specs成功、HTTP 0件後に監査失敗。内訳は`lstat64 / fseventsd.2298`の1件。OS daemonのmetadata参照をアプリの攻撃と区別していなかった。終了処理はWDIO終了から約1秒で判定でき、run 20の余分な約76秒は解消。Intel等の最終結果は未確認。 |
 | run 22対策とCI短縮（AC-00 / 05 / 22） | 利用者確認済みでfseventsdのlstat64だけを別集計・明示報告。それ以外のcanaryイベントと未知formatは失敗を維持。全WebView coverageは未証明、AC-05全体は未達。CIの15通りの手動選択、push / PR選択、出力CLI、監査分類を含むNode 12 tests成功。node構文、actionlint 1.7.12、diff検査成功。変更後のmacOS実機・Actions実行、キャッシュ効果の実測は未実施。 |
+| GitHub Actions [native run 23](https://github.com/65537i/mail-client-plan/actions/runs/39610151925) (`630b8af`, push) | Ubuntu / basic成功。run作成13:41:10から完了13:45:12 UTCまで4分02秒。基本チェックのみで、production build / 起動 / protocol / 実WebViewの証跡には数えない。 |
+| GitHub Actions [native run 24](https://github.com/65537i/mail-client-plan/actions/runs/39611373351) (`630b8af`, 手動) | planとmacOS 14 arm64 / webviewの2 jobsのみで成功。run作成13:49:27から完了13:53:53 UTCまで4分26秒。security-test buildは3分20秒、実WebView監査stepは10秒。iframe / SecretStore 2 specs成功、HTTP 0件。fseventsd lstat64を1件別集計し、その他のcanaryイベント0件。停止・分類修正とOS / モード選択をrunner上で確認。full / 他OS / 最低OS実機 / 全WebKit coverageは未確認。 |
+| run 24 Rustキャッシュ | macOS ARMのRustキャッシュ約458 MBを保存成功。次回以降の復元用データが作成された。warm cacheによる短縮効果は未計測。fullとwebviewは検証範囲が異なるため、run 20等との差をキャッシュ効果として扱わない。 |
 | `xvfb-run -a dbus-run-session -- pnpm run test:security:desktop` | 成功。ローカルLinux実WebViewで2 specs pass（iframe isolationとtrusted UI IPCを含む）。 |
 | Linux file URL OS-level audit | native run 11で成功。`strace -ff -e trace=%file`がTauri/WebViewを含む88 processを追跡し、一時ディレクトリの合成canaryへのfile syscall 0件。ローカルはstrace未導入のためCIで実行 |
 | macOS / Windows file URL OS-level audit候補 | macOS fs_usageのroot観測とdaemonイベント解析はrun 22 arm64で確認。全WebKit coverage / positive controlは未確認。Windows Microsoft Sysinternals Process Monitorはcapture/export・権限・process追跡を含め未実装。AC-05全体の合格には数えない |
-| macOS file-access audit harness | `scripts/test-macos-file-access.mjs`でsudoの一時traceを検証し、記録したfs_usage PIDを明示停止。Tauri appの観測を必須とし、fseventsd lstat64以外のcanaryイベントを拒否。生traceは削除。限定分類後のmacOS runner実行は未確認 |
+| macOS file-access audit harness | `scripts/test-macos-file-access.mjs`でsudoの一時traceを検証し、記録したfs_usage PIDを明示停止。Tauri appの観測を必須とし、fseventsd lstat64以外のcanaryイベントを拒否。生traceは削除。run 24でmacOS ARMの限定分類後の監査成功。全WebKit coverage / positive controlは引き続き未確認 |
 | `node --check` / `cargo fmt --all --check` / `git diff --check` | 成功。file audit harnessとWDIO設定を含む |
 | `pnpm run check:production-security` | 成功。production buildにtest-only IPC / WebDriver pluginなし |
 | WDIO trusted UI / hostile fixture tests | `executeAsync`内の明示許可IPC確認をfixture注入前に行い、HTTP probe server close時にactive connectionsを終了。run 9で4 runnerすべて成功 |
@@ -131,7 +134,7 @@
 
 ## 次の最小タスク
 
-- 新しいmainでnativeを`macos-14-arm64 / webview`に絞って検証し、次に必要に応じて`macos-15-intel / webview`で原因を確認する。旧runのRe-runではなくRun workflowを使う。節目に`all / full`を実行する。macOSの全WebKit process coverage / positive control、Windows Process Monitorの合成canary PoC、対象最低OSの実機試験も必要。
+- macOS ARM / webviewはrun 24で成功したため、同じ確認のために再実行しない。次は必要に応じて最新mainで`macos-15-intel / webview`に絞ってIntel側の修正を確認する。旧runのRe-runではなくRun workflowを使い、節目に`all / full`を実行する。warm cache短縮効果の計測だけを目的とする追加runは不要。macOSの全WebKit process coverage / positive control、Windows Process Monitorの合成canary PoC、対象最低OSの実機試験も必要。
 - OS別SecretStore lock / access-deniedを試験し、実IMAP/SMTP実装後はAC-06契約をprotocol adapterへ接続する。
 - ADR-006のPoCを基にPhase 07で正規化version、FTS同期、短いqueryのscope付き制限検索、100k性能計測を実装・検証する。
 - ADR-002のasync-imap候補はIDLE cancellation / TLS transportのgateを通すまで採用確定しない。
