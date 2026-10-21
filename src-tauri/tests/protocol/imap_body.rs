@@ -27,19 +27,51 @@ async fn owned_checked_fetch(
     mut session: async_imap::Session<tokio::io::DuplexStream>,
     deadline: Instant,
     cancellation: impl std::future::Future<Output = ()>,
-) -> Result<(async_imap::Session<tokio::io::DuplexStream>, Vec<u8>), CheckedFetchError> {
+) -> Result<(async_imap::Session<tokio::io::DuplexStream>, Vec<u8>), FetchFailure> {
+    let mut provisional = None;
     let timeout = async {
         if Instant::now() < deadline {
             tokio::time::sleep_until(deadline).await;
         }
     };
-    let body = tokio::select! {
+    let result = tokio::select! {
         biased;
-        () = cancellation => return Err(CheckedFetchError::Cancelled),
-        () = timeout => return Err(CheckedFetchError::TimedOut),
-        result = checked_fetch(&mut session) => result?,
+        () = cancellation => Err(CheckedFetchError::Cancelled),
+        () = timeout => Err(CheckedFetchError::TimedOut),
+        result = checked_fetch(&mut session, &mut provisional) => result,
     };
+    if let Err(cause) = result {
+        return Err(FetchFailure { cause, provisional });
+    }
+    let body = provisional.ok_or(FetchFailure {
+        cause: CheckedFetchError::MissingBody,
+        provisional: None,
+    })?;
     Ok((session, body))
+}
+
+struct FetchFailure {
+    cause: CheckedFetchError,
+    provisional: Option<Vec<u8>>,
+}
+
+impl FetchFailure {
+    fn into_parts(self) -> (CheckedFetchError, Option<Vec<u8>>) {
+        (self.cause, self.provisional)
+    }
+}
+
+impl std::fmt::Debug for FetchFailure {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("FetchFailure")
+            .field("cause", &self.cause)
+            .field(
+                "provisional_bytes",
+                &self.provisional.as_ref().map(Vec::len),
+            )
+            .finish()
+    }
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -56,12 +88,12 @@ enum CheckedFetchError {
 // Evaluation only: the candidate still buffers literals without a size gate.
 async fn checked_fetch(
     session: &mut async_imap::Session<tokio::io::DuplexStream>,
-) -> Result<Vec<u8>, CheckedFetchError> {
+    body: &mut Option<Vec<u8>>,
+) -> Result<(), CheckedFetchError> {
     let tag = session
         .run_command("UID FETCH 8 (UID FLAGS BODY.PEEK[])")
         .await
         .map_err(|_| CheckedFetchError::Io)?;
-    let mut body = None;
     loop {
         let response = session
             .read_response()
@@ -86,7 +118,7 @@ async fn checked_fetch(
                         if body.is_some() {
                             return Err(CheckedFetchError::UnexpectedResponse);
                         }
-                        body = Some(bytes.to_vec());
+                        *body = Some(bytes.to_vec());
                     }
                 }
             }
@@ -99,7 +131,9 @@ async fn checked_fetch(
                     return Err(CheckedFetchError::UnexpectedResponse);
                 }
                 return if *status == Status::Ok {
-                    body.ok_or(CheckedFetchError::MissingBody)
+                    body.as_ref()
+                        .map(|_| ())
+                        .ok_or(CheckedFetchError::MissingBody)
                 } else {
                     Err(CheckedFetchError::Rejected)
                 };
@@ -250,6 +284,19 @@ async fn exercise_fetch_api(fragment_size: usize, end: FetchEnd, checked: bool) 
                 std::future::pending(),
             )
             .await;
+            if let Err(failure) = &result {
+                let expected = if matches!(end, FetchEnd::TruncatedLiteral | FetchEnd::MissingBody)
+                {
+                    None
+                } else {
+                    Some(SOURCE)
+                };
+                assert_eq!(failure.provisional.as_deref(), expected);
+                let debug = format!("{failure:?}");
+                assert!(!debug.contains("Synthetic"));
+                assert!(!debug.contains("Subject:"));
+            }
+            let result = result.map_err(|failure| failure.into_parts().0);
             match end {
                 FetchEnd::Complete => {
                     let (mut session, raw) = result.unwrap();
@@ -465,13 +512,20 @@ async fn ac04_owned_fetch_closes_stalled_session_on_cancel_or_deadline() {
                     cancellation,
                 )
                 .await;
+                let failure = result.unwrap_err();
+                assert!(!format!("{failure:?}").contains("Synthetic"));
+                let (cause, provisional) = failure.into_parts();
                 assert_eq!(
-                    result.map(|_| ()),
-                    Err(if cancel {
+                    provisional.as_deref(),
+                    if complete_literal { Some(SOURCE) } else { None }
+                );
+                assert_eq!(
+                    cause,
+                    if cancel {
                         CheckedFetchError::Cancelled
                     } else {
                         CheckedFetchError::TimedOut
-                    })
+                    }
                 );
                 server.await.unwrap();
             })
@@ -520,13 +574,15 @@ async fn ac04_owned_fetch_ready_cancel_and_expired_deadline_send_no_command() {
                 }
             })
             .await;
+            let (cause, provisional) = result.unwrap_err().into_parts();
+            assert!(provisional.is_none());
             assert_eq!(
-                result.map(|_| ()),
-                Err(if cancel {
+                cause,
+                if cancel {
                     CheckedFetchError::Cancelled
                 } else {
                     CheckedFetchError::TimedOut
-                })
+                }
             );
             server.await.unwrap();
         })

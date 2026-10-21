@@ -54,6 +54,12 @@ IMAP候補はTLS、SASL XOAUTH2、UID/UIDVALIDITY、IDLEの取消とpolling fall
 
 ## 未達・採用gate
 
+### 未確定の完全literalの保持・回収PoC
+
+- test限定owned_checked_fetchがOption<Vec<u8>>を所有し、checked_fetchは借用した保持領域へ完全literalを格納するよう変更。selectで待機futureが取消されても保持領域は残り、FetchFailureへcauseと未確定本文を格納して返す。into_partsで明示回収でき、manual Debugはcauseと保持byte数のみ。sessionは全失敗でdropし、成功は一致tagのOK後のみ(session, body)を返す従来契約を維持する。
+- 既存の異常系testsを強化し、NO / BAD / 完了なしEOF / 別tagおよび完了待機中のtimeout / cancellationでSOURCEの全bytes回収を確認。本文なし / 途中literal / 事前中断はNoneで、未取得を空本文成功に置き換えない。診断にSubjectやSynthetic本文がないこと、peer側接続終了・後続commandなしのassertも維持。Linux arm64でunit5 + IMAP16 + MIME42 = 63 tests、対象clippy / format / diff成功。件数は既存を強化したため増加なし。欠陥再現2件は採用合格ではない。
+- 取得済みliteralでもFETCH全体の成功未確認なので、未確定状態で扱い完全cacheへ昇格させない。candidate内部の途中literalは依然回収できず、永続化・future自体drop / abort時の回収・読込allocation制限・TCP / TLS終了・unsolicited配送・account scope・3OSは未検証。製品コード・依存・workflow変更なし、本番採用blockerは維持。この後続PoCで以前の「完全literalも中断で失われる」制約のみ解消し、途中literalの制約は残る。
+
 ### FETCHの期限・取消とsession消費の限定PoC
 
 - test限定owned_checked_fetchはDuplexStreamのsessionを所有し、既存checked_fetchを絶対deadline / cancellation Futureとselectする。ready取消を期限より優先し、既に期限を過ぎていればcommandをpollしない。一致tagのOKによる成功時だけ(session, body)を返し、その他のerror経路はsessionをdropする。中断したprotocol状態をそのままcallerへ返さない所有権契約を評価したもので、本番adapterではない。
