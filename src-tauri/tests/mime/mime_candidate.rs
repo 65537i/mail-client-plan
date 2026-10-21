@@ -4,6 +4,75 @@ use mail_parser::{MessageParser, MimeHeaders, PartType};
 #[path = "async_source.rs"]
 mod async_source;
 
+fn cid_message(ids: &[&str]) -> String {
+    let mut raw = "Content-Type: multipart/mixed; boundary=cid-scope\r\n\r\n--cid-scope\r\nContent-Type: text/plain\r\n\r\nSynthetic CID body\r\n".to_owned();
+    for id in ids {
+        raw.push_str(&format!(
+            "--cid-scope\r\nContent-Type: image/png\r\nContent-Disposition: attachment\r\nContent-ID: <{id}>\r\n\r\nSynthetic image bytes\r\n"
+        ));
+    }
+    raw.push_str("--cid-scope--\r\n");
+    raw
+}
+
+#[test]
+fn ac04_cid_diagnostics_report_duplicates_without_exposing_identifiers() {
+    for (ids, duplicate) in [
+        (vec!["private-cid", "private-cid"], true),
+        (vec!["private-cid", "different-cid"], false),
+        (vec!["private-cid", "PRIVATE-CID"], false),
+        (vec![], false),
+    ] {
+        let raw = cid_message(&ids);
+        let (message, diagnostics) = mime_poc::parse_with_diagnostics(raw.as_bytes()).unwrap();
+        assert_eq!(diagnostics.duplicate_content_id, duplicate);
+        assert_eq!(message.attachment_count(), ids.len());
+        assert_eq!(message.raw_message.as_ref(), raw.as_bytes());
+        assert!(!format!("{diagnostics:?}").contains("private-cid"));
+        assert_eq!(
+            mime_poc::parse(raw.as_bytes()).unwrap().attachment_count(),
+            ids.len()
+        );
+    }
+}
+
+#[test]
+fn ac04_cid_diagnostics_keep_attached_message_namespaces_separate() {
+    let inner = "Content-Type: image/png\r\nContent-Disposition: attachment\r\nContent-ID: <same-cid>\r\n\r\nSynthetic inner image";
+    let raw = format!(
+        "Content-Type: multipart/mixed; boundary=outer\r\n\r\n--outer\r\nContent-Type: image/png\r\nContent-Disposition: attachment\r\nContent-ID: <same-cid>\r\n\r\nSynthetic outer image\r\n--outer\r\nContent-Type: message/rfc822\r\n\r\n{inner}\r\n--outer\r\nContent-Type: message/rfc822\r\n\r\n{inner}\r\n--outer--\r\n"
+    );
+    let (message, diagnostics) = mime_poc::parse_with_diagnostics(raw.as_bytes()).unwrap();
+    assert!(!diagnostics.duplicate_content_id);
+    assert_eq!(message.attachment_count(), 3);
+    assert_eq!(
+        message
+            .parts
+            .iter()
+            .filter(|part| matches!(part.body, PartType::Message(_)))
+            .count(),
+        2
+    );
+}
+
+#[test]
+fn ac04_cid_diagnostics_include_duplicates_inside_attached_messages() {
+    let raw = format!(
+        "Content-Type: message/rfc822\r\nContent-Disposition: attachment\r\n\r\n{}",
+        cid_message(&["private-nested-cid", "private-nested-cid"])
+    );
+    let (message, diagnostics) = mime_poc::parse_with_diagnostics(raw.as_bytes()).unwrap();
+    assert!(diagnostics.duplicate_content_id);
+    assert!(!diagnostics.unrecognized_text_charset);
+    assert!(!diagnostics.replacement_character_present);
+    assert_eq!(message.raw_message.as_ref(), raw.as_bytes());
+    let PartType::Message(nested) = &message.parts[0].body else {
+        panic!("expected attached message");
+    };
+    assert_eq!(nested.attachment_count(), 2);
+    assert!(!format!("{diagnostics:?}").contains("private-nested-cid"));
+}
+
 #[test]
 fn ac04_charset_diagnostics_distinguish_fallback_and_replacement_presence() {
     for (charset, body, unknown, replacement) in [

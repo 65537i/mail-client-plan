@@ -1,4 +1,5 @@
 use std::{
+    collections::HashSet,
     error::Error,
     fmt,
     future::Future,
@@ -23,6 +24,9 @@ pub struct MimeDiagnostics {
     pub unrecognized_text_charset: bool,
     /// Presence alone does not prove decoding loss: the source may contain U+FFFD.
     pub replacement_character_present: bool,
+    /// Duplicate nonempty Content-IDs within any single message, not across
+    /// distinct attached messages. This is not a CID URL resolver.
+    pub duplicate_content_id: bool,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -188,7 +192,7 @@ pub fn parse(raw: &[u8]) -> Result<Message<'_>, MimeError> {
     parse_with_diagnostics(raw).map(|(message, _)| message)
 }
 
-/// Reports body diagnostics without exposing headers or content. Header charset
+/// Reports MIME diagnostics without exposing headers or content. Header charset
 /// decoding and exact detection of lossy conversions are outside this PoC.
 pub fn parse_with_diagnostics(raw: &[u8]) -> Result<(Message<'_>, MimeDiagnostics), MimeError> {
     if raw.len() > MAX_RAW_BYTES {
@@ -210,6 +214,14 @@ fn validate(message: &Message<'_>) -> Result<MimeDiagnostics, MimeError> {
             .parts
             .get(index)
             .ok_or(MimeError::InvalidStructure)?;
+        if index == 0 {
+            let mut content_ids = HashSet::new();
+            for part in &message.parts {
+                if let Some(cid) = part.content_id().filter(|cid| !cid.is_empty()) {
+                    diagnostics.duplicate_content_id |= !content_ids.insert(cid);
+                }
+            }
+        }
         if part.is_encoding_problem {
             return Err(MimeError::Incomplete);
         }
