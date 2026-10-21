@@ -54,6 +54,12 @@ IMAP候補はTLS、SASL XOAUTH2、UID/UIDVALIDITY、IDLEの取消とpolling fall
 
 ## 未達・採用gate
 
+### 要求UIDと完全BODY応答の整合性PoC
+
+- test限定checked_fetchのUID判定を「UID 8がどこかにある」から「UID属性がちょうど1個で8」に変更。BodySectionのindexは部分取得originを表すためSome(0)も完全BODY[]とは扱わず拒否する。固定imap-proto 0.17.0の公開BodySection型（index: Option<u32>）とparser対応を配布sourceで確認した。本文重複の既存拒否も回帰試験へ追加した。
+- 新規2 testsで別UID / UID欠落 / UID重複 / 同応答内の本文重複 / origin 0 / origin 17を注入。修正前にUID重複と部分本文を完全な未確定本文へ格納する失敗を再現。修正後はUnexpectedResponseで返りsessionを破棄し、peerで後続commandなし・EOFを確認。UID不正と部分本文はprovisionalへ入れず、本文重複は最初の未確定本文を保持し後のbytesで上書きしない。初回のtest scope警告・型field名compileエラーは修正した。
+- Linux arm64でunit5 + IMAP18 + MIME42 = 65 tests、対象clippy / format / diff成功。うち既存2件は高レベルAPIの欠陥再現であり採用合格ではない。これは未要求応答をfail-closedに拒否する限定PoCで、正当なunsolicited FETCHの処理やaccount / folder / UIDVALIDITY所属を保証しない。literal allocation上限・途中prefix回収・実サーバ・3OSは未達。製品コード・依存・workflow変更なし、本番採用blockerは維持。
+
 ### 未確定の完全literalの保持・回収PoC
 
 - test限定owned_checked_fetchがOption<Vec<u8>>を所有し、checked_fetchは借用した保持領域へ完全literalを格納するよう変更。selectで待機futureが取消されても保持領域は残り、FetchFailureへcauseと未確定本文を格納して返す。into_partsで明示回収でき、manual Debugはcauseと保持byte数のみ。sessionは全失敗でdropし、成功は一致tagのOK後のみ(session, body)を返す従来契約を維持する。

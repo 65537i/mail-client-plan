@@ -21,6 +21,12 @@ enum FetchEnd {
     MissingCompletion,
     WrongTag,
     MissingBody,
+    WrongUid,
+    MissingUid,
+    DuplicateUid,
+    DuplicateBody,
+    PartialZero,
+    PartialOffset,
 }
 
 async fn owned_checked_fetch(
@@ -102,20 +108,21 @@ async fn checked_fetch(
             .ok_or(CheckedFetchError::MissingCompletion)?;
         match response.parsed() {
             Response::Fetch(_, attributes) => {
-                if !attributes
-                    .iter()
-                    .any(|attr| matches!(attr, AttributeValue::Uid(8)))
-                {
+                let mut uids = attributes.iter().filter_map(|attr| match attr {
+                    AttributeValue::Uid(uid) => Some(*uid),
+                    _ => None,
+                });
+                if uids.next() != Some(8) || uids.next().is_some() {
                     return Err(CheckedFetchError::UnexpectedResponse);
                 }
                 for attribute in attributes {
                     if let AttributeValue::BodySection {
                         section: None,
                         data: Some(bytes),
-                        ..
+                        index,
                     } = attribute
                     {
-                        if body.is_some() {
+                        if index.is_some() || body.is_some() {
                             return Err(CheckedFetchError::UnexpectedResponse);
                         }
                         *body = Some(bytes.to_vec());
@@ -172,6 +179,43 @@ async fn exercise_fetch_api(fragment_size: usize, end: FetchEnd, checked: bool) 
                 b"* 1 EXISTS\r\n* OK [UIDVALIDITY 4242] stable\r\nA0002 OK [READ-ONLY] examined\r\n"
             ).await.unwrap();
             super::read_command(&mut stream, "A0003 UID FETCH 8 (UID FLAGS BODY.PEEK[])\r\n").await;
+            if matches!(
+                end,
+                FetchEnd::WrongUid
+                    | FetchEnd::MissingUid
+                    | FetchEnd::DuplicateUid
+                    | FetchEnd::DuplicateBody
+                    | FetchEnd::PartialZero
+                    | FetchEnd::PartialOffset
+            ) {
+                let uid = match end {
+                    FetchEnd::WrongUid => "UID 9 ",
+                    FetchEnd::MissingUid => "",
+                    FetchEnd::DuplicateUid => "UID 8 UID 9 ",
+                    _ => "UID 8 ",
+                };
+                let section = match end {
+                    FetchEnd::PartialZero => "BODY[]<0>",
+                    FetchEnd::PartialOffset => "BODY[]<17>",
+                    _ => "BODY[]",
+                };
+                let mut wire =
+                    format!("* 1 FETCH ({uid}{section} {{{}}}\r\n", SOURCE.len()).into_bytes();
+                wire.extend_from_slice(SOURCE);
+                if matches!(end, FetchEnd::DuplicateBody) {
+                    wire.extend_from_slice(b" BODY[] {9}\r\nuntrusted");
+                }
+                wire.extend_from_slice(b")\r\n");
+                stream.get_mut().write_all(&wire).await.unwrap();
+                stream.get_mut().shutdown().await.unwrap();
+                let mut after = Vec::new();
+                stream.read_to_end(&mut after).await.unwrap();
+                assert!(
+                    after.is_empty(),
+                    "invalid FETCH must close without another command"
+                );
+                return;
+            }
             if matches!(end, FetchEnd::MissingBody) {
                 stream
                     .get_mut()
@@ -285,8 +329,16 @@ async fn exercise_fetch_api(fragment_size: usize, end: FetchEnd, checked: bool) 
             )
             .await;
             if let Err(failure) = &result {
-                let expected = if matches!(end, FetchEnd::TruncatedLiteral | FetchEnd::MissingBody)
-                {
+                let expected = if matches!(
+                    end,
+                    FetchEnd::TruncatedLiteral
+                        | FetchEnd::MissingBody
+                        | FetchEnd::WrongUid
+                        | FetchEnd::MissingUid
+                        | FetchEnd::DuplicateUid
+                        | FetchEnd::PartialZero
+                        | FetchEnd::PartialOffset
+                ) {
                     None
                 } else {
                     Some(SOURCE)
@@ -317,7 +369,13 @@ async fn exercise_fetch_api(fragment_size: usize, end: FetchEnd, checked: bool) 
                         Err(CheckedFetchError::MissingCompletion)
                     )
                 }
-                FetchEnd::WrongTag => {
+                FetchEnd::WrongTag
+                | FetchEnd::WrongUid
+                | FetchEnd::MissingUid
+                | FetchEnd::DuplicateUid
+                | FetchEnd::DuplicateBody
+                | FetchEnd::PartialZero
+                | FetchEnd::PartialOffset => {
                     assert_eq!(
                         result.map(|_| ()),
                         Err(CheckedFetchError::UnexpectedResponse)
@@ -433,6 +491,24 @@ async fn ac04_checked_fetch_rejects_failure_missing_completion_and_wrong_tags() 
         FetchEnd::TruncatedLiteral,
         FetchEnd::MissingBody,
     ] {
+        exercise_fetch_api(17, end, true).await;
+    }
+}
+#[tokio::test]
+async fn ac04_checked_fetch_rejects_ambiguous_uids_and_duplicate_bodies() {
+    for end in [
+        FetchEnd::WrongUid,
+        FetchEnd::MissingUid,
+        FetchEnd::DuplicateUid,
+        FetchEnd::DuplicateBody,
+    ] {
+        exercise_fetch_api(17, end, true).await;
+    }
+}
+
+#[tokio::test]
+async fn ac04_checked_fetch_rejects_partial_body_even_at_zero_origin() {
+    for end in [FetchEnd::PartialZero, FetchEnd::PartialOffset] {
         exercise_fetch_api(17, end, true).await;
     }
 }
