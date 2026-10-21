@@ -5,7 +5,9 @@ use std::{
     io::{self, Read},
 };
 
-use mail_parser::{Message, MessageParser, PartType};
+use mail_parser::{
+    Message, MessageParser, MimeHeaders, PartType, decoders::charsets::map::charset_decoder,
+};
 use tokio::{
     io::{AsyncRead, AsyncReadExt},
     time::Instant,
@@ -15,6 +17,13 @@ pub const MAX_RAW_BYTES: usize = 50 * 1024 * 1024;
 pub const MAX_DECODED_BYTES: usize = 100 * 1024 * 1024;
 pub const MAX_ATTACHMENT_BYTES: usize = 25 * 1024 * 1024;
 pub const MAX_NESTING: usize = 30;
+
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct MimeDiagnostics {
+    pub unrecognized_text_charset: bool,
+    /// Presence alone does not prove decoding loss: the source may contain U+FFFD.
+    pub replacement_character_present: bool,
+}
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum MimeError {
@@ -176,19 +185,26 @@ pub async fn read_source_async(
 /// PoC limits only: output remains untrusted, and parsing itself is not resource-bounded.
 /// The caller retains ownership of the source even when validation fails.
 pub fn parse(raw: &[u8]) -> Result<Message<'_>, MimeError> {
+    parse_with_diagnostics(raw).map(|(message, _)| message)
+}
+
+/// Reports body diagnostics without exposing headers or content. Header charset
+/// decoding and exact detection of lossy conversions are outside this PoC.
+pub fn parse_with_diagnostics(raw: &[u8]) -> Result<(Message<'_>, MimeDiagnostics), MimeError> {
     if raw.len() > MAX_RAW_BYTES {
         return Err(MimeError::RawTooLarge);
     }
     let message = MessageParser::default()
         .parse(raw)
         .ok_or(MimeError::Unparseable)?;
-    validate(&message)?;
-    Ok(message)
+    let diagnostics = validate(&message)?;
+    Ok((message, diagnostics))
 }
 
-fn validate(message: &Message<'_>) -> Result<(), MimeError> {
+fn validate(message: &Message<'_>) -> Result<MimeDiagnostics, MimeError> {
     let mut pending = vec![(message, 0usize, 0usize)];
     let mut decoded = 0usize;
+    let mut diagnostics = MimeDiagnostics::default();
     while let Some((message, index, depth)) = pending.pop() {
         let part = message
             .parts
@@ -213,6 +229,15 @@ fn validate(message: &Message<'_>) -> Result<(), MimeError> {
             .ok_or(MimeError::DecodedTooLarge)?;
         if decoded > MAX_DECODED_BYTES {
             return Err(MimeError::DecodedTooLarge);
+        }
+        if let PartType::Text(text) | PartType::Html(text) = &part.body {
+            if let Some(charset) = part.content_type().and_then(|ct| ct.attribute("charset")) {
+                // UTF-8 uses the parser's default path, not its charset decoder map.
+                diagnostics.unrecognized_text_charset |= !charset.eq_ignore_ascii_case("utf-8")
+                    && !charset.eq_ignore_ascii_case("utf8")
+                    && charset_decoder(charset.as_bytes()).is_none();
+            }
+            diagnostics.replacement_character_present |= text.contains('\u{fffd}');
         }
         match &part.body {
             PartType::Multipart(children) => {
@@ -241,7 +266,7 @@ fn validate(message: &Message<'_>) -> Result<(), MimeError> {
     {
         return Err(MimeError::Incomplete);
     }
-    Ok(())
+    Ok(diagnostics)
 }
 
 #[cfg(test)]
@@ -374,7 +399,7 @@ mod tests {
                 ..Default::default()
             });
             message.attachments = vec![1, 2, 3, 4, 5];
-            assert_eq!(validate(&message), expected);
+            assert_eq!(validate(&message).map(|_| ()), expected);
         }
     }
 }

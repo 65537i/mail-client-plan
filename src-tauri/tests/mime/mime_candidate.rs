@@ -5,6 +5,71 @@ use mail_parser::{MessageParser, MimeHeaders, PartType};
 mod async_source;
 
 #[test]
+fn ac04_charset_diagnostics_distinguish_fallback_and_replacement_presence() {
+    for (charset, body, unknown, replacement) in [
+        ("utf-8", &b"Synthetic \xff"[..], false, true),
+        ("UTF-8", &b"Synthetic \xef\xbf\xbd"[..], false, true),
+        ("utf8", &b"Synthetic ASCII"[..], false, false),
+        ("x-private-charset", &b"Synthetic ASCII"[..], true, false),
+        ("x-private-charset", &b"Synthetic \xff"[..], true, true),
+        ("shift_jis", &b"\x93\xfa\x96\x7b\x8c\xea"[..], false, false),
+        ("iso-2022-jp", &b"\x1b$BF|K\\8l\x1b(B"[..], false, false),
+    ] {
+        let mut raw = format!("Content-Type: text/plain; charset={charset}\r\n\r\n").into_bytes();
+        raw.extend_from_slice(body);
+        let (message, diagnostics) = mime_poc::parse_with_diagnostics(&raw).unwrap();
+        assert_eq!(diagnostics.unrecognized_text_charset, unknown);
+        assert_eq!(diagnostics.replacement_character_present, replacement);
+        assert_eq!(message.raw_message.as_ref(), raw);
+        assert_eq!(
+            message.body_text(0),
+            mime_poc::parse(&raw).unwrap().body_text(0)
+        );
+        let debug = format!("{diagnostics:?}");
+        assert!(!debug.contains("private-charset"));
+        assert!(!debug.contains("Synthetic"));
+    }
+}
+
+#[test]
+fn ac04_charset_diagnostics_cover_html_and_nested_text_attachments() {
+    let raw = b"Content-Type: multipart/mixed; boundary=diag\r\n\r\n--diag\r\nContent-Type: text/html; charset=x-private-charset\r\n\r\n<p>Synthetic</p>\r\n--diag\r\nContent-Type: message/rfc822\r\nContent-Disposition: attachment\r\n\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Disposition: attachment\r\n\r\nSynthetic \xff\r\n--diag--\r\n";
+    let (message, diagnostics) = mime_poc::parse_with_diagnostics(raw).unwrap();
+    assert!(diagnostics.unrecognized_text_charset);
+    assert!(diagnostics.replacement_character_present);
+    assert_eq!(message.body_html(0).as_deref(), Some("<p>Synthetic</p>"));
+    assert_eq!(message.raw_message.as_ref(), raw);
+}
+
+#[test]
+fn ac04_charset_diagnostics_ignore_binary_and_do_not_infer_missing_charset() {
+    for raw in [
+        &b"Content-Type: application/octet-stream; charset=x-private-charset\r\nContent-Disposition: attachment\r\n\r\n\xef\xbf\xbd"[..],
+        b"Content-Type: text/plain\r\n\r\nSynthetic ASCII",
+    ] {
+        let (_, diagnostics) = mime_poc::parse_with_diagnostics(raw).unwrap();
+        assert_eq!(diagnostics, mime_poc::MimeDiagnostics::default());
+    }
+    let raw = b"Content-Type: text/plain\r\n\r\nSynthetic \xff";
+    let (_, diagnostics) = mime_poc::parse_with_diagnostics(raw).unwrap();
+    assert!(!diagnostics.unrecognized_text_charset);
+    assert!(diagnostics.replacement_character_present);
+}
+
+#[test]
+fn ac04_charset_diagnostics_do_not_turn_invalid_mime_into_success() {
+    for raw in [
+        &b""[..],
+        b"Content-Type: application/octet-stream\r\nContent-Transfer-Encoding: base64\r\n\r\n!!!!",
+    ] {
+        assert_eq!(
+            mime_poc::parse_with_diagnostics(raw).unwrap_err(),
+            mime_poc::parse(raw).unwrap_err()
+        );
+    }
+}
+
+#[test]
 fn ac04_decodes_rfc2047_subject_and_japanese_charsets() {
     for (charset, body) in [
         ("utf-8", &b"\xe6\x97\xa5\xe6\x9c\xac\xe8\xaa\x9e"[..]),
