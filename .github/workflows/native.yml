@@ -18,18 +18,8 @@ jobs:
   build:
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - platform: ubuntu-24.04-x64
-            runner: ubuntu-24.04
-          - platform: windows-2025-x64
-            runner: windows-2025
-          - platform: macos-14-arm64
-            runner: macos-14
-          - platform: macos-15-intel
-            runner: macos-15-intel
+      matrix: ${{ fromJSON(github.event_name == 'push' && '[{"platform":"ubuntu-24.04-x64","runner":"ubuntu-24.04"}]' || '[{"platform":"ubuntu-24.04-x64","runner":"ubuntu-24.04"},{"platform":"windows-2025-x64","runner":"windows-2025"},{"platform":"macos-14-arm64","runner":"macos-14"},{"platform":"macos-15-intel","runner":"macos-15-intel"}]') }}
     name: ${{ matrix.platform }}
-    if: github.event_name != 'push' || matrix.platform == 'ubuntu-24.04-x64'
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 45
     steps:
