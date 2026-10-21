@@ -39,6 +39,7 @@ imap-poc = [
   "async-imap/runtime-tokio",
 ]
 smtp-poc = ["dep:lettre", "dep:tokio", "dep:rcgen", "dep:rustls", "dep:tokio-rustls"]
+mime-poc = ["dep:mail-parser"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
@@ -58,6 +59,7 @@ async-imap = { version = "=0.12.0", default-features = false, optional = true }
 base64 = { version = "=0.23.1", optional = true }
 futures-util = { version = "0.3", features = ["io"], optional = true }
 lettre = { version = "=0.11.23", default-features = false, features = ["smtp-transport", "tokio1-rustls-tls"], optional = true }
+mail-parser = { version = "=0.11.9", default-features = false, features = ["full_encoding"], optional = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 keyring = { version = "=3.6.3", default-features = false, features = ["sync-secret-service", "crypto-rust"], optional = true }
@@ -87,3 +89,8 @@ required-features = ["imap-poc"]
 name = "smtp_candidate"
 path = "tests/protocol/smtp_candidate.rs"
 required-features = ["smtp-poc"]
+
+[[test]]
+name = "mime_candidate"
+path = "tests/mime/mime_candidate.rs"
+required-features = ["mime-poc"]

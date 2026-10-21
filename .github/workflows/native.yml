@@ -180,6 +180,10 @@ jobs:
         if: needs.plan.outputs.mode == 'full'
         run: cargo test -p mail-client --features smtp-poc --test smtp_candidate --locked
 
+      - name: Test MIME candidate
+        if: needs.plan.outputs.mode == 'full'
+        run: cargo test -p mail-client --features mime-poc --test mime_candidate --locked
+
       - name: Test real WebView security boundaries
         if: needs.plan.outputs.mode != 'basic' && runner.os == 'Linux'
         run: |

@@ -36,6 +36,8 @@
 
 ## 最新の確認
 
+MIME候補の初期PoC: `mail-parser =0.11.9`（optional `mime-poc`、`full_encoding`）を追加。Linux arm64で`cargo test -p mail-client --features mime-poc --test mime_candidate --locked`の6 tests成功、同targetのclippy `-D warnings`、format、diff、actionlint成功。日本語3 charset / RFC 2047、alternative、RFC 2231危険添付名とdecoded bytes、重複CID、不正base64、truncated multipartを検証。HTMLのscript・危険な名前・CID重複は除去されない。truncated multipartはparse成功でも本文なしとなる実測制約を記録した。default dependency treeにmail-parserなしを確認。native fullへ追加し、Windows/macOS・巨大 / 深いMIME・fuzz・製品のサイズ制限adapterは未確認。UI / IPC / 添付保存には未接続、AC-04は未完了。
+
 | コマンド / 確認 | 結果 |
 |---|---|
 | `pnpm run build` | 成功 |
@@ -147,4 +149,4 @@
 - OS別SecretStore lock / access-deniedを試験し、実IMAP/SMTP実装後はAC-06契約をprotocol adapterへ接続する。
 - ADR-006のPoCを基にPhase 07で正規化version、FTS同期、短いqueryのscope付き制限検索、100k性能計測を実装・検証する。
 - ADR-002のasync-imap候補はIDLE cancellation / TLS transportのgateを通すまで採用確定しない。
-- SMTPのTLS / STARTTLS接続・認証・合成本文送信はローカルPoC成功。次はMIME候補の耐性PoCなど00Cの残gateを進める。lost response PoCを本番の再送判断へ直接流用せず、Phase 05で永続Outboxの送出境界・unknown・明示再送契約へ接続する。
+- SMTPのTLS / STARTTLS接続・認証・合成本文送信はローカルPoC成功。MIME候補は初期6 testsまで確認済み。次は大きさ・深さ・壊れたcharsetの耐性と、解析不完全を明示するadapter契約など00Cの残gateを進める。lost response PoCを本番の再送判断へ直接流用せず、Phase 05で永続Outboxの送出境界・unknown・明示再送契約へ接続する。

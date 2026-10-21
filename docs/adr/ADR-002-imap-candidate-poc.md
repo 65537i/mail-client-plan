@@ -53,6 +53,14 @@ IMAP候補はTLS、SASL XOAUTH2、UID/UIDVALIDITY、IDLEの取消とpolling fall
 
 ## 未達・採用gate
 
+### MIME候補の初期PoC
+
+- 候補: `mail-parser` 0.11.9、Apache-2.0 OR MIT。crates.ioの公開metadataと配布crateのAPI / featureを確認し、`mime-poc`専用のoptional依存として固定。default featuresなし、`full_encoding`だけを追加してShift_JIS / ISO-2022-JPを扱う。frontend / 本番default buildへは接続しない。
+- 合成fixtureの6 testsをLinux arm64で実行し、UTF-8 / Shift_JIS / ISO-2022-JP本文とRFC 2047件名、multipart/alternative、RFC 2231添付名とbase64 bytes、重複CID、不正base64、閉じ境界のないmultipartを検証した。対象clippy / format / actionlint成功。native fullに同じtest targetを追加し、Windows/macOSは未実行。
+- パーサはsanitizerではない。HTMLのscriptはそのまま返り、RFC 2231添付名の`../`も保持され、同一CIDの異なる添付2個も残る。HTMLは未信頼のままRust sanitizerとsandboxへ渡し、添付名を保存pathに使わず、CID重複は明示的な曖昧状態として処理するadapterが必要。
+- 不正base64は`is_encoding_problem`で検出できた。閉じ境界のない合成multipartではparseがSomeを返しraw sourceを保持する一方、body_text / body_htmlはNoneとなった。初回の「本文を復元できる」という期待は失敗し、候補の実測制約として試験に固定した。Someだけで完全な解析成功にしない。原文を保持し、本文なし / 解析不完全を明示する製品側契約が必要。
+- 未達: 壊れたcharset、RFC 2231 continuation、multipart/related、message/rfc822、重複境界、巨大 / 深いMIME、fuzz、解析時間・メモリ計測。設計のEML 50MiB / 復号後100MiB / 添付25MiB / ネスト30上限を適用する本番adapterは未実装。今回の小さいfixture群は耐性全体・採用確定・AC-04完了の証明ではない。
+
 - malformed/large MIMEはこのcrateの責務外で、MIME候補の別PoCを行う。未対応IMAP extensionはcapabilityを確認して基本commandへfallbackし、存在しないextensionを仮定しない。
 - SMTP final response後の永続化kill / 接続切断によるOutboxのunknown分類、複数RCPTの個別失敗UXを別PoCで確認する。lost / truncated responseで候補がエラーを返すことは確認したが、SMTP `Error`だけで再送可否を決めず、DATA送出境界を記録するoutbox state machineが必要。
 - SMTP TLSの接続・認証・固定合成本文送信はPoCで確認したが、OAuth2 mechanism、MIME生成、production adapterの入力検証 / OS trust store / timeout・取消方針は未実装。固定版lettreはTLS handshake errorをconnection errorに包むため、`is_tls()`だけで認証・TLSエラー分類を決めない。TLS検証失敗時のsource chainを評価する必要がある。
