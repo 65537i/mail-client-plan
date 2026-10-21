@@ -56,6 +56,14 @@ IMAP候補はTLS、SASL XOAUTH2、UID/UIDVALIDITY、IDLEの取消とpolling fall
 
 ## 未達・採用gate
 
+### FETCH外側取消でも処理済みwire prefixを回収
+
+- privateなBoundedReceiver::read_responseはreceiverと進行状態を借用する。既存receiveは引き続きreceiverを所有し、失敗時に回収prefixだけを返して接続をdropするwrapper。固定UID FETCHはreceiverを外側に所有して借用受信を呼ぶため、外側selectがwrite / read / flushを中断してもreceiverのframing stateを調べてから破棄できる。private借用APIをエラー後の接続再利用に使わない。
+- 読込stepを開始したかを外側へ記録し、正常応答の検証後にはresetする。開始前中断では過去の応答bytesを回収せず空、完全本文受信後の空の完了待ちでも過去の本文応答をprefixとして二重返却しない。完全本文は別のprovisionalに保持する。protocol error時の処理済み応答もwire prefixとして保持可能になったが、成功本文への昇格はしない。
+- 新規1 testの12ケースは、途中literal（header + SOURCE先頭7 bytes）と途中最終応答（F0001 OK incomplete）それぞれのdeadline / cancelをpeer write分割1 / 17 / 4096 bytesで注入。通常の証明書・hostname検証を有効にしたloopback TLSで、wire prefix全一致と接続終了・後続command 0 bytesを確認する。前者はprovisionalなし、後者は完全SOURCEもprovisionalで同時保持する。既存の完全本文後に何も届かない中断ケースもprefix空を追加assertした。
+- 最初の途中最終応答fixtureはシナリオ分岐の内側へ誤配置され実際には送信されず、prefix全一致assertが失敗した。fixture配置を修正後、Linux arm64でunit5 + IMAP40 + MIME42 = 87 tests、対象clippy `-D warnings` / format / diff成功。製品コード・依存・workflow変更なし。
+- 解消したのは限定PoCの外側selectで取消された借用受信の処理済みprefix回収だけ。TLS内部・framing未処理queueのbytes、wrapper自体のdrop / task abort、原文永続化、実サーバ・3OS、account / folder / UIDVALIDITYや通知配送は未保証・未実装。既存async-imap内部bufferの回収を修正したわけではない。採用保留・Phase 00未完了を維持する。
+
 ### 複数FETCH応答をまたぐ本文保持と整合性
 
 - 既存test限定の固定UID / tag統合fixtureへ応答列シナリオを追加。新規2 testsは7種類の応答列をpeer write分割1 / 17 / 4096 bytesで実行し、計21ケースを検証する。TLSのread境界がwrite分割と一致する保証はなく、framingの厳密な入力分割試験は既存probeが担う。証明書・hostname検証は有効のまま。

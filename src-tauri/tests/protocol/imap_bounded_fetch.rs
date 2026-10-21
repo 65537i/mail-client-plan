@@ -110,7 +110,7 @@ where
     T: AsyncRead + AsyncWrite + Unpin,
 {
     let mut provisional = None;
-    let mut wire_prefix = Vec::new();
+    let mut progressed = false;
     let operation = async {
         receiver
             .stream
@@ -123,17 +123,14 @@ where
             .await
             .map_err(|error| FetchError::Write(error.kind()))?;
         loop {
-            let raw;
-            (receiver, raw) = match receiver.receive(deadline, std::future::pending()).await {
-                Ok(result) => result,
-                Err(failure) => {
-                    wire_prefix = failure.prefix;
-                    return Err(FetchError::Receive(failure.cause));
-                }
-            };
+            let raw = receiver
+                .read_response(deadline, std::future::pending(), &mut progressed)
+                .await
+                .map_err(FetchError::Receive)?;
             if check_response(&raw, &mut provisional)? {
-                return Ok(receiver);
+                return Ok(());
             }
+            progressed = false;
             tokio::task::yield_now().await;
         }
     };
@@ -149,14 +146,18 @@ where
         result = operation => result,
     };
     match result {
-        Ok(receiver) => Ok((
+        Ok(()) => Ok((
             receiver,
             provisional.expect("checked matching OK requires body"),
         )),
         Err(cause) => Err(FetchFailure {
             cause,
             provisional,
-            wire_prefix,
+            wire_prefix: if progressed {
+                receiver.framing.fragments.message_bytes().to_vec()
+            } else {
+                Vec::new()
+            },
         }),
     }
 }
@@ -179,6 +180,10 @@ enum End {
     Truncated,
     Deadline,
     Cancel,
+    PartialDeadline,
+    PartialCancel,
+    CompletionDeadline,
+    CompletionCancel,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -239,7 +244,10 @@ async fn exercise(end: End, fragment: usize) {
                 SOURCE.len()
             };
             let mut payload = format!("* 1 FETCH ({uid}{section} {{{length}}}\r\n").into_bytes();
-            if matches!(end, End::Truncated | End::Oversized) {
+            if matches!(
+                end,
+                End::Truncated | End::Oversized | End::PartialDeadline | End::PartialCancel
+            ) {
                 payload.extend_from_slice(&SOURCE[..7]);
             } else if matches!(end, End::MissingBody) {
                 payload = b"* 1 FETCH (UID 8 FLAGS ())\r\n".to_vec();
@@ -279,6 +287,9 @@ async fn exercise(end: End, fragment: usize) {
                     }
                 }
             }
+            if matches!(end, End::CompletionDeadline | End::CompletionCancel) {
+                payload.extend_from_slice(b"F0001 OK incomplete");
+            }
             let completion: &[u8] = match end {
                 End::No => b"F0001 NO synthetic rejection\r\n",
                 End::Bad => b"F0001 BAD synthetic rejection\r\n",
@@ -287,7 +298,11 @@ async fn exercise(end: End, fragment: usize) {
                 | End::Oversized
                 | End::MissingCompletion
                 | End::Deadline
-                | End::Cancel => b"",
+                | End::Cancel
+                | End::PartialDeadline
+                | End::PartialCancel
+                | End::CompletionDeadline
+                | End::CompletionCancel => b"",
                 _ => b"F0001 OK fetched\r\n",
             };
             payload.extend_from_slice(completion);
@@ -329,7 +344,10 @@ async fn exercise(end: End, fragment: usize) {
         };
         let deadline = Instant::now() + Duration::from_millis(500);
         let cancellation = async {
-            if matches!(end, End::Cancel) {
+            if matches!(
+                end,
+                End::Cancel | End::PartialCancel | End::CompletionCancel
+            ) {
                 tokio::time::sleep(Duration::from_millis(100)).await;
             } else {
                 std::future::pending::<()>().await;
@@ -372,8 +390,12 @@ async fn exercise(end: End, fragment: usize) {
                     End::MissingCompletion | End::Truncated => {
                         FetchError::Receive(ReceiveError::Eof)
                     }
-                    End::Deadline => FetchError::TimedOut,
-                    End::Cancel => FetchError::Cancelled,
+                    End::Deadline | End::PartialDeadline | End::CompletionDeadline => {
+                        FetchError::TimedOut
+                    }
+                    End::Cancel | End::PartialCancel | End::CompletionCancel => {
+                        FetchError::Cancelled
+                    }
                     End::Complete => panic!("normal FETCH failed: {failure:?}"),
                 };
                 assert_eq!(failure.cause, expected, "{end:?}");
@@ -387,13 +409,18 @@ async fn exercise(end: End, fragment: usize) {
                         | End::Deadline
                         | End::Cancel
                         | End::Sequence(_)
+                        | End::CompletionDeadline
+                        | End::CompletionCancel
                 );
                 assert_eq!(
                     failure.provisional.as_deref(),
                     if retain_body { Some(SOURCE) } else { None }
                 );
                 assert!(!format!("{failure:?}").contains("Synthetic"));
-                if matches!(end, End::Truncated | End::Oversized) {
+                if matches!(
+                    end,
+                    End::Truncated | End::Oversized | End::PartialDeadline | End::PartialCancel
+                ) {
                     let length = if matches!(end, End::Oversized) {
                         mail_client_lib::mime_poc::MAX_RAW_BYTES + 1
                     } else {
@@ -401,10 +428,19 @@ async fn exercise(end: End, fragment: usize) {
                     };
                     let mut expected =
                         format!("* 1 FETCH (UID 8 BODY[] {{{length}}}\r\n").into_bytes();
-                    if matches!(end, End::Truncated) {
+                    if !matches!(end, End::Oversized) {
                         expected.extend_from_slice(&SOURCE[..7]);
                     }
                     assert_eq!(failure.wire_prefix, expected);
+                }
+                if matches!(end, End::Deadline | End::Cancel) {
+                    assert!(
+                        failure.wire_prefix.is_empty(),
+                        "completed response is not a new partial prefix"
+                    );
+                }
+                if matches!(end, End::CompletionDeadline | End::CompletionCancel) {
+                    assert_eq!(failure.wire_prefix, b"F0001 OK incomplete");
                 }
             }
         }
@@ -422,6 +458,20 @@ async fn ac04_bounded_tls_fetch_accepts_same_uid_flags_before_or_after_body() {
     ] {
         for fragment in [1, 17, 4096] {
             exercise(End::Sequence(sequence), fragment).await;
+        }
+    }
+}
+
+#[tokio::test]
+async fn ac04_bounded_tls_fetch_recovers_wire_prefix_on_partial_literal_interruption() {
+    for end in [
+        End::PartialDeadline,
+        End::PartialCancel,
+        End::CompletionDeadline,
+        End::CompletionCancel,
+    ] {
+        for fragment in [1, 17, 4096] {
+            exercise(end, fragment).await;
         }
     }
 }

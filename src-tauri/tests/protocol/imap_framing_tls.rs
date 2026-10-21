@@ -48,11 +48,34 @@ impl<T: AsyncRead + Unpin> BoundedReceiver<T> {
         deadline: Instant,
         cancellation: impl Future<Output = ()>,
     ) -> Result<(Self, Vec<u8>), ReceiveFailure> {
-        tokio::pin!(cancellation);
         let mut progressed = false;
-        let result = loop {
+        match self
+            .read_response(deadline, cancellation, &mut progressed)
+            .await
+        {
+            Ok(response) => Ok((self, response)),
+            Err(cause) => Err(ReceiveFailure {
+                cause,
+                prefix: if progressed {
+                    self.framing.fragments.message_bytes().to_vec()
+                } else {
+                    Vec::new()
+                },
+            }),
+        }
+    }
+
+    async fn read_response(
+        &mut self,
+        deadline: Instant,
+        cancellation: impl Future<Output = ()>,
+        progressed: &mut bool,
+    ) -> Result<Vec<u8>, ReceiveError> {
+        *progressed = false;
+        tokio::pin!(cancellation);
+        loop {
             let step = async {
-                progressed = true;
+                *progressed = true;
                 if let Some(response) = self
                     .framing
                     .next_response()
@@ -83,21 +106,10 @@ impl<T: AsyncRead + Unpin> BoundedReceiver<T> {
                 result = step => result,
             };
             match result {
-                Ok(Some(response)) => break Ok(response),
+                Ok(Some(response)) => return Ok(response),
                 Ok(None) => tokio::task::yield_now().await,
-                Err(error) => break Err(error),
+                Err(error) => return Err(error),
             }
-        };
-        match result {
-            Ok(response) => Ok((self, response)),
-            Err(cause) => Err(ReceiveFailure {
-                cause,
-                prefix: if progressed {
-                    self.framing.fragments.message_bytes().to_vec()
-                } else {
-                    Vec::new()
-                },
-            }),
         }
     }
 }
