@@ -64,14 +64,17 @@
 | GitHub Actions `native` run 8 (`8478910`) | Ubuntu 24.04 x64、macOS 14 arm64、macOS 15 Intel成功。Windows 2025ではAC-05のtrusted UI IPC、fixture injection、post-load WebDriver inspectionが返った後にafterAll timeout。最後のログは検査scriptの完了で、HTTP probe serverのclose待ちが候補。 |
 | GitHub Actions `native` run 9 (`d37a2bf`) | Ubuntu 24.04 x64、Windows 2025 x64、macOS 14 arm64、macOS 15 Intelすべて成功。Windowsの実WebView security stepは2 specs pass、hostile fixture後のprobe server close成功、外部request 0。TLS / FTS5 / IMAP / SMTP testsもmatrix内で成功。 |
 | GitHub Actions `native` run 10 (`26708f5`) | status記録のみの更新。Ubuntu 24.04 x64、Windows 2025 x64、macOS 14 arm64、macOS 15 Intelすべて成功。 |
-| GitHub Actions `native` run 11 (`4127091`) | Ubuntu 24.04 x64で`strace`によるAC-05 Linux file-access監査が成功。実Tauri appを含む88 processを追跡し、合成canaryへのfile syscall 0件。WebViewとSecretStoreの2 specsも成功。Windows 2025 x64とmacOS 14 arm64も成功。macOS 15 Intelはsecurity-test app buildが進行中で、run全体は未完了。 |
+| GitHub Actions `native` run 11 (`4127091`) | Ubuntu 24.04 x64で`strace`によるAC-05 Linux file-access監査が成功。実Tauri appを含む88 processを追跡し、合成canaryへのfile syscall 0件。WebViewとSecretStoreの2 specsも成功。Windows 2025 x64とmacOS 14 arm64も成功。macOS 15 Intelは完了前に後続pushでcancel。 |
+| GitHub Actions `native` run 12 (`179ac74`) | status更新commitで起動した従来設定の4 runner run。後続pushでcancel。 |
+| GitHub Actions `native` run 13 (`51de6e1`) / run 14 (`903a5b8`) | matrix絞り込み設定がjob生成前に失敗。matrixの構造を修正し、actionlintとrun 15で検証。 |
+| GitHub Actions `native` run 15 (`969eebe`) | mainへのpushでUbuntu 24.04 x64の1 jobのみを起動し、全チェック成功。PR / workflow_dispatchの4 runner matrixは式上有効だが、このrunでは未実行。 |
 | `xvfb-run -a dbus-run-session -- pnpm run test:security:desktop` | 成功。ローカルLinux実WebViewで2 specs pass（iframe isolationとtrusted UI IPCを含む）。 |
 | Linux file URL OS-level audit | native run 11で成功。`strace -ff -e trace=%file`がTauri/WebViewを含む88 processを追跡し、一時ディレクトリの合成canaryへのfile syscall 0件。ローカルはstrace未導入のためCIで実行 |
 | `node --check` / `cargo fmt --all --check` / `git diff --check` | 成功。file audit harnessとWDIO設定を含む |
 | `pnpm run check:production-security` | 成功。production buildにtest-only IPC / WebDriver pluginなし |
 | WDIO trusted UI / hostile fixture tests | `executeAsync`内の明示許可IPC確認をfixture注入前に行い、HTTP probe server close時にactive connectionsを終了。run 9で4 runnerすべて成功 |
 | native workflow SecretStore success gate / Japanese FTS5 / IMAP / SMTP PoC | run 9で4 runnerすべての該当tests成功。LinuxはGNOME Keyring DBus service待機後にWDIO実行 |
-| `actionlint -color .github/workflows/native.yml` (1.7.12) | 過去のworkflow更新時に成功。今回のworkflow変更なし |
+| `actionlint -color .github/workflows/native.yml` (1.7.12) | 成功。main pushでUbuntuのみ、PR / workflow_dispatchで4 runnerのmatrixを生成する条件をlint |
 | `pnpm run check:production-security` | 成功。normal production buildにWDIO plugin / permissions / global Tauri APIなし |
 | `pnpm install --frozen-lockfile` | 成功。pnpm 12.14.0 |
 | Tauri生成ACL manifest | `security-test` buildで`secret_store_probe`のallow/deny permissionを生成し、test capabilityからのみ解決 |
