@@ -18,6 +18,9 @@ mod tls;
 #[path = "imap_literal_limits.rs"]
 mod literal_limits;
 
+#[path = "imap_codec_candidate.rs"]
+mod codec_candidate;
+
 #[derive(Clone, Copy)]
 enum FetchEnd {
     Complete,

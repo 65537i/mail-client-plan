@@ -35,6 +35,8 @@ Rustのregistry / git依存と`target`をキャッシュし、OS・arch・runner
 
 fullのIMAP候補試験は`imap-poc,mime-poc`を併用し、BODY.PEEKで取得した合成literalからMIME解析までの統合試験も実行する。MIME単独の上限・診断試験は別stepで維持する。これは合成peerの試験であり、実IMAPサーバやliteralの読込中資源制限を保証しない。
 
+同じIMAP targetで代替`imap-codec`の宣言長通知・入力分割時の制約・本文と最終statusの分離も評価する。codecはimap-poc限定のoptional依存で、本番default buildへは含めない。候補制約の再現test成功を採用gate合格と数えない。
+
 ## 2. 検証コマンドの契約
 
 Phase 01で以下のpackage scriptsを用意する。これは計画上の名称であり、現時点で実装済みではない。

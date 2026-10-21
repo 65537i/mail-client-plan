@@ -12,6 +12,7 @@ IMAP候補はTLS、SASL XOAUTH2、UID/UIDVALIDITY、IDLEの取消とpolling fall
 | 候補 | 利点 | 残課題 | 現時点 |
 |---|---|---|---|
 | `async-imap` 0.12.0 | Tokio runtime feature、Authenticatorによる任意SASL challenge/response、UID command API、SELECTのUIDVALIDITY、IDLE handle、汎用AsyncRead/AsyncWrite transport | 既定featureはasync-stdなのでdefault-features=false必須。TLSは外部streamを接続する設計で、STARTTLS upgrade helperはない。upgrade前の認証禁止を呼び出し側で守る必要がある | 優先候補。未確定 |
+| `imap-codec` 1.0.0 | transport非依存のDecoder、宣言境界でLiteralFoundによる長さ通知、本文とtagged statusを別応答として保持。MIT OR Apache-2.0 | client / TLS / session管理は提供しない。本文byteを含む入力では宣言長通知が出ず、単純なchunk decodeでは事前上限を保証しない | 宣言長APIの限定PoCを実施。採用未確定 |
 | 同期`imap`系client | 同期コードの単純さ | Tauri/Tokio async runtimeとの統合でblocking回避・接続毎workerが必要。今回のPoCで比較試験していない | 未評価 |
 
 ## SMTP候補
@@ -53,6 +54,14 @@ IMAP候補はTLS、SASL XOAUTH2、UID/UIDVALIDITY、IDLEの取消とpolling fall
 | 3OS build / CI | workflow matrixに同じin-memory testを追加。GitHub Actions未実行 |
 
 ## 未達・採用gate
+
+### 代替imap-codecの宣言長通知API評価
+
+- [公式Decoder資料](https://docs.rs/imap-codec/1.0.0/imap_codec/decode/index.html)と[ResponseDecodeError](https://docs.rs/imap-codec/1.0.0/imap_codec/decode/enum.ResponseDecodeError.html)、固定1.0.0配布sourceのcodec/decode.rs・core.rsを確認。MIT OR Apache-2.0。optional依存としてimap-pocのみへ追加し、既定のnumber補正・missing text補正を有効にしないためdefault-features=falseとした。async-imapの依存差替えやforkは行っていない。
+- 新規4 testsを既存IMAP targetへ接続。literal headerの0 / raw 50 MiB-1 / 50 MiB / 50 MiB+1 / u32::MAXを64 bytes未満の入力だけで解析するとLiteralFoundが正確なu32長を返す。宣言途中の全prefixはIncomplete、負数・u32 overflow・不正文字列はFailed。本文用bufferを確保していない試験であり、parser全体のallocation計測やCPU制限の証明ではない。
+- SOURCE全bytesを含む完全FETCHはUID 8・BODY[]・originなしで解析でき、直後のtagged OK / NO / BADはremainderに残り、次のdecodeでtag A0002と元statusを保持する。応答に似た本文bytesをprotocolとして分割しない。これはcodecの出力契約で、最終OK待ちを行うsession adapterではない。
+- 重要制約: core.rsのliteral通知は宣言後のremainingが空の場合だけ。50 MiB+1のheaderだけならLiteralFoundだが、本文1 byteを追加するとIncompleteとなることを再現した。任意transport chunkのままdecodeして通知時だけ上限を検査する実装は不可。宣言境界を安全に扱う既存framing実装、複数literalを含む累積buffer上限、header上限、deadline / cancel、本文保持、TLS / session整合性の検証が必要。現段階で独自wire parserや「1 byteずつ再解析」で解決したとは扱わない。
+- Linux arm64でIMAP27 tests、対象clippy `-D warnings` / format / diff成功。imap-poc単独8 testsも成功。初回linkerのsignal 9は-j 1再実行で解消（原因未確定）。cargo treeでdefault依存graphからcodecが除外されることを確認。MIME単独・unit・3OSは今回未再実行。既存full IMAP stepが新testsも実行するためworkflow変更なし。採用未確定、既存候補のblockerも未解消。
 
 ### literal宣言だけで製品上限を超えるallocation
 
