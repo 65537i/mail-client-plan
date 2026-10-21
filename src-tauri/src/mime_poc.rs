@@ -27,6 +27,8 @@ pub struct MimeDiagnostics {
     /// Duplicate nonempty Content-IDs within any single message, not across
     /// distinct attached messages. This is not a CID URL resolver.
     pub duplicate_content_id: bool,
+    /// Presence in a parsed display name does not prove decoding loss.
+    pub attachment_name_replacement_character_present: bool,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -225,6 +227,9 @@ fn validate(message: &Message<'_>) -> Result<MimeDiagnostics, MimeError> {
         if part.is_encoding_problem {
             return Err(MimeError::Incomplete);
         }
+        diagnostics.attachment_name_replacement_character_present |= part
+            .attachment_name()
+            .is_some_and(|name| name.contains('\u{fffd}'));
         let size = part.contents().len();
         if (message.attachments.contains(&(index as u32))
             || matches!(

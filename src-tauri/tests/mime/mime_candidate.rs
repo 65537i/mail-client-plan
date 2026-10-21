@@ -193,6 +193,89 @@ fn ac04_decodes_rfc2231_attachment_name_without_treating_it_as_a_path() {
 }
 
 #[test]
+fn ac04_rfc2231_continuations_restore_japanese_names_in_segment_order() {
+    for parameters in [
+        "filename*0*=utf-8''%E6%97%A5; filename*1*=%E6%9C%AC%E8%AA%9E; filename*2=.bin",
+        "filename*2=.bin; filename*1*=%E6%9C%AC%E8%AA%9E; filename*0*=utf-8''%E6%97%A5",
+    ] {
+        let raw = format!(
+            "Content-Type: application/octet-stream\r\nContent-Disposition: attachment;\r\n {parameters}\r\nContent-Transfer-Encoding: base64\r\n\r\nAAECAw=="
+        );
+        let (message, diagnostics) = mime_poc::parse_with_diagnostics(raw.as_bytes()).unwrap();
+        assert_eq!(message.attachment_count(), 1);
+        let attachment = message.attachment(0).unwrap();
+        assert_eq!(
+            attachment.attachment_name(),
+            Some("\u{65e5}\u{672c}\u{8a9e}.bin")
+        );
+        assert_eq!(attachment.contents(), [0, 1, 2, 3]);
+        assert_eq!(message.raw_message.as_ref(), raw.as_bytes());
+        assert_eq!(diagnostics, mime_poc::MimeDiagnostics::default());
+    }
+}
+
+#[test]
+fn ac04_rfc2231_split_multibyte_name_reports_replacement_without_body_warning() {
+    let raw = b"Content-Type: application/octet-stream\r\nContent-Disposition: attachment; filename*0*=utf-8''%E6%97; filename*1*=%A5%E6%9C%AC%E8%AA%9E.bin\r\nContent-Transfer-Encoding: base64\r\n\r\nAAECAw==";
+    let (message, diagnostics) = mime_poc::parse_with_diagnostics(raw).unwrap();
+    let attachment = message.attachment(0).unwrap();
+    assert_eq!(
+        attachment.attachment_name(),
+        Some("\u{fffd}\u{fffd}\u{672c}\u{8a9e}.bin")
+    );
+    assert_eq!(attachment.contents(), [0, 1, 2, 3]);
+    assert!(!attachment.is_encoding_problem);
+    assert!(diagnostics.attachment_name_replacement_character_present);
+    assert!(!diagnostics.replacement_character_present);
+    assert!(!diagnostics.unrecognized_text_charset);
+    assert_eq!(message.raw_message.as_ref(), raw);
+    assert!(!format!("{diagnostics:?}").contains(".bin"));
+}
+
+#[test]
+fn ac04_attachment_name_replacement_diagnostic_covers_nested_original_character() {
+    let raw = b"Content-Type: message/rfc822\r\n\r\nContent-Type: application/octet-stream\r\nContent-Disposition: attachment; filename*=utf-8''synthetic-%EF%BF%BD.bin\r\n\r\nSynthetic attachment";
+    let (message, diagnostics) = mime_poc::parse_with_diagnostics(raw).unwrap();
+    assert!(diagnostics.attachment_name_replacement_character_present);
+    assert!(!diagnostics.replacement_character_present);
+    assert_eq!(message.raw_message.as_ref(), raw);
+    let PartType::Message(nested) = &message.parts[0].body else {
+        panic!("expected attached message");
+    };
+    assert_eq!(
+        nested.attachment(0).unwrap().attachment_name(),
+        Some("synthetic-\u{fffd}.bin")
+    );
+}
+
+#[test]
+fn ac04_rfc2231_continuations_do_not_make_attachment_paths_safe() {
+    for (parameters, expected) in [
+        (
+            "filename*0*=utf-8''..%2F; filename*1*=synthetic.bin",
+            "../synthetic.bin",
+        ),
+        (
+            "filename*0*=utf-8''..%5C; filename*1*=synthetic.bin",
+            "..\\synthetic.bin",
+        ),
+        (
+            "filename*0*=utf-8''%2Ftmp%2F; filename*1*=synthetic.bin",
+            "/tmp/synthetic.bin",
+        ),
+    ] {
+        let raw = format!(
+            "Content-Type: application/octet-stream\r\nContent-Disposition: attachment; {parameters}\r\n\r\nSynthetic attachment"
+        );
+        let message = mime_poc::parse(raw.as_bytes()).unwrap();
+        let attachment = message.attachment(0).unwrap();
+        assert_eq!(attachment.attachment_name(), Some(expected));
+        assert_eq!(attachment.contents(), b"Synthetic attachment");
+        assert_eq!(message.raw_message.as_ref(), raw.as_bytes());
+    }
+}
+
+#[test]
 fn ac04_preserves_duplicate_cids_for_explicit_ambiguity_handling() {
     let raw = b"MIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=cid\r\n\r\n--cid\r\nContent-Type: text/plain\r\n\r\nSynthetic\r\n--cid\r\nContent-Type: image/png\r\nContent-Disposition: attachment\r\nContent-ID: <duplicate>\r\n\r\none\r\n--cid\r\nContent-Type: image/png\r\nContent-Disposition: attachment\r\nContent-ID: <duplicate>\r\n\r\ntwo\r\n--cid--\r\n";
     let message = MessageParser::default()
