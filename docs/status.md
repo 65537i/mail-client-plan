@@ -6,6 +6,7 @@
 
 - Phase 00、縦切り機能00B「危険な境界のPoC」のHTML/IPC実WebView試験をLinux arm64と4 native CI runnerで確認
 - SecretStore lock/access-denied、Windows/macOSでのfile URL OS-level直接観測、最低サポートOSの実機確認は未完了。00CではIMAPのsynthetic peer検証、SMTP候補のfinal response/RCPT拒否をloopback sinkで確認したが、候補採用判断は未完了。
+- Actions利用分を抑えるため、native workflowはmainへのpushでUbuntuのみ、PRと手動実行（workflow_dispatch）で全4 runnerを実行する。PR / release前のクロスOS検証は維持する。
 
 ## 実装
 

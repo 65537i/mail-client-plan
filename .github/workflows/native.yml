@@ -29,6 +29,7 @@ jobs:
           - platform: macos-15-intel
             runner: macos-15-intel
     name: ${{ matrix.platform }}
+    if: github.event_name != 'push' || matrix.platform == 'ubuntu-24.04-x64'
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 45
     steps:
