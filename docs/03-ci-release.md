@@ -72,6 +72,7 @@ Phase 00で固定版によるPoCを行い、以下を証明する。
 - workflow permissionsは既定contents: read。release jobだけ必要な書き込みを付与する。
 - PRは署名鍵・本物のメール資格情報なし。fork PRや未信頼コードへsecretsを渡さない。pull_request_targetでPRコードを実行しない。
 - GitHub Actionsをレビュー済みfull commit SHAへ固定し、自動更新PRで追従する。コンテナはdigest固定。
+- `pnpm/action-setup` / `actions/cache`はNode.js 24 runtimeのv6.1.0をSHA固定で使用する。`setup-node`の`node-version`はrun step用であり、Action本体のruntimeは各Actionの`runs.using`で決まる。Node 20の警告を環境変数で抑制せずActionを更新する。self-hostedへ移す場合はNode 24対応runner（最低2.327.1）を準備する。
 - toolchainとlockfileを固定。lockfileを勝手に更新してCIを通さない。
 - cache keyへOS/arch/toolchain/lock hashを含める。秘密やメールキャッシュを保存しない。
 - ログ、スクリーンショット、失敗artifactは合成データのみ。保持期間を制限し、tokenの自動マスクだけに頼らない。
