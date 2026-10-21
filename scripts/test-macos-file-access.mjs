@@ -5,6 +5,7 @@ import { mkdtemp, open, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { verifyMacosFileTrace } from "./macos-file-trace.mjs";
 
 assert.equal(process.platform, "darwin", "file-access tracing requires macOS");
 
@@ -13,6 +14,7 @@ const tempDirectory = await mkdtemp(path.join(os.tmpdir(), "mail-client-file-aud
 const canaryName = `mc-${randomUUID().slice(0, 12)}.png`;
 const canaryPath = path.join(tempDirectory, canaryName);
 const tracePath = path.join(tempDirectory, "fs-usage.trace");
+const tracePidPath = path.join(tempDirectory, "fs-usage.pid");
 
 const waitForClose = (child) =>
   new Promise((resolve, reject) => {
@@ -26,11 +28,17 @@ try {
   const traceFile = await open(tracePath, "w");
   const trace = spawn(
     "sudo",
-    ["-n", "fs_usage", "-w", "-f", "filesys", "-t", "90"],
+    [
+      "-n", "/bin/sh", "-c",
+      'echo "$$" > "$1"; exec /usr/bin/fs_usage -w -f filesys -t 90',
+      "mail-client-file-audit", tracePidPath,
+    ],
     { stdio: ["ignore", traceFile.fd, traceFile.fd] },
   );
-  const traceClose = waitForClose(trace);
-  void traceClose.catch(() => {});
+  const traceClose = waitForClose(trace).then(
+    (result) => ({ result }),
+    (error) => ({ error }),
+  );
 
   let wdioResult;
   let traceResult;
@@ -51,14 +59,29 @@ try {
       stdio: "inherit",
     });
     wdioResult = await waitForClose(wdio);
+    assert(
+      trace.exitCode === null && trace.signalCode === null,
+      "fs_usage stopped before the WebView tests finished; audit coverage is incomplete",
+    );
   } finally {
-    if (trace.exitCode === null && trace.signalCode === null) {
-      trace.kill("SIGINT");
-    }
     try {
-      traceResult = await traceClose;
+      if (trace.exitCode === null && trace.signalCode === null) {
+        const pid = (await readFile(tracePidPath, "utf8")).trim();
+        assert(/^[1-9]\d*$/.test(pid), "fs_usage returned an invalid process ID");
+        const stop = spawn("sudo", ["-n", "/bin/kill", "-INT", pid], {
+          stdio: "inherit",
+        });
+        const stopResult = await waitForClose(stop);
+        assert.equal(stopResult.code, 0, "failed to stop the privileged fs_usage process");
+      }
     } finally {
-      await traceFile.close();
+      try {
+        const closed = await traceClose;
+        if (closed.error) throw closed.error;
+        traceResult = closed.result;
+      } finally {
+        await traceFile.close();
+      }
     }
   }
 
@@ -72,16 +95,7 @@ try {
   );
 
   const traceOutput = await readFile(tracePath, "utf8");
-  assert(
-    traceOutput
-      .split(/\r?\n/)
-      .some((line) => /\bmail-client(?:\.\d+)?\s*$/.test(line)),
-    "fs_usage did not observe filesystem activity from the Tauri application",
-  );
-  assert(
-    !traceOutput.includes(canaryName),
-    "the WebView process attempted to access the synthetic file canary",
-  );
+  verifyMacosFileTrace(traceOutput, canaryName);
 } finally {
   await rm(tempDirectory, { recursive: true, force: true });
 }

@@ -79,6 +79,9 @@ jobs:
       - name: Type-check and build frontend
         run: pnpm run build
 
+      - name: Test macOS file trace diagnostics
+        run: node --test tests/security/macos-file-trace.test.mjs
+
       - name: Build native application
         run: pnpm exec tauri build --no-bundle --ci
 

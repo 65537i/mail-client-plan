@@ -50,6 +50,7 @@ Linux PoCの結果はこの環境のWebKitGTKに限る。AC-05全体の合格や
 - Linux WebDriver実装はsandbox opaque-origin frameへの切替を拒否した。iframe内部DOM・resource completionを直接読む代わりに親DOMからのアクセス拒否、load回数、ネットワークlistenerを確認した。Linuxのcanary file syscall監査は完了したが、Windows/macOSでは別のOS-level計測が必要。
 - macOSでは`fs_usage -w -f filesys`がroot権限でファイルシステム活動を観測する候補となる。広範囲のtraceを扱うため、実行時に生成する短い固有canary名だけを照合し、生traceをartifact/logへ保存しない設計が必要。GitHub-hosted runnerでの権限、出力形式、WebView processのfile access観測は未検証。
 - macOS harnessは`sudo -n fs_usage`のsystem-wide traceを一時ファイルに取り、Tauri processが記録されたことと短い合成canary名の不在を検査する。生traceはartifact/logへ出さず、実行後に削除する。GitHub-hosted runnerでの動作・出力形式・process coverageは未検証。
+- run 20ではmacOS arm64成功、IntelはWebViewの2 specs成功後にcanary名検出で失敗した。system-wide traceの文字列検出だけではWebViewに帰属できず、元traceは削除済みのため実アクセス元は不明。監査終了がWDIO終了の約76秒後だったため、sudo wrapperではなく記録したfs_usage PIDへ権限付きSIGINTを送るよう修正した。canary検出時の失敗条件を維持し、operation / process-thread名のみを最大10件表示する。修正後のmacOS再実行・coverage検証は必要。
 - WindowsではMicrosoft Sysinternals Process Monitor（[公式資料](https://learn.microsoft.com/en-us/sysinternals/downloads/procmon)）がファイルシステム活動の取得・filter・loggingを提供する候補となる。hosted runnerでの権限、CLIによるcapture/export、WebView process descendantsの追跡、およびログからのcanary path判定は未検証。
 - 3OSでAC-05の全攻撃を検証し、fileアクセスも含む観測方法を定めてから最終決定する。
 - SecretStoreの選定とsave/lock/reject/deleteはADR-004で別途検証する。

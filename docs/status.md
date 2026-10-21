@@ -72,6 +72,8 @@
 | GitHub Actions `native` run 17 (`7d61653`) | Ubuntu 24.04 x64で実行。後続pushによりcancelされ、全step完了前に終了。 |
 | GitHub Actions `native` run 18 (`643efe3`) | Ubuntu 24.04 x64の全チェック成功。macOS / Windows計測方法を調査・記録した更新を検証。 |
 | GitHub Actions `native` run 19 (`5794400`) | Ubuntu 24.04 x64の全チェック成功。Linuxの既存file-access auditとWebViewを確認。macOS専用harnessはpush時matrixの対象外のため未実行。 |
+| GitHub Actions `native` run 20 (`fc919fc`, 手動) | Ubuntu、Windows、macOS 14 arm64成功。macOS 15 IntelはWebView / SecretStoreの2 specs成功後、system-wide fs_usage traceのcanary名検出で失敗。アクセス元をログへ出さずtraceを削除していたため、WebView起因か別process起因かは確定不能。テスト完了から監査終了まで約76秒の余分な観測時間も確認。 |
+| run 20への対策（AC-05） | sudo側へのSIGINTだけでなく、pid fileに記録したfs_usage本体をsudoで明示停止するよう修正。監査がWebView試験中に終了した場合も失敗にする。canary検出は引き続き全processで失敗させ、最大10件のoperation / process-thread名と総件数だけを診断表示（生path / traceは非公開・削除）。Node回帰5 tests、構文検査、actionlint、diff検査成功。macOSでの再実行は未確認。 |
 | `xvfb-run -a dbus-run-session -- pnpm run test:security:desktop` | 成功。ローカルLinux実WebViewで2 specs pass（iframe isolationとtrusted UI IPCを含む）。 |
 | Linux file URL OS-level audit | native run 11で成功。`strace -ff -e trace=%file`がTauri/WebViewを含む88 processを追跡し、一時ディレクトリの合成canaryへのfile syscall 0件。ローカルはstrace未導入のためCIで実行 |
 | macOS / Windows file URL OS-level audit候補 | macOS `fs_usage -w -f filesys`はroot権限が必要でsystem-wide file activityを観測可能。Windows Microsoft Sysinternals Process Monitorはfile-system activityをfilter/log可能。どちらもhosted runner上での権限・capture/export・canary判定は未検証で、AC-05の証拠には数えない |
@@ -127,7 +129,7 @@
 
 ## 次の最小タスク
 
-- macOS runnerで`pnpm run test:security:file-access:macos`を実行して権限・process coverage・path検出を検証する。ローカルLinux WebView回帰では2 specs pass、外部HTTP request 0。Windows Process Monitorの合成canary PoCと対象最低OSの実機試験も必要。
+- 修正commitでnativeを手動実行し、macOS Intelのcanary検出が続く場合はoperation / process-thread診断でアクセス元を特定する。WebView起因なら隔離経路を修正するまでAC-05未達、別processでも判定を無条件緩和せずprocess coverageを実証する。Windows Process Monitorの合成canary PoCと対象最低OSの実機試験も必要。
 - OS別SecretStore lock / access-deniedを試験し、実IMAP/SMTP実装後はAC-06契約をprotocol adapterへ接続する。
 - ADR-006のPoCを基にPhase 07で正規化version、FTS同期、短いqueryのscope付き制限検索、100k性能計測を実装・検証する。
 - ADR-002のasync-imap候補はIDLE cancellation / TLS transportのgateを通すまで採用確定しない。
