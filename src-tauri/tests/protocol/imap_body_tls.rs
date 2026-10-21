@@ -11,7 +11,28 @@ use tokio_rustls::{TlsAcceptor, TlsConnector};
 
 use super::{CheckedFetchError, SOURCE, owned_checked_fetch};
 
-async fn exercise_tls_fetch(complete_literal: bool, cancel: Option<bool>) {
+#[derive(Clone, Copy, Debug)]
+enum TlsFetchEnd {
+    Complete,
+    Interrupted {
+        complete_literal: bool,
+        cancel: bool,
+    },
+    No,
+    Bad,
+    WrongTag,
+    MissingCompletion,
+    TruncatedLiteral,
+}
+
+async fn exercise_tls_fetch(end: TlsFetchEnd) {
+    let complete_literal = !matches!(
+        end,
+        TlsFetchEnd::Interrupted {
+            complete_literal: false,
+            ..
+        } | TlsFetchEnd::TruncatedLiteral
+    );
     tokio::time::timeout(Duration::from_secs(5), async {
         let (client_config, server_config) = super::super::imap_tls_configs();
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -63,22 +84,38 @@ async fn exercise_tls_fetch(complete_literal: bool, cancel: Option<bool>) {
                     .unwrap();
             }
             stream.get_mut().flush().await.unwrap();
-            if cancel.is_none() {
-                stream
-                    .get_mut()
-                    .write_all(b"A0002 OK fetched\r\n")
-                    .await
-                    .unwrap();
-                stream.get_mut().flush().await.unwrap();
-                super::super::read_command(&mut stream, "A0003 NOOP\r\n").await;
-                stream
-                    .get_mut()
-                    .write_all(b"A0003 OK noop\r\n")
-                    .await
-                    .unwrap();
-                stream.get_mut().flush().await.unwrap();
-            } else {
-                signal_tx.write_u8(1).await.unwrap();
+            match end {
+                TlsFetchEnd::Complete => {
+                    stream
+                        .get_mut()
+                        .write_all(b"A0002 OK fetched\r\n")
+                        .await
+                        .unwrap();
+                    stream.get_mut().flush().await.unwrap();
+                    super::super::read_command(&mut stream, "A0003 NOOP\r\n").await;
+                    stream
+                        .get_mut()
+                        .write_all(b"A0003 OK noop\r\n")
+                        .await
+                        .unwrap();
+                    stream.get_mut().flush().await.unwrap();
+                }
+                TlsFetchEnd::Interrupted { .. } => {
+                    signal_tx.write_u8(1).await.unwrap();
+                }
+                TlsFetchEnd::No | TlsFetchEnd::Bad | TlsFetchEnd::WrongTag => {
+                    let response: &[u8] = match end {
+                        TlsFetchEnd::No => b"A0002 NO synthetic rejection\r\n",
+                        TlsFetchEnd::Bad => b"A0002 BAD synthetic rejection\r\n",
+                        TlsFetchEnd::WrongTag => b"A9999 OK wrong command\r\n",
+                        _ => unreachable!(),
+                    };
+                    stream.get_mut().write_all(response).await.unwrap();
+                    stream.get_mut().flush().await.unwrap();
+                }
+                TlsFetchEnd::MissingCompletion | TlsFetchEnd::TruncatedLiteral => {
+                    stream.get_mut().shutdown().await.unwrap();
+                }
             }
             let mut after = Vec::new();
             let closure = stream.read_to_end(&mut after).await;
@@ -105,7 +142,7 @@ async fn exercise_tls_fetch(complete_literal: bool, cancel: Option<bool>) {
             .map_err(|(error, _)| error)
             .unwrap();
         let cancellation = async {
-            if cancel == Some(true) {
+            if matches!(end, TlsFetchEnd::Interrupted { cancel: true, .. }) {
                 assert_eq!(signal_rx.read_u8().await.unwrap(), 1);
                 tokio::time::sleep(Duration::from_millis(20)).await;
             } else {
@@ -113,30 +150,36 @@ async fn exercise_tls_fetch(complete_literal: bool, cancel: Option<bool>) {
             }
         };
         let deadline = Instant::now()
-            + if cancel == Some(false) {
+            + if matches!(end, TlsFetchEnd::Interrupted { cancel: false, .. }) {
                 Duration::from_millis(200)
             } else {
                 Duration::from_secs(2)
             };
         let result = owned_checked_fetch(session, deadline, cancellation).await;
-        match cancel {
-            None => {
+        match end {
+            TlsFetchEnd::Complete => {
                 let (mut session, raw) = result.unwrap();
                 assert_eq!(raw, SOURCE);
                 assert!(mail_client_lib::mime_poc::parse(&raw).is_ok());
                 session.run_command_and_check_ok("NOOP").await.unwrap();
                 drop(session);
             }
-            Some(cancel) => {
+            _ => {
                 let failure = result.unwrap_err();
                 assert!(!format!("{failure:?}").contains("Synthetic"));
                 let (cause, provisional) = failure.into_parts();
                 assert_eq!(
                     cause,
-                    if cancel {
-                        CheckedFetchError::Cancelled
-                    } else {
-                        CheckedFetchError::TimedOut
+                    match end {
+                        TlsFetchEnd::Interrupted { cancel: true, .. } =>
+                            CheckedFetchError::Cancelled,
+                        TlsFetchEnd::Interrupted { cancel: false, .. } =>
+                            CheckedFetchError::TimedOut,
+                        TlsFetchEnd::No | TlsFetchEnd::Bad => CheckedFetchError::Rejected,
+                        TlsFetchEnd::WrongTag => CheckedFetchError::UnexpectedResponse,
+                        TlsFetchEnd::MissingCompletion => CheckedFetchError::MissingCompletion,
+                        TlsFetchEnd::TruncatedLiteral => CheckedFetchError::Io,
+                        TlsFetchEnd::Complete => unreachable!(),
                     }
                 );
                 assert_eq!(
@@ -153,14 +196,31 @@ async fn exercise_tls_fetch(complete_literal: bool, cancel: Option<bool>) {
 
 #[tokio::test]
 async fn ac04_owned_fetch_succeeds_over_verified_tls_and_returns_usable_session() {
-    exercise_tls_fetch(true, None).await;
+    exercise_tls_fetch(TlsFetchEnd::Complete).await;
 }
 
 #[tokio::test]
 async fn ac04_owned_fetch_closes_tls_on_interruption_and_recovers_complete_literal() {
     for complete in [false, true] {
         for cancel in [false, true] {
-            exercise_tls_fetch(complete, Some(cancel)).await;
+            exercise_tls_fetch(TlsFetchEnd::Interrupted {
+                complete_literal: complete,
+                cancel,
+            })
+            .await;
         }
+    }
+}
+
+#[tokio::test]
+async fn ac04_owned_fetch_rejects_tls_completion_failures_and_retains_only_complete_literal() {
+    for end in [
+        TlsFetchEnd::No,
+        TlsFetchEnd::Bad,
+        TlsFetchEnd::WrongTag,
+        TlsFetchEnd::MissingCompletion,
+        TlsFetchEnd::TruncatedLiteral,
+    ] {
+        exercise_tls_fetch(end).await;
     }
 }

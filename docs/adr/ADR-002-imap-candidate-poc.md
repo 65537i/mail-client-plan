@@ -54,6 +54,13 @@ IMAP候補はTLS、SASL XOAUTH2、UID/UIDVALIDITY、IDLEの取消とpolling fall
 
 ## 未達・採用gate
 
+### TLS上の最終応答異常と未完literal
+
+- 合成implicit TLS peerにNO / BAD / 別tagのOK / 完了応答前EOF / literal途中EOFを追加し、新規1 testで5ケースを実行。既存の正常・cancel・deadline試験も維持するため、fixtureの曖昧なbool組合せを明示的な終了シナリオへ置換した。証明書・hostname検証は有効のまま。
+- checked_fetchはNO / BADをRejected、別tagをUnexpectedResponse、完了応答前EOFをMissingCompletion、literal途中EOFをIoとして返す。owned wrapperは全失敗でsessionを破棄し、peerが後続command 0 bytesと接続終了を確認。完全literalが返された4ケースはSOURCE全bytesをprovisionalとして保持するが成功本文へ昇格しない。途中literalはcandidate内部bufferから回収できずNoneとなる。
+- EOFの2ケースはTLS close_notifyと書込側shutdownで注入し、TLS層の正常終了をIMAP command成功と混同しないことを確認する。TLS close_notifyなしの切断はこの追加試験の対象外。正常時の再利用や中断時の終了は直前のPoCで検証済み。
+- Linux arm64でIMAP21 tests、同targetのclippy `-D warnings` / format / diff成功。MIME単独・unit testsは今回未再実行。既存の欠陥再現2件は採用gate合格ではない。製品コード・依存・workflow変更なし。実サーバ・3OS・STARTTLS後のFETCH・account scope・allocation上限・途中literal回収などの未達と本番採用blockerは維持する。
+
 ### 実TCP / 検証済みTLSでのFETCH中断PoC
 
 - test限定のchecked_fetch / owned_checked_fetchをストリーム型で一般化。async-imap 0.12.0の公開Session APIと同じAsyncRead + AsyncWrite + Unpin + Debug + Send boundを使用し、既存DuplexStream試験に加えてloopback TCP上のrustls streamへ接続した。証明書は既存の合成localhost証明書設定を再利用し、hostname / 証明書検証を無効化していない。資格情報・本文は合成値のみ。
