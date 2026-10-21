@@ -164,6 +164,7 @@ where
 #[derive(Clone, Copy, Debug)]
 enum End {
     Complete,
+    Sequence(ResponseSequence),
     No,
     Bad,
     WrongTag,
@@ -178,6 +179,29 @@ enum End {
     Truncated,
     Deadline,
     Cancel,
+}
+
+#[derive(Clone, Copy, Debug)]
+enum ResponseSequence {
+    FlagsBeforeBody,
+    FlagsAfterBody,
+    SecondLiteral,
+    WrongUidAfterBody,
+    MissingUidAfterBody,
+    PartialAfterBody,
+    NilAfterBody,
+}
+
+impl End {
+    fn succeeds(self) -> bool {
+        matches!(
+            self,
+            Self::Complete
+                | Self::Sequence(
+                    ResponseSequence::FlagsBeforeBody | ResponseSequence::FlagsAfterBody
+                )
+        )
+    }
 }
 
 async fn exercise(end: End, fragment: usize) {
@@ -226,6 +250,35 @@ async fn exercise(end: End, fragment: usize) {
                 }
                 payload.extend_from_slice(b")\r\n");
             }
+            if let End::Sequence(sequence) = end {
+                match sequence {
+                    ResponseSequence::FlagsBeforeBody => {
+                        let mut responses = b"* 1 FETCH (UID 8 FLAGS ())\r\n".to_vec();
+                        responses.extend_from_slice(&payload);
+                        payload = responses;
+                    }
+                    ResponseSequence::FlagsAfterBody => {
+                        payload.extend_from_slice(b"* 1 FETCH (UID 8 FLAGS (\\Flagged))\r\n");
+                    }
+                    ResponseSequence::SecondLiteral => {
+                        payload.extend_from_slice(b"* 1 FETCH (UID 8 BODY[] {9}\r\nuntrusted)\r\n");
+                    }
+                    ResponseSequence::WrongUidAfterBody => {
+                        payload.extend_from_slice(b"* 2 FETCH (UID 9 FLAGS ())\r\n");
+                    }
+                    ResponseSequence::MissingUidAfterBody => {
+                        payload.extend_from_slice(b"* 1 FETCH (FLAGS ())\r\n");
+                    }
+                    ResponseSequence::PartialAfterBody => {
+                        payload.extend_from_slice(
+                            b"* 1 FETCH (UID 8 BODY[]<17> {9}\r\nuntrusted)\r\n",
+                        );
+                    }
+                    ResponseSequence::NilAfterBody => {
+                        payload.extend_from_slice(b"* 1 FETCH (UID 8 BODY[] NIL)\r\n");
+                    }
+                }
+            }
             let completion: &[u8] = match end {
                 End::No => b"F0001 NO synthetic rejection\r\n",
                 End::Bad => b"F0001 BAD synthetic rejection\r\n",
@@ -245,7 +298,7 @@ async fn exercise(end: End, fragment: usize) {
             if matches!(end, End::MissingCompletion | End::Truncated) {
                 peer.get_mut().shutdown().await.unwrap();
             }
-            if matches!(end, End::Complete) {
+            if end.succeeds() {
                 super::super::super::super::read_command(&mut peer, "F0002 NOOP\r\n").await;
                 peer.get_mut()
                     .write_all(b"F0002 OK noop\r\n")
@@ -284,7 +337,7 @@ async fn exercise(end: End, fragment: usize) {
         };
         match checked_fetch(receiver, deadline, cancellation).await {
             Ok((mut receiver, raw)) => {
-                assert!(matches!(end, End::Complete));
+                assert!(end.succeeds());
                 assert_eq!(raw, SOURCE);
                 assert!(mail_client_lib::mime_poc::parse(&raw).is_ok());
                 receiver.stream.write_all(b"F0002 NOOP\r\n").await.unwrap();
@@ -308,6 +361,10 @@ async fn exercise(end: End, fragment: usize) {
                     | End::DuplicateUid
                     | End::DuplicateBody
                     | End::Partial => FetchError::UnexpectedResponse,
+                    End::Sequence(
+                        ResponseSequence::FlagsBeforeBody | ResponseSequence::FlagsAfterBody,
+                    ) => panic!("same-UID flags must not invalidate the body: {failure:?}"),
+                    End::Sequence(_) => FetchError::UnexpectedResponse,
                     End::MissingBody => FetchError::MissingBody,
                     End::Oversized => {
                         FetchError::Receive(ReceiveError::Framing(FramingError::LiteralTooLarge))
@@ -329,6 +386,7 @@ async fn exercise(end: End, fragment: usize) {
                         | End::MissingCompletion
                         | End::Deadline
                         | End::Cancel
+                        | End::Sequence(_)
                 );
                 assert_eq!(
                     failure.provisional.as_deref(),
@@ -354,6 +412,33 @@ async fn exercise(end: End, fragment: usize) {
     })
     .await
     .expect("bounded TLS FETCH and peer shutdown must finish");
+}
+
+#[tokio::test]
+async fn ac04_bounded_tls_fetch_accepts_same_uid_flags_before_or_after_body() {
+    for sequence in [
+        ResponseSequence::FlagsBeforeBody,
+        ResponseSequence::FlagsAfterBody,
+    ] {
+        for fragment in [1, 17, 4096] {
+            exercise(End::Sequence(sequence), fragment).await;
+        }
+    }
+}
+
+#[tokio::test]
+async fn ac04_bounded_tls_fetch_preserves_first_body_when_later_fetch_is_inconsistent() {
+    for sequence in [
+        ResponseSequence::SecondLiteral,
+        ResponseSequence::WrongUidAfterBody,
+        ResponseSequence::MissingUidAfterBody,
+        ResponseSequence::PartialAfterBody,
+        ResponseSequence::NilAfterBody,
+    ] {
+        for fragment in [1, 17, 4096] {
+            exercise(End::Sequence(sequence), fragment).await;
+        }
+    }
 }
 
 #[tokio::test]

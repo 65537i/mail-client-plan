@@ -56,6 +56,14 @@ IMAP候補はTLS、SASL XOAUTH2、UID/UIDVALIDITY、IDLEの取消とpolling fall
 
 ## 未達・採用gate
 
+### 複数FETCH応答をまたぐ本文保持と整合性
+
+- 既存test限定の固定UID / tag統合fixtureへ応答列シナリオを追加。新規2 testsは7種類の応答列をpeer write分割1 / 17 / 4096 bytesで実行し、計21ケースを検証する。TLSのread境界がwrite分割と一致する保証はなく、framingの厳密な入力分割試験は既存probeが担う。証明書・hostname検証は有効のまま。
+- 正常6ケースはUID 8のFLAGS-only応答を本文の前または後に送信する。本文がまだないFLAGS応答だけでMissingBodyにせず、一致tagged OKまで待ってSOURCE全bytesとMIME解析、同じreceiverでのNOOP成功を確認。FLAGSは受入可能な属性として検証するだけで、DBへの反映や同期競合処理を実装していない。
+- 異常15ケースは完全本文の後、別FETCHで第2本文（異なる9 bytes） / UID 9のFLAGS / UIDなしのFLAGS / BODY[]<17> / BODY[] NILを送信し、続いて一致tagged OKを送る。不正な応答を最終OKで成功へ覆さずUnexpectedResponseとし、先に受け取ったSOURCEをprovisionalとして全bytes保持する。後の不正本文で上書きせず、peer側で接続終了と後続command 0 bytesを確認。NILが最初に届く場合の分類や全ての属性組合せを網羅した試験ではない。
+- 既存check_responseの判定変更は不要だった。変更はfixtureと回帰試験に限定。Linux arm64でIMAP39 tests、対象clippy `-D warnings` / format / diff成功。初回clippyのenum共通suffix警告を命名修正で解消。MIME単独・unit・3OSは今回未再実行。製品コード・依存・workflow変更なし。
+- 別UIDの合法unsolicited応答も拒否する限定PoCであり、通知配送を実装したとは扱わない。account / folder / UIDVALIDITY、認証・mailbox選択、実サーバ・3OS、厳密な資源制限などの採用gateは引き続き未達。Phase 00未完了。
+
 ### 上限付き受信からFETCH最終応答確認までの統合
 
 - test限定checked_fetchがBoundedReceiverを所有し、固定tag F0001 / UID 8のBODY.PEEK[]要求をwrite / flushする。固定2.0.0-alpha.7の公開Response / Data::Fetch / MessageDataItem / Status::Tagged / StatusKindを配布sourceで確認し使用。UIDはちょうど1個で8、BODY[]はsection / originなし・非NIL・重複なしを要求し、一致tagged OKと本文を確認後だけreceiverと本文を返す。未知応答や未対応属性はfail-closedであり、合法unsolicitedを配送するclientではない。独自wire parserや文字列によるstatus判定は使わない。
