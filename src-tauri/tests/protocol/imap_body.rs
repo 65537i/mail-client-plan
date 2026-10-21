@@ -5,7 +5,10 @@ use async_imap::{
 };
 use futures_util::StreamExt;
 use mail_client_lib::mime_poc;
-use tokio::io::{AsyncWriteExt, BufReader};
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt, BufReader},
+    time::Instant,
+};
 
 const SOURCE: &[u8] = b"Subject: Synthetic body\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nSynthetic literal\r\n)\r\nA0003 OK not a protocol response\r\n";
 
@@ -20,6 +23,25 @@ enum FetchEnd {
     MissingBody,
 }
 
+async fn owned_checked_fetch(
+    mut session: async_imap::Session<tokio::io::DuplexStream>,
+    deadline: Instant,
+    cancellation: impl std::future::Future<Output = ()>,
+) -> Result<(async_imap::Session<tokio::io::DuplexStream>, Vec<u8>), CheckedFetchError> {
+    let timeout = async {
+        if Instant::now() < deadline {
+            tokio::time::sleep_until(deadline).await;
+        }
+    };
+    let body = tokio::select! {
+        biased;
+        () = cancellation => return Err(CheckedFetchError::Cancelled),
+        () = timeout => return Err(CheckedFetchError::TimedOut),
+        result = checked_fetch(&mut session) => result?,
+    };
+    Ok((session, body))
+}
+
 #[derive(Debug, PartialEq, Eq)]
 enum CheckedFetchError {
     Io,
@@ -27,6 +49,8 @@ enum CheckedFetchError {
     Rejected,
     UnexpectedResponse,
     MissingBody,
+    TimedOut,
+    Cancelled,
 }
 
 // Evaluation only: the candidate still buffers literals without a size gate.
@@ -121,6 +145,14 @@ async fn exercise_fetch_api(fragment_size: usize, end: FetchEnd, checked: bool) 
                     .await
                     .unwrap();
                 stream.get_mut().shutdown().await.unwrap();
+                if checked {
+                    let mut after = Vec::new();
+                    stream.read_to_end(&mut after).await.unwrap();
+                    assert!(
+                        after.is_empty(),
+                        "failed FETCH must close without another command"
+                    );
+                }
                 return;
             }
             stream
@@ -141,6 +173,14 @@ async fn exercise_fetch_api(fragment_size: usize, end: FetchEnd, checked: bool) 
             }
             if matches!(end, FetchEnd::TruncatedLiteral) {
                 stream.get_mut().shutdown().await.unwrap();
+                if checked {
+                    let mut after = Vec::new();
+                    stream.read_to_end(&mut after).await.unwrap();
+                    assert!(
+                        after.is_empty(),
+                        "failed FETCH must close without another command"
+                    );
+                }
                 return;
             }
             if !matches!(end, FetchEnd::Complete) {
@@ -165,6 +205,14 @@ async fn exercise_fetch_api(fragment_size: usize, end: FetchEnd, checked: bool) 
                     _ => unreachable!(),
                 }
                 stream.get_mut().shutdown().await.unwrap();
+                if checked {
+                    let mut after = Vec::new();
+                    stream.read_to_end(&mut after).await.unwrap();
+                    assert!(
+                        after.is_empty(),
+                        "failed FETCH must close without another command"
+                    );
+                }
                 return;
             }
             stream
@@ -196,10 +244,15 @@ async fn exercise_fetch_api(fragment_size: usize, end: FetchEnd, checked: bool) 
         let mailbox = session.examine("INBOX").await.unwrap();
         assert_eq!(mailbox.uid_validity, Some(4242));
         if checked {
-            let result = checked_fetch(&mut session).await;
+            let result = owned_checked_fetch(
+                session,
+                Instant::now() + std::time::Duration::from_secs(2),
+                std::future::pending(),
+            )
+            .await;
             match end {
                 FetchEnd::Complete => {
-                    let raw = result.unwrap();
+                    let (mut session, raw) = result.unwrap();
                     assert_eq!(raw, SOURCE);
                     assert!(mime_poc::parse(&raw).is_ok());
                     let mut flags = session.uid_fetch("8", "(UID FLAGS)").await.unwrap();
@@ -209,21 +262,31 @@ async fn exercise_fetch_api(fragment_size: usize, end: FetchEnd, checked: bool) 
                     session.logout().await.unwrap();
                 }
                 FetchEnd::No | FetchEnd::Bad => {
-                    assert_eq!(result, Err(CheckedFetchError::Rejected))
+                    assert_eq!(result.map(|_| ()), Err(CheckedFetchError::Rejected))
                 }
                 FetchEnd::MissingCompletion => {
-                    assert_eq!(result, Err(CheckedFetchError::MissingCompletion))
+                    assert_eq!(
+                        result.map(|_| ()),
+                        Err(CheckedFetchError::MissingCompletion)
+                    )
                 }
                 FetchEnd::WrongTag => {
-                    assert_eq!(result, Err(CheckedFetchError::UnexpectedResponse))
+                    assert_eq!(
+                        result.map(|_| ()),
+                        Err(CheckedFetchError::UnexpectedResponse)
+                    )
                 }
-                FetchEnd::TruncatedLiteral => assert_eq!(result, Err(CheckedFetchError::Io)),
-                FetchEnd::MissingBody => assert_eq!(result, Err(CheckedFetchError::MissingBody)),
+                FetchEnd::TruncatedLiteral => {
+                    assert_eq!(result.map(|_| ()), Err(CheckedFetchError::Io))
+                }
+                FetchEnd::MissingBody => {
+                    assert_eq!(result.map(|_| ()), Err(CheckedFetchError::MissingBody))
+                }
             }
-            drop(session);
             server.await.unwrap();
             return;
         }
+
         let mut fetches = session
             .uid_fetch("8", "(UID FLAGS BODY.PEEK[])")
             .await
@@ -324,5 +387,150 @@ async fn ac04_checked_fetch_rejects_failure_missing_completion_and_wrong_tags() 
         FetchEnd::MissingBody,
     ] {
         exercise_fetch_api(17, end, true).await;
+    }
+}
+
+#[tokio::test]
+async fn ac04_owned_fetch_closes_stalled_session_on_cancel_or_deadline() {
+    for complete_literal in [false, true] {
+        for cancel in [false, true] {
+            tokio::time::timeout(std::time::Duration::from_secs(3), async {
+                let (client_stream, server_stream) = tokio::io::duplex(4096);
+                let (mut signal_tx, mut signal_rx) = tokio::io::duplex(1);
+                let server = tokio::spawn(async move {
+                    let mut stream = BufReader::new(server_stream);
+                    stream
+                        .get_mut()
+                        .write_all(b"* OK synthetic peer\r\n")
+                        .await
+                        .unwrap();
+                    super::read_command(
+                        &mut stream,
+                        "A0001 LOGIN \"synthetic@example.invalid\" \"SYNTHETIC-PASSWORD\"\r\n",
+                    )
+                    .await;
+                    stream
+                        .get_mut()
+                        .write_all(b"A0001 OK authenticated\r\n")
+                        .await
+                        .unwrap();
+                    super::read_command(
+                        &mut stream,
+                        "A0002 UID FETCH 8 (UID FLAGS BODY.PEEK[])\r\n",
+                    )
+                    .await;
+                    stream
+                        .get_mut()
+                        .write_all(
+                            format!("* 1 FETCH (UID 8 BODY[] {{{}}}\r\n", SOURCE.len()).as_bytes(),
+                        )
+                        .await
+                        .unwrap();
+                    if complete_literal {
+                        stream.get_mut().write_all(SOURCE).await.unwrap();
+                        stream.get_mut().write_all(b")\r\n").await.unwrap();
+                    } else {
+                        stream
+                            .get_mut()
+                            .write_all(&SOURCE[..SOURCE.len() / 2])
+                            .await
+                            .unwrap();
+                    }
+                    signal_tx.write_u8(1).await.unwrap();
+                    let mut after = Vec::new();
+                    stream.read_to_end(&mut after).await.unwrap();
+                    assert!(
+                        after.is_empty(),
+                        "interrupted session must close without retry, NOOP or LOGOUT"
+                    );
+                });
+                let mut client = Client::new(client_stream);
+                assert!(client.read_response().await.unwrap().is_some());
+                let session = client
+                    .login("synthetic@example.invalid", "SYNTHETIC-PASSWORD")
+                    .await
+                    .map_err(|(error, _)| error)
+                    .unwrap();
+                let cancellation = async {
+                    assert_eq!(signal_rx.read_u8().await.unwrap(), 1);
+                    if cancel {
+                        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+                    } else {
+                        std::future::pending::<()>().await;
+                    }
+                };
+                let result = owned_checked_fetch(
+                    session,
+                    Instant::now() + std::time::Duration::from_millis(100),
+                    cancellation,
+                )
+                .await;
+                assert_eq!(
+                    result.map(|_| ()),
+                    Err(if cancel {
+                        CheckedFetchError::Cancelled
+                    } else {
+                        CheckedFetchError::TimedOut
+                    })
+                );
+                server.await.unwrap();
+            })
+            .await
+            .expect("owned FETCH interruption must close the peer");
+        }
+    }
+}
+
+#[tokio::test]
+async fn ac04_owned_fetch_ready_cancel_and_expired_deadline_send_no_command() {
+    for cancel in [false, true] {
+        tokio::time::timeout(std::time::Duration::from_secs(3), async {
+            let (client_stream, server_stream) = tokio::io::duplex(4096);
+            let server = tokio::spawn(async move {
+                let mut stream = BufReader::new(server_stream);
+                stream
+                    .get_mut()
+                    .write_all(b"* OK synthetic peer\r\n")
+                    .await
+                    .unwrap();
+                super::read_command(
+                    &mut stream,
+                    "A0001 LOGIN \"synthetic@example.invalid\" \"SYNTHETIC-PASSWORD\"\r\n",
+                )
+                .await;
+                stream
+                    .get_mut()
+                    .write_all(b"A0001 OK authenticated\r\n")
+                    .await
+                    .unwrap();
+                let mut after = Vec::new();
+                stream.read_to_end(&mut after).await.unwrap();
+                assert!(after.is_empty());
+            });
+            let mut client = Client::new(client_stream);
+            assert!(client.read_response().await.unwrap().is_some());
+            let session = client
+                .login("synthetic@example.invalid", "SYNTHETIC-PASSWORD")
+                .await
+                .map_err(|(error, _)| error)
+                .unwrap();
+            let result = owned_checked_fetch(session, Instant::now(), async {
+                if !cancel {
+                    std::future::pending::<()>().await;
+                }
+            })
+            .await;
+            assert_eq!(
+                result.map(|_| ()),
+                Err(if cancel {
+                    CheckedFetchError::Cancelled
+                } else {
+                    CheckedFetchError::TimedOut
+                })
+            );
+            server.await.unwrap();
+        })
+        .await
+        .expect("preempted FETCH must close without sending a command");
     }
 }

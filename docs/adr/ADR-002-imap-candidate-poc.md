@@ -54,6 +54,12 @@ IMAP候補はTLS、SASL XOAUTH2、UID/UIDVALIDITY、IDLEの取消とpolling fall
 
 ## 未達・採用gate
 
+### FETCHの期限・取消とsession消費の限定PoC
+
+- test限定owned_checked_fetchはDuplexStreamのsessionを所有し、既存checked_fetchを絶対deadline / cancellation Futureとselectする。ready取消を期限より優先し、既に期限を過ぎていればcommandをpollしない。一致tagのOKによる成功時だけ(session, body)を返し、その他のerror経路はsessionをdropする。中断したprotocol状態をそのままcallerへ返さない所有権契約を評価したもので、本番adapterではない。
+- 新規2 testsで途中literal / 全literal受信後の完了待機を各timeout・取消で止め、peer側read_to_endがEOFとなり再試行 / NOOP / LOGOUTが送られないことをassert。事前に取消・期限切れのケースはFETCH自体0 bytes。既存checked APIの正常系もwrapper経由で後続command成功を確認し、NO / BAD / EOF / 別tag / 本文なし / literal途中切断でもpeerが接続終了を観測するようfixtureを補強した。初回のenum配置とtest scopeのcompile問題を修正後、Linux arm64でunit5 + IMAP16 + MIME42 = 63 tests、対象clippy / format / diff成功。既存高レベルAPIの欠陥再現2件は採用gate合格ではない。
+- 制限: cancellation / deadlineでchecked_fetch内の一時本文やcandidate内のpartial literalは失われる。prefix回収・未完原文の永続保存を提供する本番契約ではなく、このPoCをデータ保持実装として使わない。TCP / TLSの終了、task abort / future自体のdrop、literal allocation上限・CPU制限・unsolicited配送・account scope・3OSは未検証。新依存・workflow変更なし。本番採用blockerは維持する。
+
 ### 完了確認可能な公開低レベルAPIの限定PoC
 
 - 配布sourceで公開run_command / read_responseとimap_proto再公開を確認し、test限定のchecked_fetchを追加した。固定UID 8を要求し、parsed Response::FetchのUID / BODY[]を一時保持し、run_commandが返したtagと一致するResponse::DoneのStatus::Ok後だけbytesを返す。NO / BADはRejected、tag前EOFはMissingCompletion、別tagはUnexpectedResponse、途中literal切断はIo、OKだが本文なしはMissingBody。元response / error文字列はtyped errorへ格納せず、本文をerrorへ含めない。未対応応答や重複本文はfail-closedに拒否する。
