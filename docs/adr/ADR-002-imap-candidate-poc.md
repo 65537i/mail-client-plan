@@ -59,7 +59,10 @@ IMAP候補はTLS、SASL XOAUTH2、UID/UIDVALIDITY、IDLEの取消とpolling fall
 - 合成fixtureの6 testsをLinux arm64で実行し、UTF-8 / Shift_JIS / ISO-2022-JP本文とRFC 2047件名、multipart/alternative、RFC 2231添付名とbase64 bytes、重複CID、不正base64、閉じ境界のないmultipartを検証した。対象clippy / format / actionlint成功。native fullに同じtest targetを追加し、Windows/macOSは未実行。
 - パーサはsanitizerではない。HTMLのscriptはそのまま返り、RFC 2231添付名の`../`も保持され、同一CIDの異なる添付2個も残る。HTMLは未信頼のままRust sanitizerとsandboxへ渡し、添付名を保存pathに使わず、CID重複は明示的な曖昧状態として処理するadapterが必要。
 - 不正base64は`is_encoding_problem`で検出できた。閉じ境界のない合成multipartではparseがSomeを返しraw sourceを保持する一方、body_text / body_htmlはNoneとなった。初回の「本文を復元できる」という期待は失敗し、候補の実測制約として試験に固定した。Someだけで完全な解析成功にしない。原文を保持し、本文なし / 解析不完全を明示する製品側契約が必要。
-- 未達: 壊れたcharset、RFC 2231 continuation、multipart/related、message/rfc822、重複境界、巨大 / 深いMIME、fuzz、解析時間・メモリ計測。設計のEML 50MiB / 復号後100MiB / 添付25MiB / ネスト30上限を適用する本番adapterは未実装。今回の小さいfixture群は耐性全体・採用確定・AC-04完了の証明ではない。
+- 追加の5 testsで、不正UTF-8はU+FFFDへ置換され、未知charsetのASCII本文は読めても、いずれも`is_encoding_problem`がfalseとなることを確認。このflagはcharset復元の正確性や完全性の保証には使えない。原文を保持し、charsetの認識可否・置換・転送復号不良を別の診断として扱うadapterが必要。
+- multipartネスト29 / 30 / 31 / 128で、全partの親子関係・深さ・末端本文が保持された。添付binary 25MiBの-1 / 境界 / +1 byte、原文text/plain 50MiBの-1 / 境界 / +1 byteでも全bytesが解析された。パーサに製品のネスト30 / 添付25MiB / 原文50MiB拒否を任せることはできない。入力raw byte上限は解析前、復号後・添付・構造の上限は原文を失わない明示エラー経路で適用する必要がある。解析後だけの検査では解析中の資源消費を抑止できない点も未解決。
+- Linux arm64で既存6 + 追加5 = 11 tests成功（test本体約2.11秒）、対象clippy `-D warnings` / format / diff検査成功。これは合成fixtureの完走確認であり、解析時間の性能gate・メモリ上限・DoS耐性の証明ではない。大きいfixtureは実行時生成し、ファイルやartifactに保存しない。
+- 未達: RFC 2231 continuation、multipart/related、message/rfc822、重複境界、不正な多バイトcharsetの詳細、復号後合計100MiB境界、fuzz、解析時間・メモリ計測。設計の各上限を適用する本番adapterは未実装。今回のfixture群は耐性全体・採用確定・AC-04完了の証明ではない。
 
 - malformed/large MIMEはこのcrateの責務外で、MIME候補の別PoCを行う。未対応IMAP extensionはcapabilityを確認して基本commandへfallbackし、存在しないextensionを仮定しない。
 - SMTP final response後の永続化kill / 接続切断によるOutboxのunknown分類、複数RCPTの個別失敗UXを別PoCで確認する。lost / truncated responseで候補がエラーを返すことは確認したが、SMTP `Error`だけで再送可否を決めず、DATA送出境界を記録するoutbox state machineが必要。

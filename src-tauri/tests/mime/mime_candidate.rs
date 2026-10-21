@@ -1,4 +1,4 @@
-use mail_parser::{MessageParser, MimeHeaders};
+use mail_parser::{MessageParser, MimeHeaders, PartType};
 
 #[test]
 fn ac04_decodes_rfc2047_subject_and_japanese_charsets() {
@@ -90,4 +90,99 @@ fn ac04_truncated_multipart_preserves_raw_source_but_does_not_promise_a_body() {
     assert!(message.body_text(0).is_none());
     assert!(message.body_html(0).is_none());
     assert_eq!(message.raw_message.as_ref(), raw);
+}
+
+#[test]
+fn ac04_invalid_utf8_is_replaced_without_a_transfer_encoding_error() {
+    let raw = b"Content-Type: text/plain; charset=utf-8\r\n\r\nSynthetic \xff text";
+    let message = MessageParser::default()
+        .parse(raw)
+        .expect("invalid UTF-8 fixture");
+    assert_eq!(
+        message.body_text(0).as_deref(),
+        Some("Synthetic \u{fffd} text")
+    );
+    assert!(message.parts.iter().all(|part| !part.is_encoding_problem));
+    assert_eq!(message.raw_message.as_ref(), raw);
+}
+
+#[test]
+fn ac04_unknown_charset_falls_back_without_promising_correct_decoding() {
+    let raw = b"Content-Type: text/plain; charset=x-synthetic-unknown\r\n\r\nSynthetic ASCII";
+    let message = MessageParser::default()
+        .parse(raw)
+        .expect("unknown charset fixture");
+    assert_eq!(message.body_text(0).as_deref(), Some("Synthetic ASCII"));
+    assert!(message.parts.iter().all(|part| !part.is_encoding_problem));
+    assert_eq!(message.raw_message.as_ref(), raw);
+}
+
+fn nested_multipart(depth: usize) -> String {
+    let mut raw = String::new();
+    for level in 0..depth {
+        raw.push_str(&format!(
+            "Content-Type: multipart/mixed; boundary=level-{level}\r\n\r\n--level-{level}\r\n"
+        ));
+    }
+    raw.push_str("Content-Type: text/plain\r\n\r\nSynthetic nested body");
+    for level in (0..depth).rev() {
+        raw.push_str(&format!("\r\n--level-{level}--\r\n"));
+    }
+    raw
+}
+
+#[test]
+fn mime_candidate_does_not_enforce_the_product_multipart_depth_limit() {
+    for depth in [29, 30, 31, 128] {
+        let raw = nested_multipart(depth);
+        let message = MessageParser::default()
+            .parse(&raw)
+            .expect("nested MIME fixture");
+        assert_eq!(message.parts.len(), depth + 1);
+        let mut part = &message.parts[0];
+        let mut observed_depth = 0;
+        while let PartType::Multipart(children) = &part.body {
+            assert_eq!(children.len(), 1);
+            part = &message.parts[children[0] as usize];
+            observed_depth += 1;
+        }
+        assert_eq!(observed_depth, depth);
+        assert_eq!(part.contents(), b"Synthetic nested body");
+        assert!(message.parts.iter().all(|part| !part.is_encoding_problem));
+    }
+}
+
+#[test]
+fn mime_candidate_does_not_enforce_the_product_attachment_size_limit() {
+    const LIMIT: usize = 25 * 1024 * 1024;
+    for size in [LIMIT - 1, LIMIT, LIMIT + 1] {
+        let mut raw = b"Content-Type: application/octet-stream\r\nContent-Disposition: attachment; filename=synthetic.bin\r\nContent-Transfer-Encoding: binary\r\n\r\n".to_vec();
+        raw.resize(raw.len() + size, b'x');
+        let message = MessageParser::default()
+            .parse(&raw)
+            .expect("large attachment fixture");
+        assert_eq!(message.attachment_count(), 1);
+        let attachment = message.attachment(0).expect("binary attachment");
+        assert_eq!(attachment.contents().len(), size);
+        assert!(attachment.contents().iter().all(|byte| *byte == b'x'));
+        assert!(!attachment.is_encoding_problem);
+    }
+}
+
+#[test]
+fn mime_candidate_does_not_enforce_the_product_raw_message_size_limit() {
+    const LIMIT: usize = 50 * 1024 * 1024;
+    const HEADER: &[u8] = b"Content-Type: text/plain; charset=utf-8\r\n\r\n";
+    for size in [LIMIT - 1, LIMIT, LIMIT + 1] {
+        let mut raw = HEADER.to_vec();
+        raw.resize(size, b'x');
+        let message = MessageParser::default()
+            .parse(&raw)
+            .expect("large raw message fixture");
+        assert_eq!(message.raw_message.len(), size);
+        let body = message.body_text(0).expect("large plain body");
+        assert_eq!(body.len(), size - HEADER.len());
+        assert!(body.bytes().all(|byte| byte == b'x'));
+        assert!(message.parts.iter().all(|part| !part.is_encoding_problem));
+    }
 }
