@@ -1,17 +1,17 @@
 # 開発状況
 
-更新日: 2026-10-20
+更新日: 2026-10-21
 
 ## 現在の範囲
 
-- Phase 00、縦切り機能00B「危険な境界のPoC」のHTML/IPC部分をLinux arm64で実行確認
-- 00BのSecretStore lock・3OS検証と00Cのprotocol / WebDriver比較は未完了。AC-18のFTS5小規模PoCに加え、IMAPのsynthetic peer検証、SMTP候補のfinal response/RCPT拒否をloopback sinkで確認。
+- Phase 00、縦切り機能00B「危険な境界のPoC」のHTML/IPC実WebView試験をLinux arm64と4 native CI runnerで確認
+- SecretStore lock/access-deniedとfile URLのOS-level read観測、最低サポートOSの実機確認は未完了。00CではIMAPのsynthetic peer検証、SMTP候補のfinal response/RCPT拒否をloopback sinkで確認したが、候補採用判断は未完了。
 
 ## 実装
 
 - Tauri 2 + Vue 3 + strict TypeScriptの最小アプリ、Rust workspace、lockfileを追加。
 - Dev Containerを作成し、Docker Desktop上でlinux/arm64イメージをbuild。
-- 4 runner候補のネイティブbuild / 起動smoke test workflowを追加。GitHub Actions run 8ではUbuntu、macOS両arch成功。WindowsはWebView injectionとpost-load inspectionが返った後、AC-05のafterAll HTTP fixture server closeでtimeoutした可能性が高い。keep-alive接続をcloseAllConnectionsで終了し再実行予定。
+- 4 runner候補のネイティブbuild / 起動smoke test workflowを追加。GitHub Actions run 9でUbuntu 24.04 x64、Windows 2025 x64、macOS 14 arm64、macOS 15 Intelすべて成功。Windows WebViewのAC-05はtrusted UI IPC、iframe攻撃fixture、post-load検査を通過し、HTTP fixture serverを0 requestで終了。
 - 独自IPC commandと不要なopener pluginを初期アプリから除去。基礎CSPを設定。
 - ADR-001へOS候補、runner候補、ツールチェーン、実機候補と未検証点を記載。
 - `smoke-test` featureはCI用buildのみで自動終了し、通常buildへは含めない。
@@ -61,15 +61,16 @@
 | GitHub Actions `native` run 6 (`58e8f04`) | Ubuntu 24.04 x64とmacOS 14 arm64成功。Windows 2025はRust / protocol / SecretStore試験成功、SecretStore specも成功したが、iframe spec内のtrusted UI IPC testでrun 4/5同様のtimeout。macOS 15 Intelは未完了時点。 |
 | GitHub Actions `native` run 7 (`4b8ebd5`) | Ubuntu 24.04 x64、macOS 14 arm64、macOS 15 Intel成功。Windows 2025はtrusted UI IPC checkを通過したが、AC-05 hostile fixture testがtimeout。エラーは`blocks script, external requests, and file/top navigation attempts`に紐づく。 |
 | GitHub Actions `native` run 8 (`8478910`) | Ubuntu 24.04 x64、macOS 14 arm64、macOS 15 Intel成功。Windows 2025ではAC-05のtrusted UI IPC、fixture injection、post-load WebDriver inspectionが返った後にafterAll timeout。最後のログは検査scriptの完了で、HTTP probe serverのclose待ちが候補。 |
+| GitHub Actions `native` run 9 (`d37a2bf`) | Ubuntu 24.04 x64、Windows 2025 x64、macOS 14 arm64、macOS 15 Intelすべて成功。Windowsの実WebView security stepは2 specs pass、hostile fixture後のprobe server close成功、外部request 0。TLS / FTS5 / IMAP / SMTP testsもmatrix内で成功。 |
 | `xvfb-run -a dbus-run-session -- pnpm run test:security:desktop` | 成功。ローカルLinux実WebViewで2 specs pass（iframe isolationとtrusted UI IPCを含む）。 |
-| WDIO trusted UI / hostile fixture tests | Windowsでtrusted UI IPCとpost-load inspectionは返ることをログで確認。afterAllでprobe serverのactive keep-alive接続を閉じてから完了待ちする |
-| native workflow SecretStore success gate / Japanese FTS5 / IMAP / SMTP PoC | run 5でWindows / Ubuntu / macOS 14 arm64の該当PoC tests成功。macOS 15 IntelはWindows失敗後にcancelled。LinuxはGNOME Keyring DBus service待機後にWDIO実行 |
+| WDIO trusted UI / hostile fixture tests | `executeAsync`内の明示許可IPC確認をfixture注入前に行い、HTTP probe server close時にactive connectionsを終了。run 9で4 runnerすべて成功 |
+| native workflow SecretStore success gate / Japanese FTS5 / IMAP / SMTP PoC | run 9で4 runnerすべての該当tests成功。LinuxはGNOME Keyring DBus service待機後にWDIO実行 |
 | `actionlint -color .github/workflows/native.yml` (1.7.12) | 過去のworkflow更新時に成功。今回のworkflow変更なし |
 | `pnpm run check:production-security` | 成功。normal production buildにWDIO plugin / permissions / global Tauri APIなし |
 | `pnpm install --frozen-lockfile` | 成功。pnpm 12.14.0 |
 | Tauri生成ACL manifest | `security-test` buildで`secret_store_probe`のallow/deny permissionを生成し、test capabilityからのみ解決 |
-| Linux実WebViewのscript/外部通信/top navigation / opaque origin | 上記WDIO試験で確認。file URLのOS-level resource readは直接未確認 |
-| 3OS実WebView攻撃試験 | 未確認。4 runnerとOS実機が必要 |
+| 実WebViewのscript/外部通信/top navigation / opaque origin | run 9でLinux / Windows / macOS両archのrunnerで確認。file URLのOS-level resource readは直接未確認 |
+| 3OS実WebView攻撃試験 | 4 runnerでCI確認済み。対象最低OSの実機試験とfile URLのOS-level read直接観測は未完了 |
 | SecretStore backend拒否 | Linux sessionでdaemon不在時に明示エラーを確認。commandにfile fallbackなし。filesystem監視は未実施 |
 | SecretStore save/read/delete成功 | 一時GNOME Keyring daemon下でLinux実WebView成功を確認 |
 | SecretStore lock / access denied | 未確認。OS GUI sessionと各OS実機が必要 |
@@ -89,29 +90,29 @@
 | `xvfb-run -a dbus-run-session -- env WEBKIT_DISABLE_COMPOSITING_MODE=1 ./target/release/mail-client` | 成功。GUI smoke launch後に終了、exit code 0 |
 | `docker build -f .devcontainer/Dockerfile -t mail-client-dev:local .` | 成功。linux/arm64。Node 24.22.0、Rust 1.99.1、pnpm 12.14.0を確認 |
 | `pnpm install --frozen-lockfile` | 成功。pnpm 12.14.0 |
-| 4 runnerのbuild / GUI起動・終了 | GitHub runner未実行のため未確認 |
+| 4 runnerのbuild / GUI起動・終了 | GitHub Actions native run 9でUbuntu 24.04 x64、Windows 2025 x64、macOS 14 arm64、macOS 15 Intel成功。最低サポートOSの実機証跡は別途必要 |
 
 ## Phase 00のAC状況
 
 | AC | 状態 | 証拠 / 次の確認 |
 |---|---|---|
-| AC-00 | 部分確認 | Dev Container linux/arm64でbuild・起動・終了。4 runnerと対象最低OSの実機証跡が必要 |
-| AC-05 | 部分確認（Linux arm64のみ） | WebKitGTK real WebViewでscript marker 0、外部HTTP request 0、top document不変、iframe親DOM access拒否。Linuxでもfile URLのOS-level read未計測。macOS / Windows試験が必要 |
-| AC-06 | 部分確認（Linux PoC） | loopback 3 casesで認証相当payload 0 bytes。Secret Service不在時の明示失敗およびdaemon稼働時の合成値save/read/deleteを確認。lock/拒否の実証、3OS provider、実protocol統合は未確認 |
+| AC-00 | 部分確認 | Linux arm64 Dev Containerと4 native CI runnerでbuild・起動smoke test成功。対象最低OSの実機証跡が必要 |
+| AC-05 | 部分確認（4 CI runner） | run 9でLinux / Windows / macOS両archの実WebViewにてscript marker 0、外部HTTP request 0、top document不変、sandbox iframe親DOM access拒否、trusted IPCを確認。file URLのOS-level read直接観測と最低OS実機試験は未実施 |
+| AC-06 | 部分確認（4 CI runner） | TLS否定3 casesで認証payload 0 bytes、SecretStoreの合成値save/read/delete成功と未導入時の明示エラーを確認。OS別lock/access-denied、filesystem監視によるfallback不在の直接証跡、実protocol統合は未確認 |
 | AC-18 | 部分確認（fixture PoC） | Japanese FTS5 trigram testで日本語3+文字部分一致、NFKC/空白、account scope、1〜2文字拒否を確認。100k/性能基準、正規化versioning、structured search/UIは未実装 |
 | AC-22 | 未着手 | 00Cで本番buildにテストplugin / debug portがないことを確認 |
 
 ## Gateと未解決事項
 
-- AC-00は未完了。4 runnerのCI結果と対象最低OSの実機証跡が必要。ローカルsmoke testはLinux arm64コンテナのみ。
-- macOS/Windowsの実機、Windows WebView2、3OS AC-05 / SecretStore、署名・配布は未確認。
-- iframeのsandbox / CSP / IPC隔離はLinux WebKitGTKで限定確認済み。file URLの画像resource openは直接計測しておらず、AC-05全体は未達。
+- AC-00は未完了。4 runnerのCI結果は成功したが、対象最低OSの実機証跡が必要。
+- 3OS候補runnerのAC-05攻撃試験とSecretStore成功経路はCIで確認済み。OS別lock/access-denied、file URLのOS-level read直接観測、署名・配布は未確認。
+- iframeのsandbox / CSP / IPC隔離はrun 9で4 runner確認済み。file URLの画像resource openは直接計測しておらず、AC-05全体は未達。
 - Google/Microsoft資格情報、実メール、送信は使用していない。
-- このworkspaceにはGit repository / remoteがなく、GitHub Actionsを起動していない。
+- GitHub Actions native run 9は全4 runnerで成功。Private repositoryは`65537i/mail-client-plan`。
 
 ## 次の最小タスク
 
-- CIを実行し、Ubuntu / Windows / macOS各WebViewで同じAC-05攻撃試験の結果を記録する。file resource openの直接観測手段を用意して追加確認する。
-- Linux CIでkeyring success gateを確認し、macOS / Windowsでも実WebView SecretStore successを確認する。OS別lock / access-deniedを試験し、実IMAP/SMTP実装後はAC-06契約をprotocol adapterへ接続する。
+- file resource openのOS-level直接観測を安全な合成fixtureで追加し、対象最低OSの実機試験を行う。
+- OS別SecretStore lock / access-deniedを試験し、実IMAP/SMTP実装後はAC-06契約をprotocol adapterへ接続する。
 - ADR-006のPoCを基にPhase 07で正規化version、FTS同期、短いqueryのscope付き制限検索、100k性能計測を実装・検証する。
 - ADR-002のasync-imap候補はIDLE cancellation / TLS transportのgateを通すまで採用確定しない。
