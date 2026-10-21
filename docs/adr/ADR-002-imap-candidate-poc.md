@@ -13,6 +13,7 @@ IMAP候補はTLS、SASL XOAUTH2、UID/UIDVALIDITY、IDLEの取消とpolling fall
 |---|---|---|---|
 | `async-imap` 0.12.0 | Tokio runtime feature、Authenticatorによる任意SASL challenge/response、UID command API、SELECTのUIDVALIDITY、IDLE handle、汎用AsyncRead/AsyncWrite transport | 既定featureはasync-stdなのでdefault-features=false必須。TLSは外部streamを接続する設計で、STARTTLS upgrade helperはない。upgrade前の認証禁止を呼び出し側で守る必要がある | 優先候補。未確定 |
 | `imap-codec` 1.0.0 | transport非依存のDecoder、宣言境界でLiteralFoundによる長さ通知、本文とtagged statusを別応答として保持。MIT OR Apache-2.0 | client / TLS / session管理は提供しない。本文byteを含む入力では宣言長通知が出ず、単純なchunk decodeでは事前上限を保証しない | 宣言長APIの限定PoCを実施。採用未確定 |
+| `imap-codec` 2.0.0-alpha.7 / Fragmentizer | 既存のliteral-aware framing、応答保持bytesの上限、同時到着でも宣言通知を先に処理可能。MIT OR Apache-2.0、Rust 1.85+ | プレリリース版。未処理queueは呼出側で投入量を制限。transport / TLS / sessionと失敗時破棄は別途必要 | 上限付きframingの限定PoCを実施。採用未確定 |
 | 同期`imap`系client | 同期コードの単純さ | Tauri/Tokio async runtimeとの統合でblocking回避・接続毎workerが必要。今回のPoCで比較試験していない | 未評価 |
 
 ## SMTP候補
@@ -54,6 +55,15 @@ IMAP候補はTLS、SASL XOAUTH2、UID/UIDVALIDITY、IDLEの取消とpolling fall
 | 3OS build / CI | workflow matrixに同じin-memory testを追加。GitHub Actions未実行 |
 
 ## 未達・採用gate
+
+### 既存Fragmentizerによる同時到着と累積応答上限
+
+- [公式Fragmentizer資料](https://docs.rs/imap-codec/2.0.0-alpha.7/imap_codec/fragmentizer/index.html)と固定2.0.0-alpha.7の配布sourceを確認し、別名imap-codec-framingとしてoptional / imap-poc限定で追加。default-features=false、MIT OR Apache-2.0、Rust 1.85+。1.0.0の比較試験は維持し、既存async-imapのtransportを差し替えていない。プレリリース依存を本番採用する判断はしていない。
+- 新規4 testsのtest限定probeはFragmentizer::newで応答全体の保持bytes上限を指定し、LineのLiteralAnnouncementでliteral単体上限と宣言終了offset + lengthの累積上限を検査する。offsetのchecked conversionとchecked_addを使い、overflowも拒否。最大1 KiBずつenqueueし、次を投入する前にprogressを使い切る。enqueue_bytesの未処理queueにはライブラリのサイズ制限がないため、この投入制限を省略してはならない。
+- 1 / 17 / 一括入力すべてで、50 MiB+1 / u32::MAX宣言と本文1 byteが同時到着しても、本文をmessage bufferへ移す前にLiteralTooLargeを返し、保持message bytesはheaderだけとなる。50 MiB-1 / 50 MiBは宣言と本文1 byteだけの未完状態を確認し、実本文の境界は小さい32-byte上限に対して0 / 31 / 32 / 33 bytesで検証。50 MiBの完全応答をこのframing試験で処理したわけではない。試験のresponse上限に用いたraw上限 + 4096は評価用であり、製品protocol overheadの決定ではない。
+- SOURCE中のprotocol風bytesを保持し後続tagged OKと正確に分離。複数literalの応答全体は設定上限を応答長-1 / ちょうど / +1として各分割で拒否 / 成功を検証。長大な改行なし入力もmessage bytesが上限128を超えず拒否。不正宣言はdecode失敗、途中literalは完成応答なし。独自のwire parserやskip_messageによる再同期は追加していない。
+- 保証範囲は保持データ長と制限付きqueue投入。Vec / VecDequeの余剰capacity、decode内部allocation、返却応答コピー、全接続合計、CPU / RSSの厳密上限は測定していない。probeはテスト結果をまとめて返すだけで、EOF分類・deadline / cancel・エラー後の接続破棄・UID / tagged statusのsession判定を提供しない。エラー後にこのprobeを再利用して安全だとは扱わない。TLS付きtransportとの統合は次の未達条件。
+- Linux arm64でIMAP31 tests、対象clippy `-D warnings` / format / diff成功。初回compileのoffset型不一致は修正。両codecがdefault依存graphから除外されることを確認。MIME単独・unit・3OS・実サーバは今回未検証、既存full IMAP stepで実行するためworkflow変更なし。制限付きframingの見通しは得たが、候補採用・Phase 00完了ではない。
 
 ### 代替imap-codecの宣言長通知API評価
 

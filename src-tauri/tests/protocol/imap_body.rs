@@ -21,6 +21,9 @@ mod literal_limits;
 #[path = "imap_codec_candidate.rs"]
 mod codec_candidate;
 
+#[path = "imap_framing_candidate.rs"]
+mod framing_candidate;
+
 #[derive(Clone, Copy)]
 enum FetchEnd {
     Complete,
