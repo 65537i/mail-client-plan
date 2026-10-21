@@ -56,6 +56,14 @@ IMAP候補はTLS、SASL XOAUTH2、UID/UIDVALIDITY、IDLEの取消とpolling fall
 
 ## 未達・採用gate
 
+### transport I/O障害とInterrupted時の取消公平性
+
+- test限定の固定UID FETCHへ合成AsyncRead / AsyncWrite transportを追加。送信buffer・read / flush回数・Dropを共有観測し、新規4 testsの計8ケースを実行する。実TCP / TLSの障害注入ではなく、wrapperが受け取るI/O結果の契約試験。
+- short writeは最大3 bytesずつ返し、7 bytes受理後のBrokenPipe / 0-byte write（Tokio write_allがWriteZeroへ変換）、全command送信後のflush BrokenPipeを注入。Write(ErrorKind)・正確なcommand prefix・読込0回・Dropをassertし、追加送信・再送を許容しない。writeが7 bytes後にPendingとなる場合もcancel / deadlineで中断し、flush / readが行われずtransportがdropされることを確認する。commandが一部送信済みでも接続を返さない。
+- 途中literalと、完全SOURCE後の途中最終応答へConnectionResetを注入。Receive(Io(ConnectionReset))・処理済みwire prefix全一致を確認し、後者だけ完全SOURCEをprovisionalとして保持する。内部errorの合成private文字列をDebugへ出さず、原因kindと長さのみ表示する。
+- current_thread executorで、途中literalに続く有限10,000回のInterruptedと、read回数2以上を待って取消を通知する別taskを使用。Interrupted後のyieldにより取消taskが実行され、fixtureを使い切る前にCancelledとなること、prefix全一致・送信command 1回・Dropをassertする。無限ループfixtureやwall-clock速度だけに依存した公平性判定は使わない。
+- 既存実装の変更は不要。Linux arm64でIMAP44 tests、対象clippy `-D warnings` / format / diff成功。MIME単独・unit・3OSは今回未再実行。製品コード・依存・workflow変更なし。単一呼出内での追加送信なしを確認しただけで、再接続・長期間のretry・実TLS write障害・task abort時のデータ回収を保証しない。採用gate・Phase 00は未完了。
+
 ### FETCH外側取消でも処理済みwire prefixを回収
 
 - privateなBoundedReceiver::read_responseはreceiverと進行状態を借用する。既存receiveは引き続きreceiverを所有し、失敗時に回収prefixだけを返して接続をdropするwrapper。固定UID FETCHはreceiverを外側に所有して借用受信を呼ぶため、外側selectがwrite / read / flushを中断してもreceiverのframing stateを調べてから破棄できる。private借用APIをエラー後の接続再利用に使わない。

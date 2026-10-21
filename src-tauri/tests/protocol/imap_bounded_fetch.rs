@@ -21,6 +21,9 @@ use super::{BoundedFramingProbe, BoundedReceiver, FramingError, ReceiveError};
 const COMMAND: &[u8] = b"F0001 UID FETCH 8 (UID FLAGS BODY.PEEK[])\r\n";
 const SOURCE: &[u8] = super::super::super::SOURCE;
 
+#[path = "imap_fetch_io.rs"]
+mod io_tests;
+
 #[derive(Debug, PartialEq, Eq)]
 enum FetchError {
     Receive(ReceiveError),
