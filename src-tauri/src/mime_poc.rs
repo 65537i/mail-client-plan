@@ -188,6 +188,32 @@ pub async fn read_source_async(
     }
 }
 
+/// Reads one declared-length source without consuming subsequent protocol bytes.
+/// Oversized declarations are rejected before reading. After any error, the caller
+/// must recover or close the protocol session; this function does not drain it.
+pub async fn read_source_literal_async(
+    reader: &mut (impl AsyncRead + Unpin),
+    declared_bytes: u64,
+    deadline: Instant,
+    cancellation: impl Future<Output = ()>,
+) -> Result<Vec<u8>, SourceReadError> {
+    if declared_bytes > MAX_RAW_BYTES as u64 {
+        return Err(SourceReadError {
+            partial: Vec::new(),
+            cause: SourceReadCause::TooLarge,
+        });
+    }
+    let mut literal = reader.take(declared_bytes);
+    let raw = read_source_async(&mut literal, deadline, cancellation).await?;
+    if raw.len() as u64 != declared_bytes {
+        return Err(SourceReadError {
+            partial: raw,
+            cause: SourceReadCause::Io(io::Error::from(io::ErrorKind::UnexpectedEof)),
+        });
+    }
+    Ok(raw)
+}
+
 /// PoC limits only: output remains untrusted, and parsing itself is not resource-bounded.
 /// The caller retains ownership of the source even when validation fails.
 pub fn parse(raw: &[u8]) -> Result<Message<'_>, MimeError> {

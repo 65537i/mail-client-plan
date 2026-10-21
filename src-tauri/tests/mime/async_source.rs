@@ -10,7 +10,9 @@ use std::{
     time::Duration,
 };
 
-use mail_client_lib::mime_poc::{MAX_RAW_BYTES, SourceReadCause, read_source_async};
+use mail_client_lib::mime_poc::{
+    MAX_RAW_BYTES, SourceReadCause, read_source_async, read_source_literal_async,
+};
 use tokio::{
     io::{AsyncRead, AsyncReadExt, AsyncWriteExt, ReadBuf},
     time::Instant,
@@ -18,6 +20,134 @@ use tokio::{
 
 fn deadline() -> Instant {
     Instant::now() + Duration::from_secs(10)
+}
+
+#[tokio::test]
+async fn ac04_literal_reader_preserves_following_protocol_bytes() {
+    for source in [&b""[..], b"Content-Type: text/plain\r\n\r\nSynthetic"] {
+        let suffix = b")\r\nA1 OK FETCH complete\r\n";
+        let mut wire = source.to_vec();
+        wire.extend_from_slice(suffix);
+        let mut reader = &wire[..];
+        let raw =
+            read_source_literal_async(&mut reader, source.len() as u64, deadline(), pending())
+                .await
+                .unwrap();
+        assert_eq!(raw, source);
+        assert_eq!(reader, suffix);
+        if !raw.is_empty() {
+            assert_eq!(
+                mail_client_lib::mime_poc::parse(&raw)
+                    .unwrap()
+                    .body_text(0)
+                    .as_deref(),
+                Some("Synthetic")
+            );
+        }
+    }
+    for size in [MAX_RAW_BYTES - 1, MAX_RAW_BYTES] {
+        let mut reader = tokio::io::repeat(b'x');
+        let raw = read_source_literal_async(&mut reader, size as u64, deadline(), pending())
+            .await
+            .unwrap();
+        assert_eq!(raw.len(), size);
+        assert!(raw.iter().all(|byte| *byte == b'x'));
+    }
+}
+
+#[tokio::test]
+async fn ac04_literal_reader_preserves_ready_cancellation_and_deadline_priority() {
+    for size in [0, 1] {
+        let source = b"Synthetic unread";
+        let mut reader = &source[..];
+        let (prefix, cause) =
+            read_source_literal_async(&mut reader, size, Instant::now(), ready(()))
+                .await
+                .unwrap_err()
+                .into_parts();
+        assert!(matches!(cause, SourceReadCause::Cancelled));
+        assert!(prefix.is_empty());
+        assert_eq!(reader, source);
+        let (prefix, cause) =
+            read_source_literal_async(&mut reader, size, Instant::now(), pending())
+                .await
+                .unwrap_err()
+                .into_parts();
+        assert!(matches!(cause, SourceReadCause::TimedOut));
+        assert!(prefix.is_empty());
+        assert_eq!(reader, source);
+    }
+}
+
+#[tokio::test]
+async fn ac04_literal_reader_rejects_oversized_declarations_without_reading() {
+    for size in [MAX_RAW_BYTES as u64 + 1, u64::MAX] {
+        let source = b"Synthetic unread source";
+        let mut reader = &source[..];
+        let (prefix, cause) = read_source_literal_async(&mut reader, size, deadline(), pending())
+            .await
+            .unwrap_err()
+            .into_parts();
+        assert!(matches!(cause, SourceReadCause::TooLarge));
+        assert!(prefix.is_empty());
+        assert_eq!(reader, source);
+    }
+}
+
+#[tokio::test]
+async fn ac04_literal_reader_reports_early_eof_and_retains_partial_source() {
+    for source in [&b""[..], b"private-prefix"] {
+        let mut reader = source;
+        let error =
+            read_source_literal_async(&mut reader, source.len() as u64 + 1, deadline(), pending())
+                .await
+                .unwrap_err();
+        assert!(!format!("{error:?}").contains("private-prefix"));
+        assert!(error.to_string().contains("UnexpectedEof"));
+        let (prefix, cause) = error.into_parts();
+        assert_eq!(prefix, source);
+        let SourceReadCause::Io(error) = cause else {
+            panic!("expected explicit truncated source error");
+        };
+        assert_eq!(error.kind(), io::ErrorKind::UnexpectedEof);
+    }
+}
+
+#[tokio::test]
+async fn ac04_literal_reader_interrupts_stalled_input_and_retains_prefix() {
+    for cancel in [false, true] {
+        let (mut writer, mut reader) = tokio::io::duplex(64);
+        writer.write_all(b"Synthetic prefix").await.unwrap();
+        let cancellation = async {
+            if cancel {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            } else {
+                pending::<()>().await;
+            }
+        };
+        let error = tokio::time::timeout(
+            Duration::from_secs(2),
+            read_source_literal_async(
+                &mut reader,
+                100,
+                Instant::now() + Duration::from_millis(30),
+                cancellation,
+            ),
+        )
+        .await
+        .expect("literal read must stop")
+        .unwrap_err();
+        let (prefix, cause) = error.into_parts();
+        assert_eq!(prefix, b"Synthetic prefix");
+        assert!(matches!(
+            (cancel, cause),
+            (true, SourceReadCause::Cancelled) | (false, SourceReadCause::TimedOut)
+        ));
+        writer.write_all(b"suffix").await.unwrap();
+        let mut suffix = [0; 6];
+        reader.read_exact(&mut suffix).await.unwrap();
+        assert_eq!(&suffix, b"suffix");
+    }
 }
 
 #[tokio::test]
