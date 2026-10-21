@@ -36,6 +36,8 @@
 
 ## 最新の確認
 
+MIME base64添付上限検証（00C / AC-04耐性PoC）: 通常添付（multipart/mixed）とinline画像指定（multipart/related）を各25MiB -1 / 境界 / +1 byteの6ケースで生成。76文字改行・末尾paddingを含むbase64を実復号し、全bytes一致と原文保持を確認。候補parserは全ケースを解析し、adapterは両指定で境界以下を許可、+1 byteをAttachmentTooLargeで拒否した。Linux arm64で`cargo test -p mail-client --features mime-poc --lib --test mime_candidate --locked`: unit5 + integration26 = 31 tests成功（integration約7.95秒）。対象clippy `-D warnings` / format / diff成功。製品コード・依存・workflow変更なし。image/pngはMIME分類試験用の宣言でpayloadは合成ASCII、画像形式検証・CID表示・sanitizerの証拠ではない。解析途中のCPU / memory制限、実IMAP、Windows/macOSは未検証。全OS手動Actionsは起動せず、Phase 00未完了。
+
 MIME添付messageの解析打切り検証（00C / AC-04耐性PoC）: quoted-printableで包んだmessage/rfc822を1 / 2 / 3 / 4 / 5段で生成。mail-parser 0.11.9は3段まで展開し、4段目では復号bytesをBinaryとして保持してis_encoding_problemを設定することを確認。adapterは3段以下を許可、4 / 5段はIncompleteで拒否し、元EMLと未解析部分の全bytesを検査した。これは製品のcontainer上限30とは別の候補parserの制限。初回のfixture配置コンパイルエラーを修正し、未解析bytesの期待値も各層の元データとの完全一致へ修正。Linux arm64で`cargo test -p mail-client --features mime-poc --lib --test mime_candidate --locked`: unit5 + integration25 = 30 tests成功。対象clippy `-D warnings` / format / diff成功。製品コード・依存・workflow変更なし。base64添付message、混在encoding、不完全MIME診断の網羅性、解析中の資源制限、Windows/macOSは未検証。全OS手動Actionsは起動せず、Phase 00未完了。
 
 MIME実復号budget検証（00C / AC-04耐性PoC）: Windows-1252の0x80がUTF-8の3 byteへ展開される合成EMLを追加。原文50MiB未満から、復号後100MiB - 1 / 100MiB / 100MiB + 1 byteを実際に生成し、全decoded bytesと原文保持をassert。候補parserは3ケースとも解析し、adapterは境界以下を許可、+1 byteをDecodedTooLargeとして拒否することを確認。Linux arm64で`cargo test -p mail-client --features mime-poc --lib --test mime_candidate --locked`: unit5 + integration24 = 29 tests成功（integration約6.50秒）。初回clippyの固定長chunks指摘をas_chunksへ修正後、新規test再実行と対象clippy `-D warnings` / format成功、diff検査成功。製品コード・依存・workflow変更なし。解析後の上限検査であり、解析途中のCPU / peak memory制限や計測の証拠ではない。Windows/macOS・実IMAP・全OS手動Actionsは未実行。
@@ -163,4 +165,4 @@ MIME候補の初期PoC: `mail-parser =0.11.9`（optional `mime-poc`、`full_enco
 - OS別SecretStore lock / access-deniedを試験し、実IMAP/SMTP実装後はAC-06契約をprotocol adapterへ接続する。
 - ADR-006のPoCを基にPhase 07で正規化version、FTS同期、短いqueryのscope付き制限検索、100k性能計測を実装・検証する。
 - ADR-002のasync-imap候補はIDLE cancellation / TLS transportのgateを通すまで採用確定しない。
-- SMTPのTLS / STARTTLS接続・認証・合成本文送信はローカルPoC成功。MIME候補・制限adapter・stream上限・非同期deadline / cancellationは30 tests確認済み。復号後100MiBはunit budget計算と実EMLのcharset展開で境界前後を検証済み。quoted-printable添付messageの3段解析上限・超過時Incompleteも確認。次は不完全解析の診断範囲と解析中の資源消費制限を評価する。lost response PoCを本番の再送判断へ直接流用せず、Phase 05で永続Outboxの送出境界・unknown・明示再送契約へ接続する。
+- SMTPのTLS / STARTTLS接続・認証・合成本文送信はローカルPoC成功。MIME候補・制限adapter・stream上限・非同期deadline / cancellationは31 tests確認済み。復号後100MiBはunit budget計算と実EMLのcharset展開で境界前後を検証済み。通常・inlineのbase64添付25MiB境界と、quoted-printable添付messageの3段解析上限・超過時Incompleteも確認。次は不完全解析の診断範囲と解析中の資源消費制限を評価する。lost response PoCを本番の再送判断へ直接流用せず、Phase 05で永続Outboxの送出境界・unknown・明示再送契約へ接続する。

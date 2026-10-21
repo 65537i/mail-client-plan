@@ -235,6 +235,76 @@ fn ac04_mime_adapter_checks_decoded_budget_after_charset_expansion() {
 }
 
 #[test]
+fn ac04_base64_attachments_and_inline_images_enforce_decoded_size_limit() {
+    for inline in [false, true] {
+        for size in [
+            mime_poc::MAX_ATTACHMENT_BYTES - 1,
+            mime_poc::MAX_ATTACHMENT_BYTES,
+            mime_poc::MAX_ATTACHMENT_BYTES + 1,
+        ] {
+            let (subtype, body_type, disposition) = if inline {
+                ("related", "text/html", "inline")
+            } else {
+                ("mixed", "text/plain", "attachment")
+            };
+            let mut raw = format!(
+                "MIME-Version: 1.0\r\nContent-Type: multipart/{subtype}; boundary=encoded\r\n\r\n--encoded\r\nContent-Type: {body_type}\r\n\r\nSynthetic body\r\n--encoded\r\nContent-Type: image/png\r\nContent-Disposition: {disposition}\r\nContent-ID: <synthetic-image>\r\nContent-Transfer-Encoding: base64\r\n\r\n"
+            ).into_bytes();
+            let groups = size / 3;
+            for group in 0..groups {
+                raw.extend_from_slice(b"QUFB");
+                if group % 19 == 18 {
+                    raw.extend_from_slice(b"\r\n");
+                }
+            }
+            raw.extend_from_slice(match size % 3 {
+                1 => b"QQ==",
+                2 => b"QUE=",
+                _ => b"",
+            });
+            raw.extend_from_slice(b"\r\n--encoded--\r\n");
+            assert!(raw.len() < mime_poc::MAX_RAW_BYTES);
+            {
+                let message = MessageParser::default()
+                    .parse(&raw)
+                    .expect("synthetic base64 attachment");
+                let part = message
+                    .parts
+                    .iter()
+                    .find(|part| part.content_id() == Some("synthetic-image"))
+                    .expect("decoded attachment or inline image");
+                assert!(matches!(
+                    part.body,
+                    PartType::Binary(_) | PartType::InlineBinary(_)
+                ));
+                assert_eq!(part.contents().len(), size);
+                assert!(part.contents().iter().all(|byte| *byte == b'A'));
+                assert!(!part.is_encoding_problem);
+                assert_eq!(message.raw_message.as_ref(), raw);
+            }
+            match mime_poc::parse(&raw) {
+                Ok(message) => {
+                    assert!(size <= mime_poc::MAX_ATTACHMENT_BYTES);
+                    let part = message
+                        .parts
+                        .iter()
+                        .find(|part| part.content_id() == Some("synthetic-image"))
+                        .unwrap();
+                    assert_eq!(part.contents().len(), size);
+                    assert!(part.contents().iter().all(|byte| *byte == b'A'));
+                    assert_eq!(message.raw_message.as_ref(), raw);
+                }
+                Err(error) => {
+                    assert_eq!(size, mime_poc::MAX_ATTACHMENT_BYTES + 1);
+                    assert_eq!(error, MimeError::AttachmentTooLarge);
+                }
+            }
+            assert!(raw.ends_with(b"\r\n--encoded--\r\n"));
+        }
+    }
+}
+
+#[test]
 fn mime_candidate_does_not_enforce_the_product_raw_message_size_limit() {
     const LIMIT: usize = 50 * 1024 * 1024;
     const HEADER: &[u8] = b"Content-Type: text/plain; charset=utf-8\r\n\r\n";
