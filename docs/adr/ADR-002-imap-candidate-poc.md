@@ -66,6 +66,11 @@ IMAP候補はTLS、SASL XOAUTH2、UID/UIDVALIDITY、IDLEの取消とpolling fall
 
 ### MIME制限adapterのPoC
 
+- 入力stream向けにblocking `read_source(&mut impl Read)`を追加。16KiB単位で読み、原文50MiB + 1 byteまでで必ず判定する。50MiBちょうどはEOF確認後に成功、1 byte超過はエラーで停止し、残りのstreamを消費しない。上限超過で返すbytesは完全なメールではなくprefixであることをエラー表示に明記する。読み取り成功後のVecを既存`parse(&raw)`へ渡すPoCを試験した。
+- 読み取りエラー時は取得済みbytesと元のio::Errorを`into_parts()`で回収できる。Interruptedだけ再試行し、その他のI/O失敗をEOFや空の成功にしない。Display / Debugは本文・I/Oエラー文字列を伏せ、分類と保持bytes数のみを出す。Error::source経由の不用意なpath公開も避け、元のエラーは回収APIからのみ取得する。
+- 追加4 tests（unit計5 + integration16 = 21）でempty / small、short read、Interrupted後のI/O失敗、原文50MiBの-1 / 境界 / +1 / +100 byteを確認。超過後にstreamの残りが維持されること、部分原文と元エラーの回収、診断非公開もassert。Linux arm64で全21 testsと対象clippy / format / diff検査成功。依存・workflow変更なし。
+- 入力stream上限はこのblocking readerを使う場合のみ有効。UI threadでは呼ばない。deadline / cancellationは呼び出し側の責務で、遅いstreamのread停止、IMAPへの組み込み、prefixと未読streamの永続保存は未実装。parser自身の途中資源消費や不完全MIME診断の網羅性は今回改善していない。
+
 - `src-tauri/src/mime_poc.rs`を`mime-poc` featureだけで公開。借用した原文sliceを受け、50MiB超過をパーサ呼び出し前に`RawTooLarge`として拒否する。呼び出し元が原文を所有し続け、エラーに本文・添付名・pathを含めない。UI / IPC / DB / filesystemには接続しない。
 - 解析後のpart treeを反復走査し、添付25MiB、復号後合計100MiB、container深さ30を超過した場合に型付きエラーを返す。root containerから数え、multipartとmessage/rfc822を各1段とする。nested messageは元のmessage bytesと内部decoded leavesを両方合算する保守的budgetとした。バイナリinlineも添付上限対象。超過は原文削除や空本文の成功応答に置き換えない。
 - 転送エンコード問題、空multipart、本文も添付も分類されない結果を`Incomplete`、parse失敗を`Unparseable`として返す。これは全不正MIMEの完全性判定ではない。charset置換、未知charset、欠落境界で一部だけ復元された結果等を網羅検出する実装は未完了。成功したHTML・添付名・CIDは引き続き未信頼。

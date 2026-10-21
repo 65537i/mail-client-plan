@@ -1,4 +1,8 @@
-use std::{error::Error, fmt};
+use std::{
+    error::Error,
+    fmt,
+    io::{self, Read},
+};
 
 use mail_parser::{Message, MessageParser, PartType};
 
@@ -33,6 +37,78 @@ impl fmt::Display for MimeError {
 }
 
 impl Error for MimeError {}
+
+pub struct SourceReadError {
+    partial: Vec<u8>,
+    cause: SourceReadCause,
+}
+
+pub enum SourceReadCause {
+    TooLarge,
+    Io(io::Error),
+}
+
+impl SourceReadError {
+    pub fn into_parts(self) -> (Vec<u8>, SourceReadCause) {
+        (self.partial, self.cause)
+    }
+}
+
+impl fmt::Display for SourceReadError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match &self.cause {
+            SourceReadCause::TooLarge => {
+                f.write_str("MIME source exceeds 50 MiB; retained bytes are only a prefix")
+            }
+            SourceReadCause::Io(error) => write!(
+                f,
+                "MIME source read failed ({:?}); retained bytes may be incomplete",
+                error.kind()
+            ),
+        }
+    }
+}
+
+impl fmt::Debug for SourceReadError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("SourceReadError")
+            .field("retained_bytes", &self.partial.len())
+            .field("reason", &self.to_string())
+            .finish()
+    }
+}
+
+// Do not expose the I/O source through error formatting: it can contain private paths.
+impl Error for SourceReadError {}
+
+/// Blocking PoC reader; caller controls cancellation/timeouts and retains the unread stream.
+/// Reads at most 50 MiB plus one byte to distinguish exact-limit EOF from overflow.
+pub fn read_source(reader: &mut impl Read) -> Result<Vec<u8>, SourceReadError> {
+    let mut raw = Vec::new();
+    let mut chunk = [0u8; 16 * 1024];
+    loop {
+        let remaining = (MAX_RAW_BYTES + 1 - raw.len()).min(chunk.len());
+        match reader.read(&mut chunk[..remaining]) {
+            Ok(0) => return Ok(raw),
+            Ok(count) => {
+                raw.extend_from_slice(&chunk[..count]);
+                if raw.len() > MAX_RAW_BYTES {
+                    return Err(SourceReadError {
+                        partial: raw,
+                        cause: SourceReadCause::TooLarge,
+                    });
+                }
+            }
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+            Err(error) => {
+                return Err(SourceReadError {
+                    partial: raw,
+                    cause: SourceReadCause::Io(error),
+                });
+            }
+        }
+    }
+}
 
 /// PoC limits only: output remains untrusted, and parsing itself is not resource-bounded.
 /// The caller retains ownership of the source even when validation fails.
@@ -109,6 +185,101 @@ fn validate(message: &Message<'_>) -> Result<(), MimeError> {
 mod tests {
     use super::*;
     use mail_parser::MessagePart;
+
+    #[test]
+    fn source_reader_handles_empty_and_small_mime_sources() {
+        for source in [&b""[..], b"Content-Type: text/plain\r\n\r\nSynthetic"] {
+            let raw = read_source(&mut io::Cursor::new(source)).expect("complete MIME source");
+            assert_eq!(raw, source);
+            if !raw.is_empty() {
+                assert_eq!(
+                    parse(&raw).unwrap().body_text(0).as_deref(),
+                    Some("Synthetic")
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn source_reader_accepts_raw_boundary_and_stops_at_first_excess_byte() {
+        for size in [
+            MAX_RAW_BYTES - 1,
+            MAX_RAW_BYTES,
+            MAX_RAW_BYTES + 1,
+            MAX_RAW_BYTES + 100,
+        ] {
+            let mut reader = io::repeat(b'x').take(size as u64);
+            match read_source(&mut reader) {
+                Ok(raw) => {
+                    assert!(size <= MAX_RAW_BYTES);
+                    assert_eq!(raw.len(), size);
+                }
+                Err(error) => {
+                    assert!(size > MAX_RAW_BYTES);
+                    let (prefix, cause) = error.into_parts();
+                    assert!(matches!(cause, SourceReadCause::TooLarge));
+                    assert_eq!(prefix.len(), MAX_RAW_BYTES + 1);
+                    assert!(prefix.iter().all(|byte| *byte == b'x'));
+                    assert_eq!(reader.limit(), (size - MAX_RAW_BYTES - 1) as u64);
+                }
+            }
+        }
+    }
+
+    struct InterruptedThenFailure {
+        calls: usize,
+    }
+
+    impl Read for InterruptedThenFailure {
+        fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+            self.calls += 1;
+            match self.calls {
+                1 => Err(io::ErrorKind::Interrupted.into()),
+                2 => {
+                    let source = b"private-source";
+                    buffer[..source.len()].copy_from_slice(source);
+                    Ok(source.len())
+                }
+                _ => Err(io::Error::new(
+                    io::ErrorKind::PermissionDenied,
+                    "private-path-detail",
+                )),
+            }
+        }
+    }
+
+    #[test]
+    fn source_reader_preserves_partial_bytes_and_original_error_without_logging_them() {
+        let mut reader = InterruptedThenFailure { calls: 0 };
+        let error = read_source(&mut reader).expect_err("read failure is not EOF");
+        assert_eq!(reader.calls, 3);
+        for diagnostic in [error.to_string(), format!("{error:?}")] {
+            assert!(!diagnostic.contains("private-source"));
+            assert!(!diagnostic.contains("private-path-detail"));
+            assert!(diagnostic.contains("PermissionDenied"));
+        }
+        assert!(error.source().is_none());
+        let (prefix, cause) = error.into_parts();
+        assert_eq!(prefix, b"private-source");
+        let SourceReadCause::Io(original) = cause else {
+            panic!("expected original I/O failure");
+        };
+        assert_eq!(original.kind(), io::ErrorKind::PermissionDenied);
+        assert_eq!(original.to_string(), "private-path-detail");
+    }
+
+    #[test]
+    fn source_reader_supports_short_reads_without_changing_mime_bytes() {
+        struct ShortReader(io::Cursor<&'static [u8]>);
+        impl Read for ShortReader {
+            fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+                self.0.read(&mut buffer[..1])
+            }
+        }
+        let source = b"Content-Type: text/plain\r\n\r\nSynthetic";
+        let raw = read_source(&mut ShortReader(io::Cursor::new(source))).unwrap();
+        assert_eq!(raw, source);
+    }
 
     #[test]
     fn decoded_budget_checks_exact_boundary_without_allocating_100_mib() {
