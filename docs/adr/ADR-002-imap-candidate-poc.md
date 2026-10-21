@@ -56,6 +56,14 @@ IMAP候補はTLS、SASL XOAUTH2、UID/UIDVALIDITY、IDLEの取消とpolling fall
 
 ## 未達・採用gate
 
+### 上限付きframingとTLS受信の接続
+
+- test限定BoundedReceiverはstreamとframing stateを所有し、1 KiB固定read bufferから入力をenqueueする。共通next_responseで保持queueを処理し、未完かつqueue処理後のみ次のreadへ進む。正常時は応答bytesとreceiver全体を返すため、同時到着した後続応答を保持したまま次のreceiveができる。エラー時はreceiverを返さずdropして接続を破棄し、危険な再同期・skip_messageはしない。
+- 各stepをabsolute deadline・取消futureとselectし、ready取消を期限切れより優先する。期限切れはreadがreadyでも先に判定できる形で、read後やInterruptedではyieldする。readの途中中断はTokioのcancel-safe readを使用。内部io errorはErrorKindで区別し、メールを含みうるerror文字列をDebugへ出さない。今回は通常のTLS EOFのみ注入しており、他のI/O errorやInterrupted連続の統合試験は未実施。
+- 新規2 testsの計7ケースは、信頼した合成localhost証明書と通常のhostname検証でloopback implicit TLSを使う。正常時はSOURCEを含むFETCH応答とtagged OKを2回のreceiveで完全一致確認。異常系は50 MiB+1宣言と本文1 byte、129 bytesの改行なし入力（応答上限128）、decode不正、途中literalのclose_notify付きEOF、deadline、cancel。型付き原因をassertし、全ケースでpeer側の接続終了と後続command 0 bytesを確認する。TLS writeの一括送信はtransport readのchunk一致を保証しないが、分割に依存しないframingは既存の1 / 17 / 一括入力試験で検証済み。
+- 過大literalではheaderのみ、応答全体超過では上限128 bytes、decode不正ではその応答、途中EOF / deadline / cancelでは処理済みのheader + partial本文をprefixとして回収。Debugは原因と長さだけ。これはIMAP wire prefixであり完全MIMEでも完全取得cacheでもない。framingの未処理queueやTLS内部、wrapper future自体のdrop / abort時のbytesは回収を保証しない。既存async-imapの途中literal回収blockerを修正したわけでもない。
+- Linux arm64でunit5 + IMAP33 + MIME42 = 80 tests成功。異常系強化後もIMAP33 tests、対象clippy `-D warnings` / format / diff成功。既存probeの4 testsも維持。製品コード・依存・workflow変更なし。FETCH発行・認証・UID / 最終tagの照合・account / folder / UIDVALIDITY所属はこのreceiverへ未接続。3OS・実サーバ・厳密なメモリ量・全接続合計の資源制限も未検証。受信層の限定PoCであり、本番採用やPhase 00完了ではない。
+
 ### 既存Fragmentizerによる同時到着と累積応答上限
 
 - [公式Fragmentizer資料](https://docs.rs/imap-codec/2.0.0-alpha.7/imap_codec/fragmentizer/index.html)と固定2.0.0-alpha.7の配布sourceを確認し、別名imap-codec-framingとしてoptional / imap-poc限定で追加。default-features=false、MIT OR Apache-2.0、Rust 1.85+。1.0.0の比較試験は維持し、既存async-imapのtransportを差し替えていない。プレリリース依存を本番採用する判断はしていない。

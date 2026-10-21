@@ -6,6 +6,9 @@ use mail_client_lib::mime_poc::MAX_RAW_BYTES;
 
 use super::SOURCE;
 
+#[path = "imap_framing_tls.rs"]
+mod tls;
+
 const INPUT_CHUNK_BYTES: usize = 1024;
 
 #[derive(Debug, PartialEq, Eq)]
@@ -35,40 +38,46 @@ impl BoundedFramingProbe {
         // enqueue_bytes itself is unbounded; drain each bounded input chunk first.
         for chunk in input.chunks(INPUT_CHUNK_BYTES) {
             self.fragments.enqueue_bytes(chunk);
-            loop {
-                let fragment = self.fragments.progress();
-                if self.fragments.is_max_message_size_exceeded() {
-                    return Err(FramingError::ResponseTooLarge);
-                }
-                let Some(fragment) = fragment else {
-                    break;
-                };
-                if let FragmentInfo::Line {
-                    end,
-                    announcement: Some(announcement),
-                    ..
-                } = fragment
-                {
-                    if announcement.length > self.max_literal_bytes {
-                        return Err(FramingError::LiteralTooLarge);
-                    }
-                    if u32::try_from(end)
-                        .ok()
-                        .and_then(|end| end.checked_add(announcement.length))
-                        .is_none_or(|total| total > self.max_response_bytes)
-                    {
-                        return Err(FramingError::ResponseTooLarge);
-                    }
-                }
-                if self.fragments.is_message_complete() {
-                    self.fragments
-                        .decode_message(&ResponseCodec::default())
-                        .map_err(|_| FramingError::Decode)?;
-                    responses.push(self.fragments.message_bytes().to_vec());
-                }
+            while let Some(response) = self.next_response()? {
+                responses.push(response);
             }
         }
         Ok(responses)
+    }
+
+    fn next_response(&mut self) -> Result<Option<Vec<u8>>, FramingError> {
+        loop {
+            let fragment = self.fragments.progress();
+            if self.fragments.is_max_message_size_exceeded() {
+                return Err(FramingError::ResponseTooLarge);
+            }
+            let Some(fragment) = fragment else {
+                return Ok(None);
+            };
+            if let FragmentInfo::Line {
+                end,
+                announcement: Some(announcement),
+                ..
+            } = fragment
+            {
+                if announcement.length > self.max_literal_bytes {
+                    return Err(FramingError::LiteralTooLarge);
+                }
+                if u32::try_from(end)
+                    .ok()
+                    .and_then(|end| end.checked_add(announcement.length))
+                    .is_none_or(|total| total > self.max_response_bytes)
+                {
+                    return Err(FramingError::ResponseTooLarge);
+                }
+            }
+            if self.fragments.is_message_complete() {
+                self.fragments
+                    .decode_message(&ResponseCodec::default())
+                    .map_err(|_| FramingError::Decode)?;
+                return Ok(Some(self.fragments.message_bytes().to_vec()));
+            }
+        }
     }
 }
 

@@ -39,6 +39,8 @@ fullのIMAP候補試験は`imap-poc,mime-poc`を併用し、BODY.PEEKで取得�
 
 既存framingの評価には別名optional依存の`imap-codec 2.0.0-alpha.7`も使用する。同じtargetで同時到着・分割入力・literal / 応答全体の上限を試験するが、test限定probeであり製品のTLS / session受信層を置き換えない。
 
+同targetには1 KiB固定readとframingを結ぶ合成TLS受信試験も含む。上限・decode・EOF・期限・取消時の接続破棄と後続応答の保持を検証するが、製品のFETCH発行やUID / 最終tag照合との統合は別gateとする。
+
 ## 2. 検証コマンドの契約
 
 Phase 01で以下のpackage scriptsを用意する。これは計画上の名称であり、現時点で実装済みではない。
