@@ -6,7 +6,7 @@
 
 - Phase 00、縦切り機能00B「危険な境界のPoC」のHTML/IPC実WebView試験をLinux arm64と4 native CI runnerで確認
 - SecretStore lock/access-denied、Windows/macOSでのfile URL OS-level直接観測、最低サポートOSの実機確認は未完了。00CではIMAPのsynthetic peer検証、SMTP候補のfinal response/RCPT拒否をloopback sinkで確認したが、候補採用判断は未完了。
-- Actions利用分を抑えるため、native workflowはmainへのpushでUbuntuのみ、PRと手動実行（workflow_dispatch）で全4 runnerを実行する。PR / release前のクロスOS検証は維持する。
+- Actions利用分を抑えるため、native workflowはmainへのpushでUbuntuのみ、PRと手動実行（workflow_dispatch）で全4 runnerを実行する。`docs/status.md`のみの変更はpush / PRともworkflowを起動しない。PR / release前のクロスOS検証は維持する。
 
 ## 実装
 
@@ -68,13 +68,14 @@
 | GitHub Actions `native` run 12 (`179ac74`) | status更新commitで起動した従来設定の4 runner run。後続pushでcancel。 |
 | GitHub Actions `native` run 13 (`51de6e1`) / run 14 (`903a5b8`) | matrix絞り込み設定がjob生成前に失敗。matrixの構造を修正し、actionlintとrun 15で検証。 |
 | GitHub Actions `native` run 15 (`969eebe`) | mainへのpushでUbuntu 24.04 x64の1 jobのみを起動し、全チェック成功。PR / workflow_dispatchの4 runner matrixは式上有効だが、このrunでは未実行。 |
+| GitHub Actions `native` run 16 (`88a3ff8`) | mainへのpushでUbuntu 24.04 x64の1 jobのみを起動し、全チェック成功。 |
 | `xvfb-run -a dbus-run-session -- pnpm run test:security:desktop` | 成功。ローカルLinux実WebViewで2 specs pass（iframe isolationとtrusted UI IPCを含む）。 |
 | Linux file URL OS-level audit | native run 11で成功。`strace -ff -e trace=%file`がTauri/WebViewを含む88 processを追跡し、一時ディレクトリの合成canaryへのfile syscall 0件。ローカルはstrace未導入のためCIで実行 |
 | `node --check` / `cargo fmt --all --check` / `git diff --check` | 成功。file audit harnessとWDIO設定を含む |
 | `pnpm run check:production-security` | 成功。production buildにtest-only IPC / WebDriver pluginなし |
 | WDIO trusted UI / hostile fixture tests | `executeAsync`内の明示許可IPC確認をfixture注入前に行い、HTTP probe server close時にactive connectionsを終了。run 9で4 runnerすべて成功 |
 | native workflow SecretStore success gate / Japanese FTS5 / IMAP / SMTP PoC | run 9で4 runnerすべての該当tests成功。LinuxはGNOME Keyring DBus service待機後にWDIO実行 |
-| `actionlint -color .github/workflows/native.yml` (1.7.12) | 成功。main pushでUbuntuのみ、PR / workflow_dispatchで4 runnerのmatrixを生成する条件をlint |
+| `actionlint -color .github/workflows/native.yml` (1.7.12) | 成功。main pushでUbuntuのみ、PR / workflow_dispatchで4 runnerのmatrixを生成し、status-only changeを除外する条件をlint |
 | `pnpm run check:production-security` | 成功。normal production buildにWDIO plugin / permissions / global Tauri APIなし |
 | `pnpm install --frozen-lockfile` | 成功。pnpm 12.14.0 |
 | Tauri生成ACL manifest | `security-test` buildで`secret_store_probe`のallow/deny permissionを生成し、test capabilityからのみ解決 |

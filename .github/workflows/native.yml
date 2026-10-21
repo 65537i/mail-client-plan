@@ -2,9 +2,13 @@ name: native
 
 on:
   pull_request:
+    paths-ignore:
+      - docs/status.md
   push:
     branches:
       - main
+    paths-ignore:
+      - docs/status.md
   workflow_dispatch:
 
 permissions:

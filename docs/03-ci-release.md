@@ -5,7 +5,7 @@
 | Workflow | 起動 | 必須処理 |
 |---|---|---|
 | verify | PR / main | format、lint、typecheck、unit、UI component、依存監査、secret scan、設定検査 |
-| native | PR / 手動実行は4 runner matrix。mainへのpushはUbuntuのみ | Rust check/test、Tauri build、一時DB integration、capability契約試験 |
+| native | PR / 手動実行は4 runner matrix。mainへのpushはUbuntuのみ。`docs/status.md`のみの変更では起動しない | Rust check/test、Tauri build、一時DB integration、capability契約試験 |
 | protocol | PR / main、Ubuntu | pinned IMAP/SMTP fixtureサーバ、TLS、fault injection、オフライン収束 |
 | desktop | PR / main、3OS | 実WebView E2E、HTML攻撃、IPC拒否、再起動。GUI環境が必要 |
 | compatibility | nightly / release | OS最低版/現行版、macOS 2 arch、WebView差異、長時間同期、fuzz corpus |
