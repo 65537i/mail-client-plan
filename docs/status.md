@@ -36,6 +36,8 @@
 
 ## 最新の確認
 
+MIME実復号budget検証（00C / AC-04耐性PoC）: Windows-1252の0x80がUTF-8の3 byteへ展開される合成EMLを追加。原文50MiB未満から、復号後100MiB - 1 / 100MiB / 100MiB + 1 byteを実際に生成し、全decoded bytesと原文保持をassert。候補parserは3ケースとも解析し、adapterは境界以下を許可、+1 byteをDecodedTooLargeとして拒否することを確認。Linux arm64で`cargo test -p mail-client --features mime-poc --lib --test mime_candidate --locked`: unit5 + integration24 = 29 tests成功（integration約6.50秒）。初回clippyの固定長chunks指摘をas_chunksへ修正後、新規test再実行と対象clippy `-D warnings` / format成功、diff検査成功。製品コード・依存・workflow変更なし。解析後の上限検査であり、解析途中のCPU / peak memory制限や計測の証拠ではない。Windows/macOS・実IMAP・全OS手動Actionsは未実行。
+
 MIME非同期readの連続Interrupted対策（00C / AC-04耐性PoC）: Interruptedの再試行でも共通のyieldを通し、単一thread executorで取消taskを飢餓状態にしないよう修正。prefix受信後、最初のInterruptedで別taskへ取消を予約する回帰試験を追加。修正前は64回の有限readでI/Oエラーとなり取消assertが失敗、修正後は64回未満でCancelledと同一prefixの回収を確認。Linux arm64で`cargo test -p mail-client --features mime-poc --lib --test mime_candidate --locked`: unit5 + integration23 = 28 tests成功。対象clippy `-D warnings` / format / diff成功。同期reader・依存・workflowは変更なし。Windows/macOS、実IMAP、解析中のCPU・メモリ制限は未検証。全OS手動Actionsは起動しておらず、AC-04全体やPhase 00の完了ではない。
 
 MIME非同期read PoC: `read_source_async`に絶対deadlineと取消Futureを追加。取消・期限・readの順で判定し、途中中断でもprefixを回収しreaderの未読部分を保持する。50MiB + 1 byte上限とI/Oエラーの伏字診断を維持。Tokio既存固定版をmime-pocだけで有効化（新crate / lock更新なし）。Linux arm64で`cargo test -p mail-client --features mime-poc --lib --test mime_candidate --locked`: unit5 + integration22 = 27 tests成功、対象clippy `-D warnings` / format / diff成功。初回の期限切れ＋ready read競合は毎loopの期限比較で修正して回帰試験成功。IMAP literal framing / session中断復旧、解析中のCPU・メモリ制限、future自体drop時のprefix回収、Windows/macOSは未確認。重い全OS手動runは起動せず、既存fullのMIME stepで検証可能。
@@ -159,4 +161,4 @@ MIME候補の初期PoC: `mail-parser =0.11.9`（optional `mime-poc`、`full_enco
 - OS別SecretStore lock / access-deniedを試験し、実IMAP/SMTP実装後はAC-06契約をprotocol adapterへ接続する。
 - ADR-006のPoCを基にPhase 07で正規化version、FTS同期、短いqueryのscope付き制限検索、100k性能計測を実装・検証する。
 - ADR-002のasync-imap候補はIDLE cancellation / TLS transportのgateを通すまで採用確定しない。
-- SMTPのTLS / STARTTLS接続・認証・合成本文送信はローカルPoC成功。MIME候補・制限adapter・stream上限・非同期deadline / cancellationは28 tests確認済み。次は不完全解析の診断範囲と解析中の資源消費制限を評価する。復号後100MiBのbudget計算はunit fixtureで検証済みだが実EMLからの復号超過は未検証。lost response PoCを本番の再送判断へ直接流用せず、Phase 05で永続Outboxの送出境界・unknown・明示再送契約へ接続する。
+- SMTPのTLS / STARTTLS接続・認証・合成本文送信はローカルPoC成功。MIME候補・制限adapter・stream上限・非同期deadline / cancellationは29 tests確認済み。復号後100MiBはunit budget計算と実EMLのcharset展開で境界前後を検証済み。次は不完全解析の診断範囲と解析中の資源消費制限を評価する。lost response PoCを本番の再送判断へ直接流用せず、Phase 05で永続Outboxの送出境界・unknown・明示再送契約へ接続する。

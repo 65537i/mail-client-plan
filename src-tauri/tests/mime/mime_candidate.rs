@@ -181,6 +181,60 @@ fn mime_candidate_does_not_enforce_the_product_attachment_size_limit() {
 }
 
 #[test]
+fn ac04_mime_adapter_checks_decoded_budget_after_charset_expansion() {
+    for decoded_size in [
+        mime_poc::MAX_DECODED_BYTES - 1,
+        mime_poc::MAX_DECODED_BYTES,
+        mime_poc::MAX_DECODED_BYTES + 1,
+    ] {
+        let mut raw = b"Content-Type: text/plain; charset=windows-1252\r\n\r\n".to_vec();
+        let header_size = raw.len();
+        // Windows-1252 0x80 becomes the three-byte UTF-8 euro sign.
+        raw.resize(header_size + decoded_size / 3, 0x80);
+        raw.resize(raw.len() + decoded_size % 3, b'x');
+        assert!(raw.len() < mime_poc::MAX_RAW_BYTES);
+        {
+            let message = MessageParser::default()
+                .parse(&raw)
+                .expect("synthetic charset expansion");
+            assert_eq!(message.parts.len(), 1);
+            let body = message.body_text(0).expect("decoded plain text");
+            assert_eq!(body.len(), decoded_size);
+            assert!(
+                body.as_bytes()[..decoded_size - decoded_size % 3]
+                    .as_chunks::<3>()
+                    .0
+                    .iter()
+                    .all(|bytes| bytes == b"\xe2\x82\xac")
+            );
+            assert!(
+                body.as_bytes()[decoded_size - decoded_size % 3..]
+                    .iter()
+                    .all(|byte| *byte == b'x')
+            );
+            assert!(!message.parts[0].is_encoding_problem);
+        }
+        match mime_poc::parse(&raw) {
+            Ok(message) => {
+                assert!(decoded_size <= mime_poc::MAX_DECODED_BYTES);
+                assert_eq!(message.parts[0].contents().len(), decoded_size);
+                assert_eq!(message.raw_message.as_ref(), raw);
+            }
+            Err(error) => {
+                assert_eq!(decoded_size, mime_poc::MAX_DECODED_BYTES + 1);
+                assert_eq!(error, MimeError::DecodedTooLarge);
+            }
+        }
+        assert_eq!(raw.len(), header_size + decoded_size / 3 + decoded_size % 3);
+        assert!(
+            raw[header_size..header_size + decoded_size / 3]
+                .iter()
+                .all(|byte| *byte == 0x80)
+        );
+    }
+}
+
+#[test]
 fn mime_candidate_does_not_enforce_the_product_raw_message_size_limit() {
     const LIMIT: usize = 50 * 1024 * 1024;
     const HEADER: &[u8] = b"Content-Type: text/plain; charset=utf-8\r\n\r\n";
