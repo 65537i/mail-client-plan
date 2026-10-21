@@ -60,6 +60,7 @@ jobs:
             libwebkit2gtk-4.1-dev \
             libxdo-dev \
             pkg-config \
+            strace \
             xvfb \
             dbus-x11
 
@@ -129,7 +130,7 @@ jobs:
               --dest org.freedesktop.secrets \
               --object-path /org/freedesktop/secrets >/dev/null
             export MAIL_CLIENT_REQUIRE_SECRET_STORE=1
-            pnpm exec wdio run wdio.security.conf.mjs
+            pnpm run test:security:file-access
           '
 
       - name: Test real WebView security boundaries

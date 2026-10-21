@@ -11,7 +11,7 @@ const requests = [];
 let server;
 let probeUrl;
 
-describe("AC-05: real WebKitGTK HTML isolation", () => {
+describe("AC-05: real WebView HTML isolation", () => {
   before(async () => {
     server = createServer((request, response) => {
       requests.push(request.url);
@@ -65,6 +65,16 @@ describe("AC-05: real WebKitGTK HTML isolation", () => {
     const originalUrl = await browser.getUrl();
 
     console.log("AC-05: injecting hostile fixture");
+    const fileCanaryUrl =
+      process.env.MAIL_CLIENT_FILE_CANARY_URL ??
+      "file:///synthetic-mail-client-file-canary";
+    const hostileHtml = maliciousFixture
+      .replaceAll("http://127.0.0.1:39871", probeUrl)
+      .replaceAll("file:///synthetic-mail-client-file-canary", fileCanaryUrl);
+    if (process.env.MAIL_CLIENT_FILE_CANARY_URL) {
+      assert(hostileHtml.includes(fileCanaryUrl));
+      assert(!hostileHtml.includes("file:///synthetic-mail-client-file-canary"));
+    }
     await browser.execute((html) => {
       window.__mailClientSecurityMessages = [];
       window.addEventListener("message", (event) => {
@@ -81,7 +91,7 @@ describe("AC-05: real WebKitGTK HTML isolation", () => {
         );
       });
       frame.srcdoc = html;
-    }, maliciousFixture.replaceAll("http://127.0.0.1:39871", probeUrl));
+    }, hostileHtml);
     console.log("AC-05: fixture injection returned");
 
     await browser.pause(1500);

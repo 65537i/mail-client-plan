@@ -35,6 +35,8 @@
 | AC-22 | 08 / NFR-01 | 本番バイナリにWebDriver/debug port/テスト認証情報がなく、改変更新を拒否し、旧DBでの安全な起動制限が働く |
 | AC-23 | 08 / FR-01〜07 | キーボードのみでアカウント切替、閲覧、検索、下書き、送信確認へ進める。各OSの読み上げ・日本語IMEを確認する |
 
+AC-05のLinux CIでは、WebView/Tauriプロセスツリーのfile-related syscallsを`strace`で記録し、実行ごとに作る合成canaryファイルへのopen/stat/access試行がないことを直接確認する。この観測はLinux runner上の証跡であり、Windows/macOSや最低サポートOSの同等なOS-level auditを代替しない。
+
 ## 3. テスト層
 
 | 層 | 道具候補 | 実行内容 / 位置付け |

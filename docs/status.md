@@ -5,7 +5,7 @@
 ## 現在の範囲
 
 - Phase 00、縦切り機能00B「危険な境界のPoC」のHTML/IPC実WebView試験をLinux arm64と4 native CI runnerで確認
-- SecretStore lock/access-deniedとfile URLのOS-level read観測、最低サポートOSの実機確認は未完了。00CではIMAPのsynthetic peer検証、SMTP候補のfinal response/RCPT拒否をloopback sinkで確認したが、候補採用判断は未完了。
+- SecretStore lock/access-denied、Linux file URL OS-level audit、最低サポートOSの実機確認は未完了。00CではIMAPのsynthetic peer検証、SMTP候補のfinal response/RCPT拒否をloopback sinkで確認したが、候補採用判断は未完了。
 
 ## 実装
 
@@ -62,7 +62,11 @@
 | GitHub Actions `native` run 7 (`4b8ebd5`) | Ubuntu 24.04 x64、macOS 14 arm64、macOS 15 Intel成功。Windows 2025はtrusted UI IPC checkを通過したが、AC-05 hostile fixture testがtimeout。エラーは`blocks script, external requests, and file/top navigation attempts`に紐づく。 |
 | GitHub Actions `native` run 8 (`8478910`) | Ubuntu 24.04 x64、macOS 14 arm64、macOS 15 Intel成功。Windows 2025ではAC-05のtrusted UI IPC、fixture injection、post-load WebDriver inspectionが返った後にafterAll timeout。最後のログは検査scriptの完了で、HTTP probe serverのclose待ちが候補。 |
 | GitHub Actions `native` run 9 (`d37a2bf`) | Ubuntu 24.04 x64、Windows 2025 x64、macOS 14 arm64、macOS 15 Intelすべて成功。Windowsの実WebView security stepは2 specs pass、hostile fixture後のprobe server close成功、外部request 0。TLS / FTS5 / IMAP / SMTP testsもmatrix内で成功。 |
+| GitHub Actions `native` run 10 (`26708f5`) | status記録のみの更新。Ubuntu 24.04 x64、Windows 2025 x64、macOS 14 arm64、macOS 15 Intelすべて成功。 |
 | `xvfb-run -a dbus-run-session -- pnpm run test:security:desktop` | 成功。ローカルLinux実WebViewで2 specs pass（iframe isolationとtrusted UI IPCを含む）。 |
+| Linux file URL OS-level audit | `strace -ff -e trace=%file`でTauri/WebView process treeを追跡し、一時ディレクトリの合成canaryへのfile syscallがないことを検査するrunnerを追加。Linux CI実行結果待ち。ローカルはstrace未導入で実行不可 |
+| `node --check` / `cargo fmt --all --check` / `git diff --check` | 成功。file audit harnessとWDIO設定を含む |
+| `pnpm run check:production-security` | 成功。production buildにtest-only IPC / WebDriver pluginなし |
 | WDIO trusted UI / hostile fixture tests | `executeAsync`内の明示許可IPC確認をfixture注入前に行い、HTTP probe server close時にactive connectionsを終了。run 9で4 runnerすべて成功 |
 | native workflow SecretStore success gate / Japanese FTS5 / IMAP / SMTP PoC | run 9で4 runnerすべての該当tests成功。LinuxはGNOME Keyring DBus service待機後にWDIO実行 |
 | `actionlint -color .github/workflows/native.yml` (1.7.12) | 過去のworkflow更新時に成功。今回のworkflow変更なし |
@@ -97,7 +101,7 @@
 | AC | 状態 | 証拠 / 次の確認 |
 |---|---|---|
 | AC-00 | 部分確認 | Linux arm64 Dev Containerと4 native CI runnerでbuild・起動smoke test成功。対象最低OSの実機証跡が必要 |
-| AC-05 | 部分確認（4 CI runner） | run 9でLinux / Windows / macOS両archの実WebViewにてscript marker 0、外部HTTP request 0、top document不変、sandbox iframe親DOM access拒否、trusted IPCを確認。file URLのOS-level read直接観測と最低OS実機試験は未実施 |
+| AC-05 | 部分確認（4 CI runner） | run 9でLinux / Windows / macOS両archの実WebViewにてscript marker 0、外部HTTP request 0、top document不変、sandbox iframe親DOM access拒否、trusted IPCを確認。Linux `strace`によるsynthetic file canaryのOS-level直接観測を追加、CI結果待ち。Windows/macOSと最低OS実機試験は未実施 |
 | AC-06 | 部分確認（4 CI runner） | TLS否定3 casesで認証payload 0 bytes、SecretStoreの合成値save/read/delete成功と未導入時の明示エラーを確認。OS別lock/access-denied、filesystem監視によるfallback不在の直接証跡、実protocol統合は未確認 |
 | AC-18 | 部分確認（fixture PoC） | Japanese FTS5 trigram testで日本語3+文字部分一致、NFKC/空白、account scope、1〜2文字拒否を確認。100k/性能基準、正規化versioning、structured search/UIは未実装 |
 | AC-22 | 未着手 | 00Cで本番buildにテストplugin / debug portがないことを確認 |
@@ -105,14 +109,14 @@
 ## Gateと未解決事項
 
 - AC-00は未完了。4 runnerのCI結果は成功したが、対象最低OSの実機証跡が必要。
-- 3OS候補runnerのAC-05攻撃試験とSecretStore成功経路はCIで確認済み。OS別lock/access-denied、file URLのOS-level read直接観測、署名・配布は未確認。
+- 3OS候補runnerのAC-05攻撃試験とSecretStore成功経路はCIで確認済み。OS別lock/access-denied、今回追加したLinux `strace`によるfile URL観測、署名・配布は未確認。
 - iframeのsandbox / CSP / IPC隔離はrun 9で4 runner確認済み。file URLの画像resource openは直接計測しておらず、AC-05全体は未達。
 - Google/Microsoft資格情報、実メール、送信は使用していない。
 - GitHub Actions native run 9は全4 runnerで成功。Private repositoryは`65537i/mail-client-plan`。
 
 ## 次の最小タスク
 
-- file resource openのOS-level直接観測を安全な合成fixtureで追加し、対象最低OSの実機試験を行う。
+- Linux CIで`strace`による合成file canaryの非アクセスを確認し、Windows/macOSで同等の直接観測が可能か評価する。対象最低OSの実機試験も必要。
 - OS別SecretStore lock / access-deniedを試験し、実IMAP/SMTP実装後はAC-06契約をprotocol adapterへ接続する。
 - ADR-006のPoCを基にPhase 07で正規化version、FTS同期、短いqueryのscope付き制限検索、100k性能計測を実装・検証する。
 - ADR-002のasync-imap候補はIDLE cancellation / TLS transportのgateを通すまで採用確定しない。

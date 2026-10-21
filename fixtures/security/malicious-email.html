@@ -1,6 +1,6 @@
 <html>
   <head>
-    <meta http-equiv="refresh" content="0;url=file:///etc/passwd" />
+    <meta http-equiv="refresh" content="0;url=file:///synthetic-mail-client-file-canary" />
     <style>
       @import url("http://127.0.0.1:39871/probe.css");
       body { background-image: url("http://127.0.0.1:39871/probe-image"); }
@@ -22,15 +22,15 @@
         );
       }
       fetch("http://127.0.0.1:39871/probe-fetch");
-      window.top.location = "file:///etc/passwd";
+      window.top.location = "file:///synthetic-mail-client-file-canary";
     </script>
     <img src="http://127.0.0.1:39871/tracking-pixel" alt="" />
-    <img src="file:///etc/passwd" alt="local file probe" />
+    <img src="file:///synthetic-mail-client-file-canary" alt="local file probe" />
     <img src="cid:untrusted@example.invalid" alt="CID probe" />
     <iframe src="http://127.0.0.1:39871/nested-frame"></iframe>
     <form action="http://127.0.0.1:39871/probe-form">
       <button type="submit">Submit hostile form</button>
     </form>
-    <a href="javascript:window.top.location='file:///etc/passwd'" target="_top">Open hostile link</a>
+    <a href="javascript:window.top.location='file:///synthetic-mail-client-file-canary'" target="_top">Open hostile link</a>
   </body>
 </html>
