@@ -71,10 +71,11 @@
 | GitHub Actions `native` run 16 (`88a3ff8`) | mainへのpushでUbuntu 24.04 x64の1 jobのみを起動し、全チェック成功。 |
 | GitHub Actions `native` run 17 (`7d61653`) | Ubuntu 24.04 x64で実行。後続pushによりcancelされ、全step完了前に終了。 |
 | GitHub Actions `native` run 18 (`643efe3`) | Ubuntu 24.04 x64の全チェック成功。macOS / Windows計測方法を調査・記録した更新を検証。 |
+| GitHub Actions `native` run 19 (`5794400`) | Ubuntu 24.04 x64の全チェック成功。Linuxの既存file-access auditとWebViewを確認。macOS専用harnessはpush時matrixの対象外のため未実行。 |
 | `xvfb-run -a dbus-run-session -- pnpm run test:security:desktop` | 成功。ローカルLinux実WebViewで2 specs pass（iframe isolationとtrusted UI IPCを含む）。 |
 | Linux file URL OS-level audit | native run 11で成功。`strace -ff -e trace=%file`がTauri/WebViewを含む88 processを追跡し、一時ディレクトリの合成canaryへのfile syscall 0件。ローカルはstrace未導入のためCIで実行 |
 | macOS / Windows file URL OS-level audit候補 | macOS `fs_usage -w -f filesys`はroot権限が必要でsystem-wide file activityを観測可能。Windows Microsoft Sysinternals Process Monitorはfile-system activityをfilter/log可能。どちらもhosted runner上での権限・capture/export・canary判定は未検証で、AC-05の証拠には数えない |
-| macOS file-access audit harness | `scripts/test-macos-file-access.mjs`を追加。`sudo -n fs_usage`の一時traceにTauri appのfilesystem activityがあることと、実行時生成canary名がないことを確認する設計。`node --check`とactionlintは成功。macOS runnerで未実行のため観測権限・process名検出は未確認 |
+| macOS file-access audit harness | `scripts/test-macos-file-access.mjs`を追加。`sudo -n fs_usage`の一時traceにTauri appのfilesystem activityがあることと、実行時生成canary名がないことを確認する設計。`node --check`、actionlint、ローカルLinux WebView 2 specs passは成功。run 19はLinuxのみのため、macOS runnerで未実行。観測権限・process名検出は未確認 |
 | `node --check` / `cargo fmt --all --check` / `git diff --check` | 成功。file audit harnessとWDIO設定を含む |
 | `pnpm run check:production-security` | 成功。production buildにtest-only IPC / WebDriver pluginなし |
 | WDIO trusted UI / hostile fixture tests | `executeAsync`内の明示許可IPC確認をfixture注入前に行い、HTTP probe server close時にactive connectionsを終了。run 9で4 runnerすべて成功 |
