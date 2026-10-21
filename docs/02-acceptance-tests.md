@@ -37,6 +37,8 @@
 
 AC-05のLinux CIでは、WebView/Tauriプロセスツリーのfile-related syscallsを`strace`で記録し、実行ごとに作る合成canaryファイルへのopen/stat/access試行がないことを直接確認する。この観測はLinux runner上の証跡であり、Windows/macOSや最低サポートOSの同等なOS-level auditを代替しない。
 
+macOSでは`fs_usage`、WindowsではMicrosoft Sysinternals Process Monitorを使った合成canaryのOS-level auditを候補として評価する。runner上で観測権限、Tauri/WebView process coverage、canary path判定を実証できない場合は、そのOSのfile-access条件を未確認のままとする。実装・ログが未確認の候補をAC-05合格の証拠に数えない。
+
 ## 3. テスト層
 
 | 層 | 道具候補 | 実行内容 / 位置付け |

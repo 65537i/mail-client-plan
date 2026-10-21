@@ -69,10 +69,12 @@
 | GitHub Actions `native` run 13 (`51de6e1`) / run 14 (`903a5b8`) | matrix絞り込み設定がjob生成前に失敗。matrixの構造を修正し、actionlintとrun 15で検証。 |
 | GitHub Actions `native` run 15 (`969eebe`) | mainへのpushでUbuntu 24.04 x64の1 jobのみを起動し、全チェック成功。PR / workflow_dispatchの4 runner matrixは式上有効だが、このrunでは未実行。 |
 | GitHub Actions `native` run 16 (`88a3ff8`) | mainへのpushでUbuntu 24.04 x64の1 jobのみを起動し、全チェック成功。 |
-| GitHub Actions `native` run 17 (`7d61653`) | Ubuntu 24.04 x64の1 jobが進行中（最後の確認ではnative build中）。後続run 18はpendingで、run 17の最終結果は未確認。 |
+| GitHub Actions `native` run 17 (`7d61653`) | Ubuntu 24.04 x64で実行。後続pushによりcancelされ、全step完了前に終了。 |
+| GitHub Actions `native` run 18 (`643efe3`) | Ubuntu 24.04 x64の全チェック成功。macOS / Windows計測方法を調査・記録した更新を検証。 |
 | `xvfb-run -a dbus-run-session -- pnpm run test:security:desktop` | 成功。ローカルLinux実WebViewで2 specs pass（iframe isolationとtrusted UI IPCを含む）。 |
 | Linux file URL OS-level audit | native run 11で成功。`strace -ff -e trace=%file`がTauri/WebViewを含む88 processを追跡し、一時ディレクトリの合成canaryへのfile syscall 0件。ローカルはstrace未導入のためCIで実行 |
 | macOS / Windows file URL OS-level audit候補 | macOS `fs_usage -w -f filesys`はroot権限が必要でsystem-wide file activityを観測可能。Windows Microsoft Sysinternals Process Monitorはfile-system activityをfilter/log可能。どちらもhosted runner上での権限・capture/export・canary判定は未検証で、AC-05の証拠には数えない |
+| macOS file-access audit harness | `scripts/test-macos-file-access.mjs`を追加。`sudo -n fs_usage`の一時traceにTauri appのfilesystem activityがあることと、実行時生成canary名がないことを確認する設計。`node --check`とactionlintは成功。macOS runnerで未実行のため観測権限・process名検出は未確認 |
 | `node --check` / `cargo fmt --all --check` / `git diff --check` | 成功。file audit harnessとWDIO設定を含む |
 | `pnpm run check:production-security` | 成功。production buildにtest-only IPC / WebDriver pluginなし |
 | WDIO trusted UI / hostile fixture tests | `executeAsync`内の明示許可IPC確認をfixture注入前に行い、HTTP probe server close時にactive connectionsを終了。run 9で4 runnerすべて成功 |
@@ -124,7 +126,7 @@
 
 ## 次の最小タスク
 
-- macOS `fs_usage` / Windows Process Monitorを各runner上で実行する小さな合成canary PoCを作り、capture権限・process coverage・path検出を検証する。対象最低OSの実機試験も必要。
+- macOS runnerで`pnpm run test:security:file-access:macos`を実行して権限・process coverage・path検出を検証する。ローカルLinux WebView回帰では2 specs pass、外部HTTP request 0。Windows Process Monitorの合成canary PoCと対象最低OSの実機試験も必要。
 - OS別SecretStore lock / access-deniedを試験し、実IMAP/SMTP実装後はAC-06契約をprotocol adapterへ接続する。
 - ADR-006のPoCを基にPhase 07で正規化version、FTS同期、短いqueryのscope付き制限検索、100k性能計測を実装・検証する。
 - ADR-002のasync-imap候補はIDLE cancellation / TLS transportのgateを通すまで採用確定しない。

@@ -130,7 +130,13 @@ jobs:
           '
 
       - name: Test real WebView security boundaries
-        if: runner.os != 'Linux'
+        if: runner.os == 'macOS'
+        run: pnpm run test:security:file-access:macos
+        env:
+          MAIL_CLIENT_REQUIRE_SECRET_STORE: "1"
+
+      - name: Test real WebView security boundaries
+        if: runner.os == 'Windows'
         run: pnpm exec wdio run wdio.security.conf.mjs
         env:
           MAIL_CLIENT_REQUIRE_SECRET_STORE: "1"
