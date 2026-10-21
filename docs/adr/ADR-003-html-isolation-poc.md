@@ -1,6 +1,6 @@
 # ADR-003: HTML本文の隔離PoC
 
-- 状態: 暫定。Linux WebKitGTKのPoC試験は成功。3OS試験とファイルアクセスの直接観測が未完了
+- 状態: 暫定。Linux WebKitGTKのPoC試験とLinux file-access syscall監査は成功。Windows/macOSでのOS-level直接観測が未完了
 - 決定日: 2026-10-20
 
 ## 背景
@@ -36,17 +36,20 @@
 | 外部HTTP通信 | loopback listenerで観測したfixture由来request 0件 |
 | top navigation / iframe境界 | main document URL / title不変、iframe loadは1回、parentの`contentDocument`アクセスは不可 |
 | main-window IPC | 明示permission付き`security_probe`をtrusted main UIから呼び出し成功 |
-| file URLを含むHTML | `file:///etc/passwd`へのmeta refresh / image probeを含む。iframe再navigationは観測せず。ただしOSレベルのfile open / image loadを直接計測していない |
-| macOS / Windows WebView | 未確認 |
+| file URLを含むHTML | 合成canaryへのmeta refresh / image probeを含む。run 9では全4 runnerでiframe再navigationなし。run 11のLinux syscall監査ではcanary pathへのfile syscall 0件 |
+| Windows / macOS WebView | run 9でWindows 2025 x64、macOS 14 arm64、macOS 15 Intelの実WebViewにてscript / HTTP / navigation / iframe境界を確認。OS-level file access直接観測は未実施 |
+| Linux file-access syscall監査 | GitHub Actions native run 11で、合成canaryを含むWebView試験を`strace -ff -e trace=%file`下で実行。実Tauri appを含む88 processでcanary pathへのfile syscall 0件 |
 
-Linux PoCの結果はこの環境のWebKitGTKに限る。AC-05全体の合格やsanitizer不要の根拠にはしない。ローカルHTTP probeのrequest countとWebView navigation / top DOM変化 / IPC結果は確認したが、file URLのOSレベルopenを直接観測する試験は残る。
+Linux PoCの結果はこの環境のWebKitGTKに限る。AC-05全体の合格やsanitizer不要の根拠にはしない。ローカルHTTP probeのrequest countとWebView navigation / top DOM変化 / IPC結果を確認し、Linux CIではOS syscall監査で合成canaryへのアクセス試行が0件であることを確認した。
 
 ## 制限と次の検証
 
 - これはPoC UIであり、sanitizer、MIME parser、CID変換、リンク一覧UIを実装していない。
-- `srcdoc` CSP、CSP継承、sandbox動作はWKWebView、WebView2でも実証が必要。
+- `srcdoc` CSP、CSP継承、sandbox動作はrun 9でWKWebView、WebView2を含む4 runnerで確認したが、最低サポートOSの実機証跡は別途必要。
 - ACLはmain windowの許可範囲を制限する。iframe単位の権限分離をACLだけで保証したとは扱わない。
-- Linux WebDriver実装はsandbox opaque-origin frameへの切替を拒否した。iframe内部DOM・resource completionを直接読む代わりに親DOMからのアクセス拒否、load回数、ネットワークlistenerを確認した。file resourceの直接読取確認は別の計測が必要。
+- Linux WebDriver実装はsandbox opaque-origin frameへの切替を拒否した。iframe内部DOM・resource completionを直接読む代わりに親DOMからのアクセス拒否、load回数、ネットワークlistenerを確認した。Linuxのcanary file syscall監査は完了したが、Windows/macOSでは別のOS-level計測が必要。
+- macOSでは`fs_usage -w -f filesys`がroot権限でファイルシステム活動を観測する候補となる。広範囲のtraceを扱うため、実行時に生成する短い固有canary名だけを照合し、生traceをartifact/logへ保存しない設計が必要。GitHub-hosted runnerでの権限、出力形式、WebView processのfile access観測は未検証。
+- WindowsではMicrosoft Sysinternals Process Monitorがファイルシステム活動の取得・filter・loggingを提供する候補となる。hosted runnerでの権限、CLIによるcapture/export、WebView process descendantsの追跡、およびログからのcanary path判定は未検証。
 - 3OSでAC-05の全攻撃を検証し、fileアクセスも含む観測方法を定めてから最終決定する。
 - SecretStoreの選定とsave/lock/reject/deleteはADR-004で別途検証する。
 

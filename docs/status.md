@@ -5,7 +5,7 @@
 ## 現在の範囲
 
 - Phase 00、縦切り機能00B「危険な境界のPoC」のHTML/IPC実WebView試験をLinux arm64と4 native CI runnerで確認
-- SecretStore lock/access-denied、Windows/macOSでのfile URL OS-level直接観測、最低サポートOSの実機確認は未完了。00CではIMAPのsynthetic peer検証、SMTP候補のfinal response/RCPT拒否をloopback sinkで確認したが、候補採用判断は未完了。
+- SecretStore lock/access-denied、Windows/macOSでのfile URL OS-level直接観測、最低サポートOSの実機確認は未完了。macOS `fs_usage`とWindows Process Monitorを計測候補として調査したが、CI権限・出力解析を含む実証は未実施。00CではIMAPのsynthetic peer検証、SMTP候補のfinal response/RCPT拒否をloopback sinkで確認したが、候補採用判断は未完了。
 - Actions利用分を抑えるため、native workflowはmainへのpushでUbuntuのみ、PRと手動実行（workflow_dispatch）で全4 runnerを実行する。`docs/status.md`のみの変更はpush / PRともworkflowを起動しない。PR / release前のクロスOS検証は維持する。
 
 ## 実装
@@ -69,8 +69,10 @@
 | GitHub Actions `native` run 13 (`51de6e1`) / run 14 (`903a5b8`) | matrix絞り込み設定がjob生成前に失敗。matrixの構造を修正し、actionlintとrun 15で検証。 |
 | GitHub Actions `native` run 15 (`969eebe`) | mainへのpushでUbuntu 24.04 x64の1 jobのみを起動し、全チェック成功。PR / workflow_dispatchの4 runner matrixは式上有効だが、このrunでは未実行。 |
 | GitHub Actions `native` run 16 (`88a3ff8`) | mainへのpushでUbuntu 24.04 x64の1 jobのみを起動し、全チェック成功。 |
+| GitHub Actions `native` run 17 (`7d61653`) | Ubuntu 24.04 x64の1 jobを起動。status-only変更除外を含むworkflow更新を検証中に後続pushで中断。 |
 | `xvfb-run -a dbus-run-session -- pnpm run test:security:desktop` | 成功。ローカルLinux実WebViewで2 specs pass（iframe isolationとtrusted UI IPCを含む）。 |
 | Linux file URL OS-level audit | native run 11で成功。`strace -ff -e trace=%file`がTauri/WebViewを含む88 processを追跡し、一時ディレクトリの合成canaryへのfile syscall 0件。ローカルはstrace未導入のためCIで実行 |
+| macOS / Windows file URL OS-level audit候補 | macOS `fs_usage -w -f filesys`はroot権限が必要でsystem-wide file activityを観測可能。Windows Microsoft Sysinternals Process Monitorはfile-system activityをfilter/log可能。どちらもhosted runner上での権限・capture/export・canary判定は未検証で、AC-05の証拠には数えない |
 | `node --check` / `cargo fmt --all --check` / `git diff --check` | 成功。file audit harnessとWDIO設定を含む |
 | `pnpm run check:production-security` | 成功。production buildにtest-only IPC / WebDriver pluginなし |
 | WDIO trusted UI / hostile fixture tests | `executeAsync`内の明示許可IPC確認をfixture注入前に行い、HTTP probe server close時にactive connectionsを終了。run 9で4 runnerすべて成功 |
@@ -122,7 +124,7 @@
 
 ## 次の最小タスク
 
-- Windows/macOSでfile URLのOS-level直接観測が可能か評価し、対象最低OSの実機試験を行う。
+- macOS `fs_usage` / Windows Process Monitorを各runner上で実行する小さな合成canary PoCを作り、capture権限・process coverage・path検出を検証する。対象最低OSの実機試験も必要。
 - OS別SecretStore lock / access-deniedを試験し、実IMAP/SMTP実装後はAC-06契約をprotocol adapterへ接続する。
 - ADR-006のPoCを基にPhase 07で正規化version、FTS同期、短いqueryのscope付き制限検索、100k性能計測を実装・検証する。
 - ADR-002のasync-imap候補はIDLE cancellation / TLS transportのgateを通すまで採用確定しない。
