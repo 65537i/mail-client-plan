@@ -56,6 +56,14 @@ IMAP候補はTLS、SASL XOAUTH2、UID/UIDVALIDITY、IDLEの取消とpolling fall
 
 ## 未達・採用gate
 
+### 上限付き受信からFETCH最終応答確認までの統合
+
+- test限定checked_fetchがBoundedReceiverを所有し、固定tag F0001 / UID 8のBODY.PEEK[]要求をwrite / flushする。固定2.0.0-alpha.7の公開Response / Data::Fetch / MessageDataItem / Status::Tagged / StatusKindを配布sourceで確認し使用。UIDはちょうど1個で8、BODY[]はsection / originなし・非NIL・重複なしを要求し、一致tagged OKと本文を確認後だけreceiverと本文を返す。未知応答や未対応属性はfail-closedであり、合法unsolicitedを配送するclientではない。独自wire parserや文字列によるstatus判定は使わない。
+- 新規4 testsは正常3ケース（peer write分割1 / 17 / 4096）・応答異常12ケース・完了待ち中断2ケース・開始前中断2ケース。検証済みlocalhost証明書のloopback TLS上で、正常時はSOURCE全bytesとMIME解析、返却接続でのF0002 NOOPと応答一致を確認する。NOOPはFETCH成功の代用ではない。fixtureは認証・mailbox選択を省略した合成peerで、実IMAPセッションの状態遷移やSeen不変は証明しない。
+- NO / BAD、別tag、UID不一致 / 欠落 / 重複、同応答内の本文重複、partial origin 0、本文なし、raw上限超過、完了応答前EOF、literal途中EOFを明示的に失敗させ、peerで後続command 0 bytesと接続終了を確認。完全本文はNO / BAD / 別tag / 本文重複 / 完了前EOF / 完了待ちdeadline・cancelでもprovisionalとして保持するが完全cacheへ昇格しない。不正UID・partial・上限超過・途中literalでは完全本文を返さない。上限超過は宣言headerだけ、途中EOFはheader + 本文7 bytesのwire prefixを完全一致で確認する。Debugは原因・byte数のみ。
+- 外側selectはwrite / flush・受信を含む全操作へabsolute deadlineと取消を適用する。開始前のready取消 / 期限切れではコマンド0 bytesと接続終了をDuplexStreamで確認し、両方readyなら取消優先。失敗時は接続を返さずdropし、曖昧な途中writeを同じ接続で再利用しない。完全本文保持はselectの外側だが、取り消されたreceive future内部のwire prefix回収、wrapper自体のabort / drop、write途中中断の実TLS注入は未保証・未検証。
+- 最初に追加したpreflight testはinner itemとして実行されずclippyでも失敗したため、module scopeへ修正し実行数37件を確認。Linux arm64でunit5 + IMAP37 + MIME42 = 84 tests、対象clippy `-D warnings` / format / diff成功。既存候補の欠陥再現testは採用合格ではない。製品コード・依存・workflow変更なし。account / folder / UIDVALIDITY契約、認証・選択、合法unsolicited配送、複数FETCH応答間の重複・別originなどの網羅、実サーバ・3OS、全接続合計の厳密な資源制限は未達。本番採用保留・Phase 00未完了。
+
 ### 上限付きframingとTLS受信の接続
 
 - test限定BoundedReceiverはstreamとframing stateを所有し、1 KiB固定read bufferから入力をenqueueする。共通next_responseで保持queueを処理し、未完かつqueue処理後のみ次のreadへ進む。正常時は応答bytesとreceiver全体を返すため、同時到着した後続応答を保持したまま次のreceiveができる。エラー時はreceiverを返さずdropして接続を破棄し、危険な再同期・skip_messageはしない。

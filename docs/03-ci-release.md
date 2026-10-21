@@ -41,6 +41,8 @@ fullのIMAP候補試験は`imap-poc,mime-poc`を併用し、BODY.PEEKで取得�
 
 同targetには1 KiB固定readとframingを結ぶ合成TLS受信試験も含む。上限・decode・EOF・期限・取消時の接続破棄と後続応答の保持を検証するが、製品のFETCH発行やUID / 最終tag照合との統合は別gateとする。
 
+テスト限定の固定UID FETCH統合も同targetで実行し、上限付きTLS受信でUID / 完全BODY / 最終tagged OKと異常時の接続破棄を確認する。認証・mailbox選択・account scopeを実装した製品セッションの検証ではない。
+
 ## 2. 検証コマンドの契約
 
 Phase 01で以下のpackage scriptsを用意する。これは計画上の名称であり、現時点で実装済みではない。

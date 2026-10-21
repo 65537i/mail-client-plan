@@ -10,6 +10,9 @@ use tokio_rustls::{TlsAcceptor, TlsConnector};
 
 use super::{BoundedFramingProbe, FramingError, INPUT_CHUNK_BYTES, fetch_response};
 
+#[path = "imap_bounded_fetch.rs"]
+mod fetch;
+
 #[derive(Debug, PartialEq, Eq)]
 enum ReceiveError {
     Framing(FramingError),
