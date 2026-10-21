@@ -32,6 +32,7 @@
 - 00C SMTP候補としてlettre 0.11.23の`tokio1` / `smtp-transport` featureのみを有効化する任意PoCを追加。loopback synthetic sinkでDATA final 250受理、final 550拒否status、RCPT拒否時のDATA未送出を確認し、TLS/unknown-state等の未達条件を[ADR-002](./adr/ADR-002-imap-candidate-poc.md)へ追記。
 - 00C SMTPのlost / truncated final response fixtureを追加。DATA終端まで受信後に切断する2経路で、受理成功扱いにせず、本文受信1件・DATA 1回・250msの観測窓内に自動再接続なしを確認。fixtureのcommand / DATA途中EOFも明示エラーにして無限ループを防止。永続Outboxのunknown状態・再起動復旧は未実装。
 - 00C SMTP TLS認証境界の8ケースを追加。lettreのrustls / 必須STARTTLSをPoC featureだけに追加し、合成rootの証明書・hostname検証を維持。暗黙TLS / STARTTLS後のみ合成認証を許可し、否定経路の認証0回を検証。TLS上の本文送信・本番adapterは未実装。
+- SMTP TLS fixtureを本文送信へ拡張。暗黙TLS / 必須STARTTLSそれぞれで最終250・550・応答消失を試験し、認証 / envelope / DATAが暗号化後各1回、合成本文のwire bytes一致、lost reply時の成功誤判定なし・250ms内の再接続なしを確認。本番送信UI / adapter / Outboxは未実装。
 
 ## 最新の確認
 
@@ -86,6 +87,7 @@
 | SMTP lost response PoC（AC-13の前提検証） | `cargo test -p mail-client --features smtp-poc --test smtp_candidate --locked`: Linux arm64で5 tests成功（既存3 + lost / truncated response 2）。同対象のclippy `-D warnings`、format、diff検査成功。初回はwire本文末尾にlettreが付加するCRLFを期待値へ含めず2件失敗し、固定版の実装確認後に期待wire bytesを修正して全件再成功。専用unit test toolはRust testを検出しないためcargoで実行。変更後のWindows/macOSは未実行。既存native fullのSMTP stepへ自動的に含まれるが、この変更だけのための全OS手動runは起動しない。 |
 | SMTP TLS PoC（AC-06） | `cargo test -p mail-client --features smtp-poc --test smtp_candidate --locked`: 13 tests成功。追加8件は暗黙TLS / 必須STARTTLS成功、不可信証明書 / hostname不一致（各方式）、STARTTLS 454 / 未advertise。対象clippy `-D warnings`・format・diff成功。`smtp-poc,imap-poc,security-test`併用のSMTP 13 + IMAP 8 + 汎用TLS 3 = 24 testsも成功。default dependency treeにlettre / webpki-roots / tokio-rustlsなし。Windows/macOS・production buildは今回未実行。既存fullのSMTP stepで実行されるため追加の重い手動CIは起動しない。 |
 | SMTP TLS実装時の修正 | lettreがroot provider featureを要求するため`tokio1-rustls-tls`へ修正しlockfile更新。fixtureのSTARTTLS拒否後はclientのQUITへ221を返すよう修正してtimeoutを解消。証明書エラーは`is_tls()`ではなくconnection error内部のrustls InvalidCertificateを確認するよう修正。最終の全関連testsは成功。 |
+| SMTP TLS本文送信（AC-12 / 13の前提検証） | `cargo test -p mail-client --features smtp-poc --test smtp_candidate --locked`: Linux arm64で19 tests成功（既存13 + TLS本文6）。対象clippy `-D warnings`成功。TLS接続・認証の既存否定経路も回帰成功。format / diff検査成功。依存・workflowの変更なし。Windows/macOSと本番GUIは今回未実行。既存native fullのSMTP stepに含まれるため追加の全OS手動runは起動しない。 |
 | `xvfb-run -a dbus-run-session -- pnpm run test:security:desktop` | 成功。ローカルLinux実WebViewで2 specs pass（iframe isolationとtrusted UI IPCを含む）。 |
 | Linux file URL OS-level audit | native run 11で成功。`strace -ff -e trace=%file`がTauri/WebViewを含む88 processを追跡し、一時ディレクトリの合成canaryへのfile syscall 0件。ローカルはstrace未導入のためCIで実行 |
 | macOS / Windows file URL OS-level audit候補 | macOS fs_usageのroot観測とdaemonイベント解析はrun 22 arm64で確認。全WebKit coverage / positive controlは未確認。Windows Microsoft Sysinternals Process Monitorはcapture/export・権限・process追跡を含め未実装。AC-05全体の合格には数えない |
@@ -104,7 +106,7 @@
 | SecretStore save/read/delete成功 | 一時GNOME Keyring daemon下でLinux実WebView成功を確認 |
 | SecretStore lock / access denied | 未確認。OS GUI sessionと各OS実機が必要 |
 | async-imap TLS否定経路 | 不可信証明書・hostname mismatch・STARTTLS拒否すべてについて、IMAP synthetic fixtureのTLS application dataが0 bytesであることを確認 |
-| SMTP候補の異常系 | final 550、RCPT拒否、lost / truncated final response、暗黙TLS / STARTTLSの証明書不可信・hostname不一致・STARTTLS拒否 / 未advertiseを確認。否定経路の認証0回。Outbox unknown / 再起動復旧、TLS本文送信、本番adapterは未確認 |
+| SMTP候補の異常系 | final 550、RCPT拒否、lost / truncated final response、暗黙TLS / STARTTLSの証明書不可信・hostname不一致・STARTTLS拒否 / 未advertiseを確認。否定経路の認証0回。TLS上の合成本文送信でも250 / 550 / 応答消失を確認。Outbox unknown / 再起動復旧、本番adapterは未確認 |
 
 ## ローカル検証証跡
 
@@ -145,4 +147,4 @@
 - OS別SecretStore lock / access-deniedを試験し、実IMAP/SMTP実装後はAC-06契約をprotocol adapterへ接続する。
 - ADR-006のPoCを基にPhase 07で正規化version、FTS同期、短いqueryのscope付き制限検索、100k性能計測を実装・検証する。
 - ADR-002のasync-imap候補はIDLE cancellation / TLS transportのgateを通すまで採用確定しない。
-- SMTPのTLS / STARTTLS接続・認証境界はローカルPoC成功。次はTLS上の本文送信やMIME候補の耐性PoCなど00Cの残gateを進める。lost response PoCを本番の再送判断へ直接流用せず、Phase 05で永続Outboxの送出境界・unknown・明示再送契約へ接続する。
+- SMTPのTLS / STARTTLS接続・認証・合成本文送信はローカルPoC成功。次はMIME候補の耐性PoCなど00Cの残gateを進める。lost response PoCを本番の再送判断へ直接流用せず、Phase 05で永続Outboxの送出境界・unknown・明示再送契約へ接続する。

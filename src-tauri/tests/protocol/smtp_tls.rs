@@ -1,7 +1,7 @@
 use std::{io, net::SocketAddr, sync::Arc, time::Duration};
 
 use lettre::{
-    AsyncSmtpTransport, Tokio1Executor,
+    AsyncSmtpTransport, AsyncTransport, Tokio1Executor,
     transport::smtp::{
         authentication::{Credentials, Mechanism},
         client::{Certificate, CertificateStore, Tls, TlsParameters},
@@ -27,11 +27,18 @@ enum Mode {
     MissingStarttls,
 }
 
+#[derive(Clone, Copy)]
+enum Exchange {
+    ConnectionCheck,
+    Submit(Option<&'static [u8]>),
+}
+
 #[derive(Default)]
 struct Transcript {
     plaintext: Vec<String>,
     encrypted: Vec<String>,
     handshake_completed: bool,
+    message: Vec<u8>,
 }
 
 async fn command<T: AsyncRead + Unpin>(stream: &mut BufReader<T>) -> io::Result<String> {
@@ -58,6 +65,7 @@ async fn hello<T: AsyncRead + AsyncWrite + Unpin>(
 async fn start_server(
     certificate: &CertifiedKey<KeyPair>,
     mode: Mode,
+    exchange: Exchange,
 ) -> (SocketAddr, JoinHandle<io::Result<Transcript>>) {
     let key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(
         certificate.signing_key.serialize_der(),
@@ -140,10 +148,59 @@ async fn start_server(
         assert_eq!(auth, "AUTH PLAIN AHN5bnRoZXRpYwBzeW50aGV0aWM=\r\n");
         transcript.encrypted.push(auth);
         stream.get_mut().write_all(b"235 authenticated\r\n").await?;
-        let noop = command(&mut stream).await?;
-        assert_eq!(noop, "NOOP\r\n");
-        transcript.encrypted.push(noop);
-        stream.get_mut().write_all(b"250 OK\r\n").await?;
+        match exchange {
+            Exchange::ConnectionCheck => {
+                let noop = command(&mut stream).await?;
+                assert_eq!(noop, "NOOP\r\n");
+                transcript.encrypted.push(noop);
+                stream.get_mut().write_all(b"250 OK\r\n").await?;
+            }
+            Exchange::Submit(reply) => {
+                for (expected, response) in [
+                    (
+                        "MAIL FROM:<sender@example.invalid>\r\n",
+                        &b"250 sender accepted\r\n"[..],
+                    ),
+                    (
+                        "RCPT TO:<recipient@example.invalid>\r\n",
+                        &b"250 recipient accepted\r\n"[..],
+                    ),
+                    ("DATA\r\n", &b"354 send message\r\n"[..]),
+                ] {
+                    let line = command(&mut stream).await?;
+                    assert_eq!(line, expected);
+                    transcript.encrypted.push(line);
+                    stream.get_mut().write_all(response).await?;
+                }
+                loop {
+                    let mut line = Vec::new();
+                    if stream.read_until(b'\n', &mut line).await? == 0 {
+                        return Err(io::Error::new(
+                            io::ErrorKind::UnexpectedEof,
+                            "missing DATA terminator",
+                        ));
+                    }
+                    if line == b".\r\n" {
+                        break;
+                    }
+                    transcript.message.extend_from_slice(&line);
+                }
+                match reply {
+                    Some(reply) => stream.get_mut().write_all(reply).await?,
+                    None => {
+                        stream.get_mut().shutdown().await?;
+                        drop(stream);
+                        assert!(
+                            tokio::time::timeout(Duration::from_millis(250), listener.accept())
+                                .await
+                                .is_err(),
+                            "lost final response must not trigger a reconnect",
+                        );
+                        return Ok(transcript);
+                    }
+                }
+            }
+        }
         assert_eq!(command(&mut stream).await?, "QUIT\r\n");
         stream.get_mut().write_all(b"221 closing\r\n").await?;
         Ok(transcript)
@@ -154,7 +211,44 @@ async fn start_server(
 async fn check(mode: Mode, trust_certificate: bool, hostname: &str, succeeds: bool) {
     let certificate = generate_simple_self_signed(vec!["localhost".to_string()])
         .expect("generate synthetic SMTP certificate");
-    let (address, server) = start_server(&certificate, mode).await;
+    let (address, server) = start_server(&certificate, mode, Exchange::ConnectionCheck).await;
+    let transport = transport(address, &certificate, mode, trust_certificate, hostname);
+    let result = tokio::time::timeout(Duration::from_secs(3), transport.test_connection())
+        .await
+        .expect("SMTP TLS client must finish");
+    verify_connection_result(result, mode, succeeds);
+    drop(transport);
+    let transcript = tokio::time::timeout(Duration::from_secs(3), server)
+        .await
+        .expect("SMTP TLS sink must finish")
+        .expect("SMTP TLS sink task")
+        .expect("SMTP TLS transcript");
+    assert_plaintext_negotiation_only(&transcript);
+    assert_eq!(transcript.handshake_completed, succeeds);
+    if succeeds {
+        assert_eq!(
+            transcript
+                .encrypted
+                .iter()
+                .filter(|line| line.starts_with("AUTH "))
+                .count(),
+            1,
+        );
+    } else {
+        assert!(
+            transcript.encrypted.is_empty(),
+            "no application data before TLS validation"
+        );
+    }
+}
+
+fn transport(
+    address: SocketAddr,
+    certificate: &CertifiedKey<KeyPair>,
+    mode: Mode,
+    trust_certificate: bool,
+    hostname: &str,
+) -> AsyncSmtpTransport<Tokio1Executor> {
     let mut parameters =
         TlsParameters::builder(hostname.to_string()).certificate_store(CertificateStore::None);
     if trust_certificate {
@@ -168,17 +262,20 @@ async fn check(mode: Mode, trust_certificate: bool, hostname: &str, succeeds: bo
     } else {
         Tls::Required(parameters)
     };
-    let transport: AsyncSmtpTransport<Tokio1Executor> =
-        AsyncSmtpTransport::<Tokio1Executor>::builder_dangerous("127.0.0.1")
-            .port(address.port())
-            .tls(tls)
-            .credentials(Credentials::new("synthetic".into(), "synthetic".into()))
-            .authentication(vec![Mechanism::Plain])
-            .timeout(Some(Duration::from_secs(2)))
-            .build();
-    let result = tokio::time::timeout(Duration::from_secs(3), transport.test_connection())
-        .await
-        .expect("SMTP TLS client must finish");
+    AsyncSmtpTransport::<Tokio1Executor>::builder_dangerous("127.0.0.1")
+        .port(address.port())
+        .tls(tls)
+        .credentials(Credentials::new("synthetic".into(), "synthetic".into()))
+        .authentication(vec![Mechanism::Plain])
+        .timeout(Some(Duration::from_secs(2)))
+        .build()
+}
+
+fn verify_connection_result(
+    result: Result<bool, lettre::transport::smtp::Error>,
+    mode: Mode,
+    succeeds: bool,
+) {
     if succeeds {
         assert!(result.expect("trusted SMTP TLS connection"));
     } else {
@@ -218,12 +315,9 @@ async fn check(mode: Mode, trust_certificate: bool, hostname: &str, succeeds: bo
             Mode::MissingStarttls => assert!(error.is_client()),
         }
     }
-    drop(transport);
-    let transcript = tokio::time::timeout(Duration::from_secs(3), server)
-        .await
-        .expect("SMTP TLS sink must finish")
-        .expect("SMTP TLS sink task")
-        .expect("SMTP TLS transcript");
+}
+
+fn assert_plaintext_negotiation_only(transcript: &Transcript) {
     assert!(
         transcript
             .plaintext
@@ -231,22 +325,93 @@ async fn check(mode: Mode, trust_certificate: bool, hostname: &str, succeeds: bo
             .all(|line| line.starts_with("EHLO ") || line == "STARTTLS\r\n" || line == "QUIT\r\n"),
         "plaintext commands must contain only negotiation or shutdown, never credentials or message data"
     );
-    assert_eq!(transcript.handshake_completed, succeeds);
-    if succeeds {
+}
+
+async fn check_submission(mode: Mode, reply: Option<&'static [u8]>) {
+    let certificate = generate_simple_self_signed(vec!["localhost".to_string()])
+        .expect("generate synthetic SMTP certificate");
+    let (address, server) = start_server(&certificate, mode, Exchange::Submit(reply)).await;
+    let transport = transport(address, &certificate, mode, true, "localhost");
+    let result = tokio::time::timeout(
+        Duration::from_secs(3),
+        transport.send_raw(&super::envelope(), super::SYNTHETIC_MESSAGE),
+    )
+    .await
+    .expect("encrypted SMTP submission must finish");
+    match reply {
+        Some(reply) if reply.starts_with(b"250") => {
+            assert!(
+                result
+                    .expect("final SMTP acceptance over TLS")
+                    .has_code(250)
+            );
+        }
+        Some(_) => {
+            let error = result.expect_err("final rejection over TLS must not look accepted");
+            assert!(error.is_permanent());
+            assert_eq!(
+                error.status().map(|status| status.to_string()).as_deref(),
+                Some("550")
+            );
+        }
+        None => {
+            let error = result.expect_err("lost final reply over TLS must not look accepted");
+            assert!(error.status().is_none());
+            assert!(!error.is_permanent() && !error.is_transient());
+        }
+    }
+    drop(transport);
+    let transcript = tokio::time::timeout(Duration::from_secs(3), server)
+        .await
+        .expect("encrypted SMTP sink must finish")
+        .expect("encrypted SMTP task")
+        .expect("encrypted SMTP transcript");
+    assert_plaintext_negotiation_only(&transcript);
+    assert!(transcript.handshake_completed);
+    assert_eq!(
+        transcript.message,
+        [super::SYNTHETIC_MESSAGE, b"\r\n"].concat()
+    );
+    for prefix in ["AUTH ", "MAIL FROM:", "RCPT TO:", "DATA\r\n"] {
         assert_eq!(
             transcript
                 .encrypted
                 .iter()
-                .filter(|line| line.starts_with("AUTH "))
+                .filter(|line| line.starts_with(prefix))
                 .count(),
             1
         );
-    } else {
-        assert!(
-            transcript.encrypted.is_empty(),
-            "no application data before TLS validation"
-        );
     }
+}
+
+#[tokio::test]
+async fn ac12_smtp_submits_once_over_verified_implicit_tls() {
+    check_submission(Mode::Implicit, Some(b"250 2.0.0 queued\r\n")).await;
+}
+
+#[tokio::test]
+async fn ac12_smtp_submits_once_over_required_starttls() {
+    check_submission(Mode::Starttls, Some(b"250 2.0.0 queued\r\n")).await;
+}
+
+#[tokio::test]
+async fn ac13_smtp_does_not_retry_lost_final_reply_over_implicit_tls() {
+    check_submission(Mode::Implicit, None).await;
+}
+
+#[tokio::test]
+async fn ac13_smtp_does_not_retry_lost_final_reply_over_starttls() {
+    check_submission(Mode::Starttls, None).await;
+}
+
+#[tokio::test]
+async fn smtp_preserves_final_rejection_over_implicit_tls() {
+    check_submission(Mode::Implicit, Some(b"550 5.7.1 rejected\r\n")).await;
+}
+
+#[tokio::test]
+async fn smtp_preserves_final_rejection_over_starttls() {
+    check_submission(Mode::Starttls, Some(b"550 5.7.1 rejected\r\n")).await;
 }
 
 #[tokio::test]
