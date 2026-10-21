@@ -66,6 +66,7 @@ IMAP候補はTLS、SASL XOAUTH2、UID/UIDVALIDITY、IDLEの取消とpolling fall
 
 ### MIME制限adapterのPoC
 
+- 非同期readerのInterrupted再試行でyieldを迂回する不具合を修正。単一threadのTokio executorで、prefix受信後のInterruptedから予約された取消taskが実行され、Cancelledとprefixが返る回帰試験を追加した。修正前は64回の有限再試行後にI/Oエラーとなる失敗を確認し、修正後は64回未満で取消成功。Interruptedも既存の共通yieldへ進めるだけで、同期readerや他のI/Oエラー処理は変えない。Linux arm64でunit5 + integration23 = 28 tests、対象clippy / format / diff成功。実IMAP・3OS runtime・解析中の資源制限の未達は維持。
 - 非同期版`read_source_async`を追加し、既存固定Tokioを`mime-poc`で有効化。借用したAsyncReadと絶対deadline、完了時に中断するFutureを受ける。deadlineはchunkごとに延長しない。ready cancellation → 期限 → readの優先順で、各loopの期限判定を明示し、即時read可能な入力でも期限超過後は読まない。loop間でyieldし連続ready入力でも他taskを進める。同期readerの中断をthread放置で模倣せず、Tokioのcancel-safeなreadを使用する。
 - TimedOut / Cancelledを型付きcauseへ追加し、I/O失敗・上限超過と同じくprefixを回収できる。readerはborrowしたままで、自動close / 再試行 / 未読stream消費をしない。呼び出し側はdropによるfuture取消ではなく、渡したcancellation Futureを完了させて回収経路をawaitする必要がある。関数futureやtask自体をdrop / abortした場合のprefix回収は保証しない。
 - 非同期6 tests追加。empty / small、50MiB -1 / 境界 / +1 / +100、ready取消と期限切れで0 bytes消費、途中取消、pending read中の取消・期限切れ、Interrupted後のI/O失敗、診断のprivate data非公開、未読streamの継続利用を確認。初回は期限切れタイマーの準備よりready readが先行する失敗を検出し、毎loopの期限比較を追加して修正。同期readとasync extensionの名前衝突も明示Read呼び出しで修正。最終的にLinux arm64でunit5 + integration22 = 27 tests、対象clippy / format / diff成功。

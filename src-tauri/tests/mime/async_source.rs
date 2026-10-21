@@ -127,6 +127,63 @@ struct ScriptedReader {
     cancel_after_prefix: bool,
 }
 
+#[tokio::test(flavor = "current_thread")]
+async fn interrupted_reads_yield_to_a_cancelling_task_and_retain_prefix() {
+    struct InterruptedReader {
+        calls: usize,
+        cancel: Arc<AtomicBool>,
+        task: Option<tokio::task::JoinHandle<()>>,
+    }
+
+    impl AsyncRead for InterruptedReader {
+        fn poll_read(
+            mut self: Pin<&mut Self>,
+            _: &mut Context<'_>,
+            buffer: &mut ReadBuf<'_>,
+        ) -> Poll<io::Result<()>> {
+            self.calls += 1;
+            if self.calls == 1 {
+                buffer.put_slice(b"Synthetic prefix");
+                return Poll::Ready(Ok(()));
+            }
+            if self.calls == 2 {
+                let cancel = self.cancel.clone();
+                self.task = Some(tokio::spawn(async move {
+                    cancel.store(true, Ordering::SeqCst);
+                }));
+            }
+            // Bound the regression even if the reader monopolizes the executor.
+            Poll::Ready(Err(if self.calls < 64 {
+                io::ErrorKind::Interrupted.into()
+            } else {
+                io::ErrorKind::Other.into()
+            }))
+        }
+    }
+
+    let cancel = Arc::new(AtomicBool::new(false));
+    let mut reader = InterruptedReader {
+        calls: 0,
+        cancel: cancel.clone(),
+        task: None,
+    };
+    let cancellation = poll_fn(|_| {
+        if cancel.load(Ordering::SeqCst) {
+            Poll::Ready(())
+        } else {
+            Poll::Pending
+        }
+    });
+    let (prefix, cause) = read_source_async(&mut reader, deadline(), cancellation)
+        .await
+        .unwrap_err()
+        .into_parts();
+    reader.task.take().unwrap().await.unwrap();
+    assert!(matches!(cause, SourceReadCause::Cancelled));
+    assert_eq!(prefix, b"Synthetic prefix");
+    assert!(reader.calls < 64);
+}
+
 impl AsyncRead for ScriptedReader {
     fn poll_read(
         mut self: Pin<&mut Self>,

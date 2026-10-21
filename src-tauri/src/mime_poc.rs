@@ -161,7 +161,7 @@ pub async fn read_source_async(
                     });
                 }
             }
-            Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
             Err(error) => {
                 return Err(SourceReadError {
                     partial: raw,
