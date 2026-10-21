@@ -1,6 +1,6 @@
 # ADR-002: IMAP候補ライブラリPoC
 
-- 状態: 候補評価中。async-imap 0.12.0でTokio上のXOAUTH2・UID semantics・IDLE取消/polling fallback・rustls implicit TLS/STARTTLSとTLS拒否境界を合成serverで確認
+- 状態: 採用保留。async-imap 0.12.0でTokio上のXOAUTH2・UID semantics・IDLE取消/polling fallback・rustls implicit TLS/STARTTLSとTLS拒否境界を合成serverで確認したが、FETCH最終statusの欠落と製品上限を超える事前allocationが採用blocker
 - 決定日: 2026-10-20
 
 ## 背景
@@ -53,6 +53,14 @@ IMAP候補はTLS、SASL XOAUTH2、UID/UIDVALIDITY、IDLEの取消とpolling fall
 | 3OS build / CI | workflow matrixに同じin-memory testを追加。GitHub Actions未実行 |
 
 ## 未達・採用gate
+
+### literal宣言だけで製品上限を超えるallocation
+
+- async-imap 0.12.0配布sourceのImapStream::decodeはimap-protoのNeeded::Sizeからdecode_needsを設定し、do_poll_nextは次のtransport poll_readより先にBuffer::ensure_capacityを呼ぶ。Buffer::growはBytesMut::resizeで領域を初期化する。固定MAX_CAPACITYは512 MiBであり、無制限ではないが、製品raw上限50 MiBより大きい。bufferとdecode_needsは非公開、Client / Sessionの公開APIに上限変更設定は見当たらない。
+- 新規header-only transportはFETCHのliteral宣言までしか返さず、次のreadではReadBuf::remainingを記録して明示的な合成budget errorを返す。64-byte宣言は既存buffer内で処理される一方、50 MiB+1宣言は本文0 bytesのまま宣言長以上の初期化済み領域が次のreadへ渡される。これは容量予約の推測やRSS測定ではなく、transportが利用できる初期化済み領域の直接観測。transport側のbyte budgetやdeadlineではこの先行allocationを防げない。
+- 別testで512 MiB+1宣言を渡し、候補自身のincoming data too largeとread 1回だけを確認。512 MiB超のbufferを実際に確保する試験ではない。固定上限は1応答bufferの上限であり、返却ResponseData・本文コピー・同時接続を含むプロセス全体のメモリ制限ではない。
+- Linux arm64でIMAP23 tests、同targetのclippy `-D warnings` / format / diff成功。初回clippyのlet_and_return警告は修正。既存のFETCH最終status欠陥再現2件に加え、今回のallocation制限再現も採用合格に数えない。MIME単独・unit・3OSは今回未実行。製品コード・依存・workflow変更なし。
+- 判断: 現候補をそのまま本番採用しない。候補内部でgrowより前に製品上限とprotocol overheadを明示的に検証できる変更、または上限付きstreamingを提供する別parser候補の評価が必要。未信頼応答の独自wire parserやtransport wrapperによる見かけ上の修正は採用しない。依存差替え・forkは未実施であり、このblockerを解消したとは扱わない。
 
 ### TLS上の最終応答異常と未完literal
 

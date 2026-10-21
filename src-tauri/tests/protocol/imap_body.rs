@@ -15,6 +15,9 @@ const SOURCE: &[u8] = b"Subject: Synthetic body\r\nContent-Type: text/plain; cha
 #[path = "imap_body_tls.rs"]
 mod tls;
 
+#[path = "imap_literal_limits.rs"]
+mod literal_limits;
+
 #[derive(Clone, Copy)]
 enum FetchEnd {
     Complete,
