@@ -1,3 +1,4 @@
+use mail_client_lib::mime_poc::{self, MimeError};
 use mail_parser::{MessageParser, MimeHeaders, PartType};
 
 #[test]
@@ -166,6 +167,13 @@ fn mime_candidate_does_not_enforce_the_product_attachment_size_limit() {
         assert_eq!(attachment.contents().len(), size);
         assert!(attachment.contents().iter().all(|byte| *byte == b'x'));
         assert!(!attachment.is_encoding_problem);
+        match mime_poc::parse(&raw) {
+            Ok(_) => assert!(size <= LIMIT),
+            Err(error) => {
+                assert_eq!(size, LIMIT + 1);
+                assert_eq!(error, MimeError::AttachmentTooLarge);
+            }
+        }
     }
 }
 
@@ -184,5 +192,76 @@ fn mime_candidate_does_not_enforce_the_product_raw_message_size_limit() {
         assert_eq!(body.len(), size - HEADER.len());
         assert!(body.bytes().all(|byte| byte == b'x'));
         assert!(message.parts.iter().all(|part| !part.is_encoding_problem));
+        match mime_poc::parse(&raw) {
+            Ok(_) => assert!(size <= LIMIT),
+            Err(error) => {
+                assert_eq!(size, LIMIT + 1);
+                assert_eq!(error, MimeError::RawTooLarge);
+            }
+        }
+    }
+}
+
+#[test]
+fn mime_adapter_rejects_excessive_nesting_and_preserves_source() {
+    for depth in [29, 30, 31, 128] {
+        let raw = nested_multipart(depth);
+        let original = raw.clone();
+        match mime_poc::parse(raw.as_bytes()) {
+            Ok(_) => assert!(depth <= 30),
+            Err(error) => {
+                assert!(depth > 30);
+                assert_eq!(error, MimeError::NestingTooDeep);
+            }
+        }
+        assert_eq!(raw, original);
+    }
+}
+
+#[test]
+fn mime_adapter_reports_incomplete_or_unparseable_without_raw_data_in_errors() {
+    for raw in [
+        &b""[..],
+        b"Content-Type: multipart/mixed; boundary=cut\r\n\r\n--cut\r\nContent-Type: text/plain\r\n\r\nSynthetic truncated body",
+        b"Content-Type: application/octet-stream\r\nContent-Transfer-Encoding: base64\r\n\r\n!!!!",
+    ] {
+        let original = raw.to_vec();
+        let error = mime_poc::parse(raw).expect_err("invalid MIME must fail explicitly");
+        assert!(matches!(error, MimeError::Incomplete | MimeError::Unparseable));
+        assert!(!error.to_string().contains("Synthetic"));
+        assert_eq!(raw, original);
+    }
+}
+#[test]
+fn mime_adapter_checks_raw_limit_before_attempting_to_parse() {
+    let raw = vec![0; mime_poc::MAX_RAW_BYTES + 1];
+    assert_eq!(mime_poc::parse(&raw).unwrap_err(), MimeError::RawTooLarge);
+    assert!(raw.iter().all(|byte| *byte == 0));
+}
+
+#[test]
+fn mime_adapter_does_not_mark_html_as_sanitized() {
+    let raw = b"Content-Type: text/html\r\n\r\n<script>untrusted()</script>";
+    let message = mime_poc::parse(raw).expect("HTML is data, not sanitized by the size adapter");
+    assert_eq!(
+        message.body_html(0).as_deref(),
+        Some("<script>untrusted()</script>")
+    );
+}
+
+#[test]
+fn mime_adapter_applies_depth_checks_inside_attached_messages() {
+    for depth in [29, 30] {
+        let raw = format!(
+            "Content-Type: message/rfc822\r\nContent-Disposition: attachment\r\n\r\n{}",
+            nested_multipart(depth)
+        );
+        match mime_poc::parse(raw.as_bytes()) {
+            Ok(_) => assert_eq!(depth, 29),
+            Err(error) => {
+                assert_eq!(depth, 30);
+                assert_eq!(error, MimeError::NestingTooDeep);
+            }
+        }
     }
 }

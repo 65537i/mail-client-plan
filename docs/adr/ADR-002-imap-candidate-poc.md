@@ -64,6 +64,14 @@ IMAP候補はTLS、SASL XOAUTH2、UID/UIDVALIDITY、IDLEの取消とpolling fall
 - Linux arm64で既存6 + 追加5 = 11 tests成功（test本体約2.11秒）、対象clippy `-D warnings` / format / diff検査成功。これは合成fixtureの完走確認であり、解析時間の性能gate・メモリ上限・DoS耐性の証明ではない。大きいfixtureは実行時生成し、ファイルやartifactに保存しない。
 - 未達: RFC 2231 continuation、multipart/related、message/rfc822、重複境界、不正な多バイトcharsetの詳細、復号後合計100MiB境界、fuzz、解析時間・メモリ計測。設計の各上限を適用する本番adapterは未実装。今回のfixture群は耐性全体・採用確定・AC-04完了の証明ではない。
 
+### MIME制限adapterのPoC
+
+- `src-tauri/src/mime_poc.rs`を`mime-poc` featureだけで公開。借用した原文sliceを受け、50MiB超過をパーサ呼び出し前に`RawTooLarge`として拒否する。呼び出し元が原文を所有し続け、エラーに本文・添付名・pathを含めない。UI / IPC / DB / filesystemには接続しない。
+- 解析後のpart treeを反復走査し、添付25MiB、復号後合計100MiB、container深さ30を超過した場合に型付きエラーを返す。root containerから数え、multipartとmessage/rfc822を各1段とする。nested messageは元のmessage bytesと内部decoded leavesを両方合算する保守的budgetとした。バイナリinlineも添付上限対象。超過は原文削除や空本文の成功応答に置き換えない。
+- 転送エンコード問題、空multipart、本文も添付も分類されない結果を`Incomplete`、parse失敗を`Unparseable`として返す。これは全不正MIMEの完全性判定ではない。charset置換、未知charset、欠落境界で一部だけ復元された結果等を網羅検出する実装は未完了。成功したHTML・添付名・CIDは引き続き未信頼。
+- Linux arm64でunit 1 + integration 16 = 17 tests成功。raw / attachmentの実byte境界前後、nested multipart・添付messageの深さ、raw保持、超過を解析前に検出する経路、incomplete / parse失敗を確認。100MiB合算の-1 / 境界 / +1 byteは25MiBの共有borrowed payloadを複数partから参照するunit fixtureで検査（100MiBのallocationや入力からの復号は行わない）。対象clippy `-D warnings`、format、diff、actionlint成功。CI fullのMIME stepへ`--lib`を追加し、budget unitも実行対象にした。
+- 制限: rawは既にメモリに読み込まれたsliceであり、入力streamの読み取り制限ではない。decoded / nestingは解析後検査なので解析途中のCPU・メモリ・stack消費を止めない。依存の内部制限で未解析のmessage/rfc822が残る場合の扱い、実復号での100MiB超過、fuzz、3OS runtimeは未検証。製品へ接続する前にこれらを評価する。
+
 - malformed/large MIMEはこのcrateの責務外で、MIME候補の別PoCを行う。未対応IMAP extensionはcapabilityを確認して基本commandへfallbackし、存在しないextensionを仮定しない。
 - SMTP final response後の永続化kill / 接続切断によるOutboxのunknown分類、複数RCPTの個別失敗UXを別PoCで確認する。lost / truncated responseで候補がエラーを返すことは確認したが、SMTP `Error`だけで再送可否を決めず、DATA送出境界を記録するoutbox state machineが必要。
 - SMTP TLSの接続・認証・固定合成本文送信はPoCで確認したが、OAuth2 mechanism、MIME生成、production adapterの入力検証 / OS trust store / timeout・取消方針は未実装。固定版lettreはTLS handshake errorをconnection errorに包むため、`is_tls()`だけで認証・TLSエラー分類を決めない。TLS検証失敗時のsource chainを評価する必要がある。

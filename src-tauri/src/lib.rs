@@ -82,3 +82,5 @@ enum SecretStoreProbeResult {
     Success(String),
     Error(String),
 }
+#[cfg(feature = "mime-poc")]
+pub mod mime_poc;

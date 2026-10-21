@@ -182,7 +182,7 @@ jobs:
 
       - name: Test MIME candidate
         if: needs.plan.outputs.mode == 'full'
-        run: cargo test -p mail-client --features mime-poc --test mime_candidate --locked
+        run: cargo test -p mail-client --features mime-poc --lib --test mime_candidate --locked
 
       - name: Test real WebView security boundaries
         if: needs.plan.outputs.mode != 'basic' && runner.os == 'Linux'
