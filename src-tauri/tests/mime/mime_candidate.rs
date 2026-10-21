@@ -322,3 +322,47 @@ fn mime_adapter_applies_depth_checks_inside_attached_messages() {
         }
     }
 }
+#[test]
+fn ac04_encoded_attached_messages_report_the_parser_recursion_limit() {
+    for depth in [1, 2, 3, 4, 5] {
+        let mut raw = "Subject: Synthetic inner message\r\nContent-Type: text/plain\r\n\r\nSynthetic inner body".to_owned();
+        let mut layers = vec![raw.clone()];
+        for _ in 0..depth {
+            raw = format!(
+                "Content-Type: message/rfc822\r\nContent-Disposition: attachment\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\n{}",
+                raw.replace('=', "=3D")
+            );
+            layers.push(raw.clone());
+        }
+        let original = raw.clone();
+        let message = MessageParser::default()
+            .parse(&raw)
+            .expect("synthetic encoded attached message");
+        let mut part = &message.parts[0];
+        let mut parsed_depth = 0;
+        while let PartType::Message(nested) = &part.body {
+            assert!(!part.is_encoding_problem);
+            assert_eq!(nested.parts.len(), 1);
+            part = &nested.parts[0];
+            parsed_depth += 1;
+        }
+        assert_eq!(parsed_depth, depth.min(3));
+        if depth <= 3 {
+            assert_eq!(part.contents(), b"Synthetic inner body");
+            assert!(!part.is_encoding_problem);
+            assert!(mime_poc::parse(raw.as_bytes()).is_ok());
+        } else {
+            assert!(matches!(part.body, PartType::Binary(_)));
+            assert!(part.is_encoding_problem);
+            assert_eq!(part.contents(), layers[depth - 4].as_bytes());
+            let error = mime_poc::parse(raw.as_bytes())
+                .expect_err("unparsed attached message must not count as complete");
+            assert_eq!(error, MimeError::Incomplete);
+            for diagnostic in [error.to_string(), format!("{error:?}")] {
+                assert!(!diagnostic.contains("Synthetic"));
+            }
+        }
+        assert_eq!(message.raw_message.as_ref(), raw.as_bytes());
+        assert_eq!(raw, original);
+    }
+}
