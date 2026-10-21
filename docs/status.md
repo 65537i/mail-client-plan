@@ -30,6 +30,7 @@
 - AC-18の限定PoCを追加。SQLite bundled FTS5 trigramで日本語部分一致、NFKC/空白正規化、account scope、1〜2文字query拒否、FTS MATCH literal quotingをfixtureで確認。[ADR-006](./adr/ADR-006-japanese-trigram-search-poc.md)に結果と未達条件を記録。
 - 00C IMAP候補としてasync-imap 0.12.0のTokio test-only integrationを追加。synthetic XOAUTH2 challenge、UIDVALIDITY、UID FETCH、IDLE stop後のDONE/selected-session再利用、IDLE非対応時のNOOP polling、rustlsのimplicit TLSおよびSTARTTLS upgrade、証明書不可信・hostname mismatch・STARTTLS拒否時の認証送信停止を確認し、未確定項目を[ADR-002](./adr/ADR-002-imap-candidate-poc.md)へ記録。
 - 00C SMTP候補としてlettre 0.11.23の`tokio1` / `smtp-transport` featureのみを有効化する任意PoCを追加。loopback synthetic sinkでDATA final 250受理、final 550拒否status、RCPT拒否時のDATA未送出を確認し、TLS/unknown-state等の未達条件を[ADR-002](./adr/ADR-002-imap-candidate-poc.md)へ追記。
+- 00C SMTPのlost / truncated final response fixtureを追加。DATA終端まで受信後に切断する2経路で、受理成功扱いにせず、本文受信1件・DATA 1回・250msの観測窓内に自動再接続なしを確認。fixtureのcommand / DATA途中EOFも明示エラーにして無限ループを防止。永続Outboxのunknown状態・再起動復旧は未実装。
 
 ## 最新の確認
 
@@ -81,6 +82,7 @@
 | run 24 Rustキャッシュ | macOS ARMのRustキャッシュ約458 MBを保存成功。次回以降の復元用データが作成された。warm cacheによる短縮効果は未計測。fullとwebviewは検証範囲が異なるため、run 20等との差をキャッシュ効果として扱わない。 |
 | GitHub Actions [native run 25](https://github.com/65537i/mail-client-plan/actions/runs/39612476412) (`3c7ba3c`, 手動) | macOS 15 Intel / webview成功。iframe / SecretStore 2 specs成功、HTTP 0件、fseventsd lstat64別集計0件、その他canaryイベント0件。Rustキャッシュ約455 MBを保存。ARMとIntel双方で修正後の部分検証成功。全WebKit coverage / positive controlとfullは別途未達。 |
 | Action runtimeのNode 20非推奨警告 | アプリ用Node 24.22.0とは別に、旧pnpm/action-setup v4とactions/cache v4がnode20を宣言していた。公式v6.1.0のaction.ymlでnode24を確認し、双方をfull SHA固定で更新。pnpm 12.14.0、Node 24.22.0、キャッシュkey、検証範囲は維持。actionlint 1.7.12とdiff検査成功。変更後のActionsで警告不在を確認する必要がある。 |
+| SMTP lost response PoC（AC-13の前提検証） | `cargo test -p mail-client --features smtp-poc --test smtp_candidate --locked`: Linux arm64で5 tests成功（既存3 + lost / truncated response 2）。同対象のclippy `-D warnings`、format、diff検査成功。初回はwire本文末尾にlettreが付加するCRLFを期待値へ含めず2件失敗し、固定版の実装確認後に期待wire bytesを修正して全件再成功。専用unit test toolはRust testを検出しないためcargoで実行。変更後のWindows/macOSは未実行。既存native fullのSMTP stepへ自動的に含まれるが、この変更だけのための全OS手動runは起動しない。 |
 | `xvfb-run -a dbus-run-session -- pnpm run test:security:desktop` | 成功。ローカルLinux実WebViewで2 specs pass（iframe isolationとtrusted UI IPCを含む）。 |
 | Linux file URL OS-level audit | native run 11で成功。`strace -ff -e trace=%file`がTauri/WebViewを含む88 processを追跡し、一時ディレクトリの合成canaryへのfile syscall 0件。ローカルはstrace未導入のためCIで実行 |
 | macOS / Windows file URL OS-level audit候補 | macOS fs_usageのroot観測とdaemonイベント解析はrun 22 arm64で確認。全WebKit coverage / positive controlは未確認。Windows Microsoft Sysinternals Process Monitorはcapture/export・権限・process追跡を含め未実装。AC-05全体の合格には数えない |
@@ -99,7 +101,7 @@
 | SecretStore save/read/delete成功 | 一時GNOME Keyring daemon下でLinux実WebView成功を確認 |
 | SecretStore lock / access denied | 未確認。OS GUI sessionと各OS実機が必要 |
 | async-imap TLS否定経路 | 不可信証明書・hostname mismatch・STARTTLS拒否すべてについて、IMAP synthetic fixtureのTLS application dataが0 bytesであることを確認 |
-| SMTP候補の異常系 | loopback sinkでSMTP final 550 statusを取得、RCPT拒否でDATA送信なしを確認。lost final responseのunknown分類とSMTP TLS設定は未確認 |
+| SMTP候補の異常系 | final 550 status取得、RCPT拒否でDATAなし、lost / truncated final responseで本文受信済み・clientエラー・250ms内の再接続なしを確認。Outboxのunknown分類 / 再起動復旧とSMTP TLS設定は未確認 |
 
 ## ローカル検証証跡
 
@@ -140,3 +142,4 @@
 - OS別SecretStore lock / access-deniedを試験し、実IMAP/SMTP実装後はAC-06契約をprotocol adapterへ接続する。
 - ADR-006のPoCを基にPhase 07で正規化version、FTS同期、短いqueryのscope付き制限検索、100k性能計測を実装・検証する。
 - ADR-002のasync-imap候補はIDLE cancellation / TLS transportのgateを通すまで採用確定しない。
+- 次のローカル実装候補はSMTPのTLS / STARTTLS必須昇格と認証前の否定経路。今回のlost response PoCを本番の再送判断へ直接流用せず、Phase 05で永続Outboxの送出境界・unknown・明示再送契約へ接続する。

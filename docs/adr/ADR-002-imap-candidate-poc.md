@@ -30,6 +30,7 @@ IMAP候補はTLS、SASL XOAUTH2、UID/UIDVALIDITY、IDLEの取消とpolling fall
 - 合成証明書を`localhost`用に生成し、rustlsの通常のroot/hostname検証を維持してimplicit TLS streamを`Client`へ渡す経路と、STARTTLS OK応答後にraw streamを取り出してTLS upgradeしたうえで`Client`を作り直す経路を確認する。両経路でTLS成立後のみにXOAUTH2を送信する。統合fixtureで不可信証明書・hostname不一致・STARTTLS拒否時に認証データが0 bytesであることも確認する。
 - commandとqueryは固定fixture。ユーザー入力をrun_command / MATCH文字列等へ直接通す用途を認めない。mailbox名・search条件は型付きvalidatorとparameterizationをadapterに置く。
 - `smtp-poc` featureでは`lettre` default featuresを無効化し、`smtp-transport` / `tokio1`のみを有効化する。loopback scripted sinkでDATA final 250 response、DATA後final 550 responseのstatus取得、RCPT拒否時にDATAへ進まずQUITすることを試験する。SMTP transaction payloadは固定ASCII合成データで、外部relay・TLS・credentialsを使わない。
+- AC-13に向けた候補評価として、sinkがDATA終端まで受信した直後に接続を閉じる場合と、`250 2.0.0 queued`をCRLFなしで途中送信して閉じる場合を追加。両方でsend_rawが成功でもSMTP拒否statusでもないエラーを返し、sinkの本文とDATA回数1件を検査する。listenerを閉じず250ms監視し、この観測窓で自動再接続がないことも確認する。これは候補の単一send呼び出しの評価であり、永続Outboxのunknown分類・再起動復旧・長期間のretry禁止は証明しない。
 
 ## 結果
 
@@ -43,12 +44,13 @@ IMAP候補はTLS、SASL XOAUTH2、UID/UIDVALIDITY、IDLEの取消とpolling fall
 | TLS | rustlsの証明書・hostname検証を使い、implicit TLSおよびSTARTTLS後のasync-imap stream再構成を確認。不可信証明書・hostname mismatch・STARTTLS拒否の全ケースでIMAP統合fixture上の認証データ0 bytesを確認 |
 | SMTP final response | lettreがpositive final 250を`Response`で返し、DATA後の550拒否をpermanent error/status 550として保持することをloopback sinkで確認 |
 | SMTP RCPT拒否 | RCPT 550に対しDATAを送らずQUITすることをloopback sinkで確認。複数宛先の部分受理表示は未実装 |
+| SMTP lost / truncated final response | Linux arm64で2ケース成功。sinkは本文とDATA終端を受信済みだが、clientに最終受理応答はなく、statusなし・transient/permanentのいずれでもないエラーとなる。単一send呼び出し中と切断後250msの観測で再接続なし。CRLF未完の250も成功扱いにしない。SMTP候補testは計5件成功、対象clippy成功 |
 | 3OS build / CI | workflow matrixに同じin-memory testを追加。GitHub Actions未実行 |
 
 ## 未達・採用gate
 
 - malformed/large MIMEはこのcrateの責務外で、MIME候補の別PoCを行う。未対応IMAP extensionはcapabilityを確認して基本commandへfallbackし、存在しないextensionを仮定しない。
-- SMTP final response後の永続化kill / 接続切断によるunknown区間、TLS設定・STARTTLS必須昇格、複数RCPTの個別失敗UXを別PoCで確認する。SMTP `Error`だけで再送可否を決めず、DATA送出境界を記録するoutbox state machineが必要。
+- SMTP final response後の永続化kill / 接続切断によるOutboxのunknown分類、TLS設定・STARTTLS必須昇格、複数RCPTの個別失敗UXを別PoCで確認する。lost / truncated responseで候補がエラーを返すことは確認したが、SMTP `Error`だけで再送可否を決めず、DATA送出境界を記録するoutbox state machineが必要。
 - 3OS native compile / runtimeをCIで確認し、license、release/issue healthを再確認してから採用確定ADRへ変更する。
 - mailbox name、sequence set、FETCH query、custom command等に任意文字列を連結するAPI面がある。domain adapterで型・validation・constant queryを強制し、UIへ汎用command実行面を公開しない。
 
