@@ -1,6 +1,6 @@
 # ADR-002: IMAP候補ライブラリPoC
 
-- 状態: 採用保留。async-imap 0.12.0でTokio上のXOAUTH2・UID semantics・IDLE取消/polling fallback・rustls implicit TLS/STARTTLSとTLS拒否境界を合成serverで確認したが、FETCH最終statusの欠落と製品上限を超える事前allocationが採用blocker
+- 状態: 採用保留。async-imap 0.12.0でTokio上のXOAUTH2・UID semantics・IDLE取消/polling fallback・rustls implicit TLS/STARTTLSとTLS拒否境界を合成serverで確認したが、FETCH最終statusの欠落、製品上限を超える事前allocation、unsolicited通知queue overflow時の無通知dropが採用blocker
 - 決定日: 2026-10-20
 
 ## 背景
@@ -41,6 +41,7 @@ IMAP候補はTLS、SASL XOAUTH2、UID/UIDVALIDITY、IDLEの取消とpolling fall
 | 確認 | 結果 |
 |---|---|
 | STARTTLS authenticated EXAMINE / UID FETCH session（00C / AC-04・06・08前提） | 同一の合成sessionでplaintext greeting → tagged STARTTLS OK → rustlsの通常証明書 / hostname検証 → TLS上のXOAUTH2 challenge/response → EXAMINE "INBOX" → UIDVALIDITY=4242 / UIDNEXT=10 → UID FETCH 8 (UID FLAGS BODY.PEEK[])を確認。FETCH応答ではUIDが1個だけ8であること、BODY[]全bytesが合成SOURCEと一致すること、一致tagのOK completionを明示検証してからLOGOUTする。別4ケースでtagged NO / BAD、別tagのOK、本文literal後の完了応答なしEOFは成功扱いにせず、完全本文をprovisionalに保ったまま接続を破棄し、後続commandを送らない。異常caseを含めLinux arm64でIMAP candidate 10 tests成功、対象clippy `-D warnings` / format / diff成功。これは候補session連携の小さい合成literal試験であり、既存bounded receiverとは未接続。async-imap内部のliteral読込上限、UIDVALIDITY変更時の同期処理、account/folder scope、実サーバ、3OSは未検証。 |
+| STARTTLS authenticated IDLE notification / cancellation / timeout / DONE race / keepalive / burst後UID・FLAGS再照合（00C / AC-06・08前提） | 同一の合成TCP/TLS sessionでSTARTTLS → 通常の証明書 / hostname検証 → 合成XOAUTH2 → CAPABILITY(IDLE) → READ-ONLY EXAMINE INBOX / UIDVALIDITY → IDLEを確認。合成`* 1 EXISTS`を`IdleResponse::NewData`で受け取り、DONE後に同じsessionでIDLEへ再入できる。DONE受信直後・tagged completion前に到着する`* 2 EXISTS`と連続100件を注入し、capacity 100の`session.unsolicited_responses`にはExists(2..=101)だけが残り、101件目のExists(102)はoverflow時に`handle_unilateral`が`try_send`失敗を無視して捨てることを再現。overflow後のNOOPで最新`EXISTS=102`、初回固定`UID SEARCH ALL`ではUID 1..=102を返す。その後UID 50がFETCH前に消失する競合を注入し、`UID FETCH 1:102 (UID FLAGS)`が残り101 UIDへのFLAGSとtagged OKを返すこと、UID 50のFETCH応答がなく、続く完全`UID SEARCH ALL`でもUID 50が不在であることを確認。UID 1のSeen、UID 2のflagなし、UID 102のFlagged、UID重複なしを検査。続いて高水準`uid_fetch`のtagged NOが空streamとなる欠陥、raw commandによるtagged OK / NO判定、partial FLAGS後のNOと完全集合未満を確認。raw経路でのstatus / UID照合手段はあるが、実同期層でのUID消失処理・DB永続化・差分更新・UIDVALIDITY照合は未実装であり、overflow後の再同期責務と高水準FETCH status欠落は採用判断の未解決事項。次のIDLEではstop source drop後に`ManualInterrupt`、3回目は無通知で`Timeout`を確認。さらに500ms waitの初回開始250ms後に合成`* OK` keepaliveを送り、その400ms後（初回開始から650ms）にEXISTSを送るとtimeoutせず`NewData`となり、keepaliveで期限がリセットされることを確認。全DONE後に同じselected sessionでNOOP / LOGOUTが成功し、peerがtagとcommand順を検査。Linux arm64で個別test・IMAP candidate 11 tests・対象clippy `-D warnings` / format / diff成功。本testを含む3OS CI、実サーバ、製品同期処理、account scope、production connection managerは未検証。 |
 | STARTTLS bounded FETCH中断 / 異常 | 追加2 tests。STARTTLS昇格後にliteral over 50 MiB+1・literal途中EOF・literal途中stallのdeadline / cancel・最終status途中stallのdeadline / cancelを検証。上限超過でheaderのみ保持、EOF / literal中断でheader + 7 bytesを回収しprovisionalなし、最終status中断では完全SOURCEをprovisional、未完statusをprefixとして回収。全失敗でTLS接続を破棄し後続commandなし。証明書 / hostname検証維持。server→clientのoneshot後、cancelに50ms処理猶予を置き、既処理prefixを確認。deadlineはTLS upgrade後の1秒。初回はoneshot配置のcompile失敗と、処理前cancelでprefix空となる試験失敗を修正 |
 | STARTTLS統合後チェック | Linux arm64でunit5 + IMAP49 + MIME42 = 96 tests成功。対象clippy `-D warnings` / format / diff成功。既存拒否・未信頼証明書・hostname mismatch試験も維持。製品コード・依存・workflow変更なし。3OS・実サーバ未実施 |
 | 上限付きFETCHのSTARTTLS昇格（AC-04 / AC-06前提） | Linux arm64でIMAP47 tests中に正常1経路、STARTTLS拒否・未信頼証明書・hostname mismatchの否定3経路を確認。plaintext greeting → async-imapのtagged STARTTLS OK → raw TCP stream upgrade → 通常のrustls検証 → bounded FETCH。TLS前のFETCH / 認証なし、否定経路にplaintext fallbackなし。正常経路はSOURCE全bytes・tagged OK・MIME解析と同じTLS receiverでのNOOP成功。TLS identity errorがあればFETCHを送信せず閉じる。テスト限定・合成peerであり認証/mailbox選択や実サーバではない |
@@ -60,6 +61,16 @@ IMAP候補はTLS、SASL XOAUTH2、UID/UIDVALIDITY、IDLEの取消とpolling fall
 | 3OS build / CI | workflow matrixに同じin-memory testを追加。GitHub Actions未実行 |
 
 ## 未達・採用gate
+
+### UID FLAGS取得のtagged失敗status
+
+- 既存のSTARTTLS IDLE / UID再照合fixtureへ、FLAGS取得時にサーバがtagged `NO`を返す経路を追加。`Session::uid_fetch`は`Ok(stream)`を返し、streamは空終端となって拒否statusを呼び出し側へ伝えない。直後のNOOPが成功するため、session同期自体は保たれるが、空結果とcommand拒否を区別できない。
+- 同じfixtureでraw `run_command` / `read_response`により、102件のUID/FLAGS応答に加えて一致tagged OKを検証できること、tagged NOを拒否として識別した後に同じsessionのNOOPが成功することを確認。さらに1件だけのpartial FLAGS応答後にtagged NOを返す異常caseで、取得件数が完全集合より不足することと拒否statusを検証してからNOOPを実行する。候補API内にstatusを観測する代替経路はあるが、応答ごとのUID/FLAGS検証、tag一致、completion判定、全UID集合との照合をcallerが実装する必要がある。
+- 高水準`uid_fetch`単独利用は採用blocker。raw経路は合成testでのみ確認し、製品同期adapter・失敗時の状態管理・DB更新としての回避実装は未着手。
+- 新epochのUID 50を対象に高水準`uid_fetch`へpartial FLAGS itemだけを返し、tagged completion前にTLS closeするcaseも追加。APIはitemをyieldした後、missing completionをerrorにせず通常stream終端として示す。itemが届いたことを完了扱いできず、全応答はprovisionalのまま一致tagged OKとUID集合の完全性が必要。raw APIによる明示status確認が必要という採用blockerを強める再現であり、製品同期のstaging / commit契約は未実装。
+- 同じ新epoch fixtureで高水準`uid_search("ALL")`にpartial SEARCH応答（UID 49, 50）の後tagged NOを返すと、エラーでなく部分HashSetが返ることを再現。共通raw UID SEARCH helperはpartial UID集合を保持して一致tagged NO / BADを個別に拒否分類し、foreign-tag OK後に一致tagged BADが続く別caseは`WrongTag`として不採用にする。またtagged OK後でも重複UIDまたはUID 0を含む集合は拒否する。後続の正常検索はUID 50のみを返す。したがって完全集合照合に高水準`uid_search`だけを使うのも採用blockerであり、raw経路側で正しいtag・status・UID集合を一緒に検証する必要がある。
+- 独立した合成stream testでpartial `* SEARCH 49 50`後のEOFを注入。高水準`uid_search`は部分HashSetを成功形で返す一方、raw readerでは一致tagged completion前に`None`を観測する。完全UID検索結果とcheckpointは一致tagged OKまでcommit不可。production adapterのrollback / checkpoint transactionは未実装。
+- 同じSTARTTLS sessionでINBOXを再EXAMINEし、UIDVALIDITY=4242から4243への変更を検出後、新epochの`UID SEARCH ALL`がUID 50のみを返すこと、同じ数値UIDのFLAGSを新epochの応答として取得できることも確認。これはUIDVALIDITYと再照会APIのtest fixtureであり、旧UID参照 / pending operationの無効化・DB transaction・AC-08全体の収束実装ではない。
 
 ### transport I/O障害とInterrupted時の取消公平性
 

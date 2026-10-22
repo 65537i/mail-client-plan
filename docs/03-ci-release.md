@@ -49,6 +49,18 @@ fullのIMAP候補試験は`imap-poc,mime-poc`を併用し、BODY.PEEKで取得�
 
 IMAP候補targetには別途、STARTTLS昇格後にXOAUTH2 → EXAMINE INBOX → UIDVALIDITY / UIDNEXT取得 → 固定UIDのBODY.PEEK FETCHを同一のasync-imap sessionで行う合成試験を含める。FETCHはrun_command / read_responseで同一UID・完全BODY・一致tagged OKを明示確認し、NO / BAD / 別tag / 完了前EOFは失敗として接続を破棄する。これは小さい合成literalによるsession連携であり、bounded FETCH receiver、候補内部のliteral読込上限、account scope、UIDVALIDITY変更時の同期動作、実サーバへの接続は検証しない。
 
+同targetでは、STARTTLS → 検証済みTLS → 合成XOAUTH2 → IDLE capability確認 → READ-ONLY EXAMINE → 合成EXISTS通知の受領 → DONE中に競合して届く別EXISTS burstのunsolicited channel配送とcapacity 100 overflow時の欠落 → IDLE再入 → manual cancellation / timeout / `* OK` keepaliveによるtimeout reset → overflow後のNOOP / `UID SEARCH ALL`と`UID FETCH 1:102 (UID FLAGS)`によるUID / flags再照合を行う。fixtureは検索後・FETCH前にUID 50が消失し、FLAGS応答が101件となる競合を作る。後続の完全UID検索でUID 50が存在しないことを確認し、tagged OK FETCHからの不在とUID集合からの消失を区別する。これは同期層のDB削除・transaction動作を実装するものではない。raw FETCH success / `NO` / partial-response後の`NO`も検査する。overflow時の自動再同期、UIDVALIDITY照合、DB永続化・差分更新は未実装。実サーバ、account scope、production connection managerや3OSでの追加test実行も証明せず、overflowは候補の未解決採用blockerのまま。
+
+同じfixtureでは2回目の`UID FETCH 1:102 (UID FLAGS)`にtagged `NO`を返す異常系も確認する。async-imap 0.12.0の高水準`uid_fetch` streamはこれを空終端として返し、command失敗を呼び出し側へ示さない一方、後続NOOPは成功する。raw `run_command` / `read_response`では102 UIDのflags応答と一致tagged OKを確認し、別のtagged NOを拒否として識別した後に同一sessionのNOOPが成功することも確認する。さらに1件のpartial FLAGS FETCH後にtagged NOとなるfixtureで、取得件数が完全集合に満たないことと拒否statusを併せて検査する。従って呼び出し側でtagged completionと完全性を検証する候補経路はあるが、production adapterへの接続は未実装であり、高水準`uid_fetch`の空streamを正常な全件flags応答と解釈してはならない。
+
+新epochのUID再照合では、高水準`uid_search("ALL")`に`* SEARCH 49 50`のpartial応答後tagged `NO`を返すと、候補APIは部分集合`{49, 50}`を正常な結果として返すことも確認する。共通raw UID SEARCH helperはpartial UID集合を保持しながら一致tagged `NO`と`BAD`をそれぞれ拒否として分類する。別caseではforeign-tag `OK`の後に一致tagged `BAD`を送り、callerが一致tagの完了まで読み進めても結果を`WrongTag`として不採用にする。また、tagged `OK`後でも重複UIDおよびUID 0を含むSEARCH集合は不採用にする。完全UID集合検索へ高水準`uid_search`を単独利用せず、tagged statusと集合妥当性を明示確認する必要がある。これは候補欠陥再現で、production adapterの回避・チェックポイント保護は未実装。
+
+UID SEARCH完了前EOF fixtureも実行する。`* SEARCH 49 50`後の接続断を高水準`uid_search`は部分集合の正常終了として隠すが、raw response readerは一致tagged completion前の`None`として検出する。完全集合検索はEOFで失敗扱いとし、結果・checkpointをcommitしない契約が必要。このtestはAPI差の再現でありproduction adapter / checkpoint transactionは未実装。
+
+完全UID検索後の高水準`uid_fetch`にもpartial FETCH応答のみを返してtagged completion前にTLS closeする。APIはpartial `Fetch` itemをyieldし、その後通常stream終端を返してEOF error / missing statusを表さない。callerは全FETCH itemをprovisionalに保ち、一致tagged OKとUID集合の完全性を確認するまで同期成功・削除反映へ使わない必要がある。production adapterやDB境界への統合は未実装。
+
+同じsessionの最後にINBOXを再EXAMINEしUIDVALIDITYを4242から4243へ変え、新しいUID集合（UID 50のみ）とそのepoch固有のFLAGSを取得する。前epochでUID 50が消えた後、同じ数値UIDが新epochで再登場する場合でもUID単独では識別できないことをfixtureで確認する。これはUIDVALIDITY変化の検出・再照会APIのPoCだけで、旧epoch参照やpending operationの無効化、DB epoch transaction、切断中のAC-08収束を実装・証明しない。
+
 ## 2. 検証コマンドの契約
 
 Phase 01で以下のpackage scriptsを用意する。これは計画上の名称であり、現時点で実装済みではない。
