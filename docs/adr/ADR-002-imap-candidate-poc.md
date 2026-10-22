@@ -40,6 +40,8 @@ IMAP候補はTLS、SASL XOAUTH2、UID/UIDVALIDITY、IDLEの取消とpolling fall
 
 | 確認 | 結果 |
 |---|---|
+| STARTTLS bounded FETCH中断 / 異常 | 追加2 tests。STARTTLS昇格後にliteral over 50 MiB+1・literal途中EOF・literal途中stallのdeadline / cancel・最終status途中stallのdeadline / cancelを検証。上限超過でheaderのみ保持、EOF / literal中断でheader + 7 bytesを回収しprovisionalなし、最終status中断では完全SOURCEをprovisional、未完statusをprefixとして回収。全失敗でTLS接続を破棄し後続commandなし。証明書 / hostname検証維持。server→clientのoneshot後、cancelに50ms処理猶予を置き、既処理prefixを確認。deadlineはTLS upgrade後の1秒。初回はoneshot配置のcompile失敗と、処理前cancelでprefix空となる試験失敗を修正 |
+| STARTTLS統合後チェック | Linux arm64でunit5 + IMAP49 + MIME42 = 96 tests成功。対象clippy `-D warnings` / format / diff成功。既存拒否・未信頼証明書・hostname mismatch試験も維持。製品コード・依存・workflow変更なし。3OS・実サーバ未実施 |
 | 上限付きFETCHのSTARTTLS昇格（AC-04 / AC-06前提） | Linux arm64でIMAP47 tests中に正常1経路、STARTTLS拒否・未信頼証明書・hostname mismatchの否定3経路を確認。plaintext greeting → async-imapのtagged STARTTLS OK → raw TCP stream upgrade → 通常のrustls検証 → bounded FETCH。TLS前のFETCH / 認証なし、否定経路にplaintext fallbackなし。正常経路はSOURCE全bytes・tagged OK・MIME解析と同じTLS receiverでのNOOP成功。TLS identity errorがあればFETCHを送信せず閉じる。テスト限定・合成peerであり認証/mailbox選択や実サーバではない |
 | 統合後チェック | `cargo test -j 1 -p mail-client --features imap-poc,mime-poc --lib --test imap_candidate --test mime_candidate --locked --quiet`: unit5 + IMAP47 + MIME42 = 94 tests成功。対象clippy `-D warnings` / format / diff成功。3OS未実行、依存・製品コード・workflow変更なし |
 | Tokio integration | `cargo test -p mail-client --features imap-poc --test imap_candidate --locked` 成功 |

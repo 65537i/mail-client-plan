@@ -201,12 +201,16 @@ enum ResponseSequence {
     NilAfterBody,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 enum StartTlsEnd {
     Complete,
     Refused,
     UntrustedCertificate,
     HostnameMismatch,
+    OversizedLiteral,
+    TruncatedLiteral,
+    StalledLiteral { cancel: bool },
+    StalledCompletion { cancel: bool },
 }
 
 impl End {
@@ -452,7 +456,7 @@ async fn exercise(end: End, fragment: usize) {
                     );
                 }
                 if matches!(end, End::CompletionDeadline | End::CompletionCancel) {
-                    assert_eq!(failure.wire_prefix, b"F0001 OK incomplete");
+                    assert_eq!(failure.wire_prefix, b"F0001 OK incomplete", "{end:?}");
                 }
             }
         }
@@ -474,6 +478,7 @@ async fn exercise_starttls_fetch(end: StartTlsEnd) {
         };
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();
+        let (ready_tx, ready_rx) = tokio::sync::oneshot::channel::<()>();
         let server = tokio::spawn(async move {
             let (tcp, _) = listener.accept().await.unwrap();
             let mut plain = BufReader::new(tcp);
@@ -521,17 +526,48 @@ async fn exercise_starttls_fetch(end: StartTlsEnd) {
                 std::str::from_utf8(COMMAND).unwrap(),
             )
             .await;
-            let mut payload = super::super::fetch_response(SOURCE);
-            payload.extend_from_slice(b"F0001 OK fetched\r\n");
+            let payload = match end {
+                StartTlsEnd::OversizedLiteral => format!(
+                    "* 1 FETCH (UID 8 BODY[] {{{}}}\r\nx",
+                    mail_client_lib::mime_poc::MAX_RAW_BYTES + 1
+                )
+                .into_bytes(),
+                StartTlsEnd::TruncatedLiteral | StartTlsEnd::StalledLiteral { .. } => {
+                    let mut bytes = format!("* 1 FETCH (UID 8 BODY[] {{{}}}\r\n", SOURCE.len() + 7)
+                        .into_bytes();
+                    bytes.extend_from_slice(&SOURCE[..7]);
+                    bytes
+                }
+                StartTlsEnd::Complete => {
+                    let mut bytes = super::super::fetch_response(SOURCE);
+                    bytes.extend_from_slice(b"F0001 OK fetched\r\n");
+                    bytes
+                }
+                StartTlsEnd::StalledCompletion { .. } => {
+                    let mut bytes = super::super::fetch_response(SOURCE);
+                    bytes.extend_from_slice(b"F0001 OK incomplete");
+                    bytes
+                }
+                _ => unreachable!("only successful TLS upgrades receive FETCH"),
+            };
             encrypted.get_mut().write_all(&payload).await.unwrap();
             encrypted.get_mut().flush().await.unwrap();
-            super::super::super::super::read_command(&mut encrypted, "F0002 NOOP\r\n").await;
-            encrypted
-                .get_mut()
-                .write_all(b"F0002 OK noop\r\n")
-                .await
-                .unwrap();
-            encrypted.get_mut().flush().await.unwrap();
+            if matches!(
+                end,
+                StartTlsEnd::StalledLiteral { .. } | StartTlsEnd::StalledCompletion { .. }
+            ) {
+                ready_tx.send(()).unwrap();
+            } else if matches!(end, StartTlsEnd::TruncatedLiteral) {
+                encrypted.get_mut().shutdown().await.unwrap();
+            } else if matches!(end, StartTlsEnd::Complete) {
+                super::super::super::super::read_command(&mut encrypted, "F0002 NOOP\r\n").await;
+                encrypted
+                    .get_mut()
+                    .write_all(b"F0002 OK noop\r\n")
+                    .await
+                    .unwrap();
+                encrypted.get_mut().flush().await.unwrap();
+            }
             let mut trailing = Vec::new();
             let _ = encrypted.read_to_end(&mut trailing).await;
             assert!(trailing.is_empty());
@@ -578,26 +614,98 @@ async fn exercise_starttls_fetch(end: StartTlsEnd) {
             stream: tls,
             framing: BoundedFramingProbe::new(limit, limit + 4096),
         };
-        let (mut receiver, raw) = checked_fetch(
-            receiver,
-            Instant::now() + Duration::from_secs(2),
-            std::future::pending(),
-        )
-        .await
-        .unwrap();
-        assert_eq!(raw, SOURCE);
-        assert!(mail_client_lib::mime_poc::parse(&raw).is_ok());
-        receiver.stream.write_all(b"F0002 NOOP\r\n").await.unwrap();
-        receiver.stream.flush().await.unwrap();
-        let (receiver, response) = receiver
-            .receive(
-                Instant::now() + Duration::from_secs(2),
-                std::future::pending(),
-            )
-            .await
-            .unwrap();
-        assert_eq!(response, b"F0002 OK noop\r\n");
-        drop(receiver);
+        match end {
+            StartTlsEnd::Complete => {
+                let (mut receiver, raw) = checked_fetch(
+                    receiver,
+                    Instant::now() + Duration::from_secs(2),
+                    std::future::pending(),
+                )
+                .await
+                .unwrap();
+                assert_eq!(raw, SOURCE);
+                assert!(mail_client_lib::mime_poc::parse(&raw).is_ok());
+                receiver.stream.write_all(b"F0002 NOOP\r\n").await.unwrap();
+                receiver.stream.flush().await.unwrap();
+                let (receiver, response) = receiver
+                    .receive(
+                        Instant::now() + Duration::from_secs(2),
+                        std::future::pending(),
+                    )
+                    .await
+                    .unwrap();
+                assert_eq!(response, b"F0002 OK noop\r\n");
+                drop(receiver);
+            }
+            StartTlsEnd::OversizedLiteral
+            | StartTlsEnd::TruncatedLiteral
+            | StartTlsEnd::StalledLiteral { .. }
+            | StartTlsEnd::StalledCompletion { .. } => {
+                let cancel = matches!(
+                    end,
+                    StartTlsEnd::StalledLiteral { cancel: true }
+                        | StartTlsEnd::StalledCompletion { cancel: true }
+                );
+                let cancellation = async {
+                    if matches!(
+                        end,
+                        StartTlsEnd::StalledLiteral { .. } | StartTlsEnd::StalledCompletion { .. }
+                    ) {
+                        ready_rx.await.unwrap();
+                        if cancel {
+                            tokio::time::sleep(Duration::from_millis(50)).await;
+                            return;
+                        }
+                        std::future::pending::<()>().await;
+                    } else {
+                        std::future::pending::<()>().await;
+                    }
+                };
+                let deadline = if cancel {
+                    Instant::now() + Duration::from_secs(2)
+                } else {
+                    Instant::now() + Duration::from_secs(1)
+                };
+                let Err(failure) = checked_fetch(receiver, deadline, cancellation).await else {
+                    panic!("STARTTLS FETCH interruption or malformed input must fail");
+                };
+                let expected = match end {
+                    StartTlsEnd::OversizedLiteral => {
+                        FetchError::Receive(ReceiveError::Framing(FramingError::LiteralTooLarge))
+                    }
+                    StartTlsEnd::TruncatedLiteral => FetchError::Receive(ReceiveError::Eof),
+                    StartTlsEnd::StalledLiteral { cancel: true }
+                    | StartTlsEnd::StalledCompletion { cancel: true } => FetchError::Cancelled,
+                    StartTlsEnd::StalledLiteral { cancel: false }
+                    | StartTlsEnd::StalledCompletion { cancel: false } => FetchError::TimedOut,
+                    _ => unreachable!(),
+                };
+                assert_eq!(failure.cause, expected);
+                match end {
+                    StartTlsEnd::StalledCompletion { .. } => {
+                        assert_eq!(failure.provisional.as_deref(), Some(SOURCE));
+                        assert_eq!(failure.wire_prefix, b"F0001 OK incomplete");
+                    }
+                    StartTlsEnd::StalledLiteral { .. } => {
+                        assert!(failure.provisional.is_none());
+                        let mut prefix =
+                            format!("* 1 FETCH (UID 8 BODY[] {{{}}}\r\n", SOURCE.len() + 7)
+                                .into_bytes();
+                        prefix.extend_from_slice(&SOURCE[..7]);
+                        assert_eq!(failure.wire_prefix, prefix, "{end:?}");
+                    }
+                    StartTlsEnd::TruncatedLiteral => {
+                        assert!(failure.provisional.is_none());
+                    }
+                    StartTlsEnd::OversizedLiteral => {
+                        assert!(failure.provisional.is_none());
+                    }
+                    _ => unreachable!(),
+                }
+                assert!(!format!("{failure:?}").contains("Synthetic"));
+            }
+            _ => unreachable!(),
+        }
         server.await.unwrap();
     })
     .await
@@ -619,6 +727,25 @@ async fn ac04_bounded_fetch_stops_on_untrusted_or_mismatched_starttls_identity()
     for end in [
         StartTlsEnd::UntrustedCertificate,
         StartTlsEnd::HostnameMismatch,
+    ] {
+        exercise_starttls_fetch(end).await;
+    }
+}
+
+#[tokio::test]
+async fn ac04_bounded_fetch_rejects_oversized_or_truncated_starttls_literal() {
+    for end in [StartTlsEnd::OversizedLiteral, StartTlsEnd::TruncatedLiteral] {
+        exercise_starttls_fetch(end).await;
+    }
+}
+
+#[tokio::test]
+async fn ac04_bounded_fetch_recovers_starttls_prefix_on_literal_and_completion_interruption() {
+    for end in [
+        StartTlsEnd::StalledLiteral { cancel: false },
+        StartTlsEnd::StalledLiteral { cancel: true },
+        StartTlsEnd::StalledCompletion { cancel: false },
+        StartTlsEnd::StalledCompletion { cancel: true },
     ] {
         exercise_starttls_fetch(end).await;
     }
