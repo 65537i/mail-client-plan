@@ -5,6 +5,7 @@ use std::{io::ErrorKind, sync::Arc};
 mod imap_body;
 
 use async_imap::extensions::idle::IdleResponse;
+use async_imap::imap_proto::{AttributeValue, Response, Status};
 use async_imap::types::{Capability, Flag};
 use async_imap::{Authenticator, Client};
 use futures_util::StreamExt;
@@ -22,6 +23,9 @@ use tokio_rustls::{TlsAcceptor, TlsConnector, client::TlsStream as ClientTlsStre
 
 const SYNTHETIC_AUTH_RESPONSE: &[u8] =
     b"user=ac06@example.invalid\x01auth=Bearer SYNTHETIC-TOKEN\x01\x01";
+
+const STARTTLS_FETCH_SOURCE: &[u8] =
+    b"Subject: STARTTLS synthetic body\r\n\r\nBODY.PEEK source\r\n";
 
 struct SyntheticXoauth2;
 
@@ -487,7 +491,7 @@ async fn candidate_upgrades_starttls_before_authentication() {
 }
 
 #[tokio::test]
-async fn candidate_completes_starttls_authenticate_examine_uidvalidity_session() {
+async fn candidate_completes_starttls_authenticated_readonly_uid_fetch_session() {
     let (client_config, server_config) = imap_tls_configs();
     let listener = TcpListener::bind("127.0.0.1:0")
         .await
@@ -533,10 +537,23 @@ async fn candidate_completes_starttls_authenticate_examine_uidvalidity_session()
                 b"* 3 EXISTS\r\n* OK [UIDVALIDITY 4242] stable mailbox id\r\n* OK [UIDNEXT 10] next id\r\nA0002 OK [READ-ONLY] examined\r\n",
             )
             .await?;
-        read_command(&mut encrypted, "A0003 LOGOUT\r\n").await;
+        read_command(
+            &mut encrypted,
+            "A0003 UID FETCH 8 (UID FLAGS BODY.PEEK[])\r\n",
+        )
+        .await;
+        let mut fetch = format!(
+            "* 1 FETCH (UID 8 FLAGS () BODY[] {{{}}}\r\n",
+            STARTTLS_FETCH_SOURCE.len()
+        )
+        .into_bytes();
+        fetch.extend_from_slice(STARTTLS_FETCH_SOURCE);
+        fetch.extend_from_slice(b")\r\nA0003 OK fetched\r\n");
+        encrypted.get_mut().write_all(&fetch).await?;
+        read_command(&mut encrypted, "A0004 LOGOUT\r\n").await;
         encrypted
             .get_mut()
-            .write_all(b"* BYE logging out\r\nA0003 OK logout complete\r\n")
+            .write_all(b"* BYE logging out\r\nA0004 OK logout complete\r\n")
             .await?;
         Ok::<_, std::io::Error>(())
     });
@@ -570,6 +587,53 @@ async fn candidate_completes_starttls_authenticate_examine_uidvalidity_session()
         .expect("examine INBOX without changing its flags");
     assert_eq!(mailbox.uid_validity, Some(4242));
     assert_eq!(mailbox.uid_next, Some(10));
+
+    let fetch_tag = session
+        .run_command("UID FETCH 8 (UID FLAGS BODY.PEEK[])")
+        .await
+        .expect("fetch the fixed UID with BODY.PEEK");
+    let mut fetched_body = None;
+    loop {
+        let response = session
+            .read_response()
+            .await
+            .expect("read UID FETCH response")
+            .expect("UID FETCH must finish with a tagged response");
+        match response.parsed() {
+            Response::Fetch(_, attributes) => {
+                let mut uids = attributes.iter().filter_map(|attribute| match attribute {
+                    AttributeValue::Uid(uid) => Some(*uid),
+                    _ => None,
+                });
+                assert_eq!(uids.next(), Some(8));
+                assert_eq!(uids.next(), None);
+                for attribute in attributes {
+                    match attribute {
+                        AttributeValue::BodySection {
+                            section: None,
+                            data: Some(bytes),
+                            index: None,
+                        } if fetched_body.is_none() => {
+                            fetched_body = Some(bytes.to_vec());
+                        }
+                        AttributeValue::Uid(_) | AttributeValue::Flags(_) => {}
+                        _ => panic!("unexpected UID FETCH attribute"),
+                    }
+                }
+            }
+            Response::Done { tag, status, .. } => {
+                assert_eq!(tag, &fetch_tag, "only this command's completion is valid");
+                assert_eq!(*status, Status::Ok, "UID FETCH must complete successfully");
+                break;
+            }
+            _ => panic!("unexpected response during UID FETCH"),
+        }
+    }
+    assert_eq!(
+        fetched_body.as_deref(),
+        Some(STARTTLS_FETCH_SOURCE),
+        "BODY.PEEK must return the complete synthetic source"
+    );
     session.logout().await.expect("logout over STARTTLS");
 
     server
