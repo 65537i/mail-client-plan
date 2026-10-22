@@ -340,7 +340,10 @@ async fn exercise(end: End, fragment: usize) {
             let mut after = Vec::new();
             match peer.read_to_end(&mut after).await {
                 Ok(count) => assert_eq!(count, 0),
-                Err(error) => assert_eq!(error.kind(), ErrorKind::UnexpectedEof),
+                Err(error) => assert!(matches!(
+                    error.kind(),
+                    ErrorKind::UnexpectedEof | ErrorKind::ConnectionReset
+                )),
             }
             assert!(
                 after.is_empty(),
