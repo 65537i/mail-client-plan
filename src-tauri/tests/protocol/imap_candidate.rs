@@ -487,6 +487,98 @@ async fn candidate_upgrades_starttls_before_authentication() {
 }
 
 #[tokio::test]
+async fn candidate_completes_starttls_authenticate_examine_uidvalidity_session() {
+    let (client_config, server_config) = imap_tls_configs();
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind synthetic STARTTLS session server");
+    let address = listener
+        .local_addr()
+        .expect("read synthetic STARTTLS session address");
+    let server = tokio::spawn(async move {
+        let (stream, _) = listener.accept().await?;
+        let acceptor = TlsAcceptor::from(Arc::new(server_config));
+        let mut plaintext = BufReader::new(stream);
+        plaintext
+            .get_mut()
+            .write_all(b"* OK synthetic IMAP server ready\r\n")
+            .await?;
+        read_command(&mut plaintext, "A0001 STARTTLS\r\n").await;
+        plaintext
+            .get_mut()
+            .write_all(b"A0001 OK begin TLS negotiation\r\n")
+            .await?;
+
+        let tls = acceptor.accept(plaintext.into_inner()).await?;
+        let mut encrypted = BufReader::new(tls);
+        read_command(&mut encrypted, "A0001 AUTHENTICATE XOAUTH2\r\n").await;
+        encrypted.get_mut().write_all(b"+ \r\n").await?;
+        let mut auth_response = String::new();
+        encrypted.read_line(&mut auth_response).await?;
+        let decoded = base64::Engine::decode(
+            &base64::engine::general_purpose::STANDARD,
+            auth_response.trim(),
+        )
+        .expect("decode synthetic STARTTLS XOAUTH2 response");
+        assert_eq!(decoded, SYNTHETIC_AUTH_RESPONSE);
+        encrypted
+            .get_mut()
+            .write_all(b"A0001 OK authenticated\r\n")
+            .await?;
+
+        read_command(&mut encrypted, "A0002 EXAMINE \"INBOX\"\r\n").await;
+        encrypted
+            .get_mut()
+            .write_all(
+                b"* 3 EXISTS\r\n* OK [UIDVALIDITY 4242] stable mailbox id\r\n* OK [UIDNEXT 10] next id\r\nA0002 OK [READ-ONLY] examined\r\n",
+            )
+            .await?;
+        read_command(&mut encrypted, "A0003 LOGOUT\r\n").await;
+        encrypted
+            .get_mut()
+            .write_all(b"* BYE logging out\r\nA0003 OK logout complete\r\n")
+            .await?;
+        Ok::<_, std::io::Error>(())
+    });
+
+    let stream = TcpStream::connect(address)
+        .await
+        .expect("connect to synthetic STARTTLS session server");
+    let mut client = Client::new(stream);
+    client
+        .read_response()
+        .await
+        .expect("read plaintext greeting")
+        .expect("STARTTLS session server greeting must be present");
+    client
+        .run_command_and_check_ok("STARTTLS", None)
+        .await
+        .expect("require STARTTLS before authentication");
+
+    let tls = upgrade_candidate_tls(client.into_inner(), client_config)
+        .await
+        .expect("verify and upgrade STARTTLS connection");
+    let client = Client::new(tls);
+    let mut session = client
+        .authenticate("XOAUTH2", SyntheticXoauth2)
+        .await
+        .map_err(|(error, _client)| error)
+        .expect("authenticate over verified STARTTLS");
+    let mailbox = session
+        .examine("INBOX")
+        .await
+        .expect("examine INBOX without changing its flags");
+    assert_eq!(mailbox.uid_validity, Some(4242));
+    assert_eq!(mailbox.uid_next, Some(10));
+    session.logout().await.expect("logout over STARTTLS");
+
+    server
+        .await
+        .expect("synthetic STARTTLS session server task")
+        .expect("synthetic STARTTLS session protocol");
+}
+
+#[tokio::test]
 async fn candidate_stops_without_authentication_when_starttls_is_refused() {
     let listener = TcpListener::bind("127.0.0.1:0")
         .await

@@ -1,6 +1,6 @@
 # 開発状況
 
-更新日: 2026-10-21
+更新日: 2026-10-22
 
 ## 現在の範囲
 
@@ -35,6 +35,10 @@
 - SMTP TLS fixtureを本文送信へ拡張。暗黙TLS / 必須STARTTLSそれぞれで最終250・550・応答消失を試験し、認証 / envelope / DATAが暗号化後各1回、合成本文のwire bytes一致、lost reply時の成功誤判定なし・250ms内の再接続なしを確認。本番送信UI / adapter / Outboxは未実装。
 
 ## 最新の確認
+
+STARTTLS authenticated EXAMINE session（00C / AC-06・AC-08前提）: 同一の合成sessionでplaintext greeting → tagged STARTTLS OK → 通常のrustls証明書 / hostname検証 → TLS上のXOAUTH2 challenge/response → EXAMINE INBOX → UIDVALIDITY=4242 / UIDNEXT=10 → LOGOUTを確認。合成peerはSTARTTLS後にのみ認証を受け取り、EXAMINEをREAD-ONLYとして応答。既存のSTARTTLS拒否・不可信証明書・hostname mismatch試験を維持。これはasync-imap sessionの連続フローの候補検証で、bounded FETCH receiver、account/folder scope、UIDVALIDITY変更時の同期処理、実サーバ、3OS、製品connection managerを証明しない。採用保留・Phase 00未完了。
+
+検証: `cargo test -j 1 -p mail-client --features imap-poc --test imap_candidate --locked --quiet`でIMAP candidate 9 tests成功。対象clippy `-D warnings`、`cargo fmt --all --check`、`git diff --check`も成功。最初のfixtureはSTARTTLS後にサーバが再度greetingを送る誤想定で待機したため、その読み取りを除去し、正常なsessionを確認。3OS / 実サーバは今回未実施。
 
 上限付きFETCHのSTARTTLS中断・異常系（00C / AC-04・AC-06前提）: STARTTLS OK後の既存bounded FETCH経路に新規2 tests、計6 scenarioを追加。TLS確立後、literal宣言50 MiB+1と本文1 byteの同時到着はheaderだけ保持して上限拒否。literal宣言に対する途中EOFはheader + 受信済み先頭7 bytesのwire prefixを回収し、provisional本文は返さない。応答全体でのliteral途中stallはdeadline / cancel各1ケースで同じprefixを回収し、完了応答途中stallはdeadline / cancel各1ケースでSOURCEをprovisionalとして保持しつつ`F0001 OK incomplete`をwire prefixとして回収。全ケースでTLS接続をdropし、後続commandは送信しない。証明書・hostname検証は維持。cancel fixtureはserverがTLS書込後にoneshot通知し、clientが処理する猶予50ms後に取消す。deadlineはSTARTTLS完了後に1秒で設定。初回はfixtureのoneshot配置誤りでcompile失敗、修正後にcancel直後の空prefixとなり、処理前取消だったため受信猶予を追加し成功。Linux arm64で`cargo test -j 1 -p mail-client --features imap-poc,mime-poc --lib --test imap_candidate --test mime_candidate --locked --quiet`: unit5 + IMAP49 + MIME42 = 96 tests成功、対象clippy `-D warnings` / format / diff成功。製品コード・依存・workflow変更なし。STARTTLS拒否 / TLS identity失敗の既存試験は維持。実サーバ・3OS・認証・mailbox選択・厳密なRSS制限・task abortは未検証、採用保留・Phase 00未完了。
 
