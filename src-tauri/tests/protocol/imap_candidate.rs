@@ -50,6 +50,7 @@ enum FetchResult {
 #[derive(Debug, PartialEq, Eq)]
 enum RawUidSearchResult {
     Complete(HashSet<u32>),
+    MissingSearchData(HashSet<u32>),
     DuplicateUids(HashSet<u32>),
     InvalidUids(HashSet<u32>),
     Rejected {
@@ -100,6 +101,7 @@ where
     let tag = session.run_command("UID SEARCH ALL").await?;
     let mut uids = HashSet::new();
     let mut wrong_tag = false;
+    let mut saw_search_data = false;
     let mut duplicate_uid = false;
     let mut invalid_uid = false;
     loop {
@@ -121,6 +123,7 @@ where
         };
         match response.parsed() {
             Response::MailboxData(MailboxDatum::Search(values)) => {
+                saw_search_data = true;
                 for uid in values.iter().copied() {
                     invalid_uid |= uid == 0;
                     duplicate_uid |= !uids.insert(uid);
@@ -138,6 +141,8 @@ where
                         RawUidSearchResult::DuplicateUids(uids)
                     } else if invalid_uid {
                         RawUidSearchResult::InvalidUids(uids)
+                    } else if !saw_search_data {
+                        RawUidSearchResult::MissingSearchData(uids)
                     } else {
                         RawUidSearchResult::Complete(uids)
                     })
@@ -1142,14 +1147,24 @@ async fn ac06_starttls_xoauth2_idle_notification_and_cancellation_restore_sessio
             read_command(&mut encrypted, "A0025 UID SEARCH ALL\r\n").await;
             encrypted
                 .get_mut()
-                .write_all(b"* SEARCH 50 50\r\nA0025 OK duplicate UID response\r\n")
+                .write_all(b"* SEARCH\r\nA0025 OK empty UID set\r\n")
                 .await?;
             read_command(&mut encrypted, "A0026 UID SEARCH ALL\r\n").await;
             encrypted
                 .get_mut()
-                .write_all(b"* SEARCH 0 50\r\nA0026 OK invalid UID response\r\n")
+                .write_all(b"A0026 OK missing SEARCH data\r\n")
                 .await?;
-            read_command(&mut encrypted, "A0027 UID FETCH 50 (UID FLAGS)\r\n").await;
+            read_command(&mut encrypted, "A0027 UID SEARCH ALL\r\n").await;
+            encrypted
+                .get_mut()
+                .write_all(b"* SEARCH 50 50\r\nA0027 OK duplicate UID response\r\n")
+                .await?;
+            read_command(&mut encrypted, "A0028 UID SEARCH ALL\r\n").await;
+            encrypted
+                .get_mut()
+                .write_all(b"* SEARCH 0 50\r\nA0028 OK invalid UID response\r\n")
+                .await?;
+            read_command(&mut encrypted, "A0029 UID FETCH 50 (UID FLAGS)\r\n").await;
             encrypted
                 .get_mut()
                 .write_all(b"* 1 FETCH (UID 50 FLAGS (\\Flagged))\r\n")
@@ -1485,6 +1500,16 @@ async fn ac06_starttls_xoauth2_idle_notification_and_cancellation_restore_sessio
             other => panic!("expected complete UID SEARCH result, got {other:?}"),
         };
         assert_eq!(complete_uids, [50].into_iter().collect());
+        assert_eq!(
+            raw_uid_search(&mut session).await.expect("raw empty UID SEARCH"),
+            RawUidSearchResult::Complete(HashSet::new())
+        );
+        assert_eq!(
+            raw_uid_search(&mut session)
+                .await
+                .expect("raw UID SEARCH without SEARCH data"),
+            RawUidSearchResult::MissingSearchData(HashSet::new())
+        );
         assert_eq!(
             raw_uid_search(&mut session).await.expect("raw UID SEARCH command"),
             RawUidSearchResult::DuplicateUids([50].into_iter().collect())
