@@ -27,6 +27,25 @@ const SYNTHETIC_AUTH_RESPONSE: &[u8] =
 const STARTTLS_FETCH_SOURCE: &[u8] =
     b"Subject: STARTTLS synthetic body\r\n\r\nBODY.PEEK source\r\n";
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum FetchCompletion {
+    Ok,
+    No,
+    Bad,
+    WrongTag,
+    Missing,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum FetchResult {
+    Ok,
+    Rejected,
+    WrongTag,
+    MissingCompletion,
+    ReadError(ErrorKind),
+    UnexpectedResponse,
+}
+
 struct SyntheticXoauth2;
 
 impl Authenticator for SyntheticXoauth2 {
@@ -490,8 +509,7 @@ async fn candidate_upgrades_starttls_before_authentication() {
         .expect("synthetic STARTTLS protocol");
 }
 
-#[tokio::test]
-async fn candidate_completes_starttls_authenticated_readonly_uid_fetch_session() {
+async fn exercise_starttls_authenticated_uid_fetch(completion: FetchCompletion) -> FetchResult {
     let (client_config, server_config) = imap_tls_configs();
     let listener = TcpListener::bind("127.0.0.1:0")
         .await
@@ -548,8 +566,29 @@ async fn candidate_completes_starttls_authenticated_readonly_uid_fetch_session()
         )
         .into_bytes();
         fetch.extend_from_slice(STARTTLS_FETCH_SOURCE);
-        fetch.extend_from_slice(b")\r\nA0003 OK fetched\r\n");
+        let final_response = match completion {
+            FetchCompletion::Ok => b"A0003 OK fetched\r\n".as_slice(),
+            FetchCompletion::No => b"A0003 NO fetch rejected\r\n",
+            FetchCompletion::Bad => b"A0003 BAD invalid fetch\r\n",
+            FetchCompletion::WrongTag => b"A9999 OK unrelated completion\r\n",
+            FetchCompletion::Missing => b"",
+        };
+        fetch.extend_from_slice(b")\r\n");
+        fetch.extend_from_slice(final_response);
         encrypted.get_mut().write_all(&fetch).await?;
+        encrypted.get_mut().flush().await?;
+        if matches!(completion, FetchCompletion::Missing) {
+            encrypted.get_mut().shutdown().await?;
+        }
+        if !matches!(completion, FetchCompletion::Ok) {
+            let mut unexpected_commands = Vec::new();
+            let _ = encrypted.read_to_end(&mut unexpected_commands).await;
+            assert!(
+                unexpected_commands.is_empty(),
+                "failed FETCH must not be followed by another command"
+            );
+            return Ok::<_, std::io::Error>(());
+        }
         read_command(&mut encrypted, "A0004 LOGOUT\r\n").await;
         encrypted
             .get_mut()
@@ -593,20 +632,21 @@ async fn candidate_completes_starttls_authenticated_readonly_uid_fetch_session()
         .await
         .expect("fetch the fixed UID with BODY.PEEK");
     let mut fetched_body = None;
-    loop {
-        let response = session
-            .read_response()
-            .await
-            .expect("read UID FETCH response")
-            .expect("UID FETCH must finish with a tagged response");
+    let fetch_result = 'responses: loop {
+        let response = match session.read_response().await {
+            Ok(Some(response)) => response,
+            Ok(None) => break FetchResult::MissingCompletion,
+            Err(error) => break FetchResult::ReadError(error.kind()),
+        };
         match response.parsed() {
             Response::Fetch(_, attributes) => {
                 let mut uids = attributes.iter().filter_map(|attribute| match attribute {
                     AttributeValue::Uid(uid) => Some(*uid),
                     _ => None,
                 });
-                assert_eq!(uids.next(), Some(8));
-                assert_eq!(uids.next(), None);
+                if uids.next() != Some(8) || uids.next().is_some() {
+                    break FetchResult::UnexpectedResponse;
+                }
                 for attribute in attributes {
                     match attribute {
                         AttributeValue::BodySection {
@@ -617,29 +657,67 @@ async fn candidate_completes_starttls_authenticated_readonly_uid_fetch_session()
                             fetched_body = Some(bytes.to_vec());
                         }
                         AttributeValue::Uid(_) | AttributeValue::Flags(_) => {}
-                        _ => panic!("unexpected UID FETCH attribute"),
+                        _ => break 'responses FetchResult::UnexpectedResponse,
                     }
                 }
             }
             Response::Done { tag, status, .. } => {
-                assert_eq!(tag, &fetch_tag, "only this command's completion is valid");
-                assert_eq!(*status, Status::Ok, "UID FETCH must complete successfully");
-                break;
+                if tag != &fetch_tag {
+                    break FetchResult::WrongTag;
+                }
+                if *status != Status::Ok {
+                    break FetchResult::Rejected;
+                }
+                break FetchResult::Ok;
             }
-            _ => panic!("unexpected response during UID FETCH"),
+            _ => break FetchResult::UnexpectedResponse,
         }
-    }
+    };
     assert_eq!(
         fetched_body.as_deref(),
         Some(STARTTLS_FETCH_SOURCE),
-        "BODY.PEEK must return the complete synthetic source"
+        "the complete body remains provisional until tagged OK"
     );
-    session.logout().await.expect("logout over STARTTLS");
+    if fetch_result == FetchResult::Ok {
+        session.logout().await.expect("logout over STARTTLS");
+    } else {
+        drop(session);
+    }
 
     server
         .await
         .expect("synthetic STARTTLS session server task")
         .expect("synthetic STARTTLS session protocol");
+    fetch_result
+}
+
+#[tokio::test]
+async fn candidate_completes_starttls_authenticated_readonly_uid_fetch_session() {
+    let result = tokio::time::timeout(
+        std::time::Duration::from_secs(5),
+        exercise_starttls_authenticated_uid_fetch(FetchCompletion::Ok),
+    )
+    .await
+    .expect("STARTTLS UID FETCH session must complete");
+    assert_eq!(result, FetchResult::Ok);
+}
+
+#[tokio::test]
+async fn candidate_does_not_accept_failed_or_incomplete_starttls_uid_fetch() {
+    for (completion, expected) in [
+        (FetchCompletion::No, FetchResult::Rejected),
+        (FetchCompletion::Bad, FetchResult::Rejected),
+        (FetchCompletion::WrongTag, FetchResult::WrongTag),
+        (FetchCompletion::Missing, FetchResult::MissingCompletion),
+    ] {
+        let actual = tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            exercise_starttls_authenticated_uid_fetch(completion),
+        )
+        .await
+        .expect("failed STARTTLS UID FETCH session must terminate");
+        assert_eq!(actual, expected, "{completion:?}");
+    }
 }
 
 #[tokio::test]
