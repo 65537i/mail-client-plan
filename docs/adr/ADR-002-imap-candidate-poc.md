@@ -40,6 +40,8 @@ IMAP候補はTLS、SASL XOAUTH2、UID/UIDVALIDITY、IDLEの取消とpolling fall
 
 | 確認 | 結果 |
 |---|---|
+| 上限付きFETCHのSTARTTLS昇格（AC-04 / AC-06前提） | Linux arm64でIMAP47 tests中に正常1経路、STARTTLS拒否・未信頼証明書・hostname mismatchの否定3経路を確認。plaintext greeting → async-imapのtagged STARTTLS OK → raw TCP stream upgrade → 通常のrustls検証 → bounded FETCH。TLS前のFETCH / 認証なし、否定経路にplaintext fallbackなし。正常経路はSOURCE全bytes・tagged OK・MIME解析と同じTLS receiverでのNOOP成功。TLS identity errorがあればFETCHを送信せず閉じる。テスト限定・合成peerであり認証/mailbox選択や実サーバではない |
+| 統合後チェック | `cargo test -j 1 -p mail-client --features imap-poc,mime-poc --lib --test imap_candidate --test mime_candidate --locked --quiet`: unit5 + IMAP47 + MIME42 = 94 tests成功。対象clippy `-D warnings` / format / diff成功。3OS未実行、依存・製品コード・workflow変更なし |
 | Tokio integration | `cargo test -p mail-client --features imap-poc --test imap_candidate --locked` 成功 |
 | XOAUTH2 challenge/response | 合成payloadのchallenge flowを確認 |
 | UID semantics | SELECT UIDVALIDITYとUID FETCH responseを確認。実装側は必ず(account, folder, UIDVALIDITY, UID)でpersistし、sequence number単独参照を禁止 |

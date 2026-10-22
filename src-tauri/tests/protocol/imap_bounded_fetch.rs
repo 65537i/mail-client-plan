@@ -1,5 +1,6 @@
 use std::{future::Future, io::ErrorKind, sync::Arc, time::Duration};
 
+use async_imap::Client;
 use imap_codec_framing::{
     ResponseCodec,
     decode::Decoder,
@@ -8,7 +9,7 @@ use imap_codec_framing::{
         response::{Data, Response, Status, StatusKind},
     },
 };
-use rustls::pki_types::ServerName;
+use rustls::{ClientConfig, RootCertStore, pki_types::ServerName};
 use tokio::{
     io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader},
     net::{TcpListener, TcpStream},
@@ -198,6 +199,14 @@ enum ResponseSequence {
     MissingUidAfterBody,
     PartialAfterBody,
     NilAfterBody,
+}
+
+#[derive(Clone, Copy)]
+enum StartTlsEnd {
+    Complete,
+    Refused,
+    UntrustedCertificate,
+    HostnameMismatch,
 }
 
 impl End {
@@ -451,6 +460,168 @@ async fn exercise(end: End, fragment: usize) {
     })
     .await
     .expect("bounded TLS FETCH and peer shutdown must finish");
+}
+
+async fn exercise_starttls_fetch(end: StartTlsEnd) {
+    tokio::time::timeout(Duration::from_secs(5), async {
+        let (trusted_config, server_config) = super::super::super::super::imap_tls_configs();
+        let client_config = if matches!(end, StartTlsEnd::UntrustedCertificate) {
+            ClientConfig::builder()
+                .with_root_certificates(RootCertStore::empty())
+                .with_no_client_auth()
+        } else {
+            trusted_config
+        };
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let (tcp, _) = listener.accept().await.unwrap();
+            let mut plain = BufReader::new(tcp);
+            plain
+                .get_mut()
+                .write_all(b"* OK synthetic STARTTLS peer\r\n")
+                .await
+                .unwrap();
+            plain.get_mut().flush().await.unwrap();
+            super::super::super::super::read_command(&mut plain, "A0001 STARTTLS\r\n").await;
+            if matches!(end, StartTlsEnd::Refused) {
+                plain
+                    .get_mut()
+                    .write_all(b"A0001 NO TLS unavailable\r\n")
+                    .await
+                    .unwrap();
+                plain.get_mut().flush().await.unwrap();
+                let mut trailing = Vec::new();
+                let _ = plain.read_to_end(&mut trailing).await;
+                assert!(trailing.is_empty(), "must not fall back to plaintext");
+                return;
+            }
+            plain
+                .get_mut()
+                .write_all(b"A0001 OK begin TLS negotiation\r\n")
+                .await
+                .unwrap();
+            plain.get_mut().flush().await.unwrap();
+            let tcp = plain.into_inner();
+            let tls_result = TlsAcceptor::from(Arc::new(server_config)).accept(tcp).await;
+            if matches!(
+                end,
+                StartTlsEnd::UntrustedCertificate | StartTlsEnd::HostnameMismatch
+            ) {
+                assert!(
+                    tls_result.is_err(),
+                    "invalid TLS identity must stop the upgrade"
+                );
+                return;
+            }
+            let tls = tls_result.unwrap();
+            let mut encrypted = BufReader::new(tls);
+            super::super::super::super::read_command(
+                &mut encrypted,
+                std::str::from_utf8(COMMAND).unwrap(),
+            )
+            .await;
+            let mut payload = super::super::fetch_response(SOURCE);
+            payload.extend_from_slice(b"F0001 OK fetched\r\n");
+            encrypted.get_mut().write_all(&payload).await.unwrap();
+            encrypted.get_mut().flush().await.unwrap();
+            super::super::super::super::read_command(&mut encrypted, "F0002 NOOP\r\n").await;
+            encrypted
+                .get_mut()
+                .write_all(b"F0002 OK noop\r\n")
+                .await
+                .unwrap();
+            encrypted.get_mut().flush().await.unwrap();
+            let mut trailing = Vec::new();
+            let _ = encrypted.read_to_end(&mut trailing).await;
+            assert!(trailing.is_empty());
+        });
+
+        let tcp = TcpStream::connect(address).await.unwrap();
+        let mut client = Client::new(tcp);
+        assert!(client.read_response().await.unwrap().is_some());
+        if matches!(end, StartTlsEnd::Refused) {
+            assert!(
+                client
+                    .run_command_and_check_ok("STARTTLS", None)
+                    .await
+                    .is_err()
+            );
+            drop(client);
+            server.await.unwrap();
+            return;
+        }
+        client
+            .run_command_and_check_ok("STARTTLS", None)
+            .await
+            .unwrap();
+        let tcp = client.into_inner();
+        let hostname = if matches!(end, StartTlsEnd::HostnameMismatch) {
+            "wrong-hostname.invalid"
+        } else {
+            "localhost"
+        };
+        let tls = TlsConnector::from(Arc::new(client_config))
+            .connect(ServerName::try_from(hostname).unwrap(), tcp)
+            .await;
+        if matches!(
+            end,
+            StartTlsEnd::UntrustedCertificate | StartTlsEnd::HostnameMismatch
+        ) {
+            assert!(tls.is_err(), "STARTTLS TLS identity must be verified");
+            server.await.unwrap();
+            return;
+        }
+        let tls = tls.unwrap();
+        let limit = u32::try_from(mail_client_lib::mime_poc::MAX_RAW_BYTES).unwrap();
+        let receiver = BoundedReceiver {
+            stream: tls,
+            framing: BoundedFramingProbe::new(limit, limit + 4096),
+        };
+        let (mut receiver, raw) = checked_fetch(
+            receiver,
+            Instant::now() + Duration::from_secs(2),
+            std::future::pending(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(raw, SOURCE);
+        assert!(mail_client_lib::mime_poc::parse(&raw).is_ok());
+        receiver.stream.write_all(b"F0002 NOOP\r\n").await.unwrap();
+        receiver.stream.flush().await.unwrap();
+        let (receiver, response) = receiver
+            .receive(
+                Instant::now() + Duration::from_secs(2),
+                std::future::pending(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response, b"F0002 OK noop\r\n");
+        drop(receiver);
+        server.await.unwrap();
+    })
+    .await
+    .expect("STARTTLS bounded FETCH flow must finish");
+}
+
+#[tokio::test]
+async fn ac04_bounded_fetch_reuses_receiver_after_verified_starttls() {
+    exercise_starttls_fetch(StartTlsEnd::Complete).await;
+}
+
+#[tokio::test]
+async fn ac04_bounded_fetch_does_not_fallback_after_starttls_refusal() {
+    exercise_starttls_fetch(StartTlsEnd::Refused).await;
+}
+
+#[tokio::test]
+async fn ac04_bounded_fetch_stops_on_untrusted_or_mismatched_starttls_identity() {
+    for end in [
+        StartTlsEnd::UntrustedCertificate,
+        StartTlsEnd::HostnameMismatch,
+    ] {
+        exercise_starttls_fetch(end).await;
+    }
 }
 
 #[tokio::test]

@@ -43,6 +43,8 @@ fullのIMAP候補試験は`imap-poc,mime-poc`を併用し、BODY.PEEKで取得�
 
 テスト限定の固定UID FETCH統合も同targetで実行し、上限付きTLS受信でUID / 完全BODY / 最終tagged OKと異常時の接続破棄を確認する。認証・mailbox選択・account scopeを実装した製品セッションの検証ではない。
 
+同じbounded FETCHをSTARTTLS OK後のraw TCP→検証済みrustls streamへ引き継ぐ合成試験も実行する。STARTTLS拒否・未信頼証明書・hostname mismatchでFETCH / 認証へ進まず、plaintext fallbackをしないことを確認する。実サーバ・production connection managerの代替証跡にはしない。
+
 ## 2. 検証コマンドの契約
 
 Phase 01で以下のpackage scriptsを用意する。これは計画上の名称であり、現時点で実装済みではない。
