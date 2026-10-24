@@ -4,7 +4,7 @@ import { verifyMacosFileTrace } from "../../scripts/macos-file-trace.mjs";
 
 const canary = "mc-synthetic.png";
 const positiveControl = "mc-control.png";
-const positiveControlProcess = "cat.456";
+const positiveControlProcess = "node.456";
 const appEvent = "13:07:03.000001 open F=3 /synthetic/app 0.000001 mail-client.123";
 const positiveControlEvent = `13:07:03.000002 read /synthetic/${positiveControl} 0.000001 ${positiveControlProcess}`;
 const verify = (trace) =>
@@ -24,7 +24,7 @@ test("AC-05: accepts an observed application with no canary event", () => {
 
 test("AC-05: rejects missing or unexpected positive-control observations", () => {
   assert.throws(
-    () => verify(`${appEvent}\n${positiveControlEvent.replace("cat.456", "cat.999")}`),
+    () => verify(`${appEvent}\n${positiveControlEvent.replace("node.456", "node.999")}`),
     /positive-control file read/,
   );
   assert.throws(
@@ -33,6 +33,21 @@ test("AC-05: rejects missing or unexpected positive-control observations", () =>
         `${appEvent}\n${positiveControlEvent}\n13:07:03.000003 open /synthetic/${positiveControl} 0.000001 mdworker.789`,
       ),
     /positive-control file was accessed by an unexpected process/,
+  );
+});
+
+test("AC-05: missing control diagnostics expose only bounded operation and process summaries", () => {
+  const event = `13:07:03.000002 stat64 /private/synthetic/${positiveControl} 0.000001 node.999`;
+  assert.throws(
+    () => verify([appEvent, ...Array(20).fill(event)].join("\n")),
+    (error) => {
+      assert.match(error.message, /matching file events=20/);
+      assert.match(error.message, /expected process=node.456/);
+      assert.equal(error.message.match(/operation=stat64/g).length, 10);
+      assert(!error.message.includes("/private/synthetic"));
+      assert(!error.message.includes(positiveControl));
+      return true;
+    },
   );
 });
 

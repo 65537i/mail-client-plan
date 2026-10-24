@@ -47,7 +47,12 @@ export function verifyMacosFileTrace(
   );
   assert(
     observedPositiveControl,
-    "fs_usage did not observe the explicit positive-control file read",
+    `fs_usage did not observe the explicit positive-control file read; matching file events=${positiveControlEvents.length}; expected process=${positiveControlProcess}; observed=${positiveControlEvents
+      .slice(0, 10)
+      .map((event) => event
+        ? `operation=${event[1]} process/thread=${event[2]}`
+        : "unrecognized control event format")
+      .join("; ")}`,
   );
 
   const unexpectedPositiveControlEvents = positiveControlEvents.filter(

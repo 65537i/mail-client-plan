@@ -81,9 +81,15 @@ export function summarizeWindowsFileTrace(traceOutput, canaryPath) {
   return { canaryEvents, observedProcessNames };
 }
 
-export function verifyWindowsFileTrace(traceOutput, canaryPath) {
+export function verifyWindowsFileTrace(traceOutput, canaryPath, positiveControlPath) {
+  assert(
+    path.win32.basename(canaryPath).toLowerCase() !==
+      path.win32.basename(positiveControlPath).toLowerCase(),
+    "positive control must use a different file from the attack canary",
+  );
   const summary = summarizeWindowsFileTrace(traceOutput, canaryPath);
-  const positiveControlEvents = summary.canaryEvents.filter(
+  const controlSummary = summarizeWindowsFileTrace(traceOutput, positiveControlPath);
+  const positiveControlEvents = controlSummary.canaryEvents.filter(
     ({ processName, operation }) =>
       processName.toLowerCase() === "powershell.exe" && operation === "ReadFile",
   );
@@ -92,9 +98,7 @@ export function verifyWindowsFileTrace(traceOutput, canaryPath) {
     "Process Monitor did not observe the PowerShell synthetic-canary positive control",
   );
 
-  const unexpectedEvents = summary.canaryEvents.filter(
-    ({ processName }) => processName.toLowerCase() !== "powershell.exe",
-  );
+  const unexpectedEvents = summary.canaryEvents;
   assert.equal(
     unexpectedEvents.length,
     0,

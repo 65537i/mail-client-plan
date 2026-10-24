@@ -54,8 +54,12 @@ try {
       "fs_usage exited before the WebView test; root tracing may be unavailable",
     );
 
-    const positiveControl = spawn("/bin/cat", [positiveControlPath], {
+    const positiveControl = spawn(process.execPath, [
+      "-e",
+      'require("node:fs").readFileSync(process.env.MAIL_CLIENT_CONTROL_FILE)',
+    ], {
       stdio: "ignore",
+      env: { ...process.env, MAIL_CLIENT_CONTROL_FILE: positiveControlPath },
     });
     const positiveControlResult = await waitForClose(positiveControl);
     assert.equal(positiveControlResult.code, 0, "fs_usage positive control failed to read its file");
@@ -110,7 +114,7 @@ try {
   const result = verifyMacosFileTrace(traceOutput, {
     canaryName,
     positiveControlName,
-    positiveControlProcess: `cat.${positiveControlPid}`,
+    positiveControlProcess: `node.${positiveControlPid}`,
   });
   console.log(
     `AC-05 macOS audit: positive-control file events=${result.positiveControlEvents}; separately classified fseventsd lstat64 events=${result.systemMetadataEvents}.`,

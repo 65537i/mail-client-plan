@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
-import { access, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { access, mkdtemp, open, readFile, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -17,6 +17,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const procmonPath = path.resolve(process.env.MAIL_CLIENT_PROCMON_PATH);
 const temporaryDirectory = await mkdtemp(path.join(os.tmpdir(), "mail-client-file-audit-"));
 const canaryPath = path.join(temporaryDirectory, `mc-${randomUUID().slice(0, 12)}.png`);
+const positiveControlPath = path.join(temporaryDirectory, `mc-control-${randomUUID().slice(0, 12)}.png`);
 const backingFile = path.join(temporaryDirectory, "process-monitor.pml");
 const csvFile = path.join(temporaryDirectory, "process-monitor.csv");
 
@@ -59,7 +60,14 @@ let capture;
 let captureExit;
 
 try {
-  await writeFile(canaryPath, "Synthetic file-access canary; no user data.\n");
+  const canaryFile = await open(canaryPath, "wx");
+  try {
+    await canaryFile.writeFile("Synthetic file-access canary; no user data.\n");
+    await canaryFile.sync();
+  } finally {
+    await canaryFile.close();
+  }
+  await writeFile(positiveControlPath, "Synthetic Process Monitor positive control.\n");
   capture = spawn(
     procmonPath,
     ["/AcceptEula", "/Quiet", "/Minimized", "/NoFilter", "/BackingFile", backingFile],
@@ -94,7 +102,7 @@ try {
     {
       env: {
         ...process.env,
-        MAIL_CLIENT_FILE_CANARY: canaryPath,
+        MAIL_CLIENT_FILE_CANARY: positiveControlPath,
       },
       stdio: "ignore",
       windowsHide: true,
@@ -156,9 +164,9 @@ try {
     "Process Monitor CSV export exceeded the 256 MiB safety limit",
   );
   const trace = decodeWindowsFileTrace(await readFile(csvFile));
-  const result = verifyWindowsFileTrace(trace, canaryPath);
+  const result = verifyWindowsFileTrace(trace, canaryPath, positiveControlPath);
   console.log(
-    `AC-05 Windows audit: Procmon positive-control ReadFile events=${result.positiveControlEvents}; unexpected synthetic-canary events=${result.canaryEvents - result.positiveControlEvents}.`,
+    `AC-05 Windows audit: Procmon positive-control ReadFile events=${result.positiveControlEvents}; unexpected synthetic-canary events=${result.canaryEvents}.`,
   );
   console.log(
     "AC-05 Windows file-access audit passed for the observed application and WebView2 processes; complete descendant coverage remains unverified.",
