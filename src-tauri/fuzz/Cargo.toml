@@ -1,0 +1,22 @@
+[package]
+name = "mail-client-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[workspace]
+members = ["."]
+
+[dependencies]
+libfuzzer-sys = "0.4"
+encoding_rs = "=0.8.42"
+
+[[bin]]
+name = "mime_bounded"
+path = "fuzz_targets/mime_bounded.rs"
+test = false
+doc = false
+bench = false

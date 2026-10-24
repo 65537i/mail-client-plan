@@ -1,6 +1,6 @@
 # ADR-002: IMAP候補ライブラリPoC
 
-- 状態: 採用保留。async-imap 0.12.0でTokio上のXOAUTH2・UID semantics・IDLE取消/polling fallback・rustls implicit TLS/STARTTLSとTLS拒否境界を合成serverで確認したが、FETCH最終statusの欠落、製品上限を超える事前allocation、unsolicited通知queue overflow時の無通知dropが採用blocker
+- 状態: 採用保留。async-imap 0.12.0でTokio上のXOAUTH2・UID semantics・IDLE取消/polling fallback・rustls implicit TLS/STARTTLSとTLS拒否境界を合成serverで確認したが、FETCH最終statusの欠落、製品上限を超える事前allocation、unsolicited通知queue overflow時の無通知dropが採用blocker。`mail-parser 0.11.9`はmultipart boundary直前のquoted-printable本文を無診断で破損し、debug panicも再現したため製品候補として不採用
 - 決定日: 2026-10-20
 
 ## 背景
@@ -21,6 +21,172 @@ IMAP候補はTLS、SASL XOAUTH2、UID/UIDVALIDITY、IDLEの取消とpolling fall
 | 候補 | 利点 | 残課題 | 現時点 |
 |---|---|---|---|
 | `lettre` 0.11.23 | Tokio async transport、SMTP final positive responseを`Response`として返し、negative responseは`Error::status`・transient/permanentで取得可能。rustlsの暗黙TLS / 必須STARTTLSを合成sinkで確認。MIT、Rust 1.85+ | DATA後の応答不明をunknownへ写像するのは呼び出し側責務。複数RCPTの個別結果は最初の拒否で中断される。production adapter / trust store方針は未実装 | 優先候補。未確定 |
+
+## MIME parser候補の判断
+
+- 固定版`mail-parser 0.11.9`は製品MIME parserとして不採用。合成fixtureでquoted-printable soft break直後がmultipart boundaryとなると、LF / CRLFで本文末尾の1〜2 byteを診断なしに失う。CRLFの短い本文ではdebug panicも起き、UTF-8 raw octet / `=XX`表記の双方で本文欠落やU+FFFD化を確認した。挙動は入力とbuild profileに依存し、既存診断は損失を十分に通知しない。
+- この判断は固定した`0.11.9`に限る。別versionや別parserを検証済み・採用済みとは扱わない。既存の`mime-poc` adapterと回帰corpusは原因再現・候補比較専用とし、製品コードへ接続しない。
+- 次のMIME作業は個別fixtureの追加ではなく、同じ合成corpusを用いた代替parser候補の一括比較と、raw input / decoded output / nestingの資源上限をどの層で保証するかの設計判断とする。安全な代替が決まるまではAC-04とMIME候補の採用gateを未達のまま維持する。
+
+### 代替parser比較: mailparse 0.18.0
+
+`mailparse 0.18.0`（0BSD、Rust 1.85+）をoptionalな`mime-parser-compare-poc`だけへ追加した。既存AC-04 regression corpusの6種のシナリオに対応する合成入力を用意し、その同じ入力を両parserへ渡す。mailparseでは期待出力、mail-parser 0.11.9では既知の実測出力を照合する。新候補は6ケースすべて期待どおり:
+
+| 既存corpusに対応するケース | 期待出力 | `mail-parser 0.11.9` | `mailparse 0.18.0` |
+|---|---|---|---|
+| CRLF soft break直後がmultipart boundary | `before` + `second part` | `befo` + `second part`（末尾2字欠落） | 期待どおり |
+| LF soft break直後がmultipart boundary | `before` + `second part` | `befor` + `second part`（末尾1字欠落） | 期待どおり |
+| soft break後に本文データが継続 | `beforecontinued` + `second part` | 期待どおり | 期待どおり |
+| UTF-8 quoted-printable token境界でsoft break | `étail` + `second part` | 期待どおり | 期待どおり |
+| multipart/alternative | plain / HTML両partを順に保持 | 期待どおり | 期待どおり |
+| Shift_JIS日本語本文 | `日本語` | 期待どおり | 期待どおり |
+
+試験: `cargo test -j 1 -p mail-client --features mime-parser-compare-poc --test mime_parser_compare --locked`。候補比較は専用featureに限定し、native `full`のMIME stepでも既存72 MIME testsとともに実行する設定にした。比較範囲はこの6ケースであり、既存corpus全体を候補間で再生したものではない。
+
+#### malformed / truncated入力の追加比較
+
+既存corpusの3異常形も比較した。`mailparse`はmultipart closing boundaryのない入力をparse成功とし、part本文を返す（固定`mail-parser`は同じ入力で本文を返さない）。不正base64ではmailparseの構造parse自体は成功するが、`get_body()`がdecode errorを返す（mail-parserは`is_encoding_problem`を立てる）。末尾が単独`=`のquoted-printableは両候補とも`=`を落とした本文を正常な文字列として返す。mailparseの`raw_bytes`は各fixtureの入力と一致するが、呼び出し側がdecode errorを扱わず、またはparse成功を完全性と見なせば不完全・損失本文を表示しうる。異常fixtureは比較範囲を広げるもので、望ましい製品契約として認定するものではない。
+
+#### 添付・CID・添付messageの比較
+
+同じbinary attachment入力で、両候補ともtransfer decode後のbytes、標準`filename`、重複`Content-ID`を保持した。RFC 2231の単一extended filenameとcontinuationもmailparseは復号し、UTF-8 octetがsegment境界をまたぐ入力では`日本語.bin`を復元した。既存parserは同じsplit-byte形で`U+FFFD`を含む名前となる。この差はattachment本文bytesの破損ではなくfilename decoding差として分離した。重複CIDは両候補が値を保持するが、曖昧さを診断・拒否する製品policyは呼び出し側で必要。
+
+`message/rfc822`は構造差がある。mailparseは外側partをleafとして返し、decoded raw bodyを取得するが、そのbodyをnested `ParsedMail` treeへ変換しない。mail-parserは`PartType::Message`として内部messageを解析し、nested text bodyへ到達できる。添付EMLを利用するにはmailparse利用側で別途再帰parseを追加し、depth / raw-size budgetを継承させる必要がある。
+
+#### Multipart nesting境界
+
+設計上の最大MIME nestingは30。固定したmailparse 0.18.0は内部`RECURSION_LIMIT=100`を持つが、parse APIから変更できない。同じ単一child multipart fixtureでdepth 30、31、100はいずれもtreeを返し、101は`Recursion limit reached`となった。従って製品上限を31以上で拒否したい場合も、mailparseは少なくともその構造を再帰的にparseした後にしかcallerが深度を数えられない。`message/rfc822`はmailparse tree上leafとなるが、30回の再parseを許可し31回目を開始前に拒否するcaller-budget PoCを確認した。これは再parseごとの深度判定例であり、各段階のraw / decoded byte予算を引き継ぐadapterや製品保証を実装したものではない。内側messageを解析する追加コードでは別途depthとraw budgetを伝播させなければ上限を迂回しうる。この境界testはsmall synthetic inputでの再帰限界を測るだけで、CPU / stack / allocationの安全な上限証明ではない。
+
+#### Decoded bytesの上限境界
+
+不正UTF-8 byteはRust `String`化で1 byteからU+FFFDの3 UTF-8 bytesへ置換される。raw 34 MiBのUTF-8 text入力をmailparseに渡すと、`get_body()`は102 MiBの文字列を返した。raw入力は製品raw上限50 MiB以内だがdecoded上限100 MiBを超え、候補APIにoutput budget引数はない。従ってraw-size gateのみではdecoded output capを保証せず、返却後に長さを検査しても超過分のallocationはすでに発生している。この実測は1入力の置換膨張のみであり、全charset・transfer encoding・複数添付でのpeak memory上限や解析時間を測ったものではない。
+
+#### Multipart part-count amplification
+
+20,000個の1-byte text partを持つmultipartを合成した。raw sourceは1 MiB未満だが、mailparseは20,000個すべてを`subparts` treeとして保持し、先頭・末尾partのbodyを返した。公開parse APIにpart数やallocation予算を指定する引数はない。この結果だけで全入力に対するRAM倍率を決めることはできないが、raw-byte capだけではpart node数を直接制限できず、parse後のpart数検査もtree allocation後になる。従って独立parser案では、全体part-count capをnode生成前に適用する。候補値は4,096 partsとし、利用者向け設定にせず、実装前の容量・互換性判断を要する。
+
+**判断: `mailparse`も採用保留。** 選択したvalid inputとattachment単純形には有望な結果があるが、malformed / truncated MIMEの完全性契約は確立していない。parse成功はmultipart完全性を保証せず、quoted-printable末尾の不完全escapeも検出しない。`message/rfc822`の再帰treeは提供されず、追加parseは呼び出し側責務。組込み再帰上限100は製品方針30より高く設定変更不可で、parse後の検査ではparse-time resource limitを実現しない。fuzz、3OS runtimeも未評価。公開`parse_mail(&[u8])` APIに入力上限引数はなく、treeを返すため上限をparse後に検査するだけでは解析中CPU / stack / allocationの境界を保証できない。呼び出し前raw-size制限に加え、parserの実行中制限と破損診断をどう保証するかが未解決。
+
+### Streaming MIME候補の比較: rmimeparser 0.5.0
+
+`rmimeparser 0.5.0`（LGPL-2.1-or-later）を比較専用featureのoptional依存へ追加した。既存の同一6入力をpush APIへ渡し、4つのquoted-printable / multipartケース、multipart/alternative、Shift_JISのtransfer-decoded octetsを回帰比較した。追加attachment形でもBase64 bytesとRFC 2231 extended filenameを取得できた。候補は合成本文bytesを保持し、`max_buffer_size=16`の設定下でbody callback chunkは16 bytes以下だった。Shift_JISはcharset変換されず原octetsで返るため、製品adapterにはcharset解析・変換が必要。
+
+callback上限PoCでは、handlerがdecoded byte累積100を越える次のchunkを保持前に拒否し、1 byte本文partを20,000個含む入力も32-part limitの33個目で停止した。multipart nestingはcontent-type callbackで計測し、31階層目を検出して停止できた。ただし候補内部ではmultipart boundary文字列をhandler callback前に一つpushするため、厳密な上限では拒否対象の一階層分だけ内部状態が先行する。raw入力上限はparser呼出し前に適用し、製品handlerでpart / decoded / nestingの累積budgetを設ける必要がある。これは合成入力でのcallback契約確認であり、RSS・CPU・全てのdecoder内部allocationを測定したものではない。
+
+異常系では、truncated multipartは未閉鎖boundaryとしてerrorになる。一方、不正base64 `!!!!` はparse成功・空body、末尾単独`=`のquoted-printableはparse成功・`=`欠落となり、いずれも診断を返さない。同じ3結果を公開`MessageParser`経由でも確認し、RFC 5322 wrapperがtransfer decodeの損失を検出・診断しないことを固定した。公開`MessageParser`は`MessageHandler`を`MimeHandler`へbridgeし、RFC 5322 header dispatchとMIME callbacksを一回のstreamで合成する。既存の6入力すべてに`From` / `Subject`を加えた比較testで、Subject callbackとMIME body bytesの保持を確認した。さらに1、2、3、7、31、997 byteの入力chunkで同じ6入力を分割してもSubjectとbodyが一致すること、折り返しheader valueは既定32 KiBちょうどで受理・+1 byteで拒否されること、physical header lineは998文字ちょうどで受理・999文字で拒否されることを確認した。どちらのheader境界も1 byteおよび997 byteのstream入力で同じ結果となった。またfull-message経路でもdecoded byte・part数・multipart nesting budget超過をcallback errorとして伝播し、上限超過データをprobe handlerに保持せず拒否できた。ただしbody callbackは内蔵defaultの最大4096 bytes単位で渡されるため、budget値を超える最後のchunk自体はcallbackに到達する。header callbackのcapability testでは`Subject`と`X-Client-Extension`は通知される一方、`List-Unsubscribe`は通知されず、`MessageHandler`から任意raw headerを網羅取得できない。wrapperには`set_max_buffer_size` / `set_max_header_value_size`も公開されず、内蔵default（body callback chunk 4096 bytes、header value 32 KiB）を製品側から調整できない。callback側のdecoded / part / nesting budget拒否は利用できるが、全header保持・part tree・charset変換・`message/rfc822`再解析のbudget伝播はadapter責務として残る。比較用featureは通常のproduction dependency graphから除外する。
+
+#### 追加候補のソース評価
+
+- `mime-tree 0.5.0`（MIT OR Apache-2.0）はbyte-range tree APIを持つが、固定`mail-parser 0.11`を内部で使用するwrapperであり、今回の既知本文破損を独立したparserで置き換えないため比較対象に追加しない。
+- `mailrs-mime 2.0.3`（Apache-2.0 OR MIT）はrecursive `Part` treeを返し、parse中にBase64 / quoted-printableをdecodeする。parse APIにraw / decoded / part / depth budgetがなく、全tree構築後検査となるため採用候補にしない。
+- `email-parser 0.5.0`（MIT）は`Email::parse(&[u8])`から`RawEntity`を生成し、transfer decode後のbodyを保持する。multipart解析は子`RawEntity`の`Vec`を作り、decoded本文 / part / depth budgetを受け取るAPIがないため、parse-time resource gateを満たさず比較依存にしない。
+- `mailledger-mime 0.0.2`（MIT）はREADMEがparse機能を示す一方、公開Rust API/sourceにはwire EMLから`Message`を構築するparse entry pointを確認できず、model / generation中心と判断。parser候補に加えない。
+- `eml-codec 0.4.1`はGPL-3.0-or-later。現在の候補比較では配布条件の適合判断がなく、また上限付きparse contractも未確認のため、依存取得・実行比較を行わない。
+
+#### LGPL-2.1-or-later 配布条件の技術評価
+
+crate manifestと同梱LICENSEは`LGPL-2.1-or-later`を示す。GNUの[LGPL-2.1原文](https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html)では、Section 6によりアプリ独自の条件でのcombined work配布は可能だが、利用者による自分の利用向け変更と、その変更のdebug目的のreverse engineeringを妨げない条件がある。さらにlibraryの使用告知とlicense copyが必要で、配布形態に応じて、library sourceと変更、static link時に利用者がlibraryを差し替えて再linkできる「work that uses the Library」のobject/source・再構築に必要なmaterialを提供する方法（6a）、または利用者が差し替え可能なshared-library機構（6b）等の条件を満たす必要がある。無料配布でもbinary配布に伴う条件は消えない。
+
+このアプリはTauri/Rustで、Cargo packageは`staticlib` / `cdylib` / `rlib` crate typeを宣言し、CI release計画はmacOS app/DMG、Windows installer、Linux packagesを対象としている。現状、アプリのdistribution licenseはmanifestで宣言されず、利用者へのrelocatable object files・再link用source/toolingの提供、または全対象OSで置換可能なshared-library packagingの仕組みも定義されていない。従って通常のRust static linkingを維持したまま本crateを製品binaryへ含める場合、Section 6aのmaterial提供・notice等を実装できるかを先に決める必要がある。Section 6bを選ぶなら、Tauri bundleでsystem-installed libraryの差し替えが全対象OSで動作する設計・検証が別途必要となる。どちらも現時点では満たしたと判断しない。
+
+これはlicense本文と現行build / release計画の技術的な差分整理であり、法的助言や配布可否の承認ではない。製品採用前に、配布形態、アプリlicense、開発/再link material、EULA、著作権表示を含めて法務またはライセンス担当の確認を得る。確認までは`rmimeparser`をoptionalな内部PoCに限定し、default build / production bundleへ含めない。
+
+**判断: `rmimeparser 0.5.0`は製品候補として不採用（NO-GO）。** callbackでの停止は有望だが、RFC 5322 handlerから任意headerを列挙できず（例: `List-Unsubscribe`がdispatchされない）、公開full-message wrapperからbody chunk / header valueの限度を設定できない。選択した不正Base64 / quoted-printableは成功扱いでデータ損失を通知せず、callback前に内部bufferへ読み込む量も製品budgetと厳密には一致しない。さらにCPU / peak RSS上限・fuzz・3OS runtimeは未証明で、LGPL-2.1-or-laterの配布適合も未判断である。これらは現状のadapter側実装だけでは埋められない採用blockerと判断し、今後は同じ一項目ずつの境界testを追加して判断を先送りしない。依存とcorpusは比較・回帰用途に限りoptional PoC featureに残し、default / production buildには入れない。再検討は、上記の欠落を解消する上流API / 診断改善とライセンス承認が揃う場合に限定する。
+
+今回の比較では、既知の本文破損で`mail-parser 0.11.9`を不採用、parse-time budget APIがない`mailparse 0.18.0`、`mailrs-mime`、`email-parser`も見送り、GPL候補の`eml-codec`はlicense gate未確認のため実行しないと記録した。従って現在の選択肢のうち、製品要件（raw / decoded / part / depthのparse-time制限、損失診断、charset対応）を全て満たし、配布可能性まで確認済みのMIME parserはない。これはPhase 00またはAC-04の完了ではなく、評価済み候補の停止判断である。
+
+## 新規候補の一括hard-gateスクリーニング
+
+crates.ioの`mime parser`、`streaming email parser`、`mail mime`、`message parsing email`、`email mime`、`bounded MIME`、`streaming MIME parser`、`email MIME parser`検索で得た新規候補を公開API・README・依存情報から絞った。既知候補は再評価せず、全corpus比較へ進む前の静的hard gateとした。
+
+| 候補 | 公開情報で確認した点 | 判定 |
+|---|---|---|
+| [`email-message-wire 0.10.0`](https://docs.rs/email-message-wire/0.10.0/email_message_wire/fn.parse_rfc822.html) | MIT OR Apache-2.0。`parse_rfc822(&[u8])`は入力全体を受け取るAPI。固定`MAX_INPUT_BYTES`は16 MiB、固定multipart depthは100、multipartごとの兄弟part上限は1024。decoded総量・attachment bytes・全体part数のcaller budget APIは公開されない。対応外charsetはlossy UTF-8置換となる（[resource bounds / parser semantics](https://docs.rs/email-message-wire/0.10.0/email_message_wire/fn.parse_rfc822.html)、[input cap](https://docs.rs/email-message-wire/0.10.0/email_message_wire/constant.MAX_INPUT_BYTES.html)、[depth cap](https://docs.rs/email-message-wire/0.10.0/email_message_wire/constant.MAX_MULTIPART_DEPTH.html)）。 | NO-GO。16 MiBはraw 50 MiB要件を満たさず、depth 100は上限30と一致しない。decoded / attachment / global part budgetsも不足し、charset lossも既存fixture要件と合わない。 |
+| `daaki-message 0.2.0` | MIT。公開parse APIは`parse_email(&[u8]) -> Result<ParsedEmail, Error>`のone-shot形式。READMEはfull MIME対応を掲げるが、README/APIにparse-time byte・part・depth budgetは記載されない（[API](https://docs.rs/daaki-message/0.2.0/daaki_message/fn.parse_email.html)、[README](https://crates.io/crates/daaki-message/0.2.0/readme)）。 | NO-GO（静的gate）。callerが資源上限を設定できる契約を確認できず、全corpus試験や依存追加には進めない。 |
+| `br-email 1.2.23` | MIT。READMEの`Mail::analyze(data, false)`はraw `Vec<u8>`を解析する全体入力API。IMAP/POP3/SMTPを含むumbrella crateで、公開READMEにMIME parse budgetは示されない。 | NO-GO（静的gate）。上限付きparser APIを確認できず、parser以外のclient機能も候補要件外。 |
+| `email-extract 0.1.0` | MITだが`mailparse ^0.16`上の抽出wrapperで、独立parserではない。 | NO-GO。既評価`mailparse`のparse-time budget欠落を解消しない。 |
+| `base64-ng-mime 2.1.0` | RFC 2045 Base64 transfer-bodyを扱うbounded helper。 | MIME/RFC 5322 message parserではないため代替候補ではなく、将来の独立parser設計での部品候補に留める。 |
+
+このスクリーニングは公開情報による静的gateであり、上記の不通過候補を同一corpusへ追加していない。新規依存・Cargo設定変更もない。通過候補は0件。既知候補の評価結果と併せても、現時点で製品要件に合格するparserは確認できない。ライセンス表記はcrates.io上のメタデータ確認であり、配布可否の法的承認ではない。
+
+### 独立bounded parser / adapterの設計案
+
+現PoCの根本問題は、[`mime_poc::parse_with_diagnostics`](../../src-tauri/src/mime_poc.rs)が`MessageParser::parse`で全part treeとdecoded bodyを構築した後に`validate`でdecoded / attachment / nesting上限を検査する点にある。raw上限はparse前に適用するが、他の上限は超過allocation後の拒否である。先行preflightを加えて既存parserを再実行する方式も、二重走査と無制限tree allocationを残すため採らない。
+
+1. 既存のbounded source readerがraw ≤50 MiBをparse前に保証する。parserはcaller所有の`&[u8]`を借用し、raw全体や各part bodyの複製を作らない。
+2. `mail-parser`等の全tree APIではなく、RFC 5322 header / MIME boundaryを走査する独立scannerを使う。multipart階層は明示stackで保持し、31段目をpushする前に拒否する。part本文はraw内のrangeとして参照し、転送復号の出力だけをbounded sinkへ逐次書く。
+3. decoded byte数はtransfer decodeとcharset変換の両方の出力時に加算する。`checked_add`後にaggregate ≤100 MiB、各attachment ≤25 MiBを検査し、超過byteをsinkへ書く前にerrorにする。part数はdescriptor生成前に計上する。全message共通の上限は4,096 parts（multipart container、leaf、`message/rfc822`を数え、attached message内部にも同じcounter / depthを伝播）とする。
+4. headersはraw range参照を基本とし、unfolded valueなど保持が必要な値はbyte上限付きで扱う。上限はphysical line ≤998 octets、unfolded value ≤32 KiB、message全header block ≤1 MiBとする。
+5. Base64 / quoted-printable / charset変換は固定小chunkで処理する。invalid / truncated transfer data、unsupported charset、header / boundary異常は明示診断または`Incomplete`で返し、parse成功の形で黙ってbyteを削らない。失敗時も元rawの所有権はcallerに残し、部分結果を完全な本文として保存しない。
+6. 結果は全recursive treeでなく、bounded part metadataとplain / HTML body / attachment sinkへのhandleからなるflat modelとする。HTMLは未信頼データのまま扱い、sanitization / sandboxはこのparserの責務に含めない。
+
+設計検証では既存AC-04 corpusを維持し、budgetの直前・一致・超過、20,000-part amplification、31-depth、`message/rfc822`経由の累積budget、charset expansion、全transfer encodingの切断・不正値を、処理中に超過出力を生成しないことまで測る。任意fragment境界による結果不変性、property/fuzz、releaseでのCPU・peak RSS、3OS CIも採用gateにする。Rust実装はblocking workとして扱い、chunk / part境界で協調停止可能にする。PoC依存はoracleと回帰比較に留め、bounded guaranteeを単独で証明できるまでproduction parserへ接続しない。
+
+ユーザー確認により上記のpart数 / header上限を設計契約として確定した。これはparser採用やproduction接続の承認ではない。MIME part / boundary scannerとparse-time part/depth accountingの初期sliceを実装し、transfer/charset decodingと診断を次段階とする。配布形態・license適合は実装評価と混ぜず法務またはライセンス担当レビューへ分離する。AC-04 / MIME採用gateは未達のままとする。
+
+#### 最初のbounded scanning slice
+
+[`mime_bounded_poc`](../../src-tauri/src/mime_bounded_poc.rs)を依存なしの`mime-bounded-poc` feature限定で追加した。既存`mime-poc` featureからも利用でき、raw 50 MiB定数を共有する。RFC 5322 section scannerはparse前にraw上限を検査し、最大998 octetsのCRLF / LF physical header行、1 MiBのheader block（空行separatorを含む）、32 KiBのRFC unfolding後field valueを処理中に拒否する。bare CR、field-name token外byte、先頭continuation、header/body separator欠落も明示errorになる。
+
+結果はheader descriptorをtree/vectorとして保持せず、caller-owned rawのheader/body rangeとcountのみを持つ。`headers()`はrangeを再走査してheaderを遅延列挙し、`unfolded_value()`は最大32 KiBの出力を生成する。foldではCRLF / LFのみを除去してcontinuationのWSP列を保持する。
+
+`MimeDocument::parse`を追加してRFC 5322 entityをiterativeに走査する。MIME partはflat descriptor（header/body raw range、parent index、nesting depth、kind）のみを4,096件まで保持し、全体part上限超過を次part descriptor生成前に拒否する。multipart境界はraw bodyを行単位で走査し、boundary-prefixだけの行をdelimiterと誤認しない。closing delimiter欠落、不正boundary / Content-Type、未完了childは明示error。multipart containerと`message/rfc822`の入れ子を同じ30-depth budgetへ算入する。body rangeは区切りboundary直前のCRLF / LFを除き、`MimeDocument`経由でrawへbounds-safeにアクセスする。nested entityのheader blockも集計し、全体1 MiBを超えた時点で拒否する。
+
+このsliceは本文をopaque borrowed rangeで返し、transfer decoding、charset対応、decoded total 100 MiB、attachment 25 MiBとloss診断は未実装である。従ってbounded structural scannerのPoCであり、表示用MIME parserではない。production/default buildへ接続しない。
+
+検証時点の構造scanner test結果: `cargo test -j 1 -p mail-client --features mime-bounded-poc --lib --locked`で10 tests、比較suiteでunit 15 + regression 72 + comparison 19 = 106 tests成功（当時のbounded unit 10件を含む）。998 octets / +1、32 KiB / +1、header block 1 MiB / +1、raw 50 MiB / +1、4,096 parts / +1、nesting 30 / +1、`message/rfc822` nesting、boundary-prefix、closing boundary欠落、borrowed body ranges、malformed Content-Typeを確認。`cargo clippy -p mail-client --lib --features mime-bounded-poc --locked -- -D warnings`、`cargo fmt --all --check`、`git diff --check`成功。`mime-bounded-poc` normal dependency treeには`mail-parser` / `mailparse` / `rmimeparser`を含まない。Windows/macOSのこのPoC CIは未実行。AC-04未達。
+
+### bounded transfer-decoding slice
+
+`MimePart`は`Content-Transfer-Encoding`を構造走査時に検査し、missingを7bitとして扱う。単一・重複・不正fieldを区別し、重複/不正fieldは明示error、未知tokenはdescriptorに保持してdecode時にunsupportedとして返す。`decode_part_to`は固定1 KiB bufferを通してsinkへstreamし、各出力octetをbuffer投入前に共有`DecodeBudget`（decoded合計100 MiB）と任意の当該attachment上限25 MiBへchargeする。callerはattachment該当性を渡し、全part共通のbudgetを共有する。multipart containerの直接decodeは禁止。
+
+実装transfer encodingは7bit（high-bit octet拒否）、8bit/binary（identity）、Base64（MIME whitespaceを読み飛ばし、paddingとpad-bitを検証）、quoted-printable（hex escapeとCRLF/LF soft break）である。malformed/truncated inputは成功形の出力に置き換えない。sinkへ既にprefixを書いた後のエラーもあり得るため、callerは失敗時にsink出力をdiscard/rollbackし、途中までchargeされたbudgetも破棄する必要がある。decoderはcharset変換しない。encoded `message/rfc822`をdecodeしてからnested structural scanする統合も未実装であり、decoderをproduction接続しない。
+
+検証: bounded unit 14件成功、比較suite unit 19 + MIME regression 72 + comparison 19 = 110件成功。Base64/QP正常・異常、未知/重複CTE、7bit high-bit、aggregate budget累積、attachment budget、上限超過前のsinkへの未書込み、multipart decode拒否を確認。`cargo clippy -p mail-client --lib --features mime-bounded-poc --locked -- -D warnings`と比較integration Clippy（`-D warnings`）成功。AC-04未達。
+
+### bounded charset-decoding slice
+
+bounded feature限定のoptional依存として`encoding_rs 0.8.42`（manifest上で完全固定）を追加した。依存元のcrate metadataは`(Apache-2.0 OR MIT) AND BSD-3-Clause`。この依存はdefault buildへ有効化していない。`Content-Type`からcharset parameterを保持し、重複・空・不正tokenをparse時に拒否する。text/plain等のtext媒体用`decode_text_part_to`は宣言labelを`for_label_no_replacement`で解決し、未知label / replacement encodingをunsupported errorとする。charset省略時はUTF-8。encoding_rsのincremental `decode_to_utf8_without_replacement`を使い、malformed / truncated sequenceをU+FFFDへ置換せずerrorにする。
+
+transfer-decoded各octetはcharset変換器の固定1 KiB input bufferへ入れる前に累積decoded budgetへchargeし、生成UTF-8各octetもsink write前に同じ累積100 MiB budgetへchargeする。attachment上限25 MiBは変換後UTF-8出力に適用する。decoder output bufferは固定4 KiB。charset入力境界を跨ぐShift_JIS multibyte sequenceとWindows-1252の1→3 byte展開を試験し、transfer+charset両段のbyte数を予算計上することを確認した。UTF-8 / Shift_JIS / UTF-16LE malformed/truncated sequences、unsupported labels、非text part、重複charsetもerrorとなる。charset/transfer error後にsinkへ部分出力済みの場合があり、budgetも処理済みbyteを保持するため、callerはsinkをdiscard/rollbackしbudgetを破棄する。
+
+検証: bounded-only unit 17件、比較suite unit 22 + MIME regression 72 + comparison 19 = 113件成功。charset展開のlimit一致 / 超過、予算超過前の未書込み、buffer境界跨ぎも確認。bounded-only Clippyおよび比較test Clippyは`-D warnings`成功、fmt / diff check成功。bounded normal dependency graphに`mail-parser` / `mailparse` / `rmimeparser`を含まない。encoded `message/rfc822` decode→nested scan統合、包括的loss diagnostics、fuzz、CPU/RSS計測、Windows/macOS PoC CI、license配布レビューは未実施。production/default buildへ接続しない。AC-04未達。
+
+### encoded `message/rfc822` nested scan
+
+structure scannerは`message/rfc822`を検出しても、CTEが7bit / 8bit / binaryのidentityの場合だけそのraw bodyを直ちにnested scanする。Base64 / quoted-printable等のencoded bodyは転送encodingのままscanせず、`decode_encapsulated_part_to`でbounded transfer decodeしてからcallerが`parse_nested`へ渡す。root documentと全nested documentは同じ`StructureBudget`を使い、part総数・nested header総量・absolute nesting depthを累積する。本文のdecodeにも同じ全体`DecodeBudget`を伝播する。失敗時は部分出力と各budgetを破棄する。
+
+これは明示的な逐次APIであり、`MimeDocument::parse`がencoded nested messageを自動decode / scanするわけではない。callerはdecode済みバッファの所有権と寿命を維持し、そのsliceを借用するnested documentを使い終わるまで保持する必要がある。nested MIMEの全part decode / 添付分類はcallerが行う。境界試験ではBase64のattached messageをdecodeし、nested textをshared budgetでscan・decodeした。shared part/header limits、depth 30、nesting 31拒否、通常のidentity nested message動作も確認した。
+
+検証: bounded-only unit 19件、比較suite unit 24 + MIME regression 72 + comparison 19 = 115件成功。bounded-only ClippyとMIME comparison target Clippyは`-D warnings`成功、fmt / diff check成功。実メール、fuzz、3OS CI、peak RSS / CPU証跡、production接続は未実施。AC-04未達。
+
+### decode diagnostics slice
+
+`decode_text_part_to_with_diagnostics`は、charset parameter欠落時にUTF-8 defaultを使った事実と、生成したUTF-8 streamにU+FFFDが存在した事実だけを返す。U+FFFDの存在だけでは変換損失を断定できないため、診断型もlossと表現しない。malformed charset / transfer sequenceやunsupported encodingは従来どおりエラーであり、置換して成功にしない。U+FFFD byte sequence検出は固定状態のみで、charset出力chunkを跨いでも動作する。変換の成功時だけ診断値を返すため、エラー後のsinkとbudgetは呼び出し側で破棄する。
+
+この診断は完全なloss / MIME quality reportではない。RFC 2047 header / RFC 2231 parameter decode、charset aliasの信頼度、unknown header reporting等を網羅しない。追加したQP観察は、LF単独のsoft breakとphysical line末尾に未encodeで残るSP/TABをbounded flagとして報告する。本文は修復・正規化せずdecoder既存出力を保持する。bounded-only unit 21件および比較suite unit 26 + regression 72 + comparison 19 = 117件で、default UTF-8と明示UTF-8を区別し、合法なsource U+FFFDをchunk境界越しに検出してもlossと主張しないこと、QP異常を報告しつつsource octet由来出力を変更しないことを確認した。AC-04未達。
+
+検証: `cargo test -j 1 -p mail-client --features mime-parser-compare-poc --lib --test mime_candidate --test mime_parser_compare --locked`（unit 5 + regression 72 + comparison 19成功）、`cargo clippy -p mail-client --test mime_parser_compare --features mime-parser-compare-poc --locked -- -D warnings`、`cargo fmt --all --check`、`git diff --check`。`cargo tree -p mail-client --edges normal --no-default-features --locked`では3 MIME parser候補がdefault dependency graphに存在しない。3OS CI未実行。
+
+### bounded MIME fuzz harness
+
+`src-tauri/fuzz`を独立workspaceにし、`libfuzzer-sys`と固定`encoding_rs`を使う`mime_bounded` targetを追加した。対象moduleをsource pathで直接compileするため、fuzz targetがTauri / WebViewの依存graphを引き込まず、製品のdefault featureや依存lockfileも変更しない。任意byte列をRFC 5322 / MIME parseへ渡し、成功時にpart header/body rangeとparent indexを検査し、leafのtransfer decodeおよびstrict text decodeを`io::sink()`へ試す。初期corpusは合成multipart、quoted-printable text、identity `message/rfc822`を含む。
+
+検証: Linux arm64 nightlyで、最大65,536-byte入力・2秒per-input timeout・768 MiB RSS limitによりfuzzを2回連続実行した。1回目は121秒で5,799,790 inputs、coverage counter 1,270 / feature 6,999、peak RSS 441 MiB。拡張した一時corpusを引き継いだ2回目は61秒で1,912,986 inputs、coverage counter 1,276 / feature 7,344、peak RSS 406 MiB。合計182秒で7,712,776 inputs、crashなし、RSS limit未到達。2回目のprocess resource usageはwall 61.3秒に対しchild user CPU 56.6秒 / system CPU 4.6秒、31,360 exec/s。これらはLinux arm64 harness processの限られた実測であり、parser単体やproductionのCPU / memory上限、3OS耐性の保証ではない。curated seedのみの`-runs=1` replayも成功。`cargo check --manifest-path src-tauri/fuzz/Cargo.toml --locked`、fuzz manifest Clippy `-D warnings`、bounded unit 21件、format / diff check成功。より長いfuzz、3OS runtime、CI接続、配布license review、production接続は未実施。AC-04未達。
+
+### MIME PoC license / distribution review
+
+`cargo metadata --all-features --locked`と各固定crateのregistry sourceを照合した。これはSPDX metadata・同梱license file・featureによる依存分離の確認であり、全アプリのSBOM監査、法的意見、配布承認ではない。
+
+| Crate | 固定版 / 位置付け | Cargo license metadata | source / distribution上の確認 |
+|---|---|---|---|
+| `encoding_rs` | 0.8.42、`mime-bounded-poc`でoptional | `(Apache-2.0 OR MIT) AND BSD-3-Clause` | sourceにApache、MIT、`LICENSE-WHATWG`とWHATWG由来データのCOPYRIGHTがある。BSD 3-Clauseのデータ帰属・条件も配布noticeへ含める必要がある。 |
+| `mail-parser` | 0.11.9、`mime-poc`でoptional | `Apache-2.0 OR MIT` | registry crateのREADMEは上流LICENSE-APACHE / LICENSE-MITを参照するが、配布crate rootには両本文がない。現状はparser制約により製品不採用。将来採用を再検討する場合、同じ上流tagのlicense本文を明示的に同梱する。 |
+| `mailparse` | 0.18.0、比較featureのみ | `0BSD` | crateに0BSD LICENSE本文あり。optional比較依存で製品/default graphには含めない。 |
+| `rmimeparser` | 0.5.0、比較featureのみ | `LGPL-2.1-or-later` | crateにLGPL-2.1本文あり。default / production buildには含めず、製品へリンク・配布する選択はしない。将来再検討するならリンク形態、変更有無、対応source / relink提供、noticeを含め法務確認が必要。 |
+| `libfuzzer-sys` | 0.4.13、独立fuzz workspaceのみ | `(MIT OR Apache-2.0) AND NCSA` | wrapper側のMIT / Apache本文を含む。READMEは同梱`libfuzzer/` sourceをNCSAとしている一方、NCSA license本文はcrate rootにない。LLVM exception付きApache SPDX headerもvendor sourceに存在する。fuzz binaryは製品へ配布しない。 |
+
+bounded-onlyの通常依存treeには`encoding_rs`とそのMIT / Apache系補助crateのみが入り、3 parser候補は入らない。`mime-poc`と`mime-parser-compare-poc`は評価用optional featureで、production候補承認ではない。現時点でアプリが当該PoC featureなしで出荷される限り、PoC parser・fuzz runtimeはアプリ成果物に含めない。もしbounded MIME featureを製品へ採用する場合は、少なくともApache-2.0またはMITの選択条件に加えてWHATWG BSD 3-Clause noticeを含むNOTICE集約を追加し、全対象target / featureのSBOMと全推移依存のlicense reviewをやり直す。mail-parserの上流license本文を含まない現crate package、およびLGPL比較crateの扱いを自動的に許可済みと解釈しない。正式な配布承認は未了。
 
 ## 実験
 
@@ -205,6 +371,36 @@ IMAP候補はTLS、SASL XOAUTH2、UID/UIDVALIDITY、IDLEの取消とpolling fall
 - RFC 2231 continuationを検証。文字単位で分割された日本語filenameとsegmentの逆順配置は正しく復元された。一方、UTF-8の「日」を%E6%97と%A5へsegment分割すると、mail-parser 0.11.9は「U+FFFD U+FFFD 本語.bin」を返す。初回の完全復元assert失敗を制約として記録し、出力の完全一致・転送復号flagはfalse・添付bytes正常・原文保持を回帰試験へ固定。`attachment_name_replacement_character_present`を診断へ追加し、既存反復走査でnested message内の添付名も確認する。診断に生filenameは含めない。元からU+FFFDを正しく含む名前もtrueになるため変換損失の確定判定ではない。分割された../、Windows相対パス、絶対パスもparserがそのまま返すことをassertし、保存pathとして信頼しない契約を維持。Linux arm64で新規4 testsを含むunit5 + integration37 = 42 tests、対象clippy / format / diff成功。名前の完全復元や安全な保存API、UI通知は未実装で、既存parseの結果を変更していない。新依存・workflow変更なし。全RFC 2231異常系・解析途中資源制限・3OS runtimeは未検証。
 - 重複Content-IDの診断を追加。既存反復走査で各Messageのrootを訪問するとき、そのMessageのpartsだけをHashSetで検査する。空でないparser出力CIDの完全一致で`duplicate_content_id`を設定し、生CIDを保持 / Debug表示しない。大小文字の違いは一致とせず、異なる添付messageの名前空間を混ぜない。nested message内の重複は同じ診断boolへ集約する。各Messageを1回だけ検査し、添付 / 本文 / 原文の受理契約を変えない。新規3 testsで同一 / 一意 / 大小文字違い / CIDなし / 外側と2つの添付messageで同一CID / nested重複 / 診断非公開を確認。Linux arm64でunit5 + integration33 = 38 tests、対象clippy / format / diff成功。これはmessage単位の保守的な曖昧性診断であり、multipart/relatedやalternativeごとのCID選択、CID URLのpercent復号・正規化、重複ヘッダの全検出、画像内容検証、表示許可の実装ではない。既存charset診断にboolを1つ追加しただけでUI / IPC未接続、新依存・workflow変更なし。AC-05実WebView試験の代替にはせず、解析中資源制限・3OS検証は未達。
 - 本文文字コード診断を追加。`parse_with_diagnostics`は既存上限 / 不完全検査を通ったMessageと`MimeDiagnostics`を返す。`unrecognized_text_charset`はText / Htmlに宣言されたcharsetが固定版decoder mapで認識されず、UTF-8 / utf8でもない場合。charset未指定は未知と断定しない。`replacement_character_present`はdecoded文字列にU+FFFDが存在することだけを表し、原文に正しくエンコードされたU+FFFDがあってもtrueとなるため変換損失とは呼ばない。既存の反復tree走査を再利用してnested message / text添付も扱い、binary / headerには適用しない。診断は2つのboolのみで未信頼charsetや本文をDebugへ出さない。`parse`は同じ経路からMessageだけ返し、既存の受理 / エラー / 本文契約を保つ。新規4 testsを含めLinux arm64でunit5 + integration30 = 35 tests、対象clippy / format / diff成功。固定版の公開`charset_decoder`とparserのUTF-8 fallback経路を配布sourceで確認。UI / IPC未接続。変換がlosslessである保証・全charset alias認識・header診断・全不正MIME検出・解析中資源制限・3OS検証は未完了。新依存・workflow変更なし。
+- 文字コード診断の限界を追加fixtureで確認。正当にUTF-8表現されたU+FFFDのほか、Shift_JIS / EUC-JPの不正lead / trail、ISO-2022-JPの未完了文字sequenceをASCII suffix前に注入した。mail-parser 0.11.9は各不正sequenceをU+FFFDに変換し後続ASCIIを保持する一方、`replacement_character_present=true`、`unrecognized_text_charset=false`、`is_encoding_problem=false`を返す。UTF-16LE / UTF-16BEでは不正なodd trailing byteを黙って落として本文を切り詰め、replacement診断はfalseのまま。また、両endianのunpaired surrogateをU+FFFDにするがencoding problemにはしない。よって診断とparser flagは損失を見逃すだけでなく、不正変換の位置や原byteを表示文字列から示さない。原EML自体は保持される。`mime_candidate`はLinuxで43 tests成功。製品コード・依存・workflow変更なし。これらは固定parserの少数合成sequenceであり、全charset損失・解析中資源制限・3OS runtimeを証明しない。
+- quoted-printableの不正escapeを検証。`=GG`は本文にそのまま残る一方、末尾の単独`=`は本文から落ちる。両ケースとも`is_encoding_problem=false`、MIME診断はdefaultのままで、raw sourceだけが原bytesを保持する。したがって転送encoding flagは全ての不正escape検出を保証せず、表示本文が原文を忠実に含むとも限らない。新規1 test追加後の`mime_candidate`はLinuxで44 tests成功。製品コード・依存・workflow変更なし。このprobeは2種類のquoted-printable malformed sequenceに限られ、他の転送encoding異常系や3OS runtimeを証明しない。
+- quoted-printable soft breakの境界を追加確認。正規の`=\r\n`は次行へ連結される。固定parserは裸LFのみ、および`=`の後にspace / tabを置いてからCRLFを続ける非正規入力も同じように改行と直前空白を消して本文を連結し、`is_encoding_problem=false` / MIME診断defaultを返す。raw sourceは全入力bytesを保持。新規1 test（4合成形）を含めLinuxで`mime_candidate` 45 tests成功。製品コード・依存・workflow変更なし。裸LFと空白を挟む形は規格準拠の肯定例ではなく、候補のtolerant behavior確認に限定。
+- quoted-printable不正escapeの回復境界を追加確認。末尾の不完全な`=A`は`=A`ごと本文から脱落し、`=\rX`はCRを失って`=X`として本文に残る。`=GG`はそのまま残り、単独末尾`=`は脱落する既知結果と合わせ、いずれも`is_encoding_problem=false` / MIME診断defaultで、raw sourceのみ全入力bytesを保持。既存testへfixtureを追加し、Linuxで`mime_candidate` 45 tests成功。少数の合成形であり、quoted-printable全異常系や3OS runtimeを証明しない。
+- quoted-printable正常hexとhard lineの境界を検証。小文字`=3d`・大文字`=3D`はいずれも`=`へdecodeされ、通常のCRLFは本文に保持される一方、hard line末尾のspace / tabは本文から除去される。これらも`is_encoding_problem=false` / MIME診断defaultで、raw sourceは元bytesを保持。新規1 test（4合成形）後、Linuxで`mime_candidate` 46 tests成功。末尾空白を失う可能性のある候補parser挙動の再現に限られ、他の改行形式や3OS runtimeは未検証。
+- quoted-printableの行長・bare CRを確認。76文字と77文字のASCII bodyはいずれも長さ検証やencoding診断なしにそのまま受理される。本文中の単独CRは本文から除去され、隣接文字が連結する。3合成形すべてで`is_encoding_problem=false` / MIME診断default、raw sourceは元bytesを保持。新規1 test追加後、Linuxで`mime_candidate` 47 tests成功。短い合成行に限り、decoderがRFC行長制約を検証する保証や全改行形 / 3OS runtimeを示さない。
+- quoted-printableのbody終端空白を確認。`=20` / `=09`のencoded space / tabと、EOF直前のliteral space / tabは、いずれも末尾改行がない場合に本文へ保持される。4形すべて`is_encoding_problem=false` / MIME診断defaultで、raw sourceは元bytesを保持。新規1 test追加後、Linuxで`mime_candidate` 48 tests成功。改行終端lineの直前空白が削られる既知挙動とは区別されるが、全改行形式や3OS runtimeは未検証。
+- quoted-printable本文の混在hard line endingを確認。最初のCRLF後に続くbare LFもCRLFとして本文へ出力され、入力のLF表現を保たずdecoder内で改行styleが再利用される。`is_encoding_problem=false` / MIME診断default、raw sourceは元bytesを保持。新規1 test追加後、Linuxで`mime_candidate` 49 tests成功。混在する合成2改行に限る観測で、全改行列や3OS runtimeを証明しない。
+- quoted-printable soft break後の改行styleも確認。先行する裸LF soft breakは本文から除去され、以降のhard CRLFはCRLFとして保持される。soft breakに使われたLFをhard line styleとして扱わない。`is_encoding_problem=false` / MIME診断default、raw sourceは元bytesを保持。新規1 test追加後、Linuxで`mime_candidate` 50 tests成功。単一の合成混在列に限る観測で、全改行列や3OS runtimeを証明しない。
+- quoted-printable multipart境界の回帰fixtureで、part本文`before\r\n`は`before`として復元される一方、`before=\r\n`のsoft break直後にboundaryが来ると本文は`befo`となり末尾`re`の2 bytesが欠落することを確認。後続part自体は保持されるが、`is_encoding_problem=false` / MIME診断defaultのままでraw sourceのみ全bytesを保持する。mail-parser 0.11.9候補でのsilent body truncationであり、候補parserを採用する上で本文忠実性のblockerとして扱う。合成fixture 2種のみで、影響範囲・修正版・他OSは未確認。
+- multipart boundary直前のsoft breakについて、1〜4文字の同一本文長をprofile別に試験。debugでは1文字だけdecoder内overflow panic、2〜4文字は本文がそれぞれ空 / 1文字 / 2文字へ短縮。isolated release targetではpanicせず、1文字本文は末尾にboundaryの`-`が混入し、2〜4文字は同じく2文字短縮。全て診断defaultでraw source保持。固定依存内部挙動がprofileによりpanic / silent corruptionへ分岐することを確認し、候補parser採用blockerとして扱う。`mime_candidate`はLinux debug 53 tests成功、profile別matrixもpass。限定的な合成長さ・Linuxのみで、production feature接続や他OSは未確認。
+- 同じ`before=\r\n` part末尾soft breakでclosing delimiter `--boundary--`を使っても本文は`befo`となり、末尾`re` 2 bytesが脱落。opening delimiter後に続くpartの有無では解消しない。`is_encoding_problem=false` / MIME診断default、raw sourceは完全保持。追加のclosing-boundary fixture後、Linux debug `mime_candidate` 54 tests成功、release profileのquoted-printable該当11 tests成功。少数の合成形であり、すべてのboundary表記・修正版・他OSは未検証。
+- soft break後に実データ行が続く場合の対照fixtureを追加。`before=\r\ncontinued\r\n--boundary`は本文`beforecontinued`、後続partも独立して保持され、silent lossを再現しない。直前boundaryケースとの違いはsoft breakの直後にdelimiterが来るか、本文データが続くか。診断defaultでraw source保持。追加1 test後、Linux debug `mime_candidate` 55 tests成功。該当する合成CRLF形のみ確認し、他改行・boundary形式や3OSを証明しない。
+- すべてLFのmultipart delimiterと`before=\n--boundary`を使うと本文は`befor`となり、末尾`e` 1 byteが欠落する。CRLF delimiter時は末尾`re` 2 bytes欠落であるため、区切り改行形式によって損失長が異なる。flagなし・MIME診断default・raw source保持。新規LF境界fixture追加後、Linux debug `mime_candidate` 56 tests成功。2種類の合成delimiter形に限る。
+- CRLF boundary直前のsoft breakで、`=`の後にspace / tabを含めても本文は`befo`となり、CRLFのみの既知caseと同じ末尾2 bytesが失われる。後続partとraw sourceは保たれ、すべて`is_encoding_problem=false` / MIME診断default。追加1 test（3入力形）後、Linux debug `mime_candidate` 57 tests成功。限定fixtureであり、他whitespace・line endingや3OSは未確認。
+- bare LF delimiterの場合も、`=\n`、`= \n`、`=\t\n`の3形はいずれも本文を`befor`へ切り詰め、末尾`e` 1 byteを失う。後続part・raw sourceは保持し、全形でencoding problem flag / MIME診断なし。新規1 test（3形）後、Linux debug `mime_candidate` 59 tests成功。合成LF境界形のみであり、他whitespaceや3OSは未検証。
+- multipart delimiterとquoted-printable soft breakの改行形式が混在する6形を追加確認。本文の損失量はdelimiter側ではなくsoft break側のLF / CRLFに従い、LFでは末尾1 byte、CRLFでは2 bytesが失われる。`=`後のspace / tabでも同じ結果。後続part・raw sourceは保持し、encoding problem flag / MIME診断はなし。追加1 test（6形）後、Linux debug `mime_candidate` 60 tests成功。これは限定した合成改行混在形であり、全改行列や3OS runtimeを網羅しない。
+- LFのclosing boundary直前でも、`=\n`、`= \n`、`=\t\n`の全3形で本文末尾1 byteが無診断で失われ、本文は`befor`となる。raw sourceは保持され、encoding problem flag / MIME診断はなし。追加1 test（3形）後、Linux debug `mime_candidate` 61 tests成功。closing boundaryの限定した合成LF形であり、3OS runtimeは未検証。
+- closing delimiterが終端改行なしでEOFに達する場合も本文損失は変わらない。CRLF soft breakの3形（通常 / space / tab）は末尾2 bytes、LF soft breakの3形は末尾1 byteを無診断で失う。raw sourceは保持され、encoding problem flag / MIME診断なし。追加1 test（6形）後、Linux debug `mime_candidate` 62 tests成功。限定した合成EOF形であり、3OS runtimeは未検証。
+- LF soft breakの直後にboundaryが来るケースでは、本文長1〜4文字の全てで本文を1文字短縮する。`=\n`、`= \n`、`=\t\n`の3形ともdebug buildでpanicせず、後続partとraw sourceを保持する一方、encoding problem flag / MIME診断はなし。isolated release profileでも同じ出力を確認。追加1 test（12形）後、debug `mime_candidate` 63 tests成功、release profile対象test成功。比較対象はLF soft breakの合成fixtureに限られ、3OS runtimeや他の文字長は未検証。
+- CRLF soft breakの後にspace / tabを含む短い本文もdebug buildで破損する。`=\r\n`、`= \r\n`、`=\t\r\n`の3形すべてで、本文長1はdecoder内overflow panic、長さ2〜4は2文字短縮。非panic形では後続partとraw sourceは保持されるが、encoding problem flag / MIME診断なし。追加1 test（12形）後、debug `mime_candidate` 64 tests成功。isolated release profile検証は、test target内のTokio / mail-parserの同一version重複による型不一致でコンパイルできず、未確認。限定した合成長さ・whitespace形で、他OS runtimeは未検証。
+- UTF-8の複数byte文字を境界直前に置くと、ASCIIの同byte長試験とは異なり、CRLFでは`é`が空文字、`日` / `😀`がU+FFFD、LFでは全1文字例がU+FFFDになる。2文字例も末尾文字の一部を失い、CRLFの`日é`は`日`、LFは`日�`となるなど入力文字・改行形式に依存して破損する。`=`後space / tabも各CRLF / LF群と同じ結果。後続partとraw sourceは保持し、encoding problem flag / 未認識charset診断なし。出力にU+FFFDがあるcaseではreplacement presence診断はtrueだが、失われた原byteや位置を示さない。追加1 test（30形）後、Linux debug `mime_candidate` 65 tests成功。合成UTF-8本文と限定soft break形であり、3OS runtimeは未検証。
+- 同じ4本文をUTF-8 octetごとのquoted-printable `=XX`表記（`=C3=A9`、`=E6=97=A5`、`=F0=9F=98=80`、連結形）に変えても、各CRLF / LF soft breakおよび後続space / tabに対するdecoded本文はraw UTF-8入力と同じ破損結果。元のQ-P sourceは保持されるが、encoding problem flag / 未認識charset診断はなく、U+FFFD presence診断は置換文字が生じた場合だけtrue。追加1 test（24形）後、Linux debug `mime_candidate` 66 tests成功。限定したUTF-8列・境界合成形であり、全charset / profile / OSを網羅しない。
+- UTF-8の`é`を構成するquoted-printable octet `=C3=A9`を`=C3=` + soft break + `=A9tail`として分割し、6形（CRLF / LF、空白なし / space / tab）を試験。全形で本文`étail`と後続partを正しく保持し、raw source一致、encoding problem / U+FFFD診断なし。これはsoft break直後がboundaryで終わる場合のsilent truncationとは異なる対照結果。追加1 test（6形）後、Linux debug `mime_candidate` 67 tests成功。限定したUTF-8 octet分割形であり、全encoding列や3OS runtimeを証明しない。
+- `=C3=A9`列全体を7 byte位置でsoft break分割。octet境界（split 0 / 3 / 6）の6改行形は`étail`と後続partを保持。`=C3=A9` escape内部のsplit 1 / 2 / 4 / 5は全CRLF / LF・space / tab形でMIME adapterがIncompleteを返し、部分本文を成功扱いにしない。panicはなく、error文字列に本文suffixは含まれない。新規1 test（42形）後、Linux debug `mime_candidate` 68 tests成功。合成UTF-8列と指定したsplitだけの結果であり、全encoding列や3OS runtimeは未検証。
+- 3-byte UTF-8文字`日`の`=E6=97=A5`も全10 byte位置×6 soft break形を確認。octet token境界のsplit 0 / 3 / 6 / 9は`日tail`と後続partを保持し、escape内部の残り位置は全てIncomplete。soft breakのCRLF / LF・space / tabによる差はなくpanicなし。追加1 test（60形）後、Linux debug `mime_candidate` 69 tests成功。1つの3-byte文字に限定した確認であり、全入力や3OS runtimeは未検証。
+- 4-byte UTF-8文字`😀`の`=F0=9F=98=80`も全13 byte位置×6 soft break形を確認。octet token境界（split 0 / 3 / 6 / 9 / 12）は`😀tail`と後続partを保持し、escape内部位置は全てIncomplete。CRLF / LF・space / tabの差はなくpanicなし。追加1 test（78形）後、Linux debug `mime_candidate` 70 tests成功。1つの4-byte文字に限定した確認であり、全入力や3OS runtimeは未検証。
+- 隣接する`é日`のoctet列`=C3=A9=E6=97=A5`も全19 byte位置×6 soft break形を比較。octet token境界（split 0 / 3 / 6 / 9 / 12 / 15 / 18）は`é日tail`を保持し、escape内部splitはIncomplete。CRLF / LF・space / tabの差はなくpanicなし。追加1 test（114形）後、Linux debug `mime_candidate` 71 tests成功。2文字の固定列に限定し、一般化や3OS runtimeの証明ではない。
+- UTF-8 `é`の`=C3`と`=A9tail`の間に同形式のsoft breakを2回 / 3回連続で挿入する12形を確認。CRLF / LFおよびspace / tabの全形で`étail`・後続part・raw sourceを保持し、診断default / encoding problemなし。panicなし。追加1 test（12形）後、Linux debug `mime_candidate` 72 tests成功。限定した2 / 3回の連続soft break列であり、資源上限や任意長反復は未検証。
+- multipart boundary直前のhard line空白回復を比較。literal space / tabはCRLFとboundaryの前で除去されるが、encoded `=20` / `=09`はそれぞれspace / tabとして本文に残る。4合成形全てで後続partとraw sourceを保持し、encoding problem flag / MIME診断なし。新規1 test（4形）追加後、Linux debug `mime_candidate` 58 tests成功。境界直前の対象空白表現に限る観測で、他whitespaceやline endingを網羅しない。
 - base64の実復号を通る添付25MiB境界を検証。multipart/mixedのattachmentとmultipart/relatedのinline画像指定を各25MiB -1 / 境界 / +1 byteで生成し、76文字の折返しと全3種のpadding長を含めた。原文は全ケース50MiB未満。候補parserはbinary / inline binaryの全decoded bytesを期待どおり返し、encoding problem flagはfalse。adapterはどちらの指定も境界以下を許可、+1 byteはAttachmentTooLargeとする。受理結果の全decoded bytesとraw source一致もassertした。Linux arm64でunit5 + integration26 = 31 tests、対象clippy / format / diff成功。製品コード・依存・workflow変更なし。image/png宣言のpayloadは合成ASCIIであり、画像のmagic bytes / decoder安全性、CID解決、HTML安全化は検証していない。添付messageのbase64再帰、解析途中のCPU / memory制限、3OS runtimeは未検証。
 - 転送エンコードされたmessage/rfc822の候補内部制限を検証。固定版実装のMAX_NESTED_ENCODED = 3を確認し、quoted-printableの1 / 2 / 3 / 4 / 5段fixtureで実測した。3段までは末端本文が一致しadapterも許可。4 / 5段では3段のみ展開され、次の復号済みmessage bytesをBinaryとして保持しis_encoding_problem = trueとなる。adapterは既存のtree全体のflag検査でIncompleteを返す。元EMLとBinaryに残る各層のbytesを完全一致で検証し、診断に合成本文が出ないこともassert。製品のネスト30を満たすことと、全添付messageを解析できることは同義でない。初回fixture配置と未解析bytesの期待値を修正後、Linux arm64でunit5 + integration25 = 30 tests、対象clippy / format / diff成功。製品コード・依存・workflow変更なし。base64 / encoding混在、全不正MIME診断、解析途中の資源制限、3OSは未検証。このquoted-printableケースでは「内部制限で未解析の添付messageが成功扱いになるか」の懸念は再現せず、明示エラーを確認した。
 - 実EMLの復号後100MiB検証を追加。Windows-1252の0x80（UTF-8では3 byteのeuro sign）とASCIIの端数を組み合わせ、原文50MiB未満からdecoded 100MiB -1 / 境界 / +1 byteを生成する。候補parserは全ケースを解析し、全decoded bytesが期待どおりでencoding problem flagはfalse。adapterは境界以下を許可し+1 byteでDecodedTooLargeを返し、callerの原文を維持する。Linux arm64でunit5 + integration24 = 29 tests成功、固定長chunksのclippy指摘修正後に新規test再実行・対象clippy / format / diff成功。先行PoCの「実入力からの100MiB超過未検証」はこのcharset展開ケースに限り解消。複数part合算は既存unitで検証しており、今回の実入力は単一text part。解析は上限検査前に完了するため、CPU / peak memoryの計測・制限、fuzz、3OS検証の代替にはしない。製品コード・依存・workflow変更なし。

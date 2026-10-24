@@ -6,6 +6,7 @@ use std::{
     io::{self, Read},
 };
 
+pub use crate::mime_bounded_poc::{MAX_ATTACHMENT_BYTES, MAX_DECODED_BYTES, MAX_RAW_BYTES};
 use mail_parser::{
     Message, MessageParser, MimeHeaders, PartType, decoders::charsets::map::charset_decoder,
 };
@@ -14,9 +15,6 @@ use tokio::{
     time::Instant,
 };
 
-pub const MAX_RAW_BYTES: usize = 50 * 1024 * 1024;
-pub const MAX_DECODED_BYTES: usize = 100 * 1024 * 1024;
-pub const MAX_ATTACHMENT_BYTES: usize = 25 * 1024 * 1024;
 pub const MAX_NESTING: usize = 30;
 
 #[derive(Debug, Default, PartialEq, Eq)]

@@ -1,6 +1,6 @@
 # ADR-003: HTML本文の隔離PoC
 
-- 状態: 暫定。Linux file-access syscall監査は成功。macOS監査はrun 22でOS daemonのmetadata参照を検出し、限定的な分類を追加（変更後のmacOS再検証待ち）。WindowsでのOS-level直接観測は未実装
+- 状態: 暫定。Linux file-access syscall監査は成功。macOS監査はrun 22でOS daemonのmetadata参照を検出し、限定的な分類を追加（変更後のmacOS再検証待ち）。Windows Process Monitor監査を実装したが、Windows runnerでの実行・process coverage確認待ち
 - 決定日: 2026-10-20
 
 ## 背景
@@ -49,11 +49,11 @@ Linux PoCの結果はこの環境のWebKitGTKに限る。AC-05全体の合格や
 - ACLはmain windowの許可範囲を制限する。iframe単位の権限分離をACLだけで保証したとは扱わない。
 - Linux WebDriver実装はsandbox opaque-origin frameへの切替を拒否した。iframe内部DOM・resource completionを直接読む代わりに親DOMからのアクセス拒否、load回数、ネットワークlistenerを確認した。Linuxのcanary file syscall監査は完了したが、Windows/macOSでは別のOS-level計測が必要。
 - macOSでは`fs_usage -w -f filesys`がroot権限でファイルシステム活動を観測する。広範囲のtraceを扱うため、実行時に生成する短い固有canary名だけを照合し、生traceをartifact/logへ保存しない。run 22 arm64でsudoの観測権限とdaemonイベントの解析を確認したが、全WebView process coverageは未検証。
-- macOS harnessは`sudo -n fs_usage`のsystem-wide traceを一時ファイルに取り、Tauri processが記録されたことと、後述の限定的分類以外にcanaryイベントがないことを検査する。生traceはartifact/logへ出さず、実行後に削除する。限定分類追加後のmacOS実行は未検証。
+- macOS harnessは`sudo -n fs_usage`のsystem-wide traceを一時ファイルに取り、Tauri processの記録を必須とする。独立した`cat` processに別の固有ファイルを読ませるpositive controlも記録し、`cat.<PID>`のopen/readがtraceに現れなければ監査失敗とする。攻撃canaryへの予期しないイベントは失敗を維持し、`fseventsd`の`lstat64`のみ別集計する。生traceはartifact/logへ出さず、実行後に削除する。このpositive-control追加後のmacOS runner実行と全WebKit process coverageは未検証。
 - run 20ではmacOS arm64成功、IntelはWebViewの2 specs成功後にcanary名検出で失敗した。system-wide traceの文字列検出だけではWebViewに帰属できず、元traceは削除済みのため実アクセス元は不明。監査終了がWDIO終了の約76秒後だったため、sudo wrapperではなく記録したfs_usage PIDへ権限付きSIGINTを送るよう修正した。canary検出時の失敗条件を維持し、operation / process-thread名のみを最大10件表示する。修正後のmacOS再実行・coverage検証は必要。
 - run 22 (`ef6259d`) のmacOS 14 arm64は2 specs成功、HTTP 0件。停止修正後はWDIO終了13:32:35から判定13:32:36まで約1秒。失敗の内訳は`operation=lstat64 process/thread=fseventsd.2298`の1件で、WebViewではなくOSのファイル変更監視daemonによるmetadata参照を検出していた。
-- 利用者の確認を受け、`lstat64`かつprocess/thread欄が`fseventsd.<数値>`のイベントだけを別集計し、成功時も件数を表示する。open/read等、別process、未知formatのcanary検出は失敗を維持する。複数イベントの混在でも失敗を隠さず、生path / traceは公開しない。この限定分類は全システムのcanaryイベント0件を意味しない。traceのprocess名は実行ファイルidentityの証明ではなく、全WebKit process coverage / positive controlの実証も引き続き必要。run 20 Intelのアクセス元をこの結果から推定して確定しない。
-- WindowsではMicrosoft Sysinternals Process Monitor（[公式資料](https://learn.microsoft.com/en-us/sysinternals/downloads/procmon)）がファイルシステム活動の取得・filter・loggingを提供する候補となる。hosted runnerでの権限、CLIによるcapture/export、WebView process descendantsの追跡、およびログからのcanary path判定は未検証。
+- 利用者の確認を受け、`lstat64`かつprocess/thread欄が`fseventsd.<数値>`のイベントだけを別集計し、成功時も件数を表示する。open/read等、別process、未知formatのcanary検出は失敗を維持する。複数イベントの混在でも失敗を隠さず、生path / traceは公開しない。この限定分類は全システムのcanaryイベント0件を意味しない。traceのprocess名は実行ファイルidentityの証明ではなく、追加したpositive controlのmacOS runner上の観測と全WebKit process coverageは未実証。run 20 Intelのアクセス元をこの結果から推定して確定しない。
+- WindowsではMicrosoft Sysinternals Process Monitor（[公式資料](https://learn.microsoft.com/en-us/sysinternals/downloads/procmon)）を用いるCI PoCを追加した。workflowは公式配布ZIPから取得し、実行前にMicrosoft Authenticode署名を検証する。試験は短いsystem-wide `/NoFilter` captureを一時PMLへ記録し、Process MonitorのCSV exportから固有canary pathだけを照合する。生PML/CSVはartifactやログへ出さず、実行終了後に一時ディレクトリごと削除する。別プロセスのPowerShellによる明示ReadFileをpositive controlとし、Tauri appとWebView2 processの観測、およびそれ以外の全processからのcanary path event 0件を要求する。失敗時もcanary pathやtrace内容は出力しない。capture/exportコマンド、hosted runner権限、process tree coverage、実WebViewでのcanary判定はまだWindows runnerで実証しておらず、AC-05合格の証拠には数えない。Procmonの全system-wide eventを一時記録する方式のため、ローカル手動環境での利用は避け、専用hosted CI環境でのみ実行する。
 - 3OSでAC-05の全攻撃を検証し、fileアクセスも含む観測方法を定めてから最終決定する。
 - SecretStoreの選定とsave/lock/reject/deleteはADR-004で別途検証する。
 

@@ -84,3 +84,6 @@ enum SecretStoreProbeResult {
 }
 #[cfg(feature = "mime-poc")]
 pub mod mime_poc;
+
+#[cfg(feature = "mime-bounded-poc")]
+pub mod mime_bounded_poc;

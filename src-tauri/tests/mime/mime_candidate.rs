@@ -101,6 +101,81 @@ fn ac04_charset_diagnostics_distinguish_fallback_and_replacement_presence() {
 }
 
 #[test]
+fn ac04_charset_replacement_presence_does_not_prove_decoding_loss() {
+    let valid_utf8_replacement =
+        b"Content-Type: text/plain; charset=utf-8\r\n\r\nSynthetic \xef\xbf\xbd";
+    let (valid, valid_diagnostics) =
+        mime_poc::parse_with_diagnostics(valid_utf8_replacement).unwrap();
+    assert_eq!(valid.body_text(0).as_deref(), Some("Synthetic \u{fffd}"));
+    assert!(valid_diagnostics.replacement_character_present);
+    assert!(!valid_diagnostics.unrecognized_text_charset);
+    assert!(!valid.parts[0].is_encoding_problem);
+
+    for (charset, malformed_bytes, expected) in [
+        ("shift_jis", &b"\x82 X"[..], "Synthetic \u{fffd} X"),
+        ("euc-jp", &b"\xa4 X"[..], "Synthetic \u{fffd} X"),
+        ("iso-2022-jp", &b"\x1b$BF\x1b(BX"[..], "Synthetic \u{fffd}X"),
+    ] {
+        let mut raw =
+            format!("Content-Type: text/plain; charset={charset}\r\n\r\nSynthetic ").into_bytes();
+        raw.extend_from_slice(malformed_bytes);
+        let (message, diagnostics) = mime_poc::parse_with_diagnostics(&raw).unwrap();
+
+        assert_eq!(message.body_text(0).as_deref(), Some(expected), "{charset}");
+        assert!(diagnostics.replacement_character_present, "{charset}");
+        assert!(!diagnostics.unrecognized_text_charset, "{charset}");
+        assert!(!message.parts[0].is_encoding_problem, "{charset}");
+        assert_eq!(message.raw_message.as_ref(), raw, "{charset}");
+    }
+
+    let mut odd_utf16 = b"Content-Type: text/plain; charset=utf-16le\r\n\r\n".to_vec();
+    for unit in "Synthetic".encode_utf16() {
+        odd_utf16.extend_from_slice(&unit.to_le_bytes());
+    }
+    odd_utf16.push(b'X');
+    let (message, diagnostics) = mime_poc::parse_with_diagnostics(&odd_utf16).unwrap();
+    assert_eq!(message.body_text(0).as_deref(), Some("Synthetic"));
+    assert!(!diagnostics.replacement_character_present);
+    assert!(!message.parts[0].is_encoding_problem);
+    assert_eq!(message.raw_message.as_ref(), odd_utf16);
+
+    let mut odd_utf16_be = b"Content-Type: text/plain; charset=utf-16be\r\n\r\n".to_vec();
+    for unit in "Synthetic".encode_utf16() {
+        odd_utf16_be.extend_from_slice(&unit.to_be_bytes());
+    }
+    odd_utf16_be.push(b'X');
+    let (message, diagnostics) = mime_poc::parse_with_diagnostics(&odd_utf16_be).unwrap();
+    assert_eq!(message.body_text(0).as_deref(), Some("Synthetic"));
+    assert!(!diagnostics.replacement_character_present);
+    assert!(!message.parts[0].is_encoding_problem);
+    assert_eq!(message.raw_message.as_ref(), odd_utf16_be);
+
+    let mut unpaired_surrogate = b"Content-Type: text/plain; charset=utf-16le\r\n\r\n".to_vec();
+    for unit in "Synthetic ".encode_utf16() {
+        unpaired_surrogate.extend_from_slice(&unit.to_le_bytes());
+    }
+    unpaired_surrogate.extend_from_slice(&0xd800_u16.to_le_bytes());
+    unpaired_surrogate.extend_from_slice(&u16::from(b'X').to_le_bytes());
+    let (message, diagnostics) = mime_poc::parse_with_diagnostics(&unpaired_surrogate).unwrap();
+    assert_eq!(message.body_text(0).as_deref(), Some("Synthetic \u{fffd}X"));
+    assert!(diagnostics.replacement_character_present);
+    assert!(!message.parts[0].is_encoding_problem);
+    assert_eq!(message.raw_message.as_ref(), unpaired_surrogate);
+
+    let mut unpaired_surrogate_be = b"Content-Type: text/plain; charset=utf-16be\r\n\r\n".to_vec();
+    for unit in "Synthetic ".encode_utf16() {
+        unpaired_surrogate_be.extend_from_slice(&unit.to_be_bytes());
+    }
+    unpaired_surrogate_be.extend_from_slice(&0xd800_u16.to_be_bytes());
+    unpaired_surrogate_be.extend_from_slice(&u16::from(b'X').to_be_bytes());
+    let (message, diagnostics) = mime_poc::parse_with_diagnostics(&unpaired_surrogate_be).unwrap();
+    assert_eq!(message.body_text(0).as_deref(), Some("Synthetic \u{fffd}X"));
+    assert!(diagnostics.replacement_character_present);
+    assert!(!message.parts[0].is_encoding_problem);
+    assert_eq!(message.raw_message.as_ref(), unpaired_surrogate_be);
+}
+
+#[test]
 fn ac04_charset_diagnostics_cover_html_and_nested_text_attachments() {
     let raw = b"Content-Type: multipart/mixed; boundary=diag\r\n\r\n--diag\r\nContent-Type: text/html; charset=x-private-charset\r\n\r\n<p>Synthetic</p>\r\n--diag\r\nContent-Type: message/rfc822\r\nContent-Disposition: attachment\r\n\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Disposition: attachment\r\n\r\nSynthetic \xff\r\n--diag--\r\n";
     let (message, diagnostics) = mime_poc::parse_with_diagnostics(raw).unwrap();
@@ -300,6 +375,1108 @@ fn ac04_flags_invalid_base64_instead_of_treating_it_as_valid_decoded_content() {
         .parse(raw)
         .expect("recover malformed encoding");
     assert!(message.parts.iter().any(|part| part.is_encoding_problem));
+}
+
+#[test]
+fn ac04_quoted_printable_malformed_escapes_can_be_retained_or_dropped_silently() {
+    for (body, expected) in [
+        (&b"Synthetic =GG suffix"[..], "Synthetic =GG suffix"),
+        (&b"Synthetic trailing="[..], "Synthetic trailing"),
+        (&b"Synthetic =A"[..], "Synthetic "),
+        (&b"Synthetic =\rX suffix"[..], "Synthetic =X suffix"),
+    ] {
+        let mut raw =
+            b"Content-Type: text/plain\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\n"
+                .to_vec();
+        raw.extend_from_slice(body);
+        let (message, diagnostics) = mime_poc::parse_with_diagnostics(&raw).unwrap();
+
+        assert_eq!(message.body_text(0).as_deref(), Some(expected));
+        assert!(message.parts.iter().all(|part| !part.is_encoding_problem));
+        assert_eq!(message.raw_message.as_ref(), raw);
+        assert_eq!(
+            diagnostics,
+            mail_client_lib::mime_poc::MimeDiagnostics::default()
+        );
+    }
+}
+
+#[test]
+fn ac04_quoted_printable_soft_line_breaks_and_whitespace_after_equals() {
+    for (body, expected) in [
+        (&b"Synthetic=\r\ncontinued"[..], "Syntheticcontinued"),
+        (&b"Synthetic=\ncontinued"[..], "Syntheticcontinued"),
+        (&b"Synthetic= \r\ncontinued"[..], "Syntheticcontinued"),
+        (&b"Synthetic=\t\r\ncontinued"[..], "Syntheticcontinued"),
+    ] {
+        let mut raw =
+            b"Content-Type: text/plain\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\n"
+                .to_vec();
+        raw.extend_from_slice(body);
+        let (message, diagnostics) = mime_poc::parse_with_diagnostics(&raw).unwrap();
+
+        assert_eq!(message.body_text(0).as_deref(), Some(expected));
+        assert!(message.parts.iter().all(|part| !part.is_encoding_problem));
+        assert_eq!(message.raw_message.as_ref(), raw);
+        assert_eq!(
+            diagnostics,
+            mail_client_lib::mime_poc::MimeDiagnostics::default()
+        );
+    }
+}
+
+#[test]
+fn ac04_quoted_printable_hex_octets_and_hard_line_whitespace() {
+    for (body, expected) in [
+        (&b"Synthetic=3d=3D"[..], "Synthetic=="),
+        (
+            &b"Synthetic line\r\ncontinued"[..],
+            "Synthetic line\r\ncontinued",
+        ),
+        (
+            &b"Synthetic trailing \r\ncontinued"[..],
+            "Synthetic trailing\r\ncontinued",
+        ),
+        (
+            &b"Synthetic trailing\t\r\ncontinued"[..],
+            "Synthetic trailing\r\ncontinued",
+        ),
+    ] {
+        let mut raw =
+            b"Content-Type: text/plain\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\n"
+                .to_vec();
+        raw.extend_from_slice(body);
+        let (message, diagnostics) = mime_poc::parse_with_diagnostics(&raw).unwrap();
+
+        assert_eq!(message.body_text(0).as_deref(), Some(expected));
+        assert!(message.parts.iter().all(|part| !part.is_encoding_problem));
+        assert_eq!(message.raw_message.as_ref(), raw);
+        assert_eq!(
+            diagnostics,
+            mail_client_lib::mime_poc::MimeDiagnostics::default()
+        );
+    }
+}
+
+#[test]
+fn ac04_quoted_printable_long_lines_are_accepted_and_bare_carriage_return_is_dropped() {
+    for body in ["x".repeat(76), "x".repeat(77)] {
+        let mut raw =
+            b"Content-Type: text/plain\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\n"
+                .to_vec();
+        raw.extend_from_slice(body.as_bytes());
+        let (message, diagnostics) = mime_poc::parse_with_diagnostics(&raw).unwrap();
+
+        assert_eq!(message.body_text(0).as_deref(), Some(body.as_str()));
+        assert!(message.parts.iter().all(|part| !part.is_encoding_problem));
+        assert_eq!(message.raw_message.as_ref(), raw);
+        assert_eq!(
+            diagnostics,
+            mail_client_lib::mime_poc::MimeDiagnostics::default()
+        );
+    }
+
+    let raw = b"Content-Type: text/plain\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\nSynthetic\rbare carriage return";
+    let (message, diagnostics) = mime_poc::parse_with_diagnostics(raw).unwrap();
+    assert_eq!(
+        message.body_text(0).as_deref(),
+        Some("Syntheticbare carriage return")
+    );
+    assert!(message.parts.iter().all(|part| !part.is_encoding_problem));
+    assert_eq!(message.raw_message.as_ref(), raw);
+    assert_eq!(
+        diagnostics,
+        mail_client_lib::mime_poc::MimeDiagnostics::default()
+    );
+}
+
+#[test]
+fn ac04_quoted_printable_encoded_and_eof_trailing_whitespace() {
+    for (body, expected) in [
+        (&b"Synthetic=20"[..], "Synthetic "),
+        (&b"Synthetic=09"[..], "Synthetic\t"),
+        (&b"Synthetic "[..], "Synthetic "),
+        (&b"Synthetic\t"[..], "Synthetic\t"),
+    ] {
+        let mut raw =
+            b"Content-Type: text/plain\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\n"
+                .to_vec();
+        raw.extend_from_slice(body);
+        let (message, diagnostics) = mime_poc::parse_with_diagnostics(&raw).unwrap();
+
+        assert_eq!(message.body_text(0).as_deref(), Some(expected));
+        assert!(message.parts.iter().all(|part| !part.is_encoding_problem));
+        assert_eq!(message.raw_message.as_ref(), raw);
+        assert_eq!(
+            diagnostics,
+            mail_client_lib::mime_poc::MimeDiagnostics::default()
+        );
+    }
+}
+
+#[test]
+fn ac04_quoted_printable_mixed_hard_line_endings_reuse_crlf_style() {
+    let raw = b"Content-Type: text/plain\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\nfirst\r\nsecond\nthird";
+    let (message, diagnostics) = mime_poc::parse_with_diagnostics(raw).unwrap();
+    assert_eq!(
+        message.body_text(0).as_deref(),
+        Some("first\r\nsecond\r\nthird")
+    );
+    assert!(message.parts.iter().all(|part| !part.is_encoding_problem));
+    assert_eq!(message.raw_message.as_ref(), raw);
+    assert_eq!(
+        diagnostics,
+        mail_client_lib::mime_poc::MimeDiagnostics::default()
+    );
+}
+
+#[test]
+fn ac04_quoted_printable_soft_break_preserves_following_hard_line_style() {
+    let raw = b"Content-Type: text/plain\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\nfirst=\ncontinued\r\nlast";
+    let (message, diagnostics) = mime_poc::parse_with_diagnostics(raw).unwrap();
+    assert_eq!(
+        message.body_text(0).as_deref(),
+        Some("firstcontinued\r\nlast")
+    );
+    assert!(message.parts.iter().all(|part| !part.is_encoding_problem));
+    assert_eq!(message.raw_message.as_ref(), raw);
+    assert_eq!(
+        diagnostics,
+        mail_client_lib::mime_poc::MimeDiagnostics::default()
+    );
+}
+
+#[test]
+fn ac04_quoted_printable_soft_break_before_multipart_boundary_drops_body_octet() {
+    for (encoded_body, expected) in [
+        (&b"before\r\n"[..], "before"),
+        (&b"before=\r\n"[..], "befo"),
+    ] {
+        let mut raw = b"MIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=qp-boundary\r\n\r\n--qp-boundary\r\nContent-Type: text/plain\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\n".to_vec();
+        raw.extend_from_slice(encoded_body);
+        raw.extend_from_slice(
+            b"--qp-boundary\r\nContent-Type: text/plain\r\n\r\nsecond part\r\n--qp-boundary--\r\n",
+        );
+        let (message, diagnostics) = mime_poc::parse_with_diagnostics(&raw).unwrap();
+
+        assert_eq!(message.parts.len(), 3);
+        let PartType::Text(first_part) = &message.parts[1].body else {
+            panic!("expected quoted-printable text part");
+        };
+        let PartType::Text(second_part) = &message.parts[2].body else {
+            panic!("expected following text part");
+        };
+        assert_eq!(first_part.as_ref(), expected);
+        assert_eq!(second_part.as_ref(), "second part");
+        assert!(message.parts.iter().all(|part| !part.is_encoding_problem));
+        assert_eq!(message.raw_message.as_ref(), raw);
+        assert_eq!(
+            diagnostics,
+            mail_client_lib::mime_poc::MimeDiagnostics::default()
+        );
+    }
+}
+
+#[test]
+fn ac04_quoted_printable_short_soft_break_before_boundary_corrupts_body() {
+    let raw = b"MIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=qp-boundary\r\n\r\n--qp-boundary\r\nContent-Type: text/plain\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\nx=\r\n--qp-boundary\r\nContent-Type: text/plain\r\n\r\nsecond part\r\n--qp-boundary--\r\n";
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        mime_poc::parse_with_diagnostics(raw)
+    }));
+    if cfg!(debug_assertions) {
+        assert!(result.is_err());
+    } else {
+        let (message, diagnostics) = result
+            .expect("optimized parser should not panic")
+            .expect("short quoted-printable fixture should parse");
+        let PartType::Text(body) = &message.parts[1].body else {
+            panic!("expected quoted-printable text part");
+        };
+        assert_eq!(body.as_ref(), "x-");
+        assert_eq!(
+            diagnostics,
+            mail_client_lib::mime_poc::MimeDiagnostics::default()
+        );
+    }
+}
+
+#[test]
+fn ac04_quoted_printable_boundary_corruption_varies_with_body_length() {
+    for length in 1..=4 {
+        let body = "x".repeat(length);
+        let mut raw = b"MIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=qp-boundary\r\n\r\n--qp-boundary\r\nContent-Type: text/plain\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\n".to_vec();
+        raw.extend_from_slice(body.as_bytes());
+        raw.extend_from_slice(b"=\r\n--qp-boundary\r\nContent-Type: text/plain\r\n\r\nsecond part\r\n--qp-boundary--\r\n");
+        let parsed = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            mime_poc::parse_with_diagnostics(&raw)
+        }));
+
+        if cfg!(debug_assertions) && length == 1 {
+            assert!(parsed.is_err());
+            continue;
+        }
+
+        let (message, diagnostics) = parsed
+            .expect("parser should not panic for this body length")
+            .expect("quoted-printable multipart fixture should parse");
+        let PartType::Text(decoded) = &message.parts[1].body else {
+            panic!("expected quoted-printable text part");
+        };
+        let expected = if !cfg!(debug_assertions) && length == 1 {
+            format!("{body}-")
+        } else {
+            "x".repeat(length.saturating_sub(2))
+        };
+        assert_eq!(decoded.as_ref(), expected);
+        assert_eq!(
+            diagnostics,
+            mail_client_lib::mime_poc::MimeDiagnostics::default()
+        );
+    }
+}
+
+#[test]
+fn ac04_quoted_printable_soft_break_before_closing_boundary_drops_body_octet() {
+    let raw = b"MIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=qp-boundary\r\n\r\n--qp-boundary\r\nContent-Type: text/plain\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\nbefore=\r\n--qp-boundary--\r\n";
+    let (message, diagnostics) = mime_poc::parse_with_diagnostics(raw).unwrap();
+    assert_eq!(message.parts.len(), 2);
+    let PartType::Text(body) = &message.parts[1].body else {
+        panic!("expected quoted-printable text part");
+    };
+    assert_eq!(body.as_ref(), "befo");
+    assert!(message.parts.iter().all(|part| !part.is_encoding_problem));
+    assert_eq!(message.raw_message.as_ref(), raw);
+    assert_eq!(
+        diagnostics,
+        mail_client_lib::mime_poc::MimeDiagnostics::default()
+    );
+}
+
+#[test]
+fn ac04_quoted_printable_soft_break_with_continuation_before_boundary_preserves_body() {
+    let raw = b"MIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=qp-boundary\r\n\r\n--qp-boundary\r\nContent-Type: text/plain\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\nbefore=\r\ncontinued\r\n--qp-boundary\r\nContent-Type: text/plain\r\n\r\nsecond part\r\n--qp-boundary--\r\n";
+    let (message, diagnostics) = mime_poc::parse_with_diagnostics(raw).unwrap();
+    assert_eq!(message.parts.len(), 3);
+    let PartType::Text(first_part) = &message.parts[1].body else {
+        panic!("expected quoted-printable text part");
+    };
+    let PartType::Text(second_part) = &message.parts[2].body else {
+        panic!("expected following text part");
+    };
+    assert_eq!(first_part.as_ref(), "beforecontinued");
+    assert_eq!(second_part.as_ref(), "second part");
+    assert!(message.parts.iter().all(|part| !part.is_encoding_problem));
+    assert_eq!(message.raw_message.as_ref(), raw);
+    assert_eq!(
+        diagnostics,
+        mail_client_lib::mime_poc::MimeDiagnostics::default()
+    );
+}
+
+#[test]
+fn ac04_quoted_printable_soft_break_before_lf_multipart_boundary_behavior() {
+    let raw = b"MIME-Version: 1.0\nContent-Type: multipart/mixed; boundary=qp-boundary\n\n--qp-boundary\nContent-Type: text/plain\nContent-Transfer-Encoding: quoted-printable\n\nbefore=\n--qp-boundary\nContent-Type: text/plain\n\nsecond part\n--qp-boundary--\n";
+    let (message, diagnostics) = mime_poc::parse_with_diagnostics(raw).unwrap();
+    let PartType::Text(first_part) = &message.parts[1].body else {
+        panic!("expected quoted-printable text part");
+    };
+    assert_eq!(first_part.as_ref(), "befor");
+    assert!(message.parts.iter().all(|part| !part.is_encoding_problem));
+    assert_eq!(message.raw_message.as_ref(), raw);
+    assert_eq!(
+        diagnostics,
+        mail_client_lib::mime_poc::MimeDiagnostics::default()
+    );
+}
+
+#[test]
+fn ac04_quoted_printable_whitespace_soft_break_before_boundary_behavior() {
+    for (encoded_break, expected) in [
+        (&b"=\r\n"[..], "befo"),
+        (&b"= \r\n"[..], "befo"),
+        (&b"=\t\r\n"[..], "befo"),
+    ] {
+        let mut raw = b"MIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=qp-boundary\r\n\r\n--qp-boundary\r\nContent-Type: text/plain\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\nbefore".to_vec();
+        raw.extend_from_slice(encoded_break);
+        raw.extend_from_slice(
+            b"--qp-boundary\r\nContent-Type: text/plain\r\n\r\nsecond part\r\n--qp-boundary--\r\n",
+        );
+        let (message, diagnostics) = mime_poc::parse_with_diagnostics(&raw).unwrap();
+        assert_eq!(message.parts.len(), 3);
+        let PartType::Text(first_part) = &message.parts[1].body else {
+            panic!("expected quoted-printable text part");
+        };
+        let PartType::Text(second_part) = &message.parts[2].body else {
+            panic!("expected following text part");
+        };
+        assert_eq!(first_part.as_ref(), expected);
+        assert_eq!(second_part.as_ref(), "second part");
+        assert!(message.parts.iter().all(|part| !part.is_encoding_problem));
+        assert_eq!(message.raw_message.as_ref(), raw);
+        assert_eq!(
+            diagnostics,
+            mail_client_lib::mime_poc::MimeDiagnostics::default()
+        );
+    }
+}
+
+#[test]
+fn ac04_quoted_printable_hard_line_trailing_whitespace_before_boundary() {
+    for (encoded_body, expected) in [
+        (&b"before \r\n"[..], "before"),
+        (&b"before\t\r\n"[..], "before"),
+        (&b"before=20\r\n"[..], "before "),
+        (&b"before=09\r\n"[..], "before\t"),
+    ] {
+        let mut raw = b"MIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=qp-boundary\r\n\r\n--qp-boundary\r\nContent-Type: text/plain\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\n".to_vec();
+        raw.extend_from_slice(encoded_body);
+        raw.extend_from_slice(
+            b"--qp-boundary\r\nContent-Type: text/plain\r\n\r\nsecond part\r\n--qp-boundary--\r\n",
+        );
+        let (message, diagnostics) = mime_poc::parse_with_diagnostics(&raw).unwrap();
+        assert_eq!(message.parts.len(), 3);
+        let PartType::Text(first_part) = &message.parts[1].body else {
+            panic!("expected quoted-printable text part");
+        };
+        assert_eq!(first_part.as_ref(), expected);
+        assert!(message.parts.iter().all(|part| !part.is_encoding_problem));
+        assert_eq!(message.raw_message.as_ref(), raw);
+        assert_eq!(
+            diagnostics,
+            mail_client_lib::mime_poc::MimeDiagnostics::default()
+        );
+    }
+}
+
+#[test]
+fn ac04_quoted_printable_lf_whitespace_soft_break_before_boundary_truncates_body() {
+    for encoded_break in [&b"=\n"[..], &b"= \n"[..], &b"=\t\n"[..]] {
+        let mut raw = b"MIME-Version: 1.0\nContent-Type: multipart/mixed; boundary=qp-boundary\n\n--qp-boundary\nContent-Type: text/plain\nContent-Transfer-Encoding: quoted-printable\n\nbefore".to_vec();
+        raw.extend_from_slice(encoded_break);
+        raw.extend_from_slice(
+            b"--qp-boundary\nContent-Type: text/plain\n\nsecond part\n--qp-boundary--\n",
+        );
+        let (message, diagnostics) = mime_poc::parse_with_diagnostics(&raw).unwrap();
+        assert_eq!(message.parts.len(), 3);
+        let PartType::Text(first_part) = &message.parts[1].body else {
+            panic!("expected quoted-printable text part");
+        };
+        let PartType::Text(second_part) = &message.parts[2].body else {
+            panic!("expected following text part");
+        };
+        assert_eq!(first_part.as_ref(), "befor");
+        assert_eq!(second_part.as_ref(), "second part");
+        assert!(message.parts.iter().all(|part| !part.is_encoding_problem));
+        assert_eq!(message.raw_message.as_ref(), raw);
+        assert_eq!(
+            diagnostics,
+            mail_client_lib::mime_poc::MimeDiagnostics::default()
+        );
+    }
+}
+
+#[test]
+fn ac04_quoted_printable_lf_soft_break_short_bodies_truncate_without_panic() {
+    for encoded_break in [&b"=\n"[..], &b"= \n"[..], &b"=\t\n"[..]] {
+        for length in 1..=4 {
+            let body = "x".repeat(length);
+            let mut raw = b"MIME-Version: 1.0\nContent-Type: multipart/mixed; boundary=qp-boundary\n\n--qp-boundary\nContent-Type: text/plain\nContent-Transfer-Encoding: quoted-printable\n\n".to_vec();
+            raw.extend_from_slice(body.as_bytes());
+            raw.extend_from_slice(encoded_break);
+            raw.extend_from_slice(
+                b"--qp-boundary\nContent-Type: text/plain\n\nsecond part\n--qp-boundary--\n",
+            );
+            let (message, diagnostics) = mime_poc::parse_with_diagnostics(&raw).unwrap();
+            assert_eq!(message.parts.len(), 3);
+            let PartType::Text(decoded) = &message.parts[1].body else {
+                panic!("expected quoted-printable text part");
+            };
+            let PartType::Text(second_part) = &message.parts[2].body else {
+                panic!("expected following text part");
+            };
+            assert_eq!(decoded.as_ref(), "x".repeat(length - 1));
+            assert_eq!(second_part.as_ref(), "second part");
+            assert!(message.parts.iter().all(|part| !part.is_encoding_problem));
+            assert_eq!(message.raw_message.as_ref(), raw);
+            assert_eq!(
+                diagnostics,
+                mail_client_lib::mime_poc::MimeDiagnostics::default()
+            );
+        }
+    }
+}
+
+#[test]
+fn ac04_quoted_printable_crlf_whitespace_short_bodies() {
+    for encoded_break in [&b"=\r\n"[..], &b"= \r\n"[..], &b"=\t\r\n"[..]] {
+        for length in 1..=4 {
+            let body = "x".repeat(length);
+            let mut raw = b"MIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=qp-boundary\r\n\r\n--qp-boundary\r\nContent-Type: text/plain\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\n".to_vec();
+            raw.extend_from_slice(body.as_bytes());
+            raw.extend_from_slice(encoded_break);
+            raw.extend_from_slice(
+                b"--qp-boundary\r\nContent-Type: text/plain\r\n\r\nsecond part\r\n--qp-boundary--\r\n",
+            );
+            let parsed = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                mime_poc::parse_with_diagnostics(&raw)
+            }));
+            if cfg!(debug_assertions) && length == 1 {
+                assert!(parsed.is_err());
+                continue;
+            }
+
+            let (message, diagnostics) = parsed
+                .expect("parser should not panic for this body length")
+                .expect("quoted-printable multipart fixture should parse");
+            assert_eq!(message.parts.len(), 3);
+            let PartType::Text(decoded) = &message.parts[1].body else {
+                panic!("expected quoted-printable text part");
+            };
+            let PartType::Text(second_part) = &message.parts[2].body else {
+                panic!("expected following text part");
+            };
+            if cfg!(debug_assertions) {
+                assert_eq!(decoded.as_ref(), "x".repeat(length.saturating_sub(2)));
+            }
+            assert_eq!(second_part.as_ref(), "second part");
+            assert!(message.parts.iter().all(|part| !part.is_encoding_problem));
+            assert_eq!(message.raw_message.as_ref(), raw);
+            assert_eq!(
+                diagnostics,
+                mail_client_lib::mime_poc::MimeDiagnostics::default()
+            );
+        }
+    }
+}
+
+#[test]
+fn ac04_quoted_printable_multibyte_short_bodies_are_corrupted_at_boundaries() {
+    let bodies = ["é", "日", "😀", "é日", "日é"];
+    let crlf_expected = ["", "�", "�", "é�", "日"];
+    let lf_expected = ["�", "�", "�", "é�", "日�"];
+    for (line_ending, encoded_break, expected) in [
+        (&b"\r\n"[..], &b"=\r\n"[..], &crlf_expected[..]),
+        (&b"\r\n"[..], &b"= \r\n"[..], &crlf_expected[..]),
+        (&b"\r\n"[..], &b"=\t\r\n"[..], &crlf_expected[..]),
+        (&b"\n"[..], &b"=\n"[..], &lf_expected[..]),
+        (&b"\n"[..], &b"= \n"[..], &lf_expected[..]),
+        (&b"\n"[..], &b"=\t\n"[..], &lf_expected[..]),
+    ] {
+        for (body, expected_body) in bodies.iter().zip(expected) {
+            let mut raw = b"MIME-Version: 1.0".to_vec();
+            raw.extend_from_slice(line_ending);
+            raw.extend_from_slice(b"Content-Type: multipart/mixed; boundary=qp-boundary");
+            raw.extend_from_slice(line_ending);
+            raw.extend_from_slice(line_ending);
+            raw.extend_from_slice(b"--qp-boundary");
+            raw.extend_from_slice(line_ending);
+            raw.extend_from_slice(b"Content-Type: text/plain; charset=utf-8");
+            raw.extend_from_slice(line_ending);
+            raw.extend_from_slice(b"Content-Transfer-Encoding: quoted-printable");
+            raw.extend_from_slice(line_ending);
+            raw.extend_from_slice(line_ending);
+            raw.extend_from_slice(body.as_bytes());
+            raw.extend_from_slice(encoded_break);
+            raw.extend_from_slice(b"--qp-boundary");
+            raw.extend_from_slice(line_ending);
+            raw.extend_from_slice(b"Content-Type: text/plain; charset=utf-8");
+            raw.extend_from_slice(line_ending);
+            raw.extend_from_slice(line_ending);
+            raw.extend_from_slice(b"second part");
+            raw.extend_from_slice(line_ending);
+            raw.extend_from_slice(b"--qp-boundary--");
+            raw.extend_from_slice(line_ending);
+            let (message, diagnostics) = mime_poc::parse_with_diagnostics(&raw).unwrap();
+            assert_eq!(message.parts.len(), 3);
+            let PartType::Text(decoded) = &message.parts[1].body else {
+                panic!("expected quoted-printable text part");
+            };
+            let PartType::Text(second_part) = &message.parts[2].body else {
+                panic!("expected following text part");
+            };
+            assert_eq!(decoded.as_ref(), *expected_body);
+            assert_eq!(second_part.as_ref(), "second part");
+            assert!(message.parts.iter().all(|part| !part.is_encoding_problem));
+            assert_eq!(message.raw_message.as_ref(), raw);
+            assert_eq!(
+                diagnostics.replacement_character_present,
+                expected_body.contains('�')
+            );
+            assert!(!diagnostics.unrecognized_text_charset);
+            assert!(!diagnostics.duplicate_content_id);
+            assert!(!diagnostics.attachment_name_replacement_character_present);
+        }
+    }
+}
+
+#[test]
+fn ac04_quoted_printable_encoded_utf8_is_corrupted_at_boundaries() {
+    let encoded_bodies = ["=C3=A9", "=E6=97=A5", "=F0=9F=98=80", "=C3=A9=E6=97=A5"];
+    let crlf_expected = ["", "�", "�", "é�"];
+    let lf_expected = ["�", "�", "�", "é�"];
+    for (line_ending, encoded_break, expected) in [
+        (&b"\r\n"[..], &b"=\r\n"[..], &crlf_expected[..]),
+        (&b"\r\n"[..], &b"= \r\n"[..], &crlf_expected[..]),
+        (&b"\r\n"[..], &b"=\t\r\n"[..], &crlf_expected[..]),
+        (&b"\n"[..], &b"=\n"[..], &lf_expected[..]),
+        (&b"\n"[..], &b"= \n"[..], &lf_expected[..]),
+        (&b"\n"[..], &b"=\t\n"[..], &lf_expected[..]),
+    ] {
+        for (body, expected_body) in encoded_bodies.iter().zip(expected) {
+            let mut raw = b"MIME-Version: 1.0".to_vec();
+            raw.extend_from_slice(line_ending);
+            raw.extend_from_slice(b"Content-Type: multipart/mixed; boundary=qp-boundary");
+            raw.extend_from_slice(line_ending);
+            raw.extend_from_slice(line_ending);
+            raw.extend_from_slice(b"--qp-boundary");
+            raw.extend_from_slice(line_ending);
+            raw.extend_from_slice(b"Content-Type: text/plain; charset=utf-8");
+            raw.extend_from_slice(line_ending);
+            raw.extend_from_slice(b"Content-Transfer-Encoding: quoted-printable");
+            raw.extend_from_slice(line_ending);
+            raw.extend_from_slice(line_ending);
+            raw.extend_from_slice(body.as_bytes());
+            raw.extend_from_slice(encoded_break);
+            raw.extend_from_slice(b"--qp-boundary");
+            raw.extend_from_slice(line_ending);
+            raw.extend_from_slice(b"Content-Type: text/plain; charset=utf-8");
+            raw.extend_from_slice(line_ending);
+            raw.extend_from_slice(line_ending);
+            raw.extend_from_slice(b"second part");
+            raw.extend_from_slice(line_ending);
+            raw.extend_from_slice(b"--qp-boundary--");
+            raw.extend_from_slice(line_ending);
+            let (message, diagnostics) = mime_poc::parse_with_diagnostics(&raw).unwrap();
+            assert_eq!(message.parts.len(), 3);
+            let PartType::Text(decoded) = &message.parts[1].body else {
+                panic!("expected quoted-printable text part");
+            };
+            let PartType::Text(second_part) = &message.parts[2].body else {
+                panic!("expected following text part");
+            };
+            assert_eq!(decoded.as_ref(), *expected_body);
+            assert_eq!(second_part.as_ref(), "second part");
+            assert!(message.parts.iter().all(|part| !part.is_encoding_problem));
+            assert_eq!(message.raw_message.as_ref(), raw);
+            assert_eq!(
+                diagnostics.replacement_character_present,
+                expected_body.contains('�')
+            );
+            assert!(!diagnostics.unrecognized_text_charset);
+        }
+    }
+}
+
+#[test]
+fn ac04_quoted_printable_split_utf8_encoded_octets_preserve_body() {
+    for (line_ending, soft_break) in [
+        (&b"\r\n"[..], &b"=\r\n"[..]),
+        (&b"\r\n"[..], &b"= \r\n"[..]),
+        (&b"\r\n"[..], &b"=\t\r\n"[..]),
+        (&b"\n"[..], &b"=\n"[..]),
+        (&b"\n"[..], &b"= \n"[..]),
+        (&b"\n"[..], &b"=\t\n"[..]),
+    ] {
+        let mut raw = b"MIME-Version: 1.0".to_vec();
+        raw.extend_from_slice(line_ending);
+        raw.extend_from_slice(b"Content-Type: multipart/mixed; boundary=qp-boundary");
+        raw.extend_from_slice(line_ending);
+        raw.extend_from_slice(line_ending);
+        raw.extend_from_slice(b"--qp-boundary");
+        raw.extend_from_slice(line_ending);
+        raw.extend_from_slice(b"Content-Type: text/plain; charset=utf-8");
+        raw.extend_from_slice(line_ending);
+        raw.extend_from_slice(b"Content-Transfer-Encoding: quoted-printable");
+        raw.extend_from_slice(line_ending);
+        raw.extend_from_slice(line_ending);
+        raw.extend_from_slice(b"=C3");
+        raw.extend_from_slice(soft_break);
+        raw.extend_from_slice(b"=A9tail");
+        raw.extend_from_slice(line_ending);
+        raw.extend_from_slice(b"--qp-boundary");
+        raw.extend_from_slice(line_ending);
+        raw.extend_from_slice(b"Content-Type: text/plain");
+        raw.extend_from_slice(line_ending);
+        raw.extend_from_slice(line_ending);
+        raw.extend_from_slice(b"second part");
+        raw.extend_from_slice(line_ending);
+        raw.extend_from_slice(b"--qp-boundary--");
+        raw.extend_from_slice(line_ending);
+        let (message, diagnostics) = mime_poc::parse_with_diagnostics(&raw).unwrap();
+        let PartType::Text(body) = &message.parts[1].body else {
+            panic!("expected quoted-printable text part");
+        };
+        let PartType::Text(second_part) = &message.parts[2].body else {
+            panic!("expected following text part");
+        };
+        assert_eq!(message.parts.len(), 3);
+        assert_eq!(body.as_ref(), "étail");
+        assert_eq!(second_part.as_ref(), "second part");
+        assert!(!diagnostics.replacement_character_present);
+        assert_eq!(message.raw_message.as_ref(), raw);
+        assert!(message.parts.iter().all(|part| !part.is_encoding_problem));
+        assert!(!diagnostics.unrecognized_text_charset);
+    }
+}
+
+#[test]
+fn ac04_quoted_printable_encoded_octet_splits_preserve_or_reject_body() {
+    let encoded = b"=C3=A9";
+    for split in 0..=encoded.len() {
+        for (line_ending, soft_break) in [
+            (&b"\r\n"[..], &b"=\r\n"[..]),
+            (&b"\r\n"[..], &b"= \r\n"[..]),
+            (&b"\r\n"[..], &b"=\t\r\n"[..]),
+            (&b"\n"[..], &b"=\n"[..]),
+            (&b"\n"[..], &b"= \n"[..]),
+            (&b"\n"[..], &b"=\t\n"[..]),
+        ] {
+            let mut raw = b"MIME-Version: 1.0".to_vec();
+            raw.extend_from_slice(line_ending);
+            raw.extend_from_slice(b"Content-Type: multipart/mixed; boundary=qp-boundary");
+            raw.extend_from_slice(line_ending);
+            raw.extend_from_slice(line_ending);
+            raw.extend_from_slice(b"--qp-boundary");
+            raw.extend_from_slice(line_ending);
+            raw.extend_from_slice(b"Content-Type: text/plain; charset=utf-8");
+            raw.extend_from_slice(line_ending);
+            raw.extend_from_slice(b"Content-Transfer-Encoding: quoted-printable");
+            raw.extend_from_slice(line_ending);
+            raw.extend_from_slice(line_ending);
+            raw.extend_from_slice(&encoded[..split]);
+            raw.extend_from_slice(soft_break);
+            raw.extend_from_slice(&encoded[split..]);
+            raw.extend_from_slice(b"tail");
+            raw.extend_from_slice(line_ending);
+            raw.extend_from_slice(b"--qp-boundary");
+            raw.extend_from_slice(line_ending);
+            raw.extend_from_slice(b"Content-Type: text/plain");
+            raw.extend_from_slice(line_ending);
+            raw.extend_from_slice(line_ending);
+            raw.extend_from_slice(b"second part");
+            raw.extend_from_slice(line_ending);
+            raw.extend_from_slice(b"--qp-boundary--");
+            raw.extend_from_slice(line_ending);
+            let parsed = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                mime_poc::parse_with_diagnostics(&raw)
+            }));
+            assert!(parsed.is_ok(), "parser panicked at split {split}");
+            match split {
+                0 | 3 | 6 => {
+                    let (message, diagnostics) = parsed.unwrap().unwrap();
+                    assert_eq!(message.parts.len(), 3);
+                    let PartType::Text(body) = &message.parts[1].body else {
+                        panic!("expected quoted-printable text part");
+                    };
+                    let PartType::Text(second_part) = &message.parts[2].body else {
+                        panic!("expected following text part");
+                    };
+                    assert_eq!(body.as_ref(), "étail");
+                    assert_eq!(second_part.as_ref(), "second part");
+                    assert!(!diagnostics.replacement_character_present);
+                    assert_eq!(
+                        diagnostics,
+                        mail_client_lib::mime_poc::MimeDiagnostics::default()
+                    );
+                    assert!(message.parts.iter().all(|part| !part.is_encoding_problem));
+                    assert_eq!(message.raw_message.as_ref(), raw);
+                }
+                _ => {
+                    let error = parsed
+                        .unwrap()
+                        .expect_err("split escape must be incomplete");
+                    assert_eq!(error, MimeError::Incomplete);
+                    assert!(!error.to_string().contains("tail"));
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn ac04_quoted_printable_three_byte_utf8_octet_splits_follow_escape_boundaries() {
+    let encoded = b"=E6=97=A5";
+    for split in 0..=encoded.len() {
+        for (line_ending, soft_break) in [
+            (&b"\r\n"[..], &b"=\r\n"[..]),
+            (&b"\r\n"[..], &b"= \r\n"[..]),
+            (&b"\r\n"[..], &b"=\t\r\n"[..]),
+            (&b"\n"[..], &b"=\n"[..]),
+            (&b"\n"[..], &b"= \n"[..]),
+            (&b"\n"[..], &b"=\t\n"[..]),
+        ] {
+            let mut raw = b"MIME-Version: 1.0".to_vec();
+            raw.extend_from_slice(line_ending);
+            raw.extend_from_slice(b"Content-Type: multipart/mixed; boundary=qp-boundary");
+            raw.extend_from_slice(line_ending);
+            raw.extend_from_slice(line_ending);
+            raw.extend_from_slice(b"--qp-boundary");
+            raw.extend_from_slice(line_ending);
+            raw.extend_from_slice(b"Content-Type: text/plain; charset=utf-8");
+            raw.extend_from_slice(line_ending);
+            raw.extend_from_slice(b"Content-Transfer-Encoding: quoted-printable");
+            raw.extend_from_slice(line_ending);
+            raw.extend_from_slice(line_ending);
+            raw.extend_from_slice(&encoded[..split]);
+            raw.extend_from_slice(soft_break);
+            raw.extend_from_slice(&encoded[split..]);
+            raw.extend_from_slice(b"tail");
+            raw.extend_from_slice(line_ending);
+            raw.extend_from_slice(b"--qp-boundary");
+            raw.extend_from_slice(line_ending);
+            raw.extend_from_slice(b"Content-Type: text/plain");
+            raw.extend_from_slice(line_ending);
+            raw.extend_from_slice(line_ending);
+            raw.extend_from_slice(b"second part");
+            raw.extend_from_slice(line_ending);
+            raw.extend_from_slice(b"--qp-boundary--");
+            raw.extend_from_slice(line_ending);
+            let parsed = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                mime_poc::parse_with_diagnostics(&raw)
+            }));
+            assert!(parsed.is_ok(), "parser panicked at split {split}");
+            if split % 3 == 0 {
+                let (message, diagnostics) = parsed.unwrap().unwrap();
+                assert_eq!(message.parts.len(), 3);
+                let PartType::Text(body) = &message.parts[1].body else {
+                    panic!("expected quoted-printable text part");
+                };
+                let PartType::Text(second_part) = &message.parts[2].body else {
+                    panic!("expected following text part");
+                };
+                assert_eq!(body.as_ref(), "日tail");
+                assert_eq!(second_part.as_ref(), "second part");
+                assert_eq!(
+                    diagnostics,
+                    mail_client_lib::mime_poc::MimeDiagnostics::default()
+                );
+                assert!(message.parts.iter().all(|part| !part.is_encoding_problem));
+                assert_eq!(message.raw_message.as_ref(), raw);
+            } else {
+                let error = parsed
+                    .unwrap()
+                    .expect_err("split escape must be incomplete");
+                assert_eq!(error, MimeError::Incomplete);
+                assert!(!error.to_string().contains("tail"));
+            }
+        }
+    }
+}
+
+#[test]
+fn ac04_quoted_printable_four_byte_utf8_octet_splits_follow_escape_boundaries() {
+    let encoded = b"=F0=9F=98=80";
+    for split in 0..=encoded.len() {
+        for (line_ending, soft_break) in [
+            (&b"\r\n"[..], &b"=\r\n"[..]),
+            (&b"\r\n"[..], &b"= \r\n"[..]),
+            (&b"\r\n"[..], &b"=\t\r\n"[..]),
+            (&b"\n"[..], &b"=\n"[..]),
+            (&b"\n"[..], &b"= \n"[..]),
+            (&b"\n"[..], &b"=\t\n"[..]),
+        ] {
+            let mut raw = b"MIME-Version: 1.0".to_vec();
+            raw.extend_from_slice(line_ending);
+            raw.extend_from_slice(b"Content-Type: multipart/mixed; boundary=qp-boundary");
+            raw.extend_from_slice(line_ending);
+            raw.extend_from_slice(line_ending);
+            raw.extend_from_slice(b"--qp-boundary");
+            raw.extend_from_slice(line_ending);
+            raw.extend_from_slice(b"Content-Type: text/plain; charset=utf-8");
+            raw.extend_from_slice(line_ending);
+            raw.extend_from_slice(b"Content-Transfer-Encoding: quoted-printable");
+            raw.extend_from_slice(line_ending);
+            raw.extend_from_slice(line_ending);
+            raw.extend_from_slice(&encoded[..split]);
+            raw.extend_from_slice(soft_break);
+            raw.extend_from_slice(&encoded[split..]);
+            raw.extend_from_slice(b"tail");
+            raw.extend_from_slice(line_ending);
+            raw.extend_from_slice(b"--qp-boundary");
+            raw.extend_from_slice(line_ending);
+            raw.extend_from_slice(b"Content-Type: text/plain");
+            raw.extend_from_slice(line_ending);
+            raw.extend_from_slice(line_ending);
+            raw.extend_from_slice(b"second part");
+            raw.extend_from_slice(line_ending);
+            raw.extend_from_slice(b"--qp-boundary--");
+            raw.extend_from_slice(line_ending);
+            let parsed = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                mime_poc::parse_with_diagnostics(&raw)
+            }));
+            assert!(parsed.is_ok(), "parser panicked at split {split}");
+            if split % 3 == 0 {
+                let (message, diagnostics) = parsed.unwrap().unwrap();
+                assert_eq!(message.parts.len(), 3);
+                let PartType::Text(body) = &message.parts[1].body else {
+                    panic!("expected quoted-printable text part");
+                };
+                let PartType::Text(second_part) = &message.parts[2].body else {
+                    panic!("expected following text part");
+                };
+                assert_eq!(body.as_ref(), "😀tail");
+                assert_eq!(second_part.as_ref(), "second part");
+                assert_eq!(
+                    diagnostics,
+                    mail_client_lib::mime_poc::MimeDiagnostics::default()
+                );
+                assert!(message.parts.iter().all(|part| !part.is_encoding_problem));
+                assert_eq!(message.raw_message.as_ref(), raw);
+            } else {
+                let error = parsed
+                    .unwrap()
+                    .expect_err("split escape must be incomplete");
+                assert_eq!(error, MimeError::Incomplete);
+                assert!(!error.to_string().contains("tail"));
+            }
+        }
+    }
+}
+
+#[test]
+fn ac04_quoted_printable_adjacent_multibyte_octet_splits_follow_escape_boundaries() {
+    let encoded = b"=C3=A9=E6=97=A5";
+    for split in 0..=encoded.len() {
+        for (line_ending, soft_break) in [
+            (&b"\r\n"[..], &b"=\r\n"[..]),
+            (&b"\r\n"[..], &b"= \r\n"[..]),
+            (&b"\r\n"[..], &b"=\t\r\n"[..]),
+            (&b"\n"[..], &b"=\n"[..]),
+            (&b"\n"[..], &b"= \n"[..]),
+            (&b"\n"[..], &b"=\t\n"[..]),
+        ] {
+            let mut raw = b"MIME-Version: 1.0".to_vec();
+            raw.extend_from_slice(line_ending);
+            raw.extend_from_slice(b"Content-Type: multipart/mixed; boundary=qp-boundary");
+            raw.extend_from_slice(line_ending);
+            raw.extend_from_slice(line_ending);
+            raw.extend_from_slice(b"--qp-boundary");
+            raw.extend_from_slice(line_ending);
+            raw.extend_from_slice(b"Content-Type: text/plain; charset=utf-8");
+            raw.extend_from_slice(line_ending);
+            raw.extend_from_slice(b"Content-Transfer-Encoding: quoted-printable");
+            raw.extend_from_slice(line_ending);
+            raw.extend_from_slice(line_ending);
+            raw.extend_from_slice(&encoded[..split]);
+            raw.extend_from_slice(soft_break);
+            raw.extend_from_slice(&encoded[split..]);
+            raw.extend_from_slice(b"tail");
+            raw.extend_from_slice(line_ending);
+            raw.extend_from_slice(b"--qp-boundary");
+            raw.extend_from_slice(line_ending);
+            raw.extend_from_slice(b"Content-Type: text/plain");
+            raw.extend_from_slice(line_ending);
+            raw.extend_from_slice(line_ending);
+            raw.extend_from_slice(b"second part");
+            raw.extend_from_slice(line_ending);
+            raw.extend_from_slice(b"--qp-boundary--");
+            raw.extend_from_slice(line_ending);
+            let parsed = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                mime_poc::parse_with_diagnostics(&raw)
+            }));
+            assert!(parsed.is_ok(), "parser panicked at split {split}");
+            if split % 3 == 0 {
+                let (message, diagnostics) = parsed.unwrap().unwrap();
+                assert_eq!(message.parts.len(), 3);
+                let PartType::Text(body) = &message.parts[1].body else {
+                    panic!("expected quoted-printable text part");
+                };
+                let PartType::Text(second_part) = &message.parts[2].body else {
+                    panic!("expected following text part");
+                };
+                assert_eq!(body.as_ref(), "é日tail");
+                assert_eq!(second_part.as_ref(), "second part");
+                assert_eq!(
+                    diagnostics,
+                    mail_client_lib::mime_poc::MimeDiagnostics::default()
+                );
+                assert!(message.parts.iter().all(|part| !part.is_encoding_problem));
+                assert_eq!(message.raw_message.as_ref(), raw);
+            } else {
+                let error = parsed
+                    .unwrap()
+                    .expect_err("split escape must be incomplete");
+                assert_eq!(error, MimeError::Incomplete);
+                assert!(!error.to_string().contains("tail"));
+            }
+        }
+    }
+}
+
+#[test]
+fn ac04_quoted_printable_consecutive_soft_breaks_preserve_body() {
+    for (line_ending, soft_break) in [
+        (&b"\r\n"[..], &b"=\r\n"[..]),
+        (&b"\r\n"[..], &b"= \r\n"[..]),
+        (&b"\r\n"[..], &b"=\t\r\n"[..]),
+        (&b"\n"[..], &b"=\n"[..]),
+        (&b"\n"[..], &b"= \n"[..]),
+        (&b"\n"[..], &b"=\t\n"[..]),
+    ] {
+        for count in 2..=3 {
+            let mut raw = b"MIME-Version: 1.0".to_vec();
+            raw.extend_from_slice(line_ending);
+            raw.extend_from_slice(b"Content-Type: multipart/mixed; boundary=qp-boundary");
+            raw.extend_from_slice(line_ending);
+            raw.extend_from_slice(line_ending);
+            raw.extend_from_slice(b"--qp-boundary");
+            raw.extend_from_slice(line_ending);
+            raw.extend_from_slice(b"Content-Type: text/plain; charset=utf-8");
+            raw.extend_from_slice(line_ending);
+            raw.extend_from_slice(b"Content-Transfer-Encoding: quoted-printable");
+            raw.extend_from_slice(line_ending);
+            raw.extend_from_slice(line_ending);
+            raw.extend_from_slice(b"=C3");
+            for _ in 0..count {
+                raw.extend_from_slice(soft_break);
+            }
+            raw.extend_from_slice(b"=A9tail");
+            raw.extend_from_slice(line_ending);
+            raw.extend_from_slice(b"--qp-boundary");
+            raw.extend_from_slice(line_ending);
+            raw.extend_from_slice(b"Content-Type: text/plain");
+            raw.extend_from_slice(line_ending);
+            raw.extend_from_slice(line_ending);
+            raw.extend_from_slice(b"second part");
+            raw.extend_from_slice(line_ending);
+            raw.extend_from_slice(b"--qp-boundary--");
+            raw.extend_from_slice(line_ending);
+            let parsed = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                mime_poc::parse_with_diagnostics(&raw)
+            }));
+            let (message, diagnostics) = parsed
+                .expect("parser should not panic on repeated soft breaks")
+                .unwrap();
+            assert_eq!(message.parts.len(), 3);
+            let PartType::Text(body) = &message.parts[1].body else {
+                panic!("expected quoted-printable text part");
+            };
+            let PartType::Text(second_part) = &message.parts[2].body else {
+                panic!("expected following text part");
+            };
+            assert_eq!(body.as_ref(), "étail");
+            assert_eq!(second_part.as_ref(), "second part");
+            assert_eq!(
+                diagnostics,
+                mail_client_lib::mime_poc::MimeDiagnostics::default()
+            );
+            assert!(message.parts.iter().all(|part| !part.is_encoding_problem));
+            assert_eq!(message.raw_message.as_ref(), raw);
+        }
+    }
+}
+
+#[test]
+fn ac04_quoted_printable_mixed_line_endings_truncate_by_soft_break_style() {
+    for (boundary_line_ending, soft_break, expected_body) in [
+        (&b"\r\n"[..], &b"=\n"[..], "befor"),
+        (&b"\n"[..], &b"=\r\n"[..], "befo"),
+        (&b"\r\n"[..], &b"= \n"[..], "befor"),
+        (&b"\r\n"[..], &b"=\t\n"[..], "befor"),
+        (&b"\n"[..], &b"= \r\n"[..], "befo"),
+        (&b"\n"[..], &b"=\t\r\n"[..], "befo"),
+    ] {
+        let mut raw = b"MIME-Version: 1.0".to_vec();
+        raw.extend_from_slice(boundary_line_ending);
+        raw.extend_from_slice(b"Content-Type: multipart/mixed; boundary=qp-boundary");
+        raw.extend_from_slice(boundary_line_ending);
+        raw.extend_from_slice(boundary_line_ending);
+        raw.extend_from_slice(b"--qp-boundary");
+        raw.extend_from_slice(boundary_line_ending);
+        raw.extend_from_slice(b"Content-Type: text/plain");
+        raw.extend_from_slice(boundary_line_ending);
+        raw.extend_from_slice(b"Content-Transfer-Encoding: quoted-printable");
+        raw.extend_from_slice(boundary_line_ending);
+        raw.extend_from_slice(boundary_line_ending);
+        raw.extend_from_slice(b"before");
+        raw.extend_from_slice(soft_break);
+        raw.extend_from_slice(b"--qp-boundary");
+        raw.extend_from_slice(boundary_line_ending);
+        raw.extend_from_slice(b"Content-Type: text/plain");
+        raw.extend_from_slice(boundary_line_ending);
+        raw.extend_from_slice(boundary_line_ending);
+        raw.extend_from_slice(b"second part");
+        raw.extend_from_slice(boundary_line_ending);
+        raw.extend_from_slice(b"--qp-boundary--");
+        raw.extend_from_slice(boundary_line_ending);
+        let (message, diagnostics) = mime_poc::parse_with_diagnostics(&raw).unwrap();
+        assert_eq!(message.parts.len(), 3);
+        let PartType::Text(first_part) = &message.parts[1].body else {
+            panic!("expected quoted-printable text part");
+        };
+        let PartType::Text(second_part) = &message.parts[2].body else {
+            panic!("expected following text part");
+        };
+        assert_eq!(first_part.as_ref(), expected_body);
+        assert_eq!(second_part.as_ref(), "second part");
+        assert!(message.parts.iter().all(|part| !part.is_encoding_problem));
+        assert_eq!(message.raw_message.as_ref(), raw);
+        assert_eq!(
+            diagnostics,
+            mail_client_lib::mime_poc::MimeDiagnostics::default()
+        );
+    }
+}
+
+#[test]
+fn ac04_quoted_printable_lf_soft_break_before_closing_boundary_truncates_body() {
+    for encoded_break in [&b"=\n"[..], &b"= \n"[..], &b"=\t\n"[..]] {
+        let mut raw = b"MIME-Version: 1.0\nContent-Type: multipart/mixed; boundary=qp-boundary\n\n--qp-boundary\nContent-Type: text/plain\nContent-Transfer-Encoding: quoted-printable\n\nbefore".to_vec();
+        raw.extend_from_slice(encoded_break);
+        raw.extend_from_slice(b"--qp-boundary--\n");
+        let (message, diagnostics) = mime_poc::parse_with_diagnostics(&raw).unwrap();
+        assert_eq!(message.parts.len(), 2);
+        let PartType::Text(body) = &message.parts[1].body else {
+            panic!("expected quoted-printable text part");
+        };
+        assert_eq!(body.as_ref(), "befor");
+        assert!(message.parts.iter().all(|part| !part.is_encoding_problem));
+        assert_eq!(message.raw_message.as_ref(), raw);
+        assert_eq!(
+            diagnostics,
+            mail_client_lib::mime_poc::MimeDiagnostics::default()
+        );
+    }
+}
+
+#[test]
+fn ac04_quoted_printable_closing_boundary_at_eof_truncates_body() {
+    for (line_ending, encoded_break, expected_body) in [
+        (&b"\r\n"[..], &b"=\r\n"[..], "befo"),
+        (&b"\r\n"[..], &b"= \r\n"[..], "befo"),
+        (&b"\r\n"[..], &b"=\t\r\n"[..], "befo"),
+        (&b"\n"[..], &b"=\n"[..], "befor"),
+        (&b"\n"[..], &b"= \n"[..], "befor"),
+        (&b"\n"[..], &b"=\t\n"[..], "befor"),
+    ] {
+        let mut raw = b"MIME-Version: 1.0".to_vec();
+        raw.extend_from_slice(line_ending);
+        raw.extend_from_slice(b"Content-Type: multipart/mixed; boundary=qp-boundary");
+        raw.extend_from_slice(line_ending);
+        raw.extend_from_slice(line_ending);
+        raw.extend_from_slice(b"--qp-boundary");
+        raw.extend_from_slice(line_ending);
+        raw.extend_from_slice(b"Content-Type: text/plain");
+        raw.extend_from_slice(line_ending);
+        raw.extend_from_slice(b"Content-Transfer-Encoding: quoted-printable");
+        raw.extend_from_slice(line_ending);
+        raw.extend_from_slice(line_ending);
+        raw.extend_from_slice(b"before");
+        raw.extend_from_slice(encoded_break);
+        raw.extend_from_slice(b"--qp-boundary--");
+        let (message, diagnostics) = mime_poc::parse_with_diagnostics(&raw).unwrap();
+        assert_eq!(message.parts.len(), 2);
+        let PartType::Text(body) = &message.parts[1].body else {
+            panic!("expected quoted-printable text part");
+        };
+        assert_eq!(body.as_ref(), expected_body);
+        assert!(message.parts.iter().all(|part| !part.is_encoding_problem));
+        assert_eq!(message.raw_message.as_ref(), raw);
+        assert_eq!(
+            diagnostics,
+            mail_client_lib::mime_poc::MimeDiagnostics::default()
+        );
+    }
 }
 
 #[test]

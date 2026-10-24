@@ -1,0 +1,16 @@
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="fuzz-boundary"
+
+--fuzz-boundary
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+hello=20fuzz
+--fuzz-boundary
+Content-Type: message/rfc822
+
+Subject: nested fuzz message
+Content-Type: text/plain; charset=utf-8
+
+nested body
+--fuzz-boundary--

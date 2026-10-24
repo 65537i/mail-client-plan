@@ -69,6 +69,64 @@ fn ac18_matches_japanese_substrings_and_normalizes_fullwidth_text() {
 }
 
 #[test]
+fn ac18_normalizes_halfwidth_katakana_and_collapses_whitespace() {
+    let connection = create_index();
+    insert_message(&connection, "account-a", "ﾒｰﾙ", "東京 \nで\tメール");
+
+    assert_eq!(search(&connection, "account-a", "メール"), vec![1]);
+    assert_eq!(search(&connection, "account-a", "ﾒｰﾙ"), vec![1]);
+    assert_eq!(search(&connection, "account-a", "東京\tで"), vec![1]);
+}
+
+#[test]
+fn ac18_matches_normalized_voicing_marks_and_ascii_case_insensitively() {
+    let connection = create_index();
+    insert_message(
+        &connection,
+        "account-a",
+        "カ\u{3099}タカナ",
+        "Rust mail search",
+    );
+    insert_message(&connection, "account-a", "ガタカナ", "");
+
+    assert_eq!(search(&connection, "account-a", "ガタカナ"), vec![1, 2]);
+    assert_eq!(
+        search(&connection, "account-a", "カ\u{3099}タカナ"),
+        vec![1, 2]
+    );
+    assert_eq!(search(&connection, "account-a", "MAIL"), vec![1]);
+}
+
+#[test]
+fn ac18_records_non_ascii_case_matching_behavior() {
+    let connection = create_index();
+    insert_message(&connection, "account-a", "", "Äpfel café");
+    insert_message(&connection, "account-a", "", "äpfel cafe");
+
+    assert_eq!(search(&connection, "account-a", "ÄPFEL"), vec![1, 2]);
+    assert_eq!(search(&connection, "account-a", "äpfel"), vec![1, 2]);
+    assert_eq!(search(&connection, "account-a", "café"), vec![1]);
+    assert_eq!(search(&connection, "account-a", "cafe"), vec![2]);
+}
+
+#[test]
+fn ac18_uses_unicode_scalar_count_for_trigram_minimum() {
+    let connection = create_index();
+    insert_message(&connection, "account-a", "", "東京😀で検索");
+
+    assert_eq!(search(&connection, "account-a", "東京😀"), vec![1]);
+    assert!(prepare_match_query("😀😃").is_err());
+}
+
+#[test]
+fn ac18_applies_trigram_minimum_after_nfkc_expansion() {
+    let connection = create_index();
+    insert_message(&connection, "account-a", "", "株式会社のメール");
+
+    assert_eq!(search(&connection, "account-a", "㍿"), vec![1]);
+}
+
+#[test]
 fn ac18_enforces_account_scope_and_rejects_queries_shorter_than_three_characters() {
     let connection = create_index();
     insert_message(&connection, "account-a", "東京でのメール", "");
@@ -81,13 +139,27 @@ fn ac18_enforces_account_scope_and_rejects_queries_shorter_than_three_characters
     assert!(prepare_match_query("東").is_err());
     assert!(prepare_match_query("東京").is_err());
     assert!(prepare_match_query("  東京  ").is_err());
+    assert!(prepare_match_query("カ\u{3099}京").is_err());
     assert!(prepare_match_query("東京で").is_ok());
+}
+
+#[test]
+fn ac18_combines_account_scope_with_subject_or_body_matches() {
+    let connection = create_index();
+    insert_message(&connection, "account-a", "東京での予定", "");
+    insert_message(&connection, "account-a", "", "東京で会議");
+    insert_message(&connection, "account-b", "東京での予定", "東京で会議");
+    insert_message(&connection, "account-a", "大阪での予定", "大阪で会議");
+
+    assert_eq!(search(&connection, "account-a", "東京で"), vec![1, 2]);
 }
 
 #[test]
 fn ac18_quotes_fts_syntax_as_literal_substring_text() {
     let connection = create_index();
     insert_message(&connection, "account-a", "hello OR world", "");
+    insert_message(&connection, "account-a", "hello \"OR\" world", "");
 
     assert_eq!(search(&connection, "account-a", "OR w"), vec![1]);
+    assert_eq!(search(&connection, "account-a", "\"OR\""), vec![2]);
 }

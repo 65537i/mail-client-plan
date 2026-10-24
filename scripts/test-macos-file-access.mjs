@@ -12,7 +12,9 @@ assert.equal(process.platform, "darwin", "file-access tracing requires macOS");
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const tempDirectory = await mkdtemp(path.join(os.tmpdir(), "mail-client-file-audit-"));
 const canaryName = `mc-${randomUUID().slice(0, 12)}.png`;
+const positiveControlName = `mc-control-${randomUUID().slice(0, 12)}.png`;
 const canaryPath = path.join(tempDirectory, canaryName);
+const positiveControlPath = path.join(tempDirectory, positiveControlName);
 const tracePath = path.join(tempDirectory, "fs-usage.trace");
 const tracePidPath = path.join(tempDirectory, "fs-usage.pid");
 
@@ -24,6 +26,7 @@ const waitForClose = (child) =>
 
 try {
   await writeFile(canaryPath, "Synthetic file-access canary; no user data.\n");
+  await writeFile(positiveControlPath, "Synthetic fs_usage positive control.\n");
 
   const traceFile = await open(tracePath, "w");
   const trace = spawn(
@@ -42,6 +45,7 @@ try {
 
   let wdioResult;
   let traceResult;
+  let positiveControlPid;
   try {
     await new Promise((resolve) => setTimeout(resolve, 1500));
     assert.equal(
@@ -49,6 +53,14 @@ try {
       null,
       "fs_usage exited before the WebView test; root tracing may be unavailable",
     );
+
+    const positiveControl = spawn("/bin/cat", [positiveControlPath], {
+      stdio: "ignore",
+    });
+    const positiveControlResult = await waitForClose(positiveControl);
+    assert.equal(positiveControlResult.code, 0, "fs_usage positive control failed to read its file");
+    assert(positiveControl.pid, "fs_usage positive-control process did not start");
+    positiveControlPid = positiveControl.pid;
 
     const wdio = spawn("pnpm", ["exec", "wdio", "run", "wdio.security.conf.mjs"], {
       cwd: root,
@@ -95,8 +107,14 @@ try {
   );
 
   const traceOutput = await readFile(tracePath, "utf8");
-  const { systemMetadataEvents } = verifyMacosFileTrace(traceOutput, canaryName);
-  console.log(`AC-05 macOS audit: separately classified fseventsd lstat64 events: ${systemMetadataEvents}.`);
+  const result = verifyMacosFileTrace(traceOutput, {
+    canaryName,
+    positiveControlName,
+    positiveControlProcess: `cat.${positiveControlPid}`,
+  });
+  console.log(
+    `AC-05 macOS audit: positive-control file events=${result.positiveControlEvents}; separately classified fseventsd lstat64 events=${result.systemMetadataEvents}.`,
+  );
 } finally {
   await rm(tempDirectory, { recursive: true, force: true });
 }

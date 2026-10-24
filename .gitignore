@@ -18,6 +18,10 @@ dist-ssr
 *.key
 /target
 /src-tauri/target
+/src-tauri/fuzz/target
+/src-tauri/fuzz/artifacts
+/src-tauri/fuzz/corpus/mime_bounded/*
+!/src-tauri/fuzz/corpus/mime_bounded/valid_multipart.eml
 /src-tauri/gen
 
 # Editor directories and files

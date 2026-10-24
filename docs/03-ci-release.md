@@ -24,10 +24,10 @@ Actions → native → Run workflowで最新のmainを選び、以下を指定�
 - `target`: `all` / `ubuntu-24.04-x64` / `windows-2025-x64` / `macos-14-arm64` / `macos-15-intel`
 - `mode`:
   - `basic`: Rust format / workspace test / clippy、frontend typecheck / build。native release build、起動、protocol、実WebViewは未実行。
-  - `webview`: security-test用Tauri build（frontend typecheck / buildを含む）と実WebView / SecretStore試験。Linux / macOSはfile-access監査も実行。WindowsのOS-level file監査は未実装。production build、起動smoke、protocol、Rust workspace test / clippyは未実行。
+  - `webview`: security-test用Tauri build（frontend typecheck / buildを含む）と実WebView / SecretStore試験。Linux `strace`、macOS `fs_usage`、Windows Process Monitorによるfile-access監査を実行する。Windows監査PoCは実装済みだが、hosted runner上のcapture/exportとprocess coverageは未検証。production build、起動smoke、protocol、Rust workspace test / clippyは未実行。
   - `full`: 従来の全チェック。選択したOSだけのfullは全OSの証跡ではない。
 
-全モードの前にLinuxの短いplan jobでCI選択ロジックとmacOS trace解析のNode回帰試験を行い、失敗したら重いmatrixを開始しない。選択scopeと部分検証の注意をActions summaryへ記録する。PRと節目の`all / full`で全OSのgateを確認し、basic / webviewの成功を総合検証成功と読み替えない。
+全モードの前にLinuxの短いplan jobでCI選択ロジックとmacOS / Windows trace解析のNode回帰試験を行い、失敗したら重いmatrixを開始しない。選択scopeと部分検証の注意をActions summaryへ記録する。PRと節目の`all / full`で全OSのgateを確認し、basic / webviewの成功を総合検証成功と読み替えない。
 
 Rustのregistry / git依存と`target`をキャッシュし、OS・arch・runner・固定Rust版・lockfile / manifests / Cargo設定hashを区別する。同一モードを優先し、同じ依存条件の別モードからも復元可能。キャッシュhitでもbuild / testは省略しない。キャッシュは依存・ビルド出力のみで、資格情報ストア、監査trace、メールデータは含めない。初回はcold buildとなり、短縮量はrunnerで実測する。
 

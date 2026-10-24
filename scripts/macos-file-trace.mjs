@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 
-export function verifyMacosFileTrace(traceOutput, canaryName) {
+export function verifyMacosFileTrace(
+  traceOutput,
+  { canaryName, positiveControlName, positiveControlProcess },
+) {
   const lines = traceOutput.split(/\r?\n/);
   const canaryEvents = lines.filter((line) => line.includes(canaryName));
   const parsedEvents = canaryEvents.map((line) =>
@@ -28,5 +31,39 @@ export function verifyMacosFileTrace(traceOutput, canaryName) {
     lines.some((line) => /\bmail-client(?:\.\d+)?\s*$/.test(line)),
     "fs_usage did not observe filesystem activity from the Tauri application",
   );
-  return { systemMetadataEvents };
+
+  const positiveControlEvents = lines
+    .filter((line) => line.includes(positiveControlName))
+    .map((line) =>
+      line.match(
+        /^\s*\d{2}:\d{2}:\d{2}(?:\.\d+)?\s+([A-Za-z0-9_]+)\b.*\s([A-Za-z0-9_.:-]+)\s*$/,
+      ),
+    );
+  const observedPositiveControl = positiveControlEvents.some(
+    (event) =>
+      event !== null &&
+      ["open", "open_nocancel", "read", "read_nocancel"].includes(event[1]) &&
+      event[2] === positiveControlProcess,
+  );
+  assert(
+    observedPositiveControl,
+    "fs_usage did not observe the explicit positive-control file read",
+  );
+
+  const unexpectedPositiveControlEvents = positiveControlEvents.filter(
+    (event) =>
+      event === null ||
+      (!isSystemMetadataEvent(event) &&
+        !(
+          event[2] === positiveControlProcess &&
+          ["open", "open_nocancel", "read", "read_nocancel"].includes(event[1])
+        )),
+  );
+  assert.equal(
+    unexpectedPositiveControlEvents.length,
+    0,
+    "positive-control file was accessed by an unexpected process",
+  );
+
+  return { systemMetadataEvents, positiveControlEvents: positiveControlEvents.length };
 }

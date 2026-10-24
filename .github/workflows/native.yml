@@ -50,7 +50,7 @@ jobs:
         with:
           node-version: 24.22.0
       - name: Test CI planning and macOS file trace diagnostics
-        run: node --test tests/ci/*.test.mjs tests/security/macos-file-trace.test.mjs
+        run: node --test tests/ci/*.test.mjs tests/security/macos-file-trace.test.mjs tests/security/windows-file-trace.test.mjs
       - name: Select validation scope
         id: plan
         run: node scripts/native-ci-plan.mjs
@@ -182,7 +182,7 @@ jobs:
 
       - name: Test MIME candidate
         if: needs.plan.outputs.mode == 'full'
-        run: cargo test -p mail-client --features mime-poc --lib --test mime_candidate --locked
+        run: cargo test -p mail-client --features mime-parser-compare-poc --lib --test mime_candidate --test mime_parser_compare --locked
 
       - name: Test real WebView security boundaries
         if: needs.plan.outputs.mode != 'basic' && runner.os == 'Linux'
@@ -206,6 +206,27 @@ jobs:
 
       - name: Test real WebView security boundaries
         if: needs.plan.outputs.mode != 'basic' && runner.os == 'Windows'
-        run: pnpm exec wdio run wdio.security.conf.mjs
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $archive = Join-Path $env:RUNNER_TEMP "ProcessMonitor.zip"
+          $toolDirectory = Join-Path $env:RUNNER_TEMP "ProcessMonitor"
+          Invoke-WebRequest `
+            -Uri "https://download.sysinternals.com/files/ProcessMonitor.zip" `
+            -OutFile $archive
+          Expand-Archive -LiteralPath $archive -DestinationPath $toolDirectory -Force
+          $procmon = Join-Path $toolDirectory "Procmon64.exe"
+          $signature = Get-AuthenticodeSignature -FilePath $procmon
+          if ($signature.Status -ne "Valid" -or
+              $signature.SignerCertificate.Subject -notmatch "^CN=Microsoft Corporation,") {
+            throw "Process Monitor signature validation failed"
+          }
+          $version = (Get-Item -LiteralPath $procmon).VersionInfo.FileVersion
+          Write-Host "Verified Microsoft Process Monitor version: $version"
+          "MAIL_CLIENT_PROCMON_PATH=$procmon" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Test real WebView security boundaries
+        if: needs.plan.outputs.mode != 'basic' && runner.os == 'Windows'
+        run: pnpm run test:security:file-access:windows
         env:
           MAIL_CLIENT_REQUIRE_SECRET_STORE: "1"

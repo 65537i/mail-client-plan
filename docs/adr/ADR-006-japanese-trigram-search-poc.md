@@ -25,16 +25,23 @@ FTS5 `unicode61` tokenizerは日本語の一般的な部分文字列検索を提
 | 確認 | 結果 |
 |---|---|
 | 日本語の中間substring | `東京でメールを読む`から`東京で`・`メール`がヒット |
-| NFKC | 全角英数`ＡＢＣ`を`ABC`で照合し、半角カタカナのfixtureも正規化後に一致 |
+| NFKC | 全角英数`ＡＢＣ`を`ABC`、半角カタカナ`ﾒｰﾙ`を`メール`で照合 |
+| 濁点・ASCII大小文字 | 索引 / queryの両方向で分解表記`カ` + combining dakutenと`ガ`を照合。`Rust mail search`を`MAIL`で照合 |
+| 非ASCII大小文字・アクセント | 索引`Äpfel` / `äpfel`はquery `ÄPFEL` / `äpfel`のどちらでもヒット。一方`café`と`cafe`は互いに一致せずaccentを区別 |
+| trigram長境界 | 3 Unicode scalar value（多byteの日本語2文字+emoji）を照合し、2 emojiはquery前処理で拒否 |
+| NFKC展開と最小長 | 1文字の互換文字`㍿`が`株式会社`へ展開したqueryを正規化後の4文字として照合 |
+| 空白整理 | 文書の改行・tabを含む空白列とqueryのtabを単一空白へ正規化して照合 |
 | account scope | 同じ本文を持つ異なるaccountのfixtureをaccount条件で分離 |
-| 短いquery | 正規化後1〜2文字と空白のみのqueryをindex query前に拒否 |
-| FTS構文文字列 | `OR`を含むqueryをquoted literal substringとして検索 |
-| 実行 | `cargo test -p mail-client --features search-poc --test japanese_trigram_search --locked` |
+| 複合条件・検索対象 | account scopeとtext queryを同時適用し、選択account内のsubject / body一致のみ返す |
+| 短いquery | 正規化後1〜2文字と空白のみのqueryをindex query前に拒否。結合濁点により正規化前3 scalar valueから2文字へ縮むqueryも拒否 |
+| FTS構文・引用符 | `OR`を含む文字列と引用符を含むsubstringをquoted literal queryとして検索 |
+| 実行 | `cargo test -j 1 -p mail-client --features search-poc --test japanese_trigram_search --locked --quiet`（9 tests成功） |
 
 ## 未達・制限
 
 - PoCは小さなin-memory fixtureであり、100,000件・平均10KiB、100 queryのp95 1秒基準、DB増加量、書込み/削除時のFTS整合性は測定していない。
-- NFKC/空白規則のversion永続化、結合文字・濁点・英語大小文字等の契約fixture、FTS同期transaction、structured query AST、cancel/timeout/件数上限はPhase 07で実装する。
+- 今回の複合fixtureはaccountと全文検索だけを組み合わせたもの。folder / period / sender等の条件、製品用structured query contractやUIは検証していない。
+- NFKC/空白規則のversion永続化とUnicode全般の照合契約、FTS同期transaction、structured query AST、cancel/timeout/件数上限はPhase 07で実装する。今回の結合濁点・ASCII / `Ä`大小文字・`café`のaccent区別・Unicode scalar length・互換文字展開確認は限定fixtureであり、Unicode全般の大小文字・正規化・grapheme単位の保証ではない。
 - 1〜2文字queryの上限付きscope検索とUI案内は未実装。無制限LIKE scanへfallbackしてはならない。
 - 検索対象はindex済みsubject/bodyとし、添付OCRは対象外。未取得本文の扱いはPhase 07で明示する。
 

@@ -16,7 +16,8 @@
     "check:production-security": "node scripts/check-production-build.mjs",
     "test:security:desktop": "tauri build --no-bundle --ci --features security-test --config src-tauri/tauri.security-test.conf.json && wdio run wdio.security.conf.mjs",
     "test:security:file-access": "node scripts/test-linux-file-access.mjs",
-    "test:security:file-access:macos": "node scripts/test-macos-file-access.mjs"
+    "test:security:file-access:macos": "node scripts/test-macos-file-access.mjs",
+    "test:security:file-access:windows": "node scripts/test-windows-file-access.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "2.12.4",
