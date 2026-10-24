@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   decodeWindowsFileTrace,
+  inspectWindowsFileTrace,
   verifyWindowsFileTrace,
 } from "../../scripts/windows-file-trace.mjs";
 
@@ -50,6 +51,32 @@ test("AC-05: control-file System events cannot hide attack-canary activity", () 
     () => verifyWindowsFileTrace(trace, canaryPath, canaryPath),
     /different file/,
   );
+});
+
+test("AC-05: diagnostic inspection records baseline events without granting attack exemptions", () => {
+  const trace = header + controlEvent + applicationEvents +
+    `"10:00:00.0000003","System","4","CreateFileMapping","${canaryPath}","SUCCESS",""\r\n`;
+  const baseline = inspectWindowsFileTrace(trace, canaryPath, controlPath);
+  assert.deepEqual(baseline.canaryEvents, [
+    { processName: "System", operation: "CreateFileMapping" },
+  ]);
+  assert.throws(() => verify(trace), /1 unexpected event/);
+  assert.throws(
+    () => inspectWindowsFileTrace(header + applicationEvents, canaryPath, controlPath),
+    /positive control/,
+  );
+  assert.throws(
+    () => inspectWindowsFileTrace(header + controlEvent, canaryPath, controlPath),
+    /Tauri application/,
+  );
+});
+
+test("AC-05: baseline configuration stays separate from the attack suite", async () => {
+  const { config: baseline } = await import("../../wdio.file-audit-baseline.conf.mjs");
+  const { config: attack } = await import("../../wdio.security.conf.mjs");
+  assert.deepEqual(baseline.specs, ["./tests/security/file-audit.baseline.mjs"]);
+  assert.deepEqual(attack.specs, ["./tests/security/*.spec.mjs"]);
+  assert.equal(baseline.services, attack.services);
 });
 
 test("AC-05: rejects unknown CSV layouts and missing positive controls", () => {

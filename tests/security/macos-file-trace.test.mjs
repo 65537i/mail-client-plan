@@ -11,7 +11,6 @@ const verify = (trace) =>
   verifyMacosFileTrace(trace, {
     canaryName: canary,
     positiveControlName: positiveControl,
-    positiveControlProcess,
   });
 
 test("AC-05: accepts an observed application with no canary event", () => {
@@ -24,7 +23,7 @@ test("AC-05: accepts an observed application with no canary event", () => {
 
 test("AC-05: rejects missing or unexpected positive-control observations", () => {
   assert.throws(
-    () => verify(`${appEvent}\n${positiveControlEvent.replace("node.456", "node.999")}`),
+    () => verify(`${appEvent}\n${positiveControlEvent.replace("node.456", "fake-node.999")}`),
     /positive-control file read/,
   );
   assert.throws(
@@ -42,13 +41,26 @@ test("AC-05: missing control diagnostics expose only bounded operation and proce
     () => verify([appEvent, ...Array(20).fill(event)].join("\n")),
     (error) => {
       assert.match(error.message, /matching file events=20/);
-      assert.match(error.message, /expected process=node.456/);
+      assert.match(error.message, /expected process\/thread=node.<thread-id>/);
       assert.equal(error.message.match(/operation=stat64/g).length, 10);
       assert(!error.message.includes("/private/synthetic"));
       assert(!error.message.includes(positiveControl));
       return true;
     },
   );
+});
+
+test("AC-05: fs_usage wide process suffix is a thread ID, not the reader PID", () => {
+  for (const threadId of [70858, 100335]) {
+    const event = positiveControlEvent.replace("node.456", `node.${threadId}`);
+    assert.equal(verify(`${appEvent}\n${event}`).positiveControlEvents, 1);
+  }
+  for (const processName of ["node", "node.123.extra", "fake-node.123"]) {
+    assert.throws(
+      () => verify(`${appEvent}\n${positiveControlEvent.replace("node.456", processName)}`),
+      /positive-control file read/,
+    );
+  }
 });
 
 test("AC-05: rejects empty or unrelated traces", () => {

@@ -44,6 +44,8 @@ Linux PoCの結果はこの環境のWebKitGTKに限る。AC-05全体の合格や
 
 ## 制限と次の検証
 
+- Windowsはbaseline / attackを別々のProcmon captureで比較する診断を追加した。baselineではcanaryを作成するがURLをWDIOへ渡さず、専用configで既定UIを1.5秒観測するだけとし、攻撃fixtureと通常security specsは実行しない。attackでは従来のsecurity specsを維持。各captureでpositive controlとTauri / WebView2観測を必須とし、両方のイベント数と最大10件のoperation / process名を報告する。baselineにcanary eventがあってもcapture自体が成立していればattackを実行し、最終gateはbaseline / attack両方のcanary event 0件。Systemイベントの例外化やbaseline差分の減算は行わない。別起動・別canary・異なる所要時間とcache状態のため、背景処理の因果関係を確定するものではない。実Windows runnerでの比較は未実施。
+- Run 76でmacOS positive controlのopenは記録されていたが、`fs_usage -w`のprocess末尾thread IDをPIDと比較して拒否していたことが判明。[fs_usage manual](https://keith.github.io/xcode-man-pages/fs_usage.1.html)に従い、固有control pathへのopen/readと`node.<thread ID>`を確認するよう修正。別のNode processのidentityを独立検証するものではない。WindowsはSystem event 3件が残り、control分離だけでは解消していない。Systemの例外allowlistは追加せず監査失敗を維持する。
 - これはPoC UIであり、sanitizer、MIME parser、CID変換、リンク一覧UIを実装していない。
 - `srcdoc` CSP、CSP継承、sandbox動作はrun 9でWKWebView、WebView2を含む4 runnerで確認したが、最低サポートOSの実機証跡は別途必要。
 - ACLはmain windowの許可範囲を制限する。iframe単位の権限分離をACLだけで保証したとは扱わない。

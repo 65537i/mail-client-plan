@@ -81,7 +81,7 @@ export function summarizeWindowsFileTrace(traceOutput, canaryPath) {
   return { canaryEvents, observedProcessNames };
 }
 
-export function verifyWindowsFileTrace(traceOutput, canaryPath, positiveControlPath) {
+export function inspectWindowsFileTrace(traceOutput, canaryPath, positiveControlPath) {
   assert(
     path.win32.basename(canaryPath).toLowerCase() !==
       path.win32.basename(positiveControlPath).toLowerCase(),
@@ -98,15 +98,6 @@ export function verifyWindowsFileTrace(traceOutput, canaryPath, positiveControlP
     "Process Monitor did not observe the PowerShell synthetic-canary positive control",
   );
 
-  const unexpectedEvents = summary.canaryEvents;
-  assert.equal(
-    unexpectedEvents.length,
-    0,
-    `synthetic file canary appeared in ${unexpectedEvents.length} unexpected event(s): ${unexpectedEvents
-      .slice(0, 10)
-      .map(({ operation, processName }) => `operation=${operation} process=${processName}`)
-      .join("; ")}`,
-  );
   assert(
     summary.observedProcessNames.has("mail-client.exe"),
     "Process Monitor did not observe file activity from the Tauri application",
@@ -118,6 +109,22 @@ export function verifyWindowsFileTrace(traceOutput, canaryPath, positiveControlP
 
   return {
     positiveControlEvents: positiveControlEvents.length,
-    canaryEvents: summary.canaryEvents.length,
+    canaryEvents: summary.canaryEvents,
+  };
+}
+
+export function verifyWindowsFileTrace(traceOutput, canaryPath, positiveControlPath) {
+  const result = inspectWindowsFileTrace(traceOutput, canaryPath, positiveControlPath);
+  assert.equal(
+    result.canaryEvents.length,
+    0,
+    `synthetic file canary appeared in ${result.canaryEvents.length} unexpected event(s): ${result.canaryEvents
+      .slice(0, 10)
+      .map(({ operation, processName }) => `operation=${operation} process=${processName}`)
+      .join("; ")}`,
+  );
+  return {
+    positiveControlEvents: result.positiveControlEvents,
+    canaryEvents: result.canaryEvents.length,
   };
 }

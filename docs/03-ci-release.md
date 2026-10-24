@@ -29,6 +29,8 @@ Actions → native → Run workflowで最新のmainを選び、以下を指定�
 
 全モードの前にLinuxの短いplan jobでCI選択ロジックとmacOS / Windows trace解析のNode回帰試験を行い、失敗したら重いmatrixを開始しない。選択scopeと部分検証の注意をActions summaryへ記録する。PRと節目の`all / full`で全OSのgateを確認し、basic / webviewの成功を総合検証成功と読み替えない。
 
+Windows監査stepはProcmon captureをbaseline → attackの順に行う。baselineは専用WDIO configで既定UIを観測し、攻撃fixture / canary URLは渡さない。attackは従来の全security specsを維持し、各captureでpositive controlとapp / WebView2観測を必須とする。双方のcanary eventを診断表示した後、両方0件でなければ失敗する。baselineは攻撃テストの代用でも、System eventを除外するallowlistでもない。raw traceは各capture終了時に削除する。変更後のWindows runner検証は未実施。
+
 Rustのregistry / git依存と`target`をキャッシュし、OS・arch・runner・固定Rust版・lockfile / manifests / Cargo設定hashを区別する。同一モードを優先し、同じ依存条件の別モードからも復元可能。キャッシュhitでもbuild / testは省略しない。キャッシュは依存・ビルド出力のみで、資格情報ストア、監査trace、メールデータは含めない。初回はcold buildとなり、短縮量はrunnerで実測する。
 
 同じevent・ref・対象・モードの古いrunだけをcancelし、pushによって進行中の手動調査をcancelしない。

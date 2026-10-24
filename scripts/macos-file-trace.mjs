@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 
 export function verifyMacosFileTrace(
   traceOutput,
-  { canaryName, positiveControlName, positiveControlProcess },
+  { canaryName, positiveControlName },
 ) {
   const lines = traceOutput.split(/\r?\n/);
   const canaryEvents = lines.filter((line) => line.includes(canaryName));
@@ -43,11 +43,11 @@ export function verifyMacosFileTrace(
     (event) =>
       event !== null &&
       ["open", "open_nocancel", "read", "read_nocancel"].includes(event[1]) &&
-      event[2] === positiveControlProcess,
+      /^node\.\d+$/.test(event[2]),
   );
   assert(
     observedPositiveControl,
-    `fs_usage did not observe the explicit positive-control file read; matching file events=${positiveControlEvents.length}; expected process=${positiveControlProcess}; observed=${positiveControlEvents
+    `fs_usage did not observe the explicit positive-control file read; matching file events=${positiveControlEvents.length}; expected process/thread=node.<thread-id>; observed=${positiveControlEvents
       .slice(0, 10)
       .map((event) => event
         ? `operation=${event[1]} process/thread=${event[2]}`
@@ -60,7 +60,7 @@ export function verifyMacosFileTrace(
       event === null ||
       (!isSystemMetadataEvent(event) &&
         !(
-          event[2] === positiveControlProcess &&
+          /^node\.\d+$/.test(event[2]) &&
           ["open", "open_nocancel", "read", "read_nocancel"].includes(event[1])
         )),
   );

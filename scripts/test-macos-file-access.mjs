@@ -45,7 +45,6 @@ try {
 
   let wdioResult;
   let traceResult;
-  let positiveControlPid;
   try {
     await new Promise((resolve) => setTimeout(resolve, 1500));
     assert.equal(
@@ -64,7 +63,6 @@ try {
     const positiveControlResult = await waitForClose(positiveControl);
     assert.equal(positiveControlResult.code, 0, "fs_usage positive control failed to read its file");
     assert(positiveControl.pid, "fs_usage positive-control process did not start");
-    positiveControlPid = positiveControl.pid;
 
     const wdio = spawn("pnpm", ["exec", "wdio", "run", "wdio.security.conf.mjs"], {
       cwd: root,
@@ -114,7 +112,6 @@ try {
   const result = verifyMacosFileTrace(traceOutput, {
     canaryName,
     positiveControlName,
-    positiveControlProcess: `node.${positiveControlPid}`,
   });
   console.log(
     `AC-05 macOS audit: positive-control file events=${result.positiveControlEvents}; separately classified fseventsd lstat64 events=${result.systemMetadataEvents}.`,
