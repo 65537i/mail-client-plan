@@ -33,6 +33,12 @@ Windows監査stepはProcmon captureをbaseline → attackの順に行う。basel
 
 Run 79後のharnessは、WDIO moduleを子Nodeで事前importしてreadyを待ち、Procmon起動と別control fileへのNode ReadFileを確認してからLauncherを開始する。アプリ起動・WDIO実行・終了処理は引き続きcapture内で行い、record filterや容量上限は変えない。準備 / capture時間とPML / CSV byte数を診断表示する。workerのIPC回帰試験は依存install後のWindows build jobで実行し、依存不要のplan試験には含めない。変更後のWindows runtime・容量削減効果は未検証。
 
+Run 81（`5f17ae3`、Windows / webview）で上記変更後のruntime成功。baseline / attackともcontrol 1件・canary 0件、PMLはそれぞれ145,097,190 / 157,696,343 bytesで256 MiB未満。これは単一runner実行の部分検証で、負荷変動下の容量保証・過去System eventの原因証明・最新commitのall / full成功ではない。
+
+同commitのRun 82（all / full）はUbuntu / macOS両arch成功、Windows失敗。baselineのcanary 0件に対してattackでSystem event 3件を検出した。PMLは137,957,495 / 183,964,349 bytesで上限内。容量改善とcanary eventの解消は別の問題であり、Run 81のwebview成功をfull成功へ読み替えない。モード差が原因と確定したわけではなく、System eventの帰属は未解決。
+
+Run 82後の診断はcanary最大10件のローカル時刻 / Result / allowlist済みDetail（最大8項目）を出す。生Detailは出さず、未知項目は件数だけ表示する。capture開始要求・WDIO開始送信と終了のUTC、およびlocal UTC offsetも記録し、時刻の照合を可能にする。CSV列数不正は監査失敗とする。これは原因調査用で、Systemの除外や失敗gateの変更ではない。新診断のWindows runtimeは未実行。
+
 Rustのregistry / git依存と`target`をキャッシュし、OS・arch・runner・固定Rust版・lockfile / manifests / Cargo設定hashを区別する。同一モードを優先し、同じ依存条件の別モードからも復元可能。キャッシュhitでもbuild / testは省略しない。キャッシュは依存・ビルド出力のみで、資格情報ストア、監査trace、メールデータは含めない。初回はcold buildとなり、短縮量はrunnerで実測する。
 
 同じevent・ref・対象・モードの古いrunだけをcancelし、pushによって進行中の手動調査をcancelしない。

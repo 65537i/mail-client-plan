@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   decodeWindowsFileTrace,
   inspectWindowsFileTrace,
+  summarizeWindowsFileTrace,
   verifyWindowsFileTrace,
 } from "../../scripts/windows-file-trace.mjs";
 
@@ -115,4 +116,43 @@ test("AC-05: decodes UTF-8 and UTF-16 Process Monitor exports", () => {
   assert.equal(decodeWindowsFileTrace(csv), header);
   assert.equal(decodeWindowsFileTrace(utf16le), header);
   assert.equal(decodeWindowsFileTrace(utf16be), header);
+});
+
+test("AC-05: canary diagnostics expose only bounded allowlisted metadata", () => {
+  const event = `"10:02:03.1234567","System","4","CreateFileMapping","${canaryPath}","SUCCESS","SyncType: SyncTypeCreateSection, PageProtection: PAGE_READONLY, Offset: 0, Length: 42, File: C:\\private\\secret, Token: synthetic-secret"\r\n`;
+  const summary = summarizeWindowsFileTrace(header + event.repeat(12), canaryPath);
+  assert.equal(summary.canaryEvents.length, 12);
+  assert.equal(summary.canaryDiagnostics.length, 10);
+  assert.deepEqual(summary.canaryDiagnostics[0], {
+    time: "10:02:03.1234567",
+    processName: "System",
+    operation: "CreateFileMapping",
+    result: "SUCCESS",
+    detail: {
+      fields: ["SyncType: SyncTypeCreateSection", "PageProtection: PAGE_READONLY", "Offset: 0", "Length: 42"],
+      redactedFields: 2,
+    },
+  });
+  const diagnostic = JSON.stringify(summary.canaryDiagnostics);
+  assert(!diagnostic.includes("private"));
+  assert(!diagnostic.includes("synthetic-secret"));
+  assert(!diagnostic.includes(canaryPath));
+  assert.throws(() => verify(header + controlEvent + applicationEvents + event), /1 unexpected event/);
+});
+
+test("AC-05: malformed rows fail rather than hiding canary events", () => {
+  assert.throws(() => verify(header + controlEvent + applicationEvents + '"truncated"\r\n'), /column count/);
+});
+
+test("AC-05: unknown diagnostic formats are redacted without dropping the event", () => {
+  const event = `"secret-time","C:\\private\\process","4","ReadFile","${canaryPath}","C:\\private\\result","Offset: secret, Length: -1"\r\n`;
+  const summary = summarizeWindowsFileTrace(header + event, canaryPath);
+  assert.equal(summary.canaryEvents.length, 1);
+  assert.deepEqual(summary.canaryDiagnostics[0], {
+    time: "[unavailable]",
+    processName: "[redacted]",
+    operation: "ReadFile",
+    result: "[redacted]",
+    detail: { fields: [], redactedFields: 2 },
+  });
 });

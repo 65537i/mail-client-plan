@@ -45,6 +45,30 @@ export function decodeWindowsFileTrace(buffer) {
   return buffer.toString("utf8");
 }
 
+function diagnosticToken(value) {
+  return /^[A-Za-z0-9_. -]{1,80}$/.test(value) ? value : "[redacted]";
+}
+
+function diagnosticDetail(value) {
+  const allowed = [];
+  let redacted = 0;
+  for (const field of value.split(",")) {
+    const item = field.trim();
+    if (!item) continue;
+    if (
+      /^(?:Offset|Length|EndOfFile|AllocationSize): [0-9]{1,20}$/.test(item) ||
+      /^SyncType: SyncType(?:Other|CreateSection)$/.test(item) ||
+      /^PageProtection: PAGE_(?:READONLY|READWRITE|WRITECOPY|EXECUTE_READ|EXECUTE_READWRITE|EXECUTE_WRITECOPY|NOACCESS)$/.test(item)
+    ) {
+      if (allowed.length < 8) allowed.push(item);
+      else redacted += 1;
+    } else {
+      redacted += 1;
+    }
+  }
+  return { fields: allowed, redactedFields: redacted };
+}
+
 export function summarizeWindowsFileTrace(traceOutput, canaryPath) {
   const records = parseCsvRecords(traceOutput);
   const firstRecord = records.next();
@@ -55,6 +79,9 @@ export function summarizeWindowsFileTrace(traceOutput, canaryPath) {
   const processColumn = columns.get("process name");
   const operationColumn = columns.get("operation");
   const pathColumn = columns.get("path");
+  const timeColumn = columns.get("time of day");
+  const resultColumn = columns.get("result");
+  const detailColumn = columns.get("detail");
   assert(
     processColumn !== undefined && operationColumn !== undefined && pathColumn !== undefined,
     "Process Monitor CSV is missing Process Name, Operation, or Path columns",
@@ -63,9 +90,10 @@ export function summarizeWindowsFileTrace(traceOutput, canaryPath) {
   const canaryName = path.win32.basename(canaryPath).toLowerCase();
   const observedProcessNames = new Set();
   const canaryEvents = [];
+  const canaryDiagnostics = [];
 
   for (const fields of records) {
-    if (fields.length < headers.length) continue;
+    assert.equal(fields.length, headers.length, "Process Monitor CSV row has an unexpected column count");
     const processName = fields[processColumn].trim();
     if (processName) observedProcessNames.add(processName.toLowerCase());
 
@@ -75,10 +103,21 @@ export function summarizeWindowsFileTrace(traceOutput, canaryPath) {
         processName,
         operation: fields[operationColumn].trim(),
       });
+      if (canaryDiagnostics.length < 10) {
+        const time = timeColumn === undefined ? "" : fields[timeColumn].trim();
+        canaryDiagnostics.push({
+          time: /^(?:[01]?\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d{1,7})?(?: [AP]M)?$/.test(time)
+            ? time : "[unavailable]",
+          processName: diagnosticToken(processName),
+          operation: diagnosticToken(fields[operationColumn].trim()),
+          result: resultColumn === undefined ? "[unavailable]" : diagnosticToken(fields[resultColumn].trim()),
+          detail: diagnosticDetail(detailColumn === undefined ? "" : fields[detailColumn]),
+        });
+      }
     }
   }
 
-  return { canaryEvents, observedProcessNames };
+  return { canaryEvents, canaryDiagnostics, observedProcessNames };
 }
 
 export function inspectWindowsFileTrace(traceOutput, canaryPath, positiveControlPath) {
@@ -110,6 +149,7 @@ export function inspectWindowsFileTrace(traceOutput, canaryPath, positiveControl
   return {
     positiveControlEvents: positiveControlEvents.length,
     canaryEvents: summary.canaryEvents,
+    canaryDiagnostics: summary.canaryDiagnostics,
   };
 }
 
@@ -118,10 +158,7 @@ export function verifyWindowsFileTrace(traceOutput, canaryPath, positiveControlP
   assert.equal(
     result.canaryEvents.length,
     0,
-    `synthetic file canary appeared in ${result.canaryEvents.length} unexpected event(s): ${result.canaryEvents
-      .slice(0, 10)
-      .map(({ operation, processName }) => `operation=${operation} process=${processName}`)
-      .join("; ")}`,
+    `synthetic file canary appeared in ${result.canaryEvents.length} unexpected event(s): ${JSON.stringify(result.canaryDiagnostics)}`,
   );
   return {
     positiveControlEvents: result.positiveControlEvents,

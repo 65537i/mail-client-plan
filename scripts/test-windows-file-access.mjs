@@ -98,6 +98,7 @@ async function captureScenario(scenario) {
     console.log(`Windows audit ${scenario}: preparation milliseconds=${Math.round(performance.now() - preparedAt)}`);
 
     captureStartedAt = performance.now();
+    console.log(`Windows audit ${scenario}: capture requested UTC=${new Date().toISOString()}; local UTC offset minutes=${-new Date().getTimezoneOffset()}`);
     capture = spawn(
       procmonPath,
       ["/AcceptEula", "/Quiet", "/Minimized", "/NoFilter", "/BackingFile", backingFile],
@@ -147,6 +148,7 @@ async function captureScenario(scenario) {
     );
 
     command.send("start");
+    console.log(`Windows audit ${scenario}: WDIO start sent UTC=${new Date().toISOString()}`);
     const webviewResult = await commandExit;
     if (webviewResult.error) {
       throw new Error("Failed to start the Windows WebView security tests");
@@ -157,6 +159,7 @@ async function captureScenario(scenario) {
       `Windows WebView security tests failed (${webviewResult.signal ?? webviewResult.code})`,
     );
     assert.equal(capture.exitCode, null, "Process Monitor capture stopped during the WebView tests");
+    console.log(`Windows audit ${scenario}: WDIO finished UTC=${new Date().toISOString()}`);
 
     await runProcmon(["/AcceptEula", "/Terminate"], "capture shutdown");
     const captureResult = await waitWithTimeout(captureExit, 10_000);
@@ -186,10 +189,7 @@ async function captureScenario(scenario) {
     const trace = decodeWindowsFileTrace(await readFile(csvFile));
     const result = inspectWindowsFileTrace(trace, canaryPath, positiveControlPath);
     console.log(
-      `Windows audit ${scenario}: positive-control ReadFile events=${result.positiveControlEvents}; canary events=${result.canaryEvents.length}; observed=${result.canaryEvents
-        .slice(0, 10)
-        .map(({ operation, processName }) => `operation=${operation} process=${processName}`)
-        .join("; ")}`,
+      `Windows audit ${scenario}: positive-control ReadFile events=${result.positiveControlEvents}; canary events=${result.canaryEvents.length}; diagnostics=${JSON.stringify(result.canaryDiagnostics)}`,
     );
     return result;
   } finally {
