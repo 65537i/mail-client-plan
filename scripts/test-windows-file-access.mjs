@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { spawn } from "node:child_process";
+import { fork, spawn } from "node:child_process";
 import { access, mkdtemp, open, readFile, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -60,6 +60,10 @@ async function captureScenario(scenario) {
 
   let capture;
   let captureExit;
+  let command;
+  let commandExit;
+  const preparedAt = performance.now();
+  let captureStartedAt;
 
   try {
     const canaryFile = await open(canaryPath, "wx");
@@ -70,6 +74,30 @@ async function captureScenario(scenario) {
       await canaryFile.close();
     }
     await writeFile(positiveControlPath, "Synthetic Process Monitor positive control.\n");
+    command = fork(
+      path.join(root, "scripts", "windows-audit-wdio.mjs"),
+      [path.join(root, scenario === "baseline"
+        ? "wdio.file-audit-baseline.conf.mjs" : "wdio.security.conf.mjs")],
+      {
+        cwd: root,
+        env: {
+          ...process.env,
+          MAIL_CLIENT_FILE_CANARY_URL: scenario === "attack" ? pathToFileURL(canaryPath).href : undefined,
+        },
+        stdio: ["ignore", "inherit", "inherit", "ipc"],
+        windowsHide: true,
+      },
+    );
+    commandExit = waitForProcess(command);
+    const ready = new Promise((resolve) => {
+      command.once("message", (message) => resolve({ ready: message === "ready" }));
+      commandExit.then(() => resolve({ ready: false }));
+    });
+    const prepared = await waitWithTimeout(ready, 60_000);
+    assert(!prepared.timedOut && prepared.ready, "Windows audit WDIO preparation failed or timed out");
+    console.log(`Windows audit ${scenario}: preparation milliseconds=${Math.round(performance.now() - preparedAt)}`);
+
+    captureStartedAt = performance.now();
     capture = spawn(
       procmonPath,
       ["/AcceptEula", "/Quiet", "/Minimized", "/NoFilter", "/BackingFile", backingFile],
@@ -94,12 +122,10 @@ async function captureScenario(scenario) {
     await access(backingFile);
 
     const positiveControl = spawn(
-      "powershell.exe",
+      process.execPath,
       [
-        "-NoProfile",
-        "-NonInteractive",
-        "-Command",
-        "[System.IO.File]::ReadAllBytes($env:MAIL_CLIENT_FILE_CANARY) | Out-Null",
+        "-e",
+        "require('node:fs').readFileSync(process.env.MAIL_CLIENT_FILE_CANARY)",
       ],
       {
         env: {
@@ -117,25 +143,11 @@ async function captureScenario(scenario) {
     assert.equal(
       positiveControlResult.code,
       0,
-      "PowerShell synthetic-canary positive control failed",
+      "Node synthetic-canary positive control failed",
     );
 
-    const command = spawn(
-      process.env.ComSpec ?? "cmd.exe",
-      ["/d", "/s", "/c", `pnpm exec wdio run ${
-        scenario === "baseline" ? "wdio.file-audit-baseline.conf.mjs" : "wdio.security.conf.mjs"
-      }`],
-      {
-        cwd: root,
-        env: {
-          ...process.env,
-          MAIL_CLIENT_FILE_CANARY_URL: scenario === "attack" ? pathToFileURL(canaryPath).href : undefined,
-        },
-        stdio: "inherit",
-        windowsHide: true,
-      },
-    );
-    const webviewResult = await waitForProcess(command);
+    command.send("start");
+    const webviewResult = await commandExit;
     if (webviewResult.error) {
       throw new Error("Failed to start the Windows WebView security tests");
     }
@@ -152,6 +164,9 @@ async function captureScenario(scenario) {
     if (captureResult.error) throw new Error("Process Monitor capture failed while shutting down");
 
     const backingFileStats = await stat(backingFile);
+    console.log(
+      `Windows audit ${scenario}: capture milliseconds=${Math.round(performance.now() - captureStartedAt)}; PML bytes=${backingFileStats.size}`,
+    );
     assert(backingFileStats.size > 0, "Process Monitor produced an empty capture");
     assert(
       backingFileStats.size <= 256 * 1024 * 1024,
@@ -163,6 +178,7 @@ async function captureScenario(scenario) {
       "CSV export",
     );
     const csvStats = await stat(csvFile);
+    console.log(`Windows audit ${scenario}: CSV bytes=${csvStats.size}`);
     assert(
       csvStats.size <= 256 * 1024 * 1024,
       "Process Monitor CSV export exceeded the 256 MiB safety limit",
@@ -185,7 +201,14 @@ async function captureScenario(scenario) {
         if (result.error) throw new Error("Process Monitor capture failed while shutting down");
       }
     } finally {
-      await rm(temporaryDirectory, { recursive: true, force: true });
+      try {
+        if (command?.pid && command.exitCode === null && command.signalCode === null) {
+          command.kill();
+          await commandExit;
+        }
+      } finally {
+        await rm(temporaryDirectory, { recursive: true, force: true });
+      }
     }
   }
 }

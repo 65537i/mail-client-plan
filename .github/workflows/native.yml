@@ -225,6 +225,10 @@ jobs:
           Write-Host "Verified Microsoft Process Monitor version: $version"
           "MAIL_CLIENT_PROCMON_PATH=$procmon" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
+      - name: Test Windows audit worker coordination
+        if: needs.plan.outputs.mode != 'basic' && runner.os == 'Windows'
+        run: node --test tests/security/windows-audit-wdio.test.mjs
+
       - name: Test real WebView security boundaries
         if: needs.plan.outputs.mode != 'basic' && runner.os == 'Windows'
         run: pnpm run test:security:file-access:windows

@@ -91,11 +91,11 @@ export function inspectWindowsFileTrace(traceOutput, canaryPath, positiveControl
   const controlSummary = summarizeWindowsFileTrace(traceOutput, positiveControlPath);
   const positiveControlEvents = controlSummary.canaryEvents.filter(
     ({ processName, operation }) =>
-      processName.toLowerCase() === "powershell.exe" && operation === "ReadFile",
+      processName.toLowerCase() === "node.exe" && operation === "ReadFile",
   );
   assert(
     positiveControlEvents.length > 0,
-    "Process Monitor did not observe the PowerShell synthetic-canary positive control",
+    "Process Monitor did not observe the Node synthetic-canary positive control",
   );
 
   assert(

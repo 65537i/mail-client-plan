@@ -24,12 +24,14 @@ Actions → native → Run workflowで最新のmainを選び、以下を指定�
 - `target`: `all` / `ubuntu-24.04-x64` / `windows-2025-x64` / `macos-14-arm64` / `macos-15-intel`
 - `mode`:
   - `basic`: Rust format / workspace test / clippy、frontend typecheck / build。native release build、起動、protocol、実WebViewは未実行。
-  - `webview`: security-test用Tauri build（frontend typecheck / buildを含む）と実WebView / SecretStore試験。Linux `strace`、macOS `fs_usage`、Windows Process Monitorによるfile-access監査を実行する。Windows監査PoCは実装済みだが、hosted runner上のcapture/exportとprocess coverageは未検証。production build、起動smoke、protocol、Rust workspace test / clippyは未実行。
+  - `webview`: security-test用Tauri build（frontend typecheck / buildを含む）と実WebView / SecretStore試験。Linux `strace`、macOS `fs_usage`、Windows Process Monitorによるfile-access監査を実行する。Windowsはhosted runnerでcapture/exportまで確認したが、canary event検出と記録容量超過が未解決で、process coverageも未証明。production build、起動smoke、protocol、Rust workspace test / clippyは未実行。
   - `full`: 従来の全チェック。選択したOSだけのfullは全OSの証跡ではない。
 
 全モードの前にLinuxの短いplan jobでCI選択ロジックとmacOS / Windows trace解析のNode回帰試験を行い、失敗したら重いmatrixを開始しない。選択scopeと部分検証の注意をActions summaryへ記録する。PRと節目の`all / full`で全OSのgateを確認し、basic / webviewの成功を総合検証成功と読み替えない。
 
-Windows監査stepはProcmon captureをbaseline → attackの順に行う。baselineは専用WDIO configで既定UIを観測し、攻撃fixture / canary URLは渡さない。attackは従来の全security specsを維持し、各captureでpositive controlとapp / WebView2観測を必須とする。双方のcanary eventを診断表示した後、両方0件でなければ失敗する。baselineは攻撃テストの代用でも、System eventを除外するallowlistでもない。raw traceは各capture終了時に削除する。変更後のWindows runner検証は未実施。
+Windows監査stepはProcmon captureをbaseline → attackの順に行う。baselineは専用WDIO configで既定UIを観測し、攻撃fixture / canary URLは渡さない。attackは従来の全security specsを維持し、各captureでpositive controlとapp / WebView2観測を必須とする。双方のcanary eventを診断表示した後、両方0件でなければ失敗する。baselineは攻撃テストの代用でも、System eventを除外するallowlistでもない。raw traceは各capture終了時に削除する。Run 78では両captureでSystem canary eventを3件検出して失敗。Run 79ではbaselineのPMLが256 MiBを超え、export前に失敗したためattackは未実行。記録上限超過は監査不成立であり、イベント0件や攻撃遮断の証拠には数えない。
+
+Run 79後のharnessは、WDIO moduleを子Nodeで事前importしてreadyを待ち、Procmon起動と別control fileへのNode ReadFileを確認してからLauncherを開始する。アプリ起動・WDIO実行・終了処理は引き続きcapture内で行い、record filterや容量上限は変えない。準備 / capture時間とPML / CSV byte数を診断表示する。workerのIPC回帰試験は依存install後のWindows build jobで実行し、依存不要のplan試験には含めない。変更後のWindows runtime・容量削減効果は未検証。
 
 Rustのregistry / git依存と`target`をキャッシュし、OS・arch・runner・固定Rust版・lockfile / manifests / Cargo設定hashを区別する。同一モードを優先し、同じ依存条件の別モードからも復元可能。キャッシュhitでもbuild / testは省略しない。キャッシュは依存・ビルド出力のみで、資格情報ストア、監査trace、メールデータは含めない。初回はcold buildとなり、短縮量はrunnerで実測する。
 

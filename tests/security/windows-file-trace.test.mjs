@@ -11,7 +11,7 @@ const controlPath = "C:\\Users\\runner\\Temp\\mc-control.png";
 const header =
   '"Time of Day","Process Name","PID","Operation","Path","Result","Detail"\r\n';
 const controlEvent =
-  '"10:00:00.0000000","powershell.exe","100","ReadFile","C:\\Users\\runner\\Temp\\mc-control.png","SUCCESS","Offset: 0"\r\n';
+  '"10:00:00.0000000","node.exe","100","ReadFile","C:\\Users\\runner\\Temp\\mc-control.png","SUCCESS","Offset: 0"\r\n';
 const applicationEvents =
   '"10:00:00.0000001","mail-client.exe","200","CreateFile","C:\\app\\mail.db","SUCCESS",""\r\n' +
   '"10:00:00.0000002","msedgewebview2.exe","300","ReadFile","C:\\app\\WebView2Loader.dll","SUCCESS",""\r\n';
@@ -25,7 +25,7 @@ test("AC-05: requires a positive control and observes the app and WebView2", () 
 });
 
 test("AC-05: rejects canary access from the app or any other process", () => {
-  for (const processName of ["mail-client.exe", "msedgewebview2.exe", "System", "powershell.exe"]) {
+  for (const processName of ["mail-client.exe", "msedgewebview2.exe", "System", "powershell.exe", "node.exe"]) {
     const trace = header + controlEvent + applicationEvents +
       `"10:00:00.0000003","${processName}","400","CreateFile","${canaryPath}","SUCCESS",""\r\n`;
     assert.throws(
@@ -87,8 +87,18 @@ test("AC-05: rejects unknown CSV layouts and missing positive controls", () => {
   assert.throws(
     () =>
       verify(header + applicationEvents),
-    /did not observe the PowerShell synthetic-canary positive control/,
+    /did not observe the Node synthetic-canary positive control/,
   );
+});
+
+test("AC-05: requires an exact Node ReadFile control, not a lookalike or metadata event", () => {
+  for (const event of [
+    controlEvent.replace("node.exe", "powershell.exe"),
+    controlEvent.replace("node.exe", "not-node.exe"),
+    controlEvent.replace("ReadFile", "CreateFile"),
+  ]) {
+    assert.throws(() => verify(header + event + applicationEvents), /positive control/);
+  }
 });
 
 test("AC-05: decodes UTF-8 and UTF-16 Process Monitor exports", () => {

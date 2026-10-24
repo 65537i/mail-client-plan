@@ -44,6 +44,8 @@ Linux PoCの結果はこの環境のWebKitGTKに限る。AC-05全体の合格や
 
 ## 制限と次の検証
 
+- Run 79後はWDIOのmodule importを子Nodeでcapture前に行い、readyの後にProcmonを開始する。Launcher構築・runとTauri / WebView起動はcaptureと別ファイルのNode ReadFile control確認後に限定する。cmd / pnpm / PowerShellのcold startupを記録区間から外すが、filter、256 MiB上限、Systemを含む全processのcanary拒否条件は変更しない。親は失敗時に待機workerも終了させ、一時traceを削除する。時間と記録byte数を診断表示する。Windows上の容量削減とSystem eventへの影響は未検証。
+- Run 78（`fbb335a`、all / full）はmacOS両arch成功。Windowsはbaseline / attackともpositive-control ReadFile 1件、System canary event 3件（SetEndOfFileInformationFile / CreateFileMapping / FASTIO_RELEASE_FOR_SECTION_SYNCHRONIZATION）で失敗。同じevent列だけでは原因を断定しない。Run 79（同commit、Windows / webview）はbaseline UI spec成功後、PMLの256 MiB上限超過でexport前に停止。attack未実行のため、System eventの再現証跡ではない。system-wide captureの記録量制御とSystem eventの帰属は別の未解決事項で、上限・canary拒否gateは維持する。
 - Windowsはbaseline / attackを別々のProcmon captureで比較する診断を追加した。baselineではcanaryを作成するがURLをWDIOへ渡さず、専用configで既定UIを1.5秒観測するだけとし、攻撃fixtureと通常security specsは実行しない。attackでは従来のsecurity specsを維持。各captureでpositive controlとTauri / WebView2観測を必須とし、両方のイベント数と最大10件のoperation / process名を報告する。baselineにcanary eventがあってもcapture自体が成立していればattackを実行し、最終gateはbaseline / attack両方のcanary event 0件。Systemイベントの例外化やbaseline差分の減算は行わない。別起動・別canary・異なる所要時間とcache状態のため、背景処理の因果関係を確定するものではない。実Windows runnerでの比較は未実施。
 - Run 76でmacOS positive controlのopenは記録されていたが、`fs_usage -w`のprocess末尾thread IDをPIDと比較して拒否していたことが判明。[fs_usage manual](https://keith.github.io/xcode-man-pages/fs_usage.1.html)に従い、固有control pathへのopen/readと`node.<thread ID>`を確認するよう修正。別のNode processのidentityを独立検証するものではない。WindowsはSystem event 3件が残り、control分離だけでは解消していない。Systemの例外allowlistは追加せず監査失敗を維持する。
 - これはPoC UIであり、sanitizer、MIME parser、CID変換、リンク一覧UIを実装していない。
