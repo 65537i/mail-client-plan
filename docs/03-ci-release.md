@@ -127,6 +127,8 @@ Run 167（`d453245`、Windows / webview）はembedded Window候補を検出し`w
 
 Run 169（`eab43b2`、Windows / webview）はResetと4 ComboBox / 1 Editを持つProcmon所有・non-main HWNDのWindow ancestorを選び、`wait-filter-dialog`を通過したが、既存の`set-canary-filter`内で失敗。field/operator/value/action選択とAddのどの操作かログから区別できない。次runでは固定stageを各操作前に記録して failure locationを特定する。Run 169はPMC/WDIO/capture未到達、AC-05未達。
 
+Run 171（`59d4ead`、Windows / webview）は`select-filter-column`、`select-filter-operator`、`set-filter-path-value`を通過後、`select-filter-action`で停止した。action ComboBoxの固定index 2にはInclude optionがなかった。次runは全ComboBoxに対して要求optionの存在を個別に調べ、一意に一致したcontrolだけ選択する。index依存を取り除き、0件 / 複数件は明示失敗。Run 171はPMC/WDIO/capture未到達、AC-05未達。
+
 Rustのregistry / git依存と`target`をキャッシュし、OS・arch・runner・固定Rust版・lockfile / manifests / Cargo設定hashを区別する。同一モードを優先し、同じ依存条件の別モードからも復元可能。キャッシュhitでもbuild / testは省略しない。キャッシュは依存・ビルド出力のみで、資格情報ストア、監査trace、メールデータは含めない。初回はcold buildとなり、短縮量はrunnerで実測する。
 
 同じevent・ref・対象・モードの古いrunだけをcancelし、pushによって進行中の手動調査をcancelしない。

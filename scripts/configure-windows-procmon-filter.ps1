@@ -191,11 +191,51 @@ function Wait-FilterDialog([System.Diagnostics.Process]$Process, [System.Windows
   throw "Process Monitor filter dialog did not expose its Reset control"
 }
 
-function Select-ComboValue([System.Windows.Automation.AutomationElement]$Combo, [string]$Value) {
-  $comboPattern = $Combo.GetCurrentPattern([System.Windows.Automation.ExpandCollapsePattern]::Pattern)
+function Find-ComboValue(
+  [System.Windows.Automation.AutomationElement]$Combo,
+  [string]$Value,
+  [int]$TimeoutSeconds = 1
+) {
+  $comboPattern = $null
+  if (-not $Combo.TryGetCurrentPattern(
+      [System.Windows.Automation.ExpandCollapsePattern]::Pattern,
+      [ref]$comboPattern
+    )) {
+    return $null
+  }
+  $condition = [System.Windows.Automation.PropertyCondition]::new(
+    [System.Windows.Automation.AutomationElement]::NameProperty, $Value
+  )
+  $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
   $comboPattern.Expand()
   try {
-    $item = Wait-Element $Combo ([System.Windows.Automation.PropertyCondition]::new(
+    do {
+      $item = $Combo.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $condition)
+      if ($null -ne $item) { return $item }
+      Start-Sleep -Milliseconds 100
+    } while ([DateTime]::UtcNow -lt $deadline)
+    return $null
+  } finally {
+    $comboPattern.Collapse()
+  }
+}
+
+function Select-ComboValue($Combos, [string]$Value) {
+  $matchingCombos = [System.Collections.Generic.List[System.Windows.Automation.AutomationElement]]::new()
+  foreach ($combo in $Combos) {
+    if ($null -ne (Find-ComboValue $combo $Value)) {
+      $matchingCombos.Add($combo)
+    }
+  }
+  if ($matchingCombos.Count -ne 1) {
+    throw "Process Monitor filter dialog did not expose one exact option"
+  }
+  $comboPattern = $matchingCombos[0].GetCurrentPattern(
+    [System.Windows.Automation.ExpandCollapsePattern]::Pattern
+  )
+  $comboPattern.Expand()
+  try {
+    $item = Wait-Element $matchingCombos[0] ([System.Windows.Automation.PropertyCondition]::new(
       [System.Windows.Automation.AutomationElement]::NameProperty, $Value
     )) 5
     $item.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select()
@@ -223,13 +263,13 @@ function Set-FilterRule([System.Windows.Automation.AutomationElement]$Dialog, [s
     throw "Process Monitor filter dialog has an unexpected control layout"
   }
   Set-Stage "select-filter-column"
-  Select-ComboValue $combos[0] "Path"
+  Select-ComboValue $combos "Path"
   Set-Stage "select-filter-operator"
-  Select-ComboValue $combos[1] "is"
+  Select-ComboValue $combos "is"
   Set-Stage "set-filter-path-value"
   $edits[0].GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).SetValue($Path)
   Set-Stage "select-filter-action"
-  Select-ComboValue $combos[2] "Include"
+  Select-ComboValue $combos "Include"
   Set-Stage "add-filter-rule"
   $add = Wait-Element $Dialog ([System.Windows.Automation.PropertyCondition]::new(
     [System.Windows.Automation.AutomationElement]::NameProperty, "Add"
