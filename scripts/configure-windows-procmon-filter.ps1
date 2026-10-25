@@ -9,6 +9,14 @@ $ErrorActionPreference = "Stop"
 Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName UIAutomationTypes
 Add-Type -AssemblyName System.Windows.Forms
+Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+public static class ProcmonWindowActivation {
+  [DllImport("user32.dll")]
+  public static extern bool SetForegroundWindow(IntPtr windowHandle);
+}
+"@
 
 $process = Start-Process -FilePath $ProcmonPath -ArgumentList "/AcceptEula" -PassThru
 
@@ -116,8 +124,14 @@ try {
   $stage = "find-main-window"
   $main = Wait-MainWindow $process
   $main.SetFocus()
-  $stage = "open-filter-dialog"
+  $stage = "activate-main-window"
+  $mainHandle = [IntPtr]$main.Current.NativeWindowHandle
+  if ($mainHandle -eq [IntPtr]::Zero -or -not [ProcmonWindowActivation]::SetForegroundWindow($mainHandle)) {
+    throw "Process Monitor configuration window could not be activated"
+  }
+  $stage = "send-filter-shortcut"
   [System.Windows.Forms.SendKeys]::SendWait("^l")
+  $stage = "wait-filter-dialog"
   $filterDialog = Wait-TopLevelWindow "Filter" 10
   $stage = "reset-existing-filters"
   $reset = Wait-Element $filterDialog ([System.Windows.Automation.PropertyCondition]::new(

@@ -51,6 +51,8 @@ Run 89（`a862532`、all / full）ではUbuntu・macOS両archのfull jobが成�
 
 Run 91（`d38647f`、Windows / webview）ではsecurity-test build、Procmon署名確認、Windows harness回帰試験が成功した後、file-access testのProcmon filter setupが`find-main-window`で失敗し、baseline capture前に停止した。WDIO実WebView監査およびProcmon captureには到達していない。`MainWindowHandle`だけに依存したwindow検出を避けるため、UI Automation desktop treeでprocess IDが一致するトップレベルwindowを優先検出し、handleをfallbackにする。Run 91はcapture/filter動作の証拠ではなく、AC-05未達。
 
+Run 93（`534b434`、Windows / webview）では同じfilter setupが`find-main-window`を通過したが、`open-filter-dialog`で停止した。Procmon windowを検出できたことと、keyboard shortcutでdialogを開けたことは別に診断する。Run 93もWDIO/captureに到達しておらず、AC-05の証拠ではない。
+
 Rustのregistry / git依存と`target`をキャッシュし、OS・arch・runner・固定Rust版・lockfile / manifests / Cargo設定hashを区別する。同一モードを優先し、同じ依存条件の別モードからも復元可能。キャッシュhitでもbuild / testは省略しない。キャッシュは依存・ビルド出力のみで、資格情報ストア、監査trace、メールデータは含めない。初回はcold buildとなり、短縮量はrunnerで実測する。
 
 同じevent・ref・対象・モードの古いrunだけをcancelし、pushによって進行中の手動調査をcancelしない。
