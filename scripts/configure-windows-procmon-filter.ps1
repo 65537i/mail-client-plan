@@ -9,14 +9,6 @@ $ErrorActionPreference = "Stop"
 Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName UIAutomationTypes
 Add-Type -AssemblyName System.Windows.Forms
-Add-Type @"
-using System;
-using System.Runtime.InteropServices;
-public static class ProcmonWindowActivation {
-  [DllImport("user32.dll")]
-  public static extern bool SetForegroundWindow(IntPtr windowHandle);
-}
-"@
 
 $process = Start-Process -FilePath $ProcmonPath -ArgumentList "/AcceptEula" -PassThru
 
@@ -153,13 +145,39 @@ try {
   $stage = "find-main-window"
   $main = Wait-MainWindow $process
   $main.SetFocus()
-  $stage = "activate-main-window"
-  $mainHandle = [IntPtr]$main.Current.NativeWindowHandle
-  if ($mainHandle -eq [IntPtr]::Zero -or -not [ProcmonWindowActivation]::SetForegroundWindow($mainHandle)) {
-    throw "Process Monitor configuration window could not be activated"
+  $stage = "find-filter-menu"
+  $filterMenuCondition = [System.Windows.Automation.AndCondition]::new(
+    [System.Windows.Automation.PropertyCondition]::new(
+      [System.Windows.Automation.AutomationElement]::NameProperty, "Filter"
+    ),
+    [System.Windows.Automation.PropertyCondition]::new(
+      [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+      [System.Windows.Automation.ControlType]::MenuItem
+    )
+  )
+  $filterMenu = Wait-Element $main $filterMenuCondition 5
+  $stage = "expand-filter-menu"
+  $menuPattern = $null
+  if ($filterMenu.TryGetCurrentPattern(
+      [System.Windows.Automation.ExpandCollapsePattern]::Pattern,
+      [ref]$menuPattern
+    )) {
+    $menuPattern.Expand()
+  } else {
+    $menuPattern = $null
+    if (-not $filterMenu.TryGetCurrentPattern(
+        [System.Windows.Automation.InvokePattern]::Pattern,
+        [ref]$menuPattern
+      )) {
+      throw "Process Monitor Filter menu cannot be opened"
+    }
+    $menuPattern.Invoke()
   }
-  $stage = "send-filter-shortcut"
-  [System.Windows.Forms.SendKeys]::SendWait("^l")
+  $stage = "invoke-filter-command"
+  $filterCommand = Wait-Element $main ([System.Windows.Automation.PropertyCondition]::new(
+    [System.Windows.Automation.AutomationElement]::NameProperty, "Filter..."
+  )) 5
+  $filterCommand.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
   $stage = "wait-filter-dialog"
   $filterDialog = Wait-FilterDialog $process $main
   $stage = "reset-existing-filters"
