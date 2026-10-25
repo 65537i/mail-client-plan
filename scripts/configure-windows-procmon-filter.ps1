@@ -632,17 +632,56 @@ try {
   )) 5
   $ok.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
 
-  Set-Stage "enable-drop-filtered-events"
+  Set-Stage "focus-main-for-drop-filtered-events"
   $main.SetFocus()
-  [System.Windows.Forms.SendKeys]::SendWait("%f")
+  Set-Stage "find-filter-menu-for-drop-filtered-events"
+  $filterMenu = Wait-Element $main ([System.Windows.Automation.AndCondition]::new(
+    [System.Windows.Automation.PropertyCondition]::new(
+      [System.Windows.Automation.AutomationElement]::NameProperty, "Filter"
+    ),
+    [System.Windows.Automation.PropertyCondition]::new(
+      [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+      [System.Windows.Automation.ControlType]::MenuItem
+    )
+  )) 5
+  $dropMenuPattern = $null
+  if (-not $filterMenu.TryGetCurrentPattern(
+      [System.Windows.Automation.InvokePattern]::Pattern,
+      [ref]$dropMenuPattern
+    )) {
+    throw "Process Monitor Filter menu does not expose InvokePattern"
+  }
+  Set-Stage "open-drop-filtered-events-menu"
+  $dropMenuPattern.Invoke()
+  Set-Stage "find-drop-filtered-events"
   $drop = Wait-Element $main ([System.Windows.Automation.PropertyCondition]::new(
     [System.Windows.Automation.AutomationElement]::NameProperty, "Drop Filtered Events"
   )) 5
-  $toggle = $drop.GetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern)
-  if ($toggle.ToggleState -ne [System.Windows.Automation.ToggleState]::On) {
-    $toggle.Toggle()
+  Set-Stage "probe-drop-filter-toggle"
+  $togglePattern = $null
+  $hasTogglePattern = $drop.TryGetCurrentPattern(
+    [System.Windows.Automation.TogglePattern]::Pattern,
+    [ref]$togglePattern
+  )
+  $dropToggleState = "unavailable"
+  if ($hasTogglePattern) {
+    $dropToggleState = switch ($togglePattern.ToggleState) {
+      ([System.Windows.Automation.ToggleState]::On) { "on" }
+      ([System.Windows.Automation.ToggleState]::Off) { "off" }
+      default { "indeterminate" }
+    }
   }
-  if ($toggle.ToggleState -ne [System.Windows.Automation.ToggleState]::On) {
+  [Console]::Out.WriteLine(
+    "PROC_MON_FILTER_DROP_EVENTS_PATTERN=toggle:$($hasTogglePattern.ToString().ToLowerInvariant());state:$dropToggleState"
+  )
+  if (-not $hasTogglePattern) {
+    throw "Process Monitor Drop Filtered Events does not expose TogglePattern"
+  }
+  Set-Stage "enable-drop-filtered-events"
+  if ($dropToggleState -ne "on") {
+    $togglePattern.Toggle()
+  }
+  if ($togglePattern.ToggleState -ne [System.Windows.Automation.ToggleState]::On) {
     throw "Process Monitor did not enable Drop Filtered Events"
   }
 

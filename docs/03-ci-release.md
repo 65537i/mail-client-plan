@@ -133,6 +133,8 @@ Run 173（`fffed7d`、Windows / webview）はPath / isを固定indexでなく一
 
 Run 175（`79e8d92`、Windows / webview）はEditがenabled / onscreen / writable、ValuePattern提供ありと記録したが、出力が4096文字上限に達して失敗stageが不完全なままとなった。次runでは診断上限を8192へ増やし、上限到達も固定booleanで示す。ログはallowlist済み・boundedを維持し、Run 175はPMC/WDIO/capture未到達、AC-05未達。
 
+Run 177（`ab488e6`、Windows / webview）は8192文字以内にcomplete failure markerを保持し、stageが`enable-drop-filtered-events`と確定した。embedded filter dialogのReset / rules / path value / Applyまでは成功している。後続の`Alt+F`によるDrop Filtered Events切替で停止したため、次runでは既に観測済みのFilter menuをUIA InvokePatternで開き、該当項目とTogglePatternを特定する。Run 177はPMC保存 / WDIO / capture未到達、AC-05未達。
+
 Rustのregistry / git依存と`target`をキャッシュし、OS・arch・runner・固定Rust版・lockfile / manifests / Cargo設定hashを区別する。同一モードを優先し、同じ依存条件の別モードからも復元可能。キャッシュhitでもbuild / testは省略しない。キャッシュは依存・ビルド出力のみで、資格情報ストア、監査trace、メールデータは含めない。初回はcold buildとなり、短縮量はrunnerで実測する。
 
 同じevent・ref・対象・モードの古いrunだけをcancelし、pushによって進行中の手動調査をcancelしない。
