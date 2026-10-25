@@ -77,6 +77,7 @@ function Wait-FilterDialog([System.Diagnostics.Process]$Process, [System.Windows
   $processWindowCount = 0
   $nonMainWindowCount = 0
   $resetControlPresent = $false
+  $desktopResetControlPresent = $false
   $windowCondition = [System.Windows.Automation.PropertyCondition]::new(
     [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
     [System.Windows.Automation.ControlType]::Window
@@ -109,8 +110,17 @@ function Wait-FilterDialog([System.Diagnostics.Process]$Process, [System.Windows
     }
     Start-Sleep -Milliseconds 100
   } while ([DateTime]::UtcNow -lt $deadline)
+  foreach ($window in $windows) {
+    if ($null -ne $window.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $resetCondition)) {
+      $desktopResetControlPresent = $true
+      break
+    }
+  }
   [Console]::Out.WriteLine(
     "PROC_MON_FILTER_DIALOG_SCAN=process-windows:$processWindowCount;non-main-windows:$nonMainWindowCount;reset-control:$($resetControlPresent.ToString().ToLowerInvariant())"
+  )
+  [Console]::Out.WriteLine(
+    "PROC_MON_FILTER_DIALOG_DESKTOP_RESET_CONTROL=$($desktopResetControlPresent.ToString().ToLowerInvariant())"
   )
   throw "Process Monitor filter dialog did not expose its Reset control"
 }
@@ -275,6 +285,46 @@ function Write-FocusObservation(
   }
 }
 
+function Write-FocusOwnerObservation(
+  [string]$Phase,
+  [System.Diagnostics.Process]$Process,
+  [System.Windows.Automation.AutomationElement]$MainWindow
+) {
+  $owner = "unavailable"
+  $reason = $null
+  try {
+    $focused = [System.Windows.Automation.AutomationElement]::FocusedElement
+    $treeWalker = [System.Windows.Automation.TreeWalker]::ControlViewWalker
+    for ($level = 0; $null -ne $focused -and $level -lt 4; $level++) {
+      if ($focused.Current.ControlType -eq [System.Windows.Automation.ControlType]::Window) {
+        if ($focused.Current.ProcessId -ne $Process.Id) {
+          $owner = "other-process"
+        } elseif ($focused.Current.NativeWindowHandle -eq $MainWindow.Current.NativeWindowHandle) {
+          $owner = "procmon-main"
+        } else {
+          $owner = "procmon-other"
+        }
+        break
+      }
+      $focused = $treeWalker.GetParent($focused)
+    }
+    if ($null -eq $focused) {
+      $owner = "no-window"
+    }
+  } catch {
+    $reason = $_.Exception.GetType().Name
+    if ($reason -notin @(
+        "ElementNotAvailableException",
+        "InvalidOperationException",
+        "COMException"
+      )) {
+      $reason = "Other"
+    }
+  }
+  $suffix = if ($null -eq $reason) { "" } else { ";reason:$reason" }
+  [Console]::Out.WriteLine("PROC_MON_FILTER_FOCUS_OWNER=$Phase;owner:$owner$suffix")
+}
+
 try {
   Set-Stage "wait-for-input-idle"
   if (-not $process.WaitForInputIdle(10000)) {
@@ -433,6 +483,7 @@ try {
   $filterInvokePattern.Invoke()
   Set-Stage "observe-dialog-focus"
   Write-FocusObservation "after-command-invoke" | Out-Null
+  Write-FocusOwnerObservation "after-command-invoke" $process $main
   Set-Stage "wait-filter-dialog"
   $filterDialog = Wait-FilterDialog $process $main
   Set-Stage "reset-existing-filters"

@@ -117,6 +117,8 @@ Run 157（`860358f`、Windows / webview）はonscreenのpositive bounds中心を
 
 Run 159（`daf85b9`、Windows / webview）は11子からFilter commandを一意に特定し、FromPointとControlView parentによってrect中心が同じFilter MenuItemであることを確認した。それでもphysical click後はfocusがOtherへ移り、root windowは同一processのmainのみ、Reset controlなしで`wait-filter-dialog`に失敗。座標誤りではなくpointer activationでdialogが開かなかったことを示す。次runではFilter command自身のInvokePatternを直接使い、一意一致・InvokePattern提供・有効状態を必須とする。以前の親Filter menuに対するInvokePattern試行とは別の対象要素である。Run 159はWDIO/capture未到達でAC-05未達。
 
+Run 161（`0bed283`、Windows / webview）はFilter command自身のInvokePatternを実行したが、dialogは生成されず、同一process root windowはmainのみでReset controlなし。親Filter menuへのInvokeとphysical clickに続き、別のcommand-level UIA activationも失敗した。次runではpost-activation focus windowがProcmon main / Procmon別window / 他processのいずれかをsafe enumで記録し、全desktop root windowsにReset controlがあるかをbooleanで診断する。別process UIは利用せず、設定対象windowは引き続きProcmon所有に限定。Run 161はWDIO/capture未到達、AC-05未達。
+
 Rustのregistry / git依存と`target`をキャッシュし、OS・arch・runner・固定Rust版・lockfile / manifests / Cargo設定hashを区別する。同一モードを優先し、同じ依存条件の別モードからも復元可能。キャッシュhitでもbuild / testは省略しない。キャッシュは依存・ビルド出力のみで、資格情報ストア、監査trace、メールデータは含めない。初回はcold buildとなり、短縮量はrunnerで実測する。
 
 同じevent・ref・対象・モードの古いrunだけをcancelし、pushによって進行中の手動調査をcancelしない。

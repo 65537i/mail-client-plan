@@ -11,6 +11,8 @@ test("AC-05: Windows filter diagnostics retain only allowlisted UIA state", () =
     "PROC_MON_FILTER_MENU_PATTERNS=expand-collapse:true;invoke:false",
     "PROC_MON_FILTER_COMMAND_PATTERNS=invoke:true;selection-item:false",
     "PROC_MON_FILTER_COMMAND_ACTIVATION=invoke-pattern",
+    "PROC_MON_FILTER_DIALOG_DESKTOP_RESET_CONTROL=false",
+    "PROC_MON_FILTER_FOCUS_OWNER=after-command-invoke;owner:procmon-main",
     "PROC_MON_FILTER_MENU_TREE=MenuItem:Filter>MenuBar:MenuBar>Window:ProcessMonitor",
     "PROC_MON_FILTER_MENU_FOCUS=failed-COMException",
   ].join("\n");
@@ -20,6 +22,8 @@ test("AC-05: Windows filter diagnostics retain only allowlisted UIA state", () =
       + "; menu-patterns=expand-collapse:true;invoke:false"
       + "; filter-command-patterns=invoke:true;selection-item:false"
       + "; filter-command-activation=invoke-pattern"
+      + "; filter-dialog-desktop-reset-control=false"
+      + "; focus-owner-after-command-invoke=procmon-main"
       + "; menu-tree=MenuItem:Filter>MenuBar:MenuBar>Window:ProcessMonitor"
       + "; menu-focus=failed-COMException",
   );
@@ -105,6 +109,20 @@ test("AC-05: Windows filter diagnostics retain bounded dialog scan counts", () =
       "PROC_MON_FILTER_DIALOG_SCAN=process-windows:20000;non-main-windows:1;reset-control:false",
     ),
     "",
+  );
+});
+
+test("AC-05: Windows filter diagnostics retain safe dialog ownership state", () => {
+  assert.equal(
+    describeWindowsFilterDiagnostics([
+      "PROC_MON_FILTER_DIALOG_DESKTOP_RESET_CONTROL=true",
+      "PROC_MON_FILTER_FOCUS_OWNER=after-command-invoke;owner:other-process",
+      "PROC_MON_FILTER_FOCUS_OWNER=after-command-invoke;owner:unavailable;reason:COMException",
+      "PROC_MON_FILTER_FOCUS_OWNER=after-command-invoke;owner:other-process;reason:C:\\private\\mail",
+    ].join("\n")),
+    "; filter-dialog-desktop-reset-control=true"
+      + "; focus-owner-after-command-invoke=other-process"
+      + "; focus-owner-after-command-invoke=unavailable;reason:COMException",
   );
 });
 

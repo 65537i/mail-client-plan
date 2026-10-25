@@ -46,6 +46,20 @@ export function describeWindowsFilterDiagnostics(output) {
     );
   }
 
+  const desktopResetControl = output.match(
+    /^PROC_MON_FILTER_DIALOG_DESKTOP_RESET_CONTROL=(true|false)\r?$/m,
+  )?.[1];
+  if (desktopResetControl) {
+    diagnostics.push(`filter-dialog-desktop-reset-control=${desktopResetControl}`);
+  }
+
+  for (const match of output.matchAll(
+    /^PROC_MON_FILTER_FOCUS_OWNER=(after-command-invoke);owner:(procmon-main|procmon-other|other-process|no-window|unavailable)(?:;reason:(ElementNotAvailableException|InvalidOperationException|COMException|Other))?\r?$/gm,
+  )) {
+    const reason = match[3] ? `;reason:${match[3]}` : "";
+    diagnostics.push(`focus-owner-${match[1]}=${match[2]}${reason}`);
+  }
+
   const tree = output.match(/PROC_MON_FILTER_MENU_TREE=([A-Za-z:>]+)/)?.[1];
   if (tree) {
     const nodes = tree.split(">");
