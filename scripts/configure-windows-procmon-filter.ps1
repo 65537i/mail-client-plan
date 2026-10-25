@@ -266,8 +266,28 @@ function Set-FilterRule([System.Windows.Automation.AutomationElement]$Dialog, [s
   Select-ComboValue $combos "Path"
   Set-Stage "select-filter-operator"
   Select-ComboValue $combos "is"
+  Set-Stage "probe-filter-path-edit"
+  $editState = $edits[0].Current
+  $valuePattern = $null
+  $hasValuePattern = $edits[0].TryGetCurrentPattern(
+    [System.Windows.Automation.ValuePattern]::Pattern,
+    [ref]$valuePattern
+  )
+  $isReadOnly = $true
+  if ($hasValuePattern) {
+    $isReadOnly = $valuePattern.Current.IsReadOnly
+  }
+  [Console]::Out.WriteLine(
+    "PROC_MON_FILTER_PATH_EDIT=enabled:$($editState.IsEnabled.ToString().ToLowerInvariant());offscreen:$($editState.IsOffscreen.ToString().ToLowerInvariant());read-only:$($isReadOnly.ToString().ToLowerInvariant());value-pattern:$($hasValuePattern.ToString().ToLowerInvariant())"
+  )
+  if (-not $editState.IsEnabled -or
+    $editState.IsOffscreen -or
+    -not $hasValuePattern -or
+    $isReadOnly) {
+    throw "Process Monitor filter path field is not writable"
+  }
   Set-Stage "set-filter-path-value"
-  $edits[0].GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).SetValue($Path)
+  $valuePattern.SetValue($Path)
   Set-Stage "select-filter-action"
   Select-ComboValue $combos "Include"
   Set-Stage "add-filter-rule"

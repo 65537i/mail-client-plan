@@ -66,6 +66,15 @@ export function describeWindowsFilterDiagnostics(output) {
     );
   }
 
+  const pathEdit = output.match(
+    /^PROC_MON_FILTER_PATH_EDIT=enabled:(true|false);offscreen:(true|false);read-only:(true|false);value-pattern:(true|false)\r?$/m,
+  );
+  if (pathEdit) {
+    diagnostics.push(
+      `filter-path-edit=enabled:${pathEdit[1]};offscreen:${pathEdit[2]};read-only:${pathEdit[3]};value-pattern:${pathEdit[4]}`,
+    );
+  }
+
   const resetTree = output.match(
     /^PROC_MON_FILTER_DIALOG_RESET_TREE=(Window|Pane|ToolBar|Button|Text|Edit|Other)(?:>(?:Window|Pane|ToolBar|Button|Text|Edit|Other)){0,3}\r?$/m,
   )?.[0]?.replace("PROC_MON_FILTER_DIALOG_RESET_TREE=", "");

@@ -141,7 +141,9 @@ native [Run 167](https://github.com/65537i/mail-client-plan/actions/runs/4022717
 
 native [Run 169](https://github.com/65537i/mail-client-plan/actions/runs/40228120596)（`eab43b2`、Windows / webview）はReset + 4 ComboBox / 1 Editを持つ同一Procmonの非main Window ancestorを選択し、`wait-filter-dialog`を通過した。しかし`set-canary-filter`内で停止し、選択・値設定・Addのどこで失敗したかはouter stageだけでは不明。次runは各UI操作を固定stageへ分けて位置を特定する。Run 169はPMC/WDIO/capture未到達でAC-05未達。
 
-native [Run 171](https://github.com/65537i/mail-client-plan/actions/runs/40229037918)（`59d4ead`、Windows / webview）はfield=Path、operator=is、exact path値の設定を通過し、actionを選ぶ`select-filter-action`で停止した。固定index 2のComboBoxにInclude optionが見つからなかった。次は全ComboBoxから要求optionが存在する唯一のcontrolを探索し、候補が一意の場合だけ選択する。index順に依存せず、曖昧・欠落時はfail closed。Run 171はPMC/WDIO/capture未到達でAC-05未達。
+native [Run 171](https://github.com/65537i/mail-client-plan/actions/runs/40229037918)（`59d4ead`、Windows / webview）は列・演算子選択後に`set-filter-path-value` stageで停止した。SetValue呼び出し前にstageが出るため、値設定成功とは確認できない。次に`Include`候補が固定index 2に見つからなかったことも分離し、全ComboBoxからrequested optionが一意に存在するcontrolを選ぶ。曖昧・欠落時はfail closed。Run 171はPMC/WDIO/capture未到達でAC-05未達。
+
+native [Run 173](https://github.com/65537i/mail-client-plan/actions/runs/40230006044)（`fffed7d`、Windows / webview）は全ComboBoxから`Path`と`is`を一意に選んだ後、`set-filter-path-value` stageで停止した。Editの有効状態・ValuePattern有無をまだ記録していない。次はenabled / offscreen / read-only / ValuePatternを固定booleanで出し、値設定可否を特定する。Run 173はPMC/WDIO/capture未到達でAC-05未達。
 
 native [Run 89](https://github.com/65537i/mail-client-plan/actions/runs/40184517503)（`a862532`、all / full）はUbuntu、macOS 14 ARM、macOS 15 Intelが成功、Windowsのみ失敗。Windowsではformat / workspace test / clippy / frontend build / native build / production除外検査 / launch smoke / security-test build / TLS / Japanese FTS / IMAP / SMTP / MIME candidate / Windows harness回帰5 testsまで成功。Procmon署名確認も成功したが、capture前のUI Automation filter setupがexit 1となり、WDIOおよびcapture/export・control判定には進まなかった。元のstderrは意図的に破棄していたため、失敗したUI操作はこのrunから特定できない。Run 89はWindows file-access監査の実証ではなく、AC-05未達。
 
