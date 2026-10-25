@@ -220,8 +220,10 @@ function Write-FocusObservation([string]$Phase) {
     ) {
       Write-MenuItemsObservation $Phase $focused
     }
+    return $focused
   } catch {
     [Console]::Out.WriteLine("PROC_MON_FILTER_FOCUSED_CONTROL=$Phase;focused:unavailable")
+    return $null
   }
 }
 
@@ -300,9 +302,8 @@ try {
     throw "Process Monitor Filter menu exposes no supported open pattern"
   }
   Set-Stage "observe-menu-focus"
-  Write-FocusObservation "after-open"
+  $menu = Write-FocusObservation "after-open"
   Set-Stage "find-open-filter-menu"
-  $menu = [System.Windows.Automation.AutomationElement]::FocusedElement
   if ($null -eq $menu -or
     $menu.Current.ControlType.ProgrammaticName -ne "ControlType.Menu") {
     throw "Process Monitor did not expose its open Filter menu"
@@ -333,11 +334,11 @@ try {
   Set-Stage "focus-filter-command"
   $filterCommand.SetFocus()
   Set-Stage "observe-filter-command-focus"
-  Write-FocusObservation "filter-command"
+  Write-FocusObservation "filter-command" | Out-Null
   Set-Stage "send-filter-command"
   [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
   Set-Stage "observe-dialog-focus"
-  Write-FocusObservation "after-enter"
+  Write-FocusObservation "after-enter" | Out-Null
   Set-Stage "wait-filter-dialog"
   $filterDialog = Wait-FilterDialog $process $main
   Set-Stage "reset-existing-filters"
