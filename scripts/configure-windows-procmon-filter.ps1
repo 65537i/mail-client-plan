@@ -361,8 +361,9 @@ function Get-NativeDropMenuSnapshot([System.IntPtr]$WindowHandle) {
 }
 
 function Write-NativeDropMenuSnapshot($Snapshot, [string]$Observation) {
+  $handleState = if ($Snapshot.HandleAvailable) { "available" } else { "unavailable" }
   [Console]::Out.WriteLine(
-    "PROC_MON_FILTER_NATIVE_MENU_STATE=observation:$Observation;handle:$($Snapshot.HandleAvailable.ToString().ToLowerInvariant());items:$($Snapshot.ItemCount);matches:$($Snapshot.MatchCount);readable:$($Snapshot.Readable.ToString().ToLowerInvariant());checked:$($Snapshot.CheckState)"
+    "PROC_MON_FILTER_NATIVE_MENU_STATE=observation:$Observation;handle:$handleState;items:$($Snapshot.ItemCount);matches:$($Snapshot.MatchCount);readable:$($Snapshot.Readable.ToString().ToLowerInvariant());checked:$($Snapshot.CheckState)"
   )
 }
 
@@ -934,7 +935,7 @@ try {
     $dropMenu.Current.NativeWindowHandle -ne 0
   ).ToString().ToLowerInvariant()
   [Console]::Out.WriteLine(
-    "PROC_MON_FILTER_DROP_ITEM_STATE=keyboard-focusable:$($dropState.IsKeyboardFocusable.ToString().ToLowerInvariant());item-status:$dropItemStatus;help-text:$dropHelpText"
+    "PROC_MON_FILTER_DROP_ITEM_STATE=enabled:$($dropState.IsEnabled.ToString().ToLowerInvariant());offscreen:$($dropState.IsOffscreen.ToString().ToLowerInvariant());keyboard-focusable:$($dropState.IsKeyboardFocusable.ToString().ToLowerInvariant());item-status:$dropItemStatus;help-text:$dropHelpText"
   )
   [Console]::Out.WriteLine(
     "PROC_MON_FILTER_DROP_ITEM_BACKEND=framework:$dropFramework;native-window-handle:$dropNativeHandle;menu-window-handle:$menuNativeHandle"

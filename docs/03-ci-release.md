@@ -147,6 +147,8 @@ Run 183（`7ce682e`）、Run 185（`8921a49`）、Run 189（`3eddfa6`）のpush 
 
 [Run 191](https://github.com/65537i/mail-client-plan/actions/runs/40240259586)（`47d7f10`、push / Ubuntu 24.04 x64 / basic）はsuccess。Windows / AC-05の証拠ではない。[Run 192](https://github.com/65537i/mail-client-plan/actions/runs/40240666463)（`47d7f10`、Windows 2025 x64 / webview）はfilter dialogとUIA item照合後、`probe-drop-native-menu-state`で`RuntimeException`となった。native snapshot diagnosticがなく、PMC保存 / WDIO / capture未到達、AC-05未達。次runで`GetMenu` handle取得、bounded menu scan、state reportを別々のstageにして失敗箇所を限定する。native stateが確認できない場合はInvoke・保存を行わない。
 
+[Run 193](https://github.com/65537i/mail-client-plan/actions/runs/40241556573)（`f37ecf3`、push / Ubuntu 24.04 x64 / basic）はsuccess。Windows / AC-05の証拠ではない。[Run 194](https://github.com/65537i/mail-client-plan/actions/runs/40241654873)（`f37ecf3`、Windows 2025 x64 / webview）はnative menu scan / reportまで到達したが、`verify-drop-native-menu-state`で停止。出力`handle:true|false`がparserの`available|unavailable` allowlistと一致せず、stateおよびDrop itemのenabled / offscreenをdiagnostic summaryで区別できなかった。Invoke / PMC保存 / WDIO / capture未到達、AC-05未達。Run194後はnative handleをallowlist enumへ修正し、Drop itemのenabled / offscreen booleanもdiagnoseする変更を加えた。関連Node tests 12/12、JS syntax check、diff check成功。修正版Windows runtimeは未確認。
+
 Rustのregistry / git依存と`target`をキャッシュし、OS・arch・runner・固定Rust版・lockfile / manifests / Cargo設定hashを区別する。同一モードを優先し、同じ依存条件の別モードからも復元可能。キャッシュhitでもbuild / testは省略しない。キャッシュは依存・ビルド出力のみで、資格情報ストア、監査trace、メールデータは含めない。初回はcold buildとなり、短縮量はrunnerで実測する。
 
 同じevent・ref・対象・モードの古いrunだけをcancelし、pushによって進行中の手動調査をcancelしない。

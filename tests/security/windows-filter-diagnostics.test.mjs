@@ -22,7 +22,7 @@ test("AC-05: Windows filter diagnostics retain only allowlisted UIA and native m
     "PROC_MON_FILTER_DROP_PATTERN=toggle:true",
     "PROC_MON_FILTER_DROP_PATTERN=invoke:false",
     "PROC_MON_FILTER_DROP_PATTERN=selection-item:false",
-    "PROC_MON_FILTER_DROP_ITEM_STATE=keyboard-focusable:true;item-status:off;help-text:other",
+    "PROC_MON_FILTER_DROP_ITEM_STATE=enabled:true;offscreen:false;keyboard-focusable:true;item-status:off;help-text:other",
     "PROC_MON_FILTER_DROP_ITEM_BACKEND=framework:Win32;native-window-handle:false;menu-window-handle:true",
     "PROC_MON_FILTER_NATIVE_MENU_STATE=observation:before;handle:available;items:19;matches:1;readable:true;checked:off",
     "PROC_MON_FILTER_NATIVE_MENU_STATE=observation:after-invoke;handle:available;items:19;matches:1;readable:true;checked:on",
@@ -45,7 +45,7 @@ test("AC-05: Windows filter diagnostics retain only allowlisted UIA and native m
       + "; drop-filter-pattern-toggle=true"
       + "; drop-filter-pattern-invoke=false"
       + "; drop-filter-pattern-selection-item=false"
-      + "; drop-filter-item-state=keyboard-focusable:true;item-status:off;help-text:other"
+      + "; drop-filter-item-state=enabled:true;offscreen:false;keyboard-focusable:true;item-status:off;help-text:other"
       + "; drop-filter-item-backend=framework:Win32;native-window-handle:false;menu-window-handle:true"
       + "; drop-native-menu-state=observation:before;handle:available;items:19;matches:1;readable:true;checked:off"
       + "; drop-native-menu-state=observation:after-invoke;handle:available;items:19;matches:1;readable:true;checked:on"
@@ -187,11 +187,12 @@ test("AC-05: Windows filter diagnostics reject unknown Drop item patterns", () =
       "PROC_MON_FILTER_DROP_PATTERN=toggle:true;private-value",
       "PROC_MON_FILTER_DROP_PATTERN=legacy-accessible:true",
       "PROC_MON_FILTER_DROP_PATTERN=invoke:unknown",
-      "PROC_MON_FILTER_DROP_ITEM_STATE=keyboard-focusable:true;item-status:checked;help-text:C:\\private\\mail",
+      "PROC_MON_FILTER_DROP_ITEM_STATE=enabled:true;offscreen:false;keyboard-focusable:true;item-status:checked;help-text:C:\\private\\mail",
       "PROC_MON_FILTER_DROP_ITEM_BACKEND=framework:C:\\private\\mail;native-window-handle:true;menu-window-handle:true",
       "PROC_MON_FILTER_NATIVE_MENU_STATE=observation:before;handle:available;items:1000;matches:1;readable:true;checked:off",
       "PROC_MON_FILTER_NATIVE_MENU_STATE=observation:before;handle:available;items:1;matches:1;readable:true;checked:unavailable",
       "PROC_MON_FILTER_NATIVE_MENU_STATE=observation:private;handle:available;items:1;matches:1;readable:true;checked:on",
+      "PROC_MON_FILTER_NATIVE_MENU_STATE=observation:before;handle:true;items:19;matches:1;readable:true;checked:off",
     ].join("\n")),
     "",
   );

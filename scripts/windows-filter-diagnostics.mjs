@@ -100,11 +100,11 @@ export function describeWindowsFilterDiagnostics(output) {
   }
 
   const dropItemState = output.match(
-    /^PROC_MON_FILTER_DROP_ITEM_STATE=keyboard-focusable:(true|false);item-status:(checked|unchecked|on|off|mixed|other);help-text:(checked|unchecked|on|off|mixed|other)\r?$/m,
+    /^PROC_MON_FILTER_DROP_ITEM_STATE=enabled:(true|false);offscreen:(true|false);keyboard-focusable:(true|false);item-status:(checked|unchecked|on|off|mixed|other);help-text:(checked|unchecked|on|off|mixed|other)\r?$/m,
   );
   if (dropItemState) {
     diagnostics.push(
-      `drop-filter-item-state=keyboard-focusable:${dropItemState[1]};item-status:${dropItemState[2]};help-text:${dropItemState[3]}`,
+      `drop-filter-item-state=enabled:${dropItemState[1]};offscreen:${dropItemState[2]};keyboard-focusable:${dropItemState[3]};item-status:${dropItemState[4]};help-text:${dropItemState[5]}`,
     );
   }
 
