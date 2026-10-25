@@ -57,7 +57,9 @@ Run 95（`fe49719`、Windows / webview）ではforeground化とshortcut送信を
 
 Run 97（`9d21d13`、Windows / webview）ではdialogの識別条件を広げても`wait-filter-dialog`で失敗した。次はSendKeysに依存せず、UI AutomationでFilter menuと`Filter...` commandをinvokeする。Run 97はWDIO/captureに到達しておらず、AC-05の証拠ではない。
 
-Run 99（`6e57722`、Windows / webview）ではfilter setup child processが60秒timeoutし、進捗markerは`invoke-filter-command`で停止した。modalを開くmenu commandの同期Invokeを避けるため、UIA focus後にEnterで起動する。Run 99もWDIO/captureに到達しておらず、AC-05の証拠ではない。
+Run 99（`6e57722`、Windows / webview）ではfilter setup child processが60秒timeoutし、進捗markerは`invoke-filter-command`で停止した。modalを開くmenu commandの同期Invokeを避けるため、UIA focus後にEnterで起動する。
+
+Run 103（`d7e61a1`、Windows / webview）も同じprogress markerで60秒timeoutした。command検索・focus・Enter送信の個別完了点が区別できなかったため、進捗tokenを細分化して次runの停止位置を特定する。Run 99 / 103ともWDIO/captureに到達しておらず、AC-05の証拠ではない。
 
 Rustのregistry / git依存と`target`をキャッシュし、OS・arch・runner・固定Rust版・lockfile / manifests / Cargo設定hashを区別する。同一モードを優先し、同じ依存条件の別モードからも復元可能。キャッシュhitでもbuild / testは省略しない。キャッシュは依存・ビルド出力のみで、資格情報ストア、監査trace、メールデータは含めない。初回はcold buildとなり、短縮量はrunnerで実測する。
 

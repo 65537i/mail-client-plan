@@ -178,11 +178,13 @@ try {
     }
     $menuPattern.Invoke()
   }
-  Set-Stage "invoke-filter-command"
+  Set-Stage "find-filter-command"
   $filterCommand = Wait-Element $main ([System.Windows.Automation.PropertyCondition]::new(
     [System.Windows.Automation.AutomationElement]::NameProperty, "Filter..."
   )) 5
+  Set-Stage "focus-filter-command"
   $filterCommand.SetFocus()
+  Set-Stage "send-filter-command"
   [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
   Set-Stage "wait-filter-dialog"
   $filterDialog = Wait-FilterDialog $process $main
@@ -221,7 +223,9 @@ try {
   $saveFilter = Wait-Element $main ([System.Windows.Automation.PropertyCondition]::new(
     [System.Windows.Automation.AutomationElement]::NameProperty, "Save Filter..."
   )) 5
+  Set-Stage "focus-save-filter-command"
   $saveFilter.SetFocus()
+  Set-Stage "send-save-filter-command"
   [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
   $saveDialog = Wait-TopLevelWindow "Save" 10
   $fileName = Wait-Element $saveDialog ([System.Windows.Automation.PropertyCondition]::new(

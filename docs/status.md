@@ -63,6 +63,8 @@ native [Run 97](https://github.com/65537i/mail-client-plan/actions/runs/40191688
 
 native [Run 99](https://github.com/65537i/mail-client-plan/actions/runs/40192409809)（`6e57722`、Windows / webview）はfilter setup子processが60秒timeoutとなり、WDIO/captureへ進まなかった。追加した進捗診断で停止stageは`invoke-filter-command`と特定できた。modalを開くMenuItemの同期`Invoke()`が戻らない可能性を避け、展開済みmenu内のcommandをfocusしてEnterで実行する。Run 99は監査成功やAC-05合格に数えない。
 
+native [Run 103](https://github.com/65537i/mail-client-plan/actions/runs/40194076668)（`d7e61a1`、Windows / webview）は引き続き60秒timeout、最後のmarkerは`invoke-filter-command`だった。既存markerはcommand検索・focus・Enter送信を区別しないため、これらを個別stageに分けて再試験する。Run 103もWDIO/captureに到達しておらず、AC-05合格に数えない。
+
 native [Run 89](https://github.com/65537i/mail-client-plan/actions/runs/40184517503)（`a862532`、all / full）はUbuntu、macOS 14 ARM、macOS 15 Intelが成功、Windowsのみ失敗。Windowsではformat / workspace test / clippy / frontend build / native build / production除外検査 / launch smoke / security-test build / TLS / Japanese FTS / IMAP / SMTP / MIME candidate / Windows harness回帰5 testsまで成功。Procmon署名確認も成功したが、capture前のUI Automation filter setupがexit 1となり、WDIOおよびcapture/export・control判定には進まなかった。元のstderrは意図的に破棄していたため、失敗したUI操作はこのrunから特定できない。Run 89はWindows file-access監査の実証ではなく、AC-05未達。
 
 native [Run 87](https://github.com/65537i/mail-client-plan/actions/runs/40179791422)（`4f75cec`、all / full）はWindowsのみ失敗。plan / Ubuntu / macOS ARM / Intelは成功。Windowsのcanary生成・worker回帰5件とbaseline UI spec 1件は成功したが、baseline終了後のPMLが273,341,060 bytesで256 MiB（268,435,456 bytes）上限を4,905,604 bytes超過し、CSV export / canary event判定前に停止。attack captureは未実行。このrunではSystem eventの有無を観測・判断できず、Run 86のwrite-through効果を否定または裏付けしない。上限引き上げ、イベントfilter、超過captureからの部分的な合格判定は行わない。Linux/macOS成功をWindows fullの代替にしない。AC-05 / Phase 00未完了。
