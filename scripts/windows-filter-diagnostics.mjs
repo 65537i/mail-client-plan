@@ -118,7 +118,7 @@ export function describeWindowsFilterDiagnostics(output) {
   }
 
   for (const match of output.matchAll(
-    /^PROC_MON_FILTER_NATIVE_MENU_STATE=observation:(before|after-invoke);source:(main|menu-owner|unavailable);menu-window-process:(same|other|unavailable);gui-thread-info:(available|unavailable);owner-window:(available|unavailable);handle:(available|unavailable);items:(\d{1,3});matches:(\d{1,3});readable:(true|false);checked:(on|off|unavailable)\r?$/gm,
+    /^PROC_MON_FILTER_NATIVE_MENU_STATE=observation:(before|after-invoke);source:(main|menu-owner|unavailable);menu-window-process:(same|other|unavailable);gui-thread-info:(available|unavailable);owner-window:(available|unavailable);handle:(available|unavailable);items:(\d{1,3});matches:(\d{1,3});read-failure:(none|depth-limit|total-limit|menu-count-invalid|menu-count-limit|owner-drawn|item-read-failed);readable:(true|false);checked:(on|off|unavailable)\r?$/gm,
   )) {
     const [
       ,
@@ -130,6 +130,7 @@ export function describeWindowsFilterDiagnostics(output) {
       handle,
       rawItems,
       rawMatches,
+      readFailure,
       readable,
       checked,
     ] = match;
@@ -153,6 +154,7 @@ export function describeWindowsFilterDiagnostics(output) {
       );
     const consistentCheck =
       validSource
+      && readFailure === "none"
       && handle === "available"
       && readable === "true"
       && matches === 1
@@ -163,13 +165,17 @@ export function describeWindowsFilterDiagnostics(output) {
         (
           validSource
           && handle === "available"
-          && (readable === "false" || matches !== 1)
+          && (
+            (readFailure === "none" && readable === "true" && matches !== 1)
+            || (readFailure !== "none" && readable === "false")
+          )
         )
         || (
           source === "unavailable"
           && handle === "unavailable"
           && items === 0
           && matches === 0
+          && readFailure === "none"
           && readable === "false"
         )
       );
@@ -179,7 +185,7 @@ export function describeWindowsFilterDiagnostics(output) {
       && (consistentCheck || consistentUnavailable)
     ) {
       diagnostics.push(
-        `drop-native-menu-state=observation:${observation};source:${source};menu-window-process:${menuWindowProcess};gui-thread-info:${guiThreadInfo};owner-window:${ownerWindow};handle:${handle};items:${items};matches:${matches};readable:${readable};checked:${checked}`,
+        `drop-native-menu-state=observation:${observation};source:${source};menu-window-process:${menuWindowProcess};gui-thread-info:${guiThreadInfo};owner-window:${ownerWindow};handle:${handle};items:${items};matches:${matches};read-failure:${readFailure};readable:${readable};checked:${checked}`,
       );
     }
   }

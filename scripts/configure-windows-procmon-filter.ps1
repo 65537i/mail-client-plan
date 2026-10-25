@@ -147,15 +147,20 @@ public static class ProcmonNativeMenu
         ref MenuItemInfo info
     );
 
-    public static ItemSnapshot ReadItem(IntPtr hMenu, uint position)
+    public static ItemSnapshot ReadItem(IntPtr hMenu, uint position, out bool ownerDrawn)
     {
+        ownerDrawn = false;
         var info = new MenuItemInfo
         {
             cbSize = (uint)Marshal.SizeOf(typeof(MenuItemInfo)),
             fMask = MIIM_STATE | MIIM_SUBMENU | MIIM_FTYPE
         };
-        if (!GetMenuItemInfo(hMenu, position, true, ref info) ||
-            (info.fType & MFT_OWNERDRAW) != 0)
+        if (!GetMenuItemInfo(hMenu, position, true, ref info))
+        {
+            return null;
+        }
+        ownerDrawn = (info.fType & MFT_OWNERDRAW) != 0;
+        if (ownerDrawn)
         {
             return null;
         }
@@ -377,21 +382,45 @@ function Wait-FilterDialog([System.Diagnostics.Process]$Process, [System.Windows
 function Find-NativeDropMenuItem([System.IntPtr]$MenuHandle, [int]$Depth) {
   if ($Depth -gt 4 -or $script:nativeMenuVisited -ge 256) {
     $script:nativeMenuReadable = $false
+    if ($script:nativeMenuFailure -eq "none") {
+      $script:nativeMenuFailure = if ($Depth -gt 4) { "depth-limit" } else { "total-limit" }
+    }
     return
   }
   $itemCount = [ProcmonNativeMenu]::GetMenuItemCount($MenuHandle)
-  if ($itemCount -lt 0 -or $itemCount -gt 64) {
+  if ($itemCount -lt 0) {
     $script:nativeMenuReadable = $false
+    if ($script:nativeMenuFailure -eq "none") {
+      $script:nativeMenuFailure = "menu-count-invalid"
+    }
+    return
+  }
+  if ($itemCount -gt 64) {
+    $script:nativeMenuReadable = $false
+    if ($script:nativeMenuFailure -eq "none") {
+      $script:nativeMenuFailure = "menu-count-limit"
+    }
     return
   }
   for ($position = 0; $position -lt $itemCount; $position++) {
     if ($script:nativeMenuVisited -ge 256) {
       $script:nativeMenuReadable = $false
+      if ($script:nativeMenuFailure -eq "none") {
+        $script:nativeMenuFailure = "total-limit"
+      }
       return
     }
-    $item = [ProcmonNativeMenu]::ReadItem($MenuHandle, [uint32]$position)
+    $ownerDrawn = $false
+    $item = [ProcmonNativeMenu]::ReadItem(
+      $MenuHandle,
+      [uint32]$position,
+      [ref]$ownerDrawn
+    )
     if ($null -eq $item) {
       $script:nativeMenuReadable = $false
+      if ($script:nativeMenuFailure -eq "none") {
+        $script:nativeMenuFailure = if ($ownerDrawn) { "owner-drawn" } else { "item-read-failed" }
+      }
       continue
     }
     $script:nativeMenuVisited++
@@ -444,6 +473,7 @@ function Get-NativeDropMenuSnapshot(
   $handleAvailable = -not $menuHandle.Equals([System.IntPtr]::Zero)
   $script:nativeMenuVisited = 0
   $script:nativeMenuReadable = $handleAvailable
+  $script:nativeMenuFailure = "none"
   $script:nativeDropMenuMatches = [System.Collections.Generic.List[bool]]::new()
   if ($handleAvailable) {
     Set-Stage "scan-native-menu-state"
@@ -462,6 +492,7 @@ function Get-NativeDropMenuSnapshot(
     HandleAvailable = $handleAvailable
     ItemCount = [Math]::Min($script:nativeMenuVisited, 9999)
     MatchCount = [Math]::Min($script:nativeDropMenuMatches.Count, 9999)
+    ReadFailure = $script:nativeMenuFailure
     Readable = $script:nativeMenuReadable
     CheckState = $checkState
   }
@@ -472,7 +503,7 @@ function Write-NativeDropMenuSnapshot($Snapshot, [string]$Observation) {
   $ownerWindowState = if ($Snapshot.OwnerWindowAvailable) { "available" } else { "unavailable" }
   $handleState = if ($Snapshot.HandleAvailable) { "available" } else { "unavailable" }
   [Console]::Out.WriteLine(
-    "PROC_MON_FILTER_NATIVE_MENU_STATE=observation:$Observation;source:$($Snapshot.MenuSource);menu-window-process:$($Snapshot.MenuWindowProcess);gui-thread-info:$guiThreadInfoState;owner-window:$ownerWindowState;handle:$handleState;items:$($Snapshot.ItemCount);matches:$($Snapshot.MatchCount);readable:$($Snapshot.Readable.ToString().ToLowerInvariant());checked:$($Snapshot.CheckState)"
+    "PROC_MON_FILTER_NATIVE_MENU_STATE=observation:$Observation;source:$($Snapshot.MenuSource);menu-window-process:$($Snapshot.MenuWindowProcess);gui-thread-info:$guiThreadInfoState;owner-window:$ownerWindowState;handle:$handleState;items:$($Snapshot.ItemCount);matches:$($Snapshot.MatchCount);read-failure:$($Snapshot.ReadFailure);readable:$($Snapshot.Readable.ToString().ToLowerInvariant());checked:$($Snapshot.CheckState)"
   )
 }
 

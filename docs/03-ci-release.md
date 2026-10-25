@@ -153,6 +153,8 @@ native [Run 196](https://github.com/65537i/mail-client-plan/actions/runs/4024259
 
 native [Run 198](https://github.com/65537i/mail-client-plan/actions/runs/40244199050)（`c3b1c3b`、manual Windows 2025 x64 / webview）はplanとsecurity-test build成功。Procmon監査setupはcanary flush / close後の`select-filter-operator`で60秒timeoutとなり、ComboBox 4個 / Edit 1個のfilter dialog確認以降、operator option探索の実行箇所を特定できなかった。`.PMC`保存、WDIO、capture / control未到達でAC-05未達。Run196後に追加したmenu-owner fallbackは未実行。次の診断変更はcolumn / operator / actionそれぞれのComboBox候補ordinal、展開、option待機に固定stageを設けるだけで、選択条件やUI操作は変えない。
 
+native [Run 200](https://github.com/65537i/mail-client-plan/actions/runs/40245305319)（`c4f857b`、manual Windows 2025 x64 / webview）はplan、security-test build、Windows audit setup / worker tests成功。`select-filter-operator`を通過してWin32 owner fallbackに到達し、popup / ownerのProcmon process一致とowner `GetMenu` handle取得を確認したが、menu scanはitems 0 / matches 0 / readable falseでstate unavailableとなった。fail-closedでfilter Invoke、`.PMC`保存、WDIO、capture / control未実行、AC-05未達。既存出力ではmenu count invalidと最初のitem read failureを区別できないため、次runでowner-drawn / item-read-failed / invalid count / bounds超過をallowlist診断し原因を特定する。厳格なscan・state判定は維持する。
+
 Rustのregistry / git依存と`target`をキャッシュし、OS・arch・runner・固定Rust版・lockfile / manifests / Cargo設定hashを区別する。同一モードを優先し、同じ依存条件の別モードからも復元可能。キャッシュhitでもbuild / testは省略しない。キャッシュは依存・ビルド出力のみで、資格情報ストア、監査trace、メールデータは含めない。初回はcold buildとなり、短縮量はrunnerで実測する。
 
 同じevent・ref・対象・モードの古いrunだけをcancelし、pushによって進行中の手動調査をcancelしない。
