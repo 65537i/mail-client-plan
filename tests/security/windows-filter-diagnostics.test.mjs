@@ -10,7 +10,7 @@ test("AC-05: Windows filter diagnostics retain only allowlisted UIA state", () =
     "PROC_MON_FILTER_MENU_STATE=enabled:true;offscreen:false;keyboard-focusable:true",
     "PROC_MON_FILTER_MENU_PATTERNS=expand-collapse:true;invoke:false",
     "PROC_MON_FILTER_COMMAND_PATTERNS=invoke:true;selection-item:false",
-    "PROC_MON_FILTER_COMMAND_GEOMETRY=clickable-bounds:true;center-matches-command:true",
+    "PROC_MON_FILTER_COMMAND_ACTIVATION=invoke-pattern",
     "PROC_MON_FILTER_MENU_TREE=MenuItem:Filter>MenuBar:MenuBar>Window:ProcessMonitor",
     "PROC_MON_FILTER_MENU_FOCUS=failed-COMException",
   ].join("\n");
@@ -19,7 +19,7 @@ test("AC-05: Windows filter diagnostics retain only allowlisted UIA state", () =
     "; menu-state=enabled:true;offscreen:false;keyboard-focusable:true"
       + "; menu-patterns=expand-collapse:true;invoke:false"
       + "; filter-command-patterns=invoke:true;selection-item:false"
-      + "; filter-command-clickable-bounds=true;center-matches-command=true"
+      + "; filter-command-activation=invoke-pattern"
       + "; menu-tree=MenuItem:Filter>MenuBar:MenuBar>Window:ProcessMonitor"
       + "; menu-focus=failed-COMException",
   );
@@ -58,7 +58,7 @@ test("AC-05: Windows filter diagnostics retain safe focused-control observations
     "PROC_MON_FILTER_FOCUSED_CONTROL=filter-command;type:MenuItem;name:FilterCommand;offscreen:false;keyboard-focusable:true;tree=MenuItem:FilterCommand>Menu:Other",
     "PROC_MON_FILTER_FOCUSED_CONTROL=after-enter;focused:none",
     "PROC_MON_FILTER_FOCUSED_CONTROL=after-invoke;type:Window;name:ProcessMonitor;offscreen:false;keyboard-focusable:false;tree=Window:ProcessMonitor",
-    "PROC_MON_FILTER_FOCUSED_CONTROL=after-click;type:Window;name:ProcessMonitor;offscreen:false;keyboard-focusable:false;tree=Window:ProcessMonitor",
+    "PROC_MON_FILTER_FOCUSED_CONTROL=after-command-invoke;type:Window;name:ProcessMonitor;offscreen:false;keyboard-focusable:false;tree=Window:ProcessMonitor",
   ].join("\n");
   assert.equal(
     describeWindowsFilterDiagnostics(output),
@@ -67,7 +67,7 @@ test("AC-05: Windows filter diagnostics retain safe focused-control observations
       + "; focus-filter-command=MenuItem:FilterCommand;offscreen:false;keyboard-focusable:true;tree=MenuItem:FilterCommand>Menu:Other"
       + "; focus-after-enter=none"
       + "; focus-after-invoke=Window:ProcessMonitor;offscreen:false;keyboard-focusable:false;tree=Window:ProcessMonitor"
-      + "; focus-after-click=Window:ProcessMonitor;offscreen:false;keyboard-focusable:false;tree=Window:ProcessMonitor",
+      + "; focus-after-command-invoke=Window:ProcessMonitor;offscreen:false;keyboard-focusable:false;tree=Window:ProcessMonitor",
   );
 });
 

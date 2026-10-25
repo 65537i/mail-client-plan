@@ -9,16 +9,6 @@ $ErrorActionPreference = "Stop"
 Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName UIAutomationTypes
 Add-Type -AssemblyName System.Windows.Forms
-Add-Type -AssemblyName WindowsBase
-Add-Type -TypeDefinition @"
-using System.Runtime.InteropServices;
-public static class WindowsAuditMouse {
-  [DllImport("user32.dll", SetLastError = true)]
-  public static extern bool SetCursorPos(int x, int y);
-  [DllImport("user32.dll", SetLastError = true)]
-  public static extern void mouse_event(uint flags, uint dx, uint dy, uint data, System.UIntPtr extraInfo);
-}
-"@
 
 $process = Start-Process -FilePath $ProcmonPath -ArgumentList "/AcceptEula" -PassThru
 
@@ -427,53 +417,22 @@ try {
   [Console]::Out.WriteLine(
     "PROC_MON_FILTER_COMMAND_PATTERNS=invoke:$($hasFilterInvokePattern.ToString().ToLowerInvariant());selection-item:$($hasFilterSelectionPattern.ToString().ToLowerInvariant())"
   )
-  Set-Stage "read-filter-command-bounds"
-  $filterBounds = $filterCommandState.BoundingRectangle
-  $hasFilterClickableBounds = -not $filterCommandState.IsOffscreen -and
-    $filterBounds.Width -gt 0 -and $filterBounds.Height -gt 0
-  $filterCenterMatchesCommand = $false
-  if ($hasFilterClickableBounds) {
-    Set-Stage "verify-filter-command-center"
-    $clickX = [int][Math]::Round($filterBounds.X + ($filterBounds.Width / 2))
-    $clickY = [int][Math]::Round($filterBounds.Y + ($filterBounds.Height / 2))
-    $pointElement = [System.Windows.Automation.AutomationElement]::FromPoint(
-      [System.Windows.Point]::new($clickX, $clickY)
-    )
-    $treeWalker = [System.Windows.Automation.TreeWalker]::ControlViewWalker
-    for ($level = 0; $null -ne $pointElement -and $level -lt 4; $level++) {
-      $pointState = $pointElement.Current
-      if ($pointState.Name -eq "Filter..." -and
-        $pointState.ControlType.ProgrammaticName -eq "ControlType.MenuItem") {
-        $filterCenterMatchesCommand = $true
-        break
-      }
-      $pointElement = $treeWalker.GetParent($pointElement)
-    }
-  }
-  [Console]::Out.WriteLine(
-    "PROC_MON_FILTER_COMMAND_GEOMETRY=clickable-bounds:$($hasFilterClickableBounds.ToString().ToLowerInvariant());center-matches-command:$($filterCenterMatchesCommand.ToString().ToLowerInvariant())"
-  )
   Set-Stage "validate-filter-command-state"
   if (-not $filterCommandState.IsEnabled -or
     $filterCommandState.IsOffscreen -or
-    -not $filterCommandState.IsKeyboardFocusable) {
-    throw "Process Monitor Filter command is not available for keyboard input"
+    -not $filterCommandState.IsKeyboardFocusable -or
+    -not $hasFilterInvokePattern) {
+    throw "Process Monitor Filter command is not available through its InvokePattern"
   }
   Set-Stage "focus-filter-command"
   $filterCommand.SetFocus()
   Set-Stage "observe-filter-command-focus"
   Write-FocusObservation "filter-command" | Out-Null
-  if (-not $hasFilterClickableBounds -or -not $filterCenterMatchesCommand) {
-    throw "Process Monitor Filter command has no verified onscreen click target"
-  }
-  Set-Stage "click-filter-command"
-  if (-not [WindowsAuditMouse]::SetCursorPos($clickX, $clickY)) {
-    throw "Process Monitor Filter command could not be reached by pointer input"
-  }
-  [WindowsAuditMouse]::mouse_event(0x0002, 0, 0, 0, [UIntPtr]::Zero)
-  [WindowsAuditMouse]::mouse_event(0x0004, 0, 0, 0, [UIntPtr]::Zero)
+  [Console]::Out.WriteLine("PROC_MON_FILTER_COMMAND_ACTIVATION=invoke-pattern")
+  Set-Stage "invoke-filter-command"
+  $filterInvokePattern.Invoke()
   Set-Stage "observe-dialog-focus"
-  Write-FocusObservation "after-click" | Out-Null
+  Write-FocusObservation "after-command-invoke" | Out-Null
   Set-Stage "wait-filter-dialog"
   $filterDialog = Wait-FilterDialog $process $main
   Set-Stage "reset-existing-filters"

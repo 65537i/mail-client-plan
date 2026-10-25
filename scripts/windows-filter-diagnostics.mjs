@@ -24,15 +24,6 @@ export function describeWindowsFilterDiagnostics(output) {
   )?.[1];
   if (commandPatterns) diagnostics.push(`filter-command-patterns=${commandPatterns}`);
 
-  const commandGeometry = output.match(
-    /PROC_MON_FILTER_COMMAND_GEOMETRY=clickable-bounds:(true|false);center-matches-command:(true|false)/,
-  );
-  if (commandGeometry) {
-    diagnostics.push(
-      `filter-command-clickable-bounds=${commandGeometry[1]};center-matches-command=${commandGeometry[2]}`,
-    );
-  }
-
   const commandMatch = output.match(
     /PROC_MON_FILTER_COMMAND_MATCH=items:(\d{1,4});matches:(\d{1,4})/,
   );
@@ -40,6 +31,10 @@ export function describeWindowsFilterDiagnostics(output) {
     diagnostics.push(
       `filter-command-match=items:${commandMatch[1]};matches:${commandMatch[2]}`,
     );
+  }
+
+  if (/^PROC_MON_FILTER_COMMAND_ACTIVATION=invoke-pattern\r?$/m.test(output)) {
+    diagnostics.push("filter-command-activation=invoke-pattern");
   }
 
   const dialogScan = output.match(
@@ -115,7 +110,7 @@ export function describeWindowsFilterDiagnostics(output) {
     }
   }
   for (const match of output.matchAll(
-    /^PROC_MON_FILTER_FOCUSED_CONTROL=(after-open|after-home|filter-command|after-enter|after-invoke|after-click);focused:(none|unavailable)\r?$/gm,
+    /^PROC_MON_FILTER_FOCUSED_CONTROL=(after-open|after-home|filter-command|after-enter|after-invoke|after-click|after-command-invoke);focused:(none|unavailable)\r?$/gm,
   )) {
     focusObservations.push({
       index: match.index,
@@ -123,7 +118,7 @@ export function describeWindowsFilterDiagnostics(output) {
     });
   }
   for (const match of output.matchAll(
-    /^PROC_MON_FILTER_FOCUSED_CONTROL=(after-open|after-home|filter-command|after-enter|after-invoke|after-click);type:(MenuBar|Menu|MenuItem|Window|Pane|ToolBar|Button|Text|Edit|Other);name:(Filter|FilterCommand|MenuBar|ProcessMonitor|Other);offscreen:(true|false);keyboard-focusable:(true|false);tree=([A-Za-z:>]+)\r?$/gm,
+    /^PROC_MON_FILTER_FOCUSED_CONTROL=(after-open|after-home|filter-command|after-enter|after-invoke|after-click|after-command-invoke);type:(MenuBar|Menu|MenuItem|Window|Pane|ToolBar|Button|Text|Edit|Other);name:(Filter|FilterCommand|MenuBar|ProcessMonitor|Other);offscreen:(true|false);keyboard-focusable:(true|false);tree=([A-Za-z:>]+)\r?$/gm,
   )) {
     const nodes = match[6].split(">");
     if (

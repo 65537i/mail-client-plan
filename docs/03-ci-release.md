@@ -115,6 +115,8 @@ Run 155（`26174c6`、Windows / webview）でも明示型Pointを使うTryGetCli
 
 Run 157（`860358f`、Windows / webview）はonscreenのpositive bounds中心をクリックした後、FocusedElement=ToolBar、main以外window 0 / Reset controlなしとなりdialog未表示だった。座標が対象MenuItemを指していた証拠がないため、次runでは入力前にFromPointのUIA elementと最大4 parentを調べ、完全一致Filter... MenuItemかだけ記録して検証する。click target不一致時はfail closed。Run 157はAC-05の証拠ではない。
 
+Run 159（`daf85b9`、Windows / webview）は11子からFilter commandを一意に特定し、FromPointとControlView parentによってrect中心が同じFilter MenuItemであることを確認した。それでもphysical click後はfocusがOtherへ移り、root windowは同一processのmainのみ、Reset controlなしで`wait-filter-dialog`に失敗。座標誤りではなくpointer activationでdialogが開かなかったことを示す。次runではFilter command自身のInvokePatternを直接使い、一意一致・InvokePattern提供・有効状態を必須とする。以前の親Filter menuに対するInvokePattern試行とは別の対象要素である。Run 159はWDIO/capture未到達でAC-05未達。
+
 Rustのregistry / git依存と`target`をキャッシュし、OS・arch・runner・固定Rust版・lockfile / manifests / Cargo設定hashを区別する。同一モードを優先し、同じ依存条件の別モードからも復元可能。キャッシュhitでもbuild / testは省略しない。キャッシュは依存・ビルド出力のみで、資格情報ストア、監査trace、メールデータは含めない。初回はcold buildとなり、短縮量はrunnerで実測する。
 
 同じevent・ref・対象・モードの古いrunだけをcancelし、pushによって進行中の手動調査をcancelしない。
