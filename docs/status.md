@@ -99,7 +99,9 @@ native [Run 129](https://github.com/65537i/mail-client-plan/actions/runs/4020619
 
 native [Run 131](https://github.com/65537i/mail-client-plan/actions/runs/40207145751)（`163d157`、Windows / webview）は`resolve-open-filter-menu`で停止。PowerShellからMenuのFocusedElementと子controlの診断は出たが、同じ観測参照を後段へ渡す処理が成立しなかった。PSCUSTOMOBJECT pipeline handoffを使わず、PowerShell script-scoped変数へAutomationElementとControlType snapshotを保持する変更を行う。Run 131もWDIO/capture前で停止し、AC-05合格に数えない。
 
-Run 131後の修正: after-open観測が得たAutomationElement / ControlTypeをscript scopeへ直接保持し、PowerShell pipeline経由の参照返却を除去。次runでMenu解決とFilter command selectionを確認する。
+native [Run 133](https://github.com/65537i/mail-client-plan/actions/runs/40208095864)（`25109db`、Windows / webview）も`resolve-open-filter-menu`で停止。FocusedElementと子controlは引き続き観測されたが、script-scoped変数によるhandoffでも解決しなかった。次はfunction return / script scopeを使わず、mutable IDictionary snapshotへAutomationElementとControlTypeを直接格納して後段へ渡す。Run 133もWDIO/capture前で停止し、AC-05合格に数えない。
+
+Run 133後の修正: after-openのFocusedElement / ControlTypeを呼び出し元が作成したhashtableへ書き込み、resolverがそのsnapshotを読む。PowerShell runtimeは次のWindows runで確認。
 
 native [Run 89](https://github.com/65537i/mail-client-plan/actions/runs/40184517503)（`a862532`、all / full）はUbuntu、macOS 14 ARM、macOS 15 Intelが成功、Windowsのみ失敗。Windowsではformat / workspace test / clippy / frontend build / native build / production除外検査 / launch smoke / security-test build / TLS / Japanese FTS / IMAP / SMTP / MIME candidate / Windows harness回帰5 testsまで成功。Procmon署名確認も成功したが、capture前のUI Automation filter setupがexit 1となり、WDIOおよびcapture/export・control判定には進まなかった。元のstderrは意図的に破棄していたため、失敗したUI操作はこのrunから特定できない。Run 89はWindows file-access監査の実証ではなく、AC-05未達。
 

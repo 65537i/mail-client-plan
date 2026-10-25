@@ -196,9 +196,14 @@ function Write-MenuItemsObservation(
   }
 }
 
-function Write-FocusObservation([string]$Phase) {
-  $script:observedFocusedElement = $null
-  $script:observedFocusedControlType = $null
+function Write-FocusObservation(
+  [string]$Phase,
+  [System.Collections.IDictionary]$Snapshot = $null
+) {
+  if ($null -ne $Snapshot) {
+    $Snapshot["Element"] = $null
+    $Snapshot["ControlType"] = $null
+  }
   try {
     $focused = [System.Windows.Automation.AutomationElement]::FocusedElement
     if ($null -eq $focused) {
@@ -213,8 +218,10 @@ function Write-FocusObservation([string]$Phase) {
       $treeParts.Add("$(Get-ControlTypeLabel $treeNode):$(Get-ControlNameLabel $treeNode)")
       $treeNode = $treeWalker.GetParent($treeNode)
     }
-    $script:observedFocusedElement = $focused
-    $script:observedFocusedControlType = $state.ControlType.ProgrammaticName
+    if ($null -ne $Snapshot) {
+      $Snapshot["Element"] = $focused
+      $Snapshot["ControlType"] = $state.ControlType.ProgrammaticName
+    }
     [Console]::Out.WriteLine(
       "PROC_MON_FILTER_FOCUSED_CONTROL=$Phase;type:$(Get-ControlTypeLabel $focused);name:$(Get-ControlNameLabel $focused);offscreen:$($state.IsOffscreen.ToString().ToLowerInvariant());keyboard-focusable:$($state.IsKeyboardFocusable.ToString().ToLowerInvariant());tree=$($treeParts -join '>')"
     )
@@ -304,13 +311,14 @@ try {
     throw "Process Monitor Filter menu exposes no supported open pattern"
   }
   Set-Stage "observe-menu-focus"
-  Write-FocusObservation "after-open"
+  $focusSnapshot = @{}
+  Write-FocusObservation "after-open" $focusSnapshot
   Set-Stage "resolve-open-filter-menu"
-  if ($null -eq $script:observedFocusedElement) {
+  if ($null -eq $focusSnapshot["Element"]) {
     throw "Process Monitor did not expose its focused menu element"
   }
-  $menu = $script:observedFocusedElement
-  $menuType = $script:observedFocusedControlType
+  $menu = $focusSnapshot["Element"]
+  $menuType = $focusSnapshot["ControlType"]
   if ($menuType -ne "ControlType.Menu") {
     Set-Stage "walk-to-open-filter-menu"
     $treeWalker = [System.Windows.Automation.TreeWalker]::ControlViewWalker
@@ -324,7 +332,7 @@ try {
   if ($null -eq $menu -or $menuType -ne "ControlType.Menu") {
     throw "Process Monitor did not expose its open Filter menu"
   }
-  if ($script:observedFocusedControlType -ne "ControlType.Menu") {
+  if ($focusSnapshot["ControlType"] -ne "ControlType.Menu") {
     Write-MenuItemsObservation "after-open" $menu
   }
   Set-Stage "enumerate-filter-menu-items"
