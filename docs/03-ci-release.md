@@ -77,7 +77,9 @@ Run 117（`ef70a3f`、Windows / webview）はmenu `ExpandCollapsePattern=false; 
 
 Run 119（`9eb8f38`、Windows / webview）はInvoke後とHOME後にFocusedElement=`Menu`（keyboard-focusableなし）、ENTER後に`Other`（keyboard-focusableあり）を観測したが、Filter dialogは開かなかった。次runで直接子controlの内容を取得する。
 
-Run 121（`cfc9319`、Windows / webview）はMenu直下に11 controlがあり、3番目がenabled / onscreen / keyboard-focusableな`Filter...` MenuItemと観測した。HOMEによる先頭選択は使わず、この完全一致MenuItemを一意に特定し、状態検査後にfocusしてEnterを送る。Run 121は`select-filter-command`で停止し、WDIO/capture未到達のためAC-05の証拠ではない。
+Run 121（`cfc9319`、Windows / webview）はMenu直下に11 controlがあり、3番目がenabled / onscreen / keyboard-focusableな`Filter...` MenuItemと観測した。HOMEによる先頭選択は使わず、この完全一致MenuItemを一意に特定する方針。
+
+Run 123（`a878d05`、Windows / webview）は`find-filter-command-in-menu`で停止。完全一致名とControlTypeを組み合わせたUIA検索はMenu配下からcommandを返さなかった。次runでは実際に取得できた直接子一覧をTrueConditionで列挙し、完全一致name / typeでcommandを特定してからfocusする。関連Node回帰は9/9成功、Run 123はWDIO/capture未到達のためAC-05の証拠ではない。
 
 Rustのregistry / git依存と`target`をキャッシュし、OS・arch・runner・固定Rust版・lockfile / manifests / Cargo設定hashを区別する。同一モードを優先し、同じ依存条件の別モードからも復元可能。キャッシュhitでもbuild / testは省略しない。キャッシュは依存・ビルド出力のみで、資格情報ストア、監査trace、メールデータは含めない。初回はcold buildとなり、短縮量はrunnerで実測する。
 

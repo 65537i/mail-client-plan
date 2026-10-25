@@ -301,24 +301,25 @@ try {
   }
   Set-Stage "observe-menu-focus"
   Write-FocusObservation "after-open"
-  Set-Stage "find-filter-command-in-menu"
+  Set-Stage "find-open-filter-menu"
   $menu = [System.Windows.Automation.AutomationElement]::FocusedElement
   if ($null -eq $menu -or
     $menu.Current.ControlType.ProgrammaticName -ne "ControlType.Menu") {
     throw "Process Monitor did not expose its open Filter menu"
   }
-  $filterCommands = $menu.FindAll(
+  Set-Stage "enumerate-filter-menu-items"
+  $menuItems = $menu.FindAll(
     [System.Windows.Automation.TreeScope]::Children,
-    [System.Windows.Automation.AndCondition]::new(
-      [System.Windows.Automation.PropertyCondition]::new(
-        [System.Windows.Automation.AutomationElement]::NameProperty, "Filter..."
-      ),
-      [System.Windows.Automation.PropertyCondition]::new(
-        [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
-        [System.Windows.Automation.ControlType]::MenuItem
-      )
-    )
+    [System.Windows.Automation.Condition]::TrueCondition
   )
+  Set-Stage "match-filter-command"
+  $filterCommands = [System.Collections.Generic.List[System.Windows.Automation.AutomationElement]]::new()
+  foreach ($item in $menuItems) {
+    if ($item.Current.Name -eq "Filter..." -and
+      $item.Current.ControlType.ProgrammaticName -eq "ControlType.MenuItem") {
+      $filterCommands.Add($item)
+    }
+  }
   if ($filterCommands.Count -ne 1) {
     throw "Process Monitor open menu did not expose one Filter command"
   }
