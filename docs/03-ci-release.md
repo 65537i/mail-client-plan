@@ -99,6 +99,8 @@ Run 139（`153a08b`、Windows / webview）もProcmon filter setupで失敗。ロ
 
 Run 141（`541365e`、Windows / webview）では4096文字上限下でcaller snapshotもelement present / ControlType Menuと観測し、Filter commandを一意に特定してfocusできた。Enter後のFocusedElementはButtonとなり、filter dialogは見つからず`wait-filter-dialog`で停止した。次runはFilter commandのInvokePattern / SelectionItemPattern対応を固定booleanで観測する。未確認のactivation操作を試さず、WDIO/capture/export/control判定は未到達のまま。Run 141はAC-05の証拠ではない。
 
+Run 143（`9528184`、Windows / webview）はFilter commandのInvokePatternがtrue、SelectionItemPatternがfalseと観測された。キーボードEnter後はFocusedElement=Buttonでdialog未表示のため、次runでは測定済みInvokePatternを呼ぶ。Run 143はWDIO/capture/export/control判定に到達しておらず、AC-05の証拠ではない。
+
 Rustのregistry / git依存と`target`をキャッシュし、OS・arch・runner・固定Rust版・lockfile / manifests / Cargo設定hashを区別する。同一モードを優先し、同じ依存条件の別モードからも復元可能。キャッシュhitでもbuild / testは省略しない。キャッシュは依存・ビルド出力のみで、資格情報ストア、監査trace、メールデータは含めない。初回はcold buildとなり、短縮量はrunnerで実測する。
 
 同じevent・ref・対象・モードの古いrunだけをcancelし、pushによって進行中の手動調査をcancelしない。

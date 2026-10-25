@@ -402,10 +402,13 @@ try {
   $filterCommand.SetFocus()
   Set-Stage "observe-filter-command-focus"
   Write-FocusObservation "filter-command" | Out-Null
-  Set-Stage "send-filter-command"
-  [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
+  if (-not $hasFilterInvokePattern) {
+    throw "Process Monitor Filter command does not expose InvokePattern"
+  }
+  Set-Stage "invoke-filter-command"
+  $filterInvokePattern.Invoke()
   Set-Stage "observe-dialog-focus"
-  Write-FocusObservation "after-enter" | Out-Null
+  Write-FocusObservation "after-invoke" | Out-Null
   Set-Stage "wait-filter-dialog"
   $filterDialog = Wait-FilterDialog $process $main
   Set-Stage "reset-existing-filters"
