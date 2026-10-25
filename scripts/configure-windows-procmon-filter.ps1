@@ -747,8 +747,22 @@ try {
     "Mixed" { "mixed" }
     default { "other" }
   }
+  $dropFramework = switch ($dropState.FrameworkId) {
+    "Win32" { "Win32" }
+    "WPF" { "WPF" }
+    "WinForm" { "WinForm" }
+    "DirectUI" { "DirectUI" }
+    default { "other" }
+  }
+  $dropNativeHandle = ($dropState.NativeWindowHandle -ne 0).ToString().ToLowerInvariant()
+  $menuNativeHandle = (
+    $dropMenu.Current.NativeWindowHandle -ne 0
+  ).ToString().ToLowerInvariant()
   [Console]::Out.WriteLine(
     "PROC_MON_FILTER_DROP_ITEM_STATE=keyboard-focusable:$($dropState.IsKeyboardFocusable.ToString().ToLowerInvariant());item-status:$dropItemStatus;help-text:$dropHelpText"
+  )
+  [Console]::Out.WriteLine(
+    "PROC_MON_FILTER_DROP_ITEM_BACKEND=framework:$dropFramework;native-window-handle:$dropNativeHandle;menu-window-handle:$menuNativeHandle"
   )
   $dropToggleState = "unavailable"
   if ($hasTogglePattern) {
