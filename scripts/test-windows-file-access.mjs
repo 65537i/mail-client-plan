@@ -107,15 +107,24 @@ async function captureScenario(scenario) {
     const filterSetupExit = waitForProcess(filterSetup);
     const filterSetupResult = await waitWithTimeout(filterSetupExit, 60_000);
     if (filterSetupResult.timedOut) {
+      const filterStage = [...filterSetupOutput.matchAll(
+        /PROC_MON_FILTER_PROGRESS=([a-z-]+)/g,
+      )].at(-1)?.[1];
       filterSetup.kill();
       await filterSetupExit;
       await runProcmon(["/AcceptEula", "/Terminate"], "filter setup cleanup");
-      throw new Error("Process Monitor exact-path filter configuration timed out");
+      throw new Error(
+        filterStage
+          ? `Process Monitor exact-path filter configuration timed out at ${filterStage}`
+          : "Process Monitor exact-path filter configuration timed out",
+      );
     }
     if (filterSetupResult.error) throw new Error("Failed to start Process Monitor filter configuration");
     const filterStage = filterSetupOutput.match(
       /PROC_MON_FILTER_FAILED_STAGE=([a-z-]+)/,
-    )?.[1];
+    )?.[1] ?? [...filterSetupOutput.matchAll(
+      /PROC_MON_FILTER_PROGRESS=([a-z-]+)/g,
+    )].at(-1)?.[1];
     assert.equal(
       filterSetupResult.code,
       0,

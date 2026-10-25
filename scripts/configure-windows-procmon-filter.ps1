@@ -12,6 +12,11 @@ Add-Type -AssemblyName System.Windows.Forms
 
 $process = Start-Process -FilePath $ProcmonPath -ArgumentList "/AcceptEula" -PassThru
 
+function Set-Stage([string]$Name) {
+  $script:stage = $Name
+  [Console]::Out.WriteLine("PROC_MON_FILTER_PROGRESS=$Name")
+}
+
 function Wait-Element([System.Windows.Automation.AutomationElement]$Root, [System.Windows.Automation.Condition]$Condition, [int]$TimeoutSeconds = 10) {
   $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
   do {
@@ -138,14 +143,14 @@ function Set-FilterRule([System.Windows.Automation.AutomationElement]$Dialog, [s
 }
 
 try {
-  $stage = "wait-for-input-idle"
+  Set-Stage "wait-for-input-idle"
   if (-not $process.WaitForInputIdle(10000)) {
     throw "Process Monitor UI did not become idle"
   }
-  $stage = "find-main-window"
+  Set-Stage "find-main-window"
   $main = Wait-MainWindow $process
   $main.SetFocus()
-  $stage = "find-filter-menu"
+  Set-Stage "find-filter-menu"
   $filterMenuCondition = [System.Windows.Automation.AndCondition]::new(
     [System.Windows.Automation.PropertyCondition]::new(
       [System.Windows.Automation.AutomationElement]::NameProperty, "Filter"
@@ -156,7 +161,7 @@ try {
     )
   )
   $filterMenu = Wait-Element $main $filterMenuCondition 5
-  $stage = "expand-filter-menu"
+  Set-Stage "expand-filter-menu"
   $menuPattern = $null
   if ($filterMenu.TryGetCurrentPattern(
       [System.Windows.Automation.ExpandCollapsePattern]::Pattern,
@@ -173,29 +178,29 @@ try {
     }
     $menuPattern.Invoke()
   }
-  $stage = "invoke-filter-command"
+  Set-Stage "invoke-filter-command"
   $filterCommand = Wait-Element $main ([System.Windows.Automation.PropertyCondition]::new(
     [System.Windows.Automation.AutomationElement]::NameProperty, "Filter..."
   )) 5
   $filterCommand.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
-  $stage = "wait-filter-dialog"
+  Set-Stage "wait-filter-dialog"
   $filterDialog = Wait-FilterDialog $process $main
-  $stage = "reset-existing-filters"
+  Set-Stage "reset-existing-filters"
   $reset = Wait-Element $filterDialog ([System.Windows.Automation.PropertyCondition]::new(
     [System.Windows.Automation.AutomationElement]::NameProperty, "Reset"
   )) 5
   $reset.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
-  $stage = "set-canary-filter"
+  Set-Stage "set-canary-filter"
   Set-FilterRule $filterDialog $CanaryPath
-  $stage = "set-control-filter"
+  Set-Stage "set-control-filter"
   Set-FilterRule $filterDialog $ControlPath
-  $stage = "apply-filters"
+  Set-Stage "apply-filters"
   $ok = Wait-Element $filterDialog ([System.Windows.Automation.PropertyCondition]::new(
     [System.Windows.Automation.AutomationElement]::NameProperty, "OK"
   )) 5
   $ok.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
 
-  $stage = "enable-drop-filtered-events"
+  Set-Stage "enable-drop-filtered-events"
   $main.SetFocus()
   [System.Windows.Forms.SendKeys]::SendWait("%f")
   $drop = Wait-Element $main ([System.Windows.Automation.PropertyCondition]::new(
@@ -209,7 +214,7 @@ try {
     throw "Process Monitor did not enable Drop Filtered Events"
   }
 
-  $stage = "save-filter"
+  Set-Stage "save-filter"
   [System.Windows.Forms.SendKeys]::SendWait("{ESC}")
   [System.Windows.Forms.SendKeys]::SendWait("%f")
   $saveFilter = Wait-Element $main ([System.Windows.Automation.PropertyCondition]::new(
@@ -226,7 +231,7 @@ try {
     [System.Windows.Automation.AutomationElement]::NameProperty, "Save"
   )) 5
   $save.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
-  $stage = "verify-filter-file"
+  Set-Stage "verify-filter-file"
   if (-not (Test-Path -LiteralPath $ConfigPath) -or (Get-Item -LiteralPath $ConfigPath).Length -lt 100) {
     throw "Process Monitor did not save the audit filter configuration"
   }
