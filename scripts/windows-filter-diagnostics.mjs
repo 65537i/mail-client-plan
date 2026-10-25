@@ -46,11 +46,18 @@ export function describeWindowsFilterDiagnostics(output) {
     );
   }
 
-  const desktopResetControl = output.match(
-    /^PROC_MON_FILTER_DIALOG_DESKTOP_RESET_CONTROL=(true|false)\r?$/m,
+  const desktopResetOwner = output.match(
+    /^PROC_MON_FILTER_DIALOG_DESKTOP_RESET_OWNER=(procmon-main|procmon-other|other-process|none)\r?$/m,
   )?.[1];
-  if (desktopResetControl) {
-    diagnostics.push(`filter-dialog-desktop-reset-control=${desktopResetControl}`);
+  if (desktopResetOwner) {
+    diagnostics.push(`filter-dialog-desktop-reset-owner=${desktopResetOwner}`);
+  }
+
+  const resetTree = output.match(
+    /^PROC_MON_FILTER_DIALOG_RESET_TREE=(Window|Pane|ToolBar|Button|Text|Edit|Other)(?:>(?:Window|Pane|ToolBar|Button|Text|Edit|Other)){0,3}\r?$/m,
+  )?.[0]?.replace("PROC_MON_FILTER_DIALOG_RESET_TREE=", "");
+  if (resetTree) {
+    diagnostics.push(`filter-dialog-reset-tree=${resetTree}`);
   }
 
   for (const match of output.matchAll(

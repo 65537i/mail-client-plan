@@ -11,7 +11,8 @@ test("AC-05: Windows filter diagnostics retain only allowlisted UIA state", () =
     "PROC_MON_FILTER_MENU_PATTERNS=expand-collapse:true;invoke:false",
     "PROC_MON_FILTER_COMMAND_PATTERNS=invoke:true;selection-item:false",
     "PROC_MON_FILTER_COMMAND_ACTIVATION=invoke-pattern",
-    "PROC_MON_FILTER_DIALOG_DESKTOP_RESET_CONTROL=false",
+    "PROC_MON_FILTER_DIALOG_DESKTOP_RESET_OWNER=procmon-main",
+    "PROC_MON_FILTER_DIALOG_RESET_TREE=Button>Pane>Window",
     "PROC_MON_FILTER_FOCUS_OWNER=after-command-invoke;owner:procmon-main",
     "PROC_MON_FILTER_MENU_TREE=MenuItem:Filter>MenuBar:MenuBar>Window:ProcessMonitor",
     "PROC_MON_FILTER_MENU_FOCUS=failed-COMException",
@@ -22,7 +23,8 @@ test("AC-05: Windows filter diagnostics retain only allowlisted UIA state", () =
       + "; menu-patterns=expand-collapse:true;invoke:false"
       + "; filter-command-patterns=invoke:true;selection-item:false"
       + "; filter-command-activation=invoke-pattern"
-      + "; filter-dialog-desktop-reset-control=false"
+      + "; filter-dialog-desktop-reset-owner=procmon-main"
+      + "; filter-dialog-reset-tree=Button>Pane>Window"
       + "; focus-owner-after-command-invoke=procmon-main"
       + "; menu-tree=MenuItem:Filter>MenuBar:MenuBar>Window:ProcessMonitor"
       + "; menu-focus=failed-COMException",
@@ -115,12 +117,14 @@ test("AC-05: Windows filter diagnostics retain bounded dialog scan counts", () =
 test("AC-05: Windows filter diagnostics retain safe dialog ownership state", () => {
   assert.equal(
     describeWindowsFilterDiagnostics([
-      "PROC_MON_FILTER_DIALOG_DESKTOP_RESET_CONTROL=true",
+      "PROC_MON_FILTER_DIALOG_DESKTOP_RESET_OWNER=other-process",
+      "PROC_MON_FILTER_DIALOG_RESET_TREE=Button>Pane>Window",
       "PROC_MON_FILTER_FOCUS_OWNER=after-command-invoke;owner:other-process",
       "PROC_MON_FILTER_FOCUS_OWNER=after-command-invoke;owner:unavailable;reason:COMException",
       "PROC_MON_FILTER_FOCUS_OWNER=after-command-invoke;owner:other-process;reason:C:\\private\\mail",
     ].join("\n")),
-    "; filter-dialog-desktop-reset-control=true"
+    "; filter-dialog-desktop-reset-owner=other-process"
+      + "; filter-dialog-reset-tree=Button>Pane>Window"
       + "; focus-owner-after-command-invoke=other-process"
       + "; focus-owner-after-command-invoke=unavailable;reason:COMException",
   );

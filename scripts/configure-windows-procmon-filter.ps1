@@ -77,7 +77,8 @@ function Wait-FilterDialog([System.Diagnostics.Process]$Process, [System.Windows
   $processWindowCount = 0
   $nonMainWindowCount = 0
   $resetControlPresent = $false
-  $desktopResetControlPresent = $false
+  $desktopResetOwner = "none"
+  $desktopResetTree = [System.Collections.Generic.List[string]]::new()
   $windowCondition = [System.Windows.Automation.PropertyCondition]::new(
     [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
     [System.Windows.Automation.ControlType]::Window
@@ -111,8 +112,21 @@ function Wait-FilterDialog([System.Diagnostics.Process]$Process, [System.Windows
     Start-Sleep -Milliseconds 100
   } while ([DateTime]::UtcNow -lt $deadline)
   foreach ($window in $windows) {
-    if ($null -ne $window.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $resetCondition)) {
-      $desktopResetControlPresent = $true
+    $reset = $window.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $resetCondition)
+    if ($null -ne $reset) {
+      if ($window.Current.ProcessId -ne $Process.Id) {
+        $desktopResetOwner = "other-process"
+      } elseif ($window.Current.NativeWindowHandle -eq $MainWindow.Current.NativeWindowHandle) {
+        $desktopResetOwner = "procmon-main"
+      } else {
+        $desktopResetOwner = "procmon-other"
+      }
+      $treeWalker = [System.Windows.Automation.TreeWalker]::ControlViewWalker
+      $treeNode = $reset
+      for ($level = 0; $null -ne $treeNode -and $level -lt 4; $level++) {
+        $desktopResetTree.Add((Get-ControlTypeLabel $treeNode))
+        $treeNode = $treeWalker.GetParent($treeNode)
+      }
       break
     }
   }
@@ -120,8 +134,11 @@ function Wait-FilterDialog([System.Diagnostics.Process]$Process, [System.Windows
     "PROC_MON_FILTER_DIALOG_SCAN=process-windows:$processWindowCount;non-main-windows:$nonMainWindowCount;reset-control:$($resetControlPresent.ToString().ToLowerInvariant())"
   )
   [Console]::Out.WriteLine(
-    "PROC_MON_FILTER_DIALOG_DESKTOP_RESET_CONTROL=$($desktopResetControlPresent.ToString().ToLowerInvariant())"
+    "PROC_MON_FILTER_DIALOG_DESKTOP_RESET_OWNER=$desktopResetOwner"
   )
+  if ($desktopResetTree.Count -gt 0) {
+    [Console]::Out.WriteLine("PROC_MON_FILTER_DIALOG_RESET_TREE=$($desktopResetTree -join '>')")
+  }
   throw "Process Monitor filter dialog did not expose its Reset control"
 }
 
