@@ -222,10 +222,15 @@ function Set-FilterRule([System.Windows.Automation.AutomationElement]$Dialog, [s
   if ($combos.Count -lt 3 -or $edits.Count -lt 1) {
     throw "Process Monitor filter dialog has an unexpected control layout"
   }
+  Set-Stage "select-filter-column"
   Select-ComboValue $combos[0] "Path"
+  Set-Stage "select-filter-operator"
   Select-ComboValue $combos[1] "is"
+  Set-Stage "set-filter-path-value"
   $edits[0].GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).SetValue($Path)
+  Set-Stage "select-filter-action"
   Select-ComboValue $combos[2] "Include"
+  Set-Stage "add-filter-rule"
   $add = Wait-Element $Dialog ([System.Windows.Automation.PropertyCondition]::new(
     [System.Windows.Automation.AutomationElement]::NameProperty, "Add"
   )) 5
