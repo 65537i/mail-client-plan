@@ -9,6 +9,110 @@ $ErrorActionPreference = "Stop"
 Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName UIAutomationTypes
 Add-Type -AssemblyName System.Windows.Forms
+Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+
+public static class ProcmonNativeMenu
+{
+    private const uint MIIM_STATE = 0x00000001;
+    private const uint MIIM_SUBMENU = 0x00000004;
+    private const uint MIIM_STRING = 0x00000040;
+    private const uint MIIM_FTYPE = 0x00000100;
+    private const uint MFS_CHECKED = 0x00000008;
+    private const uint MFT_OWNERDRAW = 0x00000100;
+    private const uint MaximumTextCharacters = 255;
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MenuItemInfo
+    {
+        public uint cbSize;
+        public uint fMask;
+        public uint fType;
+        public uint fState;
+        public uint wID;
+        public IntPtr hSubMenu;
+        public IntPtr hbmpChecked;
+        public IntPtr hbmpUnchecked;
+        public IntPtr dwItemData;
+        public IntPtr dwTypeData;
+        public uint cch;
+        public IntPtr hbmpItem;
+    }
+
+    public sealed class ItemSnapshot
+    {
+        public string Text { get; set; }
+        public bool IsChecked { get; set; }
+        public IntPtr Submenu { get; set; }
+    }
+
+    [DllImport("user32.dll", ExactSpelling = true, SetLastError = true)]
+    public static extern IntPtr GetMenu(IntPtr hWnd);
+
+    [DllImport("user32.dll", ExactSpelling = true, SetLastError = true)]
+    public static extern int GetMenuItemCount(IntPtr hMenu);
+
+    [DllImport(
+        "user32.dll",
+        EntryPoint = "GetMenuItemInfoW",
+        ExactSpelling = true,
+        CharSet = CharSet.Unicode,
+        SetLastError = true
+    )]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetMenuItemInfo(
+        IntPtr hMenu,
+        uint item,
+        [MarshalAs(UnmanagedType.Bool)] bool fByPosition,
+        ref MenuItemInfo info
+    );
+
+    public static ItemSnapshot ReadItem(IntPtr hMenu, uint position)
+    {
+        var info = new MenuItemInfo
+        {
+            cbSize = (uint)Marshal.SizeOf(typeof(MenuItemInfo)),
+            fMask = MIIM_STATE | MIIM_SUBMENU | MIIM_FTYPE
+        };
+        if (!GetMenuItemInfo(hMenu, position, true, ref info) ||
+            (info.fType & MFT_OWNERDRAW) != 0)
+        {
+            return null;
+        }
+        info.fMask = MIIM_STRING;
+        info.dwTypeData = IntPtr.Zero;
+        info.cch = 0;
+        if (!GetMenuItemInfo(hMenu, position, true, ref info) ||
+            info.cch > MaximumTextCharacters)
+        {
+            return null;
+        }
+        var bufferCharacters = info.cch + 1;
+        var buffer = Marshal.AllocHGlobal((int)(bufferCharacters * 2));
+        try
+        {
+            info.dwTypeData = buffer;
+            info.cch = bufferCharacters;
+            if (!GetMenuItemInfo(hMenu, position, true, ref info) ||
+                info.cch > MaximumTextCharacters)
+            {
+                return null;
+            }
+            return new ItemSnapshot
+            {
+                Text = Marshal.PtrToStringUni(buffer, (int)info.cch) ?? string.Empty,
+                IsChecked = (info.fState & MFS_CHECKED) != 0,
+                Submenu = info.hSubMenu
+            };
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(buffer);
+        }
+    }
+}
+"@
 
 $process = Start-Process -FilePath $ProcmonPath -ArgumentList "/AcceptEula" -PassThru
 
@@ -189,6 +293,74 @@ function Wait-FilterDialog([System.Diagnostics.Process]$Process, [System.Windows
     [Console]::Out.WriteLine("PROC_MON_FILTER_DIALOG_RESET_TREE=$($desktopResetTree -join '>')")
   }
   throw "Process Monitor filter dialog did not expose its Reset control"
+}
+
+function Find-NativeDropMenuItem([System.IntPtr]$MenuHandle, [int]$Depth) {
+  if ($Depth -gt 4 -or $script:nativeMenuVisited -ge 256) {
+    $script:nativeMenuReadable = $false
+    return
+  }
+  $itemCount = [ProcmonNativeMenu]::GetMenuItemCount($MenuHandle)
+  if ($itemCount -lt 0 -or $itemCount -gt 64) {
+    $script:nativeMenuReadable = $false
+    return
+  }
+  for ($position = 0; $position -lt $itemCount; $position++) {
+    if ($script:nativeMenuVisited -ge 256) {
+      $script:nativeMenuReadable = $false
+      return
+    }
+    $item = [ProcmonNativeMenu]::ReadItem($MenuHandle, [uint32]$position)
+    if ($null -eq $item) {
+      $script:nativeMenuReadable = $false
+      continue
+    }
+    $script:nativeMenuVisited++
+    $itemName = $item.Text.Replace("&", "")
+    $acceleratorIndex = $itemName.IndexOf("`t")
+    if ($acceleratorIndex -ge 0) {
+      $itemName = $itemName.Substring(0, $acceleratorIndex)
+    }
+    $itemName = $itemName.Trim()
+    if ([string]::Equals(
+        $itemName,
+        "Drop Filtered Events",
+        [System.StringComparison]::Ordinal
+      )) {
+      $script:nativeDropMenuMatches.Add([bool]$item.IsChecked)
+    }
+    if (-not $item.Submenu.Equals([System.IntPtr]::Zero)) {
+      Find-NativeDropMenuItem $item.Submenu ($Depth + 1)
+    }
+  }
+}
+
+function Get-NativeDropMenuSnapshot([System.IntPtr]$WindowHandle) {
+  $menuHandle = [ProcmonNativeMenu]::GetMenu($WindowHandle)
+  $handleAvailable = -not $menuHandle.Equals([System.IntPtr]::Zero)
+  $script:nativeMenuVisited = 0
+  $script:nativeMenuReadable = $handleAvailable
+  $script:nativeDropMenuMatches = [System.Collections.Generic.List[bool]]::new()
+  if ($handleAvailable) {
+    Find-NativeDropMenuItem $menuHandle 0
+  }
+  $checkState = "unavailable"
+  if ($script:nativeMenuReadable -and $script:nativeDropMenuMatches.Count -eq 1) {
+    $checkState = if ($script:nativeDropMenuMatches[0]) { "on" } else { "off" }
+  }
+  [pscustomobject]@{
+    HandleAvailable = $handleAvailable
+    ItemCount = [Math]::Min($script:nativeMenuVisited, 9999)
+    MatchCount = [Math]::Min($script:nativeDropMenuMatches.Count, 9999)
+    Readable = $script:nativeMenuReadable
+    CheckState = $checkState
+  }
+}
+
+function Write-NativeDropMenuSnapshot($Snapshot, [string]$Observation) {
+  [Console]::Out.WriteLine(
+    "PROC_MON_FILTER_NATIVE_MENU_STATE=observation:$Observation;handle:$($Snapshot.HandleAvailable.ToString().ToLowerInvariant());items:$($Snapshot.ItemCount);matches:$($Snapshot.MatchCount);readable:$($Snapshot.Readable.ToString().ToLowerInvariant());checked:$($Snapshot.CheckState)"
+  )
 }
 
 function Find-ComboValue(
@@ -764,25 +936,31 @@ try {
   [Console]::Out.WriteLine(
     "PROC_MON_FILTER_DROP_ITEM_BACKEND=framework:$dropFramework;native-window-handle:$dropNativeHandle;menu-window-handle:$menuNativeHandle"
   )
-  $dropToggleState = "unavailable"
-  if ($hasTogglePattern) {
-    Set-Stage "read-drop-toggle-state"
-    $dropToggleState = switch ($togglePattern.ToggleState) {
-      ([System.Windows.Automation.ToggleState]::On) { "on" }
-      ([System.Windows.Automation.ToggleState]::Off) { "off" }
-      default { "indeterminate" }
+  Set-Stage "probe-drop-native-menu-state"
+  $mainWindowHandle = [System.IntPtr]$main.Current.NativeWindowHandle
+  $nativeDropMenuSnapshot = Get-NativeDropMenuSnapshot -WindowHandle $mainWindowHandle
+  Write-NativeDropMenuSnapshot $nativeDropMenuSnapshot "before"
+  if ($nativeDropMenuSnapshot.CheckState -eq "unavailable") {
+    throw "Process Monitor native menu state could not be verified"
+  }
+  if (-not $dropState.IsEnabled -or $dropState.IsOffscreen) {
+    throw "Process Monitor Drop Filtered Events is unavailable"
+  }
+  if ($nativeDropMenuSnapshot.CheckState -eq "off") {
+    if (-not $hasInvokePattern) {
+      throw "Process Monitor Drop Filtered Events cannot be enabled without InvokePattern"
+    }
+    Set-Stage "invoke-drop-filtered-events"
+    $invokePattern.Invoke()
+    Start-Sleep -Milliseconds 100
+    Set-Stage "verify-drop-native-menu-state"
+    $nativeDropMenuSnapshot = Get-NativeDropMenuSnapshot -WindowHandle $mainWindowHandle
+    Write-NativeDropMenuSnapshot $nativeDropMenuSnapshot "after-invoke"
+    if ($nativeDropMenuSnapshot.CheckState -ne "on") {
+      throw "Process Monitor did not enable Drop Filtered Events"
     }
   }
-  if (-not $dropState.IsEnabled -or $dropState.IsOffscreen -or -not $hasTogglePattern) {
-    throw "Process Monitor Drop Filtered Events is unavailable or does not expose TogglePattern"
-  }
-  Set-Stage "enable-drop-filtered-events"
-  if ($dropToggleState -ne "on") {
-    $togglePattern.Toggle()
-  }
-  if ($togglePattern.ToggleState -ne [System.Windows.Automation.ToggleState]::On) {
-    throw "Process Monitor did not enable Drop Filtered Events"
-  }
+  Set-Stage "drop-filtered-events-verified"
 
   Set-Stage "save-filter"
   [System.Windows.Forms.SendKeys]::SendWait("{ESC}")

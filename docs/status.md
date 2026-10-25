@@ -169,11 +169,17 @@ native [Run 186](https://github.com/65537i/mail-client-plan/actions/runs/4023661
 
 Run 186後の診断変更は同じInvokePattern経路のstateを推測せず、ItemStatus / HelpTextの厳密なallowlist値だけを記録する。既定UIの操作やfilter適用は変更しない。関連Node test 12/12、JS syntax check、`git diff --check`成功。Windows runtime未確認。
 
-native [Run 187](https://github.com/65537i/mail-client-plan/actions/runs/40237562289)（`7fede8f`、push / Ubuntu 24.04 x64 / basic）は更新時点でin progress。完了結果はまだ検証証拠に含めない。
+native [Run 187](https://github.com/65537i/mail-client-plan/actions/runs/40237562289)（`7fede8f`、push / Ubuntu 24.04 x64 / basic）は後続pushによりcancelled。完了前のため検証証拠には数えない。
 
 native [Run 188](https://github.com/65537i/mail-client-plan/actions/runs/40237667033)（`7fede8f`、Windows 2025 x64 / webview）は`probe-drop-item-state`で停止した。Toggle=false / Invoke=true / SelectionItem=false、ItemStatusとHelpTextは共に`other`で、checked stateはUIAプロパティから確認できなかった。次runではFrameworkId enumとtarget/menuのnative-window-handle有無だけを確認し、native menu stateを安全に照合可能か評価する。PMC保存 / WDIO / capture未到達、AC-05未達。
 
 Run 188後の診断変更はProcmonが返す生FrameworkId / HWNDを出力せず、allowlist enumとhandle有無booleanだけを記録する。既定UIの操作やfilter適用は変更しない。関連Node test 12/12、JS syntax check、`git diff --check`成功。Windows runtime未確認。
+
+native [Run 189](https://github.com/65537i/mail-client-plan/actions/runs/40238631896)（`3eddfa6`、push / Ubuntu 24.04 x64 / basic）はsuccess。planとUbuntu basicの証拠であり、Windows / webviewやAC-05の証拠ではない。
+
+[Run 190](https://github.com/65537i/mail-client-plan/actions/runs/40238680455)（`3eddfa6`、Windows 2025 x64 / webview）はpopupの同一Procmon process ownershipと`Drop Filtered Events`の一意一致を通過したが、`probe-drop-item-state`で停止した。UIAではTogglePattern=false / InvokePattern=true、FrameworkId=Win32、itemのnative HWNDなし / popup menuのnative HWNDありを確認したが、checked stateは不明。`.PMC`保存 / 再読込、WDIO、capture / controls未到達でAC-05未達。次の試行ではMicrosoft Win32 `GetMenu` / `GetMenuItemInfoW`でProcmon main windowのメニューから厳密一致する項目の`MFS_CHECKED`を読み取る。読み取り不能・複数一致なら停止し、読み取りでoffを確認できた場合に限りUIA InvokePatternを一度実行し、同じnative state queryでonを再確認してから保存へ進む。UI Automation item stateからの推測や成功扱いはしない。
+
+Run 190後の実装はread-only Win32 menu inspectionを追加し、menu traversalを深度4 / 256 item / 64 item per menu / 256文字に制限、exact label一意一致と全読取成功を要求する。Invokeはnative check stateがoffで確認された場合だけ許可し、実行後にonを確認する。関連Node diagnostics test 12/12、JS syntax check、`git diff --check`成功。PowerShell / Win32 runtime未検証。API根拠: [GetMenu](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getmenu), [GetMenuItemInfoW](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getmenuiteminfow), [MENUITEMINFOW](https://learn.microsoft.com/en-us/windows/win32/api/winuser/ns-winuser-menuiteminfow)。AC-05未達。
 
 native [Run 89](https://github.com/65537i/mail-client-plan/actions/runs/40184517503)（`a862532`、all / full）はUbuntu、macOS 14 ARM、macOS 15 Intelが成功、Windowsのみ失敗。Windowsではformat / workspace test / clippy / frontend build / native build / production除外検査 / launch smoke / security-test build / TLS / Japanese FTS / IMAP / SMTP / MIME candidate / Windows harness回帰5 testsまで成功。Procmon署名確認も成功したが、capture前のUI Automation filter setupがexit 1となり、WDIOおよびcapture/export・control判定には進まなかった。元のstderrは意図的に破棄していたため、失敗したUI操作はこのrunから特定できない。Run 89はWindows file-access監査の実証ではなく、AC-05未達。
 

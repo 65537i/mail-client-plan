@@ -117,6 +117,34 @@ export function describeWindowsFilterDiagnostics(output) {
     );
   }
 
+  for (const match of output.matchAll(
+    /^PROC_MON_FILTER_NATIVE_MENU_STATE=observation:(before|after-invoke);handle:(available|unavailable);items:(\d{1,3});matches:(\d{1,3});readable:(true|false);checked:(on|off|unavailable)\r?$/gm,
+  )) {
+    const [, observation, handle, rawItems, rawMatches, readable, checked] = match;
+    const items = Number(rawItems);
+    const matches = Number(rawMatches);
+    const consistentCheck =
+      handle === "available"
+      && readable === "true"
+      && matches === 1
+      && (checked === "on" || checked === "off");
+    const consistentUnavailable =
+      checked === "unavailable"
+      && (
+        (handle === "unavailable" && items === 0 && matches === 0 && readable === "false")
+        || (handle === "available" && (readable === "false" || matches !== 1))
+      );
+    if (
+      items <= 256
+      && matches <= items
+      && (consistentCheck || consistentUnavailable)
+    ) {
+      diagnostics.push(
+        `drop-native-menu-state=observation:${observation};handle:${handle};items:${items};matches:${matches};readable:${readable};checked:${checked}`,
+      );
+    }
+  }
+
   const resetTree = output.match(
     /^PROC_MON_FILTER_DIALOG_RESET_TREE=(Window|Pane|ToolBar|Button|Text|Edit|Other)(?:>(?:Window|Pane|ToolBar|Button|Text|Edit|Other)){0,3}\r?$/m,
   )?.[0]?.replace("PROC_MON_FILTER_DIALOG_RESET_TREE=", "");
