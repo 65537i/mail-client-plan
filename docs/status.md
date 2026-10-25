@@ -157,7 +157,9 @@ Run 181（`b4c9806`）はworkflow dispatchの既定値`all / full`で誤って�
 
 native [Run 182](https://github.com/65537i/mail-client-plan/actions/runs/40234424259)（`b4c9806`、Windows 2025 x64 / webview）はpopup menuの同一process ownershipとenabled / onscreen状態、Drop Filtered Eventsの一意一致まで通過し、`probe-drop-filter-toggle`で停止した。対象MenuItemはTogglePatternを公開していない（`toggle:false`）。次run向けにInvokePattern、SelectionItemPattern、LegacyIAccessiblePatternの有無と、LegacyIAccessible checked stateだけをallowlist診断する。filter PMC保存 / WDIO / capture未到達、AC-05未達。
 
-Run 182後の診断拡張では、Drop itemのInvokePattern / SelectionItemPattern / LegacyIAccessiblePattern有無と、LegacyIAccessible checked / mixed stateを固定boolean・enumのみで採取する。既定UIの操作やfilter適用は変更しない。関連Node test 12/12、JS syntax check、`git diff --check`成功。PowerShell / Windows UIA runtimeは次runで初確認する。
+Run 184（`7ce682e`、Windows 2025 x64 / webview）は`probe-drop-filter-toggle`で停止した。追加した統合pattern診断は失敗出力から得られず、各pattern確認の成否も未確定。次runではToggle / Invoke / SelectionItem / LegacyIAccessibleの各probeに個別stageと固定booleanを付けて失敗位置を特定する。filter PMC保存 / WDIO / capture未到達、AC-05未達。
+
+Run 184後の診断拡張では、各pattern query直後に固定booleanを出し、各probeのstageを分離する。既定UIの操作やfilter適用は変更しない。関連Node test 12/12、JS syntax check、`git diff --check`成功。PowerShell / Windows UIA runtimeは次runで初確認する。
 
 native [Run 89](https://github.com/65537i/mail-client-plan/actions/runs/40184517503)（`a862532`、all / full）はUbuntu、macOS 14 ARM、macOS 15 Intelが成功、Windowsのみ失敗。Windowsではformat / workspace test / clippy / frontend build / native build / production除外検査 / launch smoke / security-test build / TLS / Japanese FTS / IMAP / SMTP / MIME candidate / Windows harness回帰5 testsまで成功。Procmon署名確認も成功したが、capture前のUI Automation filter setupがexit 1となり、WDIOおよびcapture/export・control判定には進まなかった。元のstderrは意図的に破棄していたため、失敗したUI操作はこのrunから特定できない。Run 89はWindows file-access監査の実証ではなく、AC-05未達。
 

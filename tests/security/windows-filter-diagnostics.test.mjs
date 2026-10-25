@@ -19,7 +19,10 @@ test("AC-05: Windows filter diagnostics retain only allowlisted UIA state", () =
     "PROC_MON_FILTER_DIALOG_DISCOVERY=embedded-window",
     "PROC_MON_FILTER_DIALOG_LAYOUT=combos:3;edits:1",
     "PROC_MON_FILTER_PATH_EDIT=enabled:true;offscreen:false;read-only:false;value-pattern:true",
-    "PROC_MON_FILTER_DROP_EVENTS_PATTERN=toggle:true;invoke:false;selection-item:false;legacy-accessible:true;state:off;legacy-state:off",
+    "PROC_MON_FILTER_DROP_PATTERN=toggle:true",
+    "PROC_MON_FILTER_DROP_PATTERN=invoke:false",
+    "PROC_MON_FILTER_DROP_PATTERN=selection-item:false",
+    "PROC_MON_FILTER_DROP_PATTERN=legacy-accessible:true",
     "PROC_MON_FILTER_FOCUS_OWNER=after-command-invoke;owner:procmon-main",
     "PROC_MON_FILTER_MENU_TREE=MenuItem:Filter>MenuBar:MenuBar>Window:ProcessMonitor",
     "PROC_MON_FILTER_MENU_FOCUS=failed-COMException",
@@ -36,7 +39,10 @@ test("AC-05: Windows filter diagnostics retain only allowlisted UIA state", () =
       + "; filter-dialog-discovery=embedded-window"
       + "; filter-dialog-layout=combos:3;edits:1"
       + "; filter-path-edit=enabled:true;offscreen:false;read-only:false;value-pattern:true"
-      + "; drop-filtered-events-pattern=toggle:true;invoke:false;selection-item:false;legacy-accessible:true;state:off;legacy-state:off"
+      + "; drop-filter-pattern-toggle=true"
+      + "; drop-filter-pattern-invoke=false"
+      + "; drop-filter-pattern-selection-item=false"
+      + "; drop-filter-pattern-legacy-accessible=true"
       + "; filter-dialog-reset-tree=Button>Pane>Window"
       + "; focus-owner-after-command-invoke=procmon-main"
       + "; menu-tree=MenuItem:Filter>MenuBar:MenuBar>Window:ProcessMonitor"
@@ -169,14 +175,14 @@ test("AC-05: Windows filter diagnostics reject unsafe Drop menu values", () => {
   );
 });
 
-test("AC-05: Windows filter diagnostics reject unknown Drop item patterns and states", () => {
+test("AC-05: Windows filter diagnostics reject unknown Drop item patterns", () => {
   assert.equal(
     describeWindowsFilterDiagnostics([
-      "PROC_MON_FILTER_DROP_EVENTS_PATTERN=toggle:false;invoke:true;selection-item:false;legacy-accessible:true;state:unavailable;legacy-state:off",
-      "PROC_MON_FILTER_DROP_EVENTS_PATTERN=toggle:false;invoke:unknown;selection-item:false;legacy-accessible:true;state:off;legacy-state:off",
-      "PROC_MON_FILTER_DROP_EVENTS_PATTERN=toggle:false;invoke:true;selection-item:false;legacy-accessible:true;state:off;legacy-state:C:\\private\\mail",
+      "PROC_MON_FILTER_DROP_PATTERN=toggle:true;private-value",
+      "PROC_MON_FILTER_DROP_PATTERN=private-pattern:true",
+      "PROC_MON_FILTER_DROP_PATTERN=invoke:unknown",
     ].join("\n")),
-    "; drop-filtered-events-pattern=toggle:false;invoke:true;selection-item:false;legacy-accessible:true;state:unavailable;legacy-state:off",
+    "",
   );
 });
 

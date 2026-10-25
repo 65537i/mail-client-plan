@@ -93,13 +93,10 @@ export function describeWindowsFilterDiagnostics(output) {
     );
   }
 
-  const dropEventsPattern = output.match(
-    /^PROC_MON_FILTER_DROP_EVENTS_PATTERN=toggle:(true|false);invoke:(true|false);selection-item:(true|false);legacy-accessible:(true|false);state:(on|off|indeterminate|unavailable);legacy-state:(on|off|mixed|unavailable)\r?$/m,
-  );
-  if (dropEventsPattern) {
-    diagnostics.push(
-      `drop-filtered-events-pattern=toggle:${dropEventsPattern[1]};invoke:${dropEventsPattern[2]};selection-item:${dropEventsPattern[3]};legacy-accessible:${dropEventsPattern[4]};state:${dropEventsPattern[5]};legacy-state:${dropEventsPattern[6]}`,
-    );
+  for (const match of output.matchAll(
+    /^PROC_MON_FILTER_DROP_PATTERN=(toggle|invoke|selection-item|legacy-accessible):(true|false)\r?$/gm,
+  )) {
+    diagnostics.push(`drop-filter-pattern-${match[1]}=${match[2]}`);
   }
 
   const resetTree = output.match(

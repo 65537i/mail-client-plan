@@ -139,7 +139,7 @@ Run 179（`4de93ce`、Windows / webview）はfilter dialog discovery / rule設�
 
 Run 180（`b4c9806`、push / Ubuntu 24.04 x64 / basic）は成功した。planとUbuntu basicの証拠であり、Windows / webviewやAC-05の証拠ではない。
 
-Run 181はworkflow dispatchの既定値`all / full`で開始してしまった。plan成功後にUbuntu / Windows / macOS両方のmatrix jobが起動したが、各検査完了前にcancelを要求し、全matrix jobの`cancelled`を確認した。検証証拠には数えない。Run 182（`b4c9806`、Windows 2025 x64 / webview）はpopup menuを同一Procmon processから解決し、一意な`Drop Filtered Events` itemを発見したが、`TogglePattern`が提供されず`probe-drop-filter-toggle`で停止した。次runではInvokePattern / SelectionItemPattern / LegacyIAccessiblePatternの有無と、LegacyIAccessible checked stateをbounded enumで診断する。PMC保存 / WDIO / capture未到達、AC-05未達。後続の診断拡張は固定boolean / enumのみで、既定UI操作は変更しない。関連Node test 12/12、JS syntax check、`git diff --check`成功し、Windows runtimeは未確認。
+Run 181はworkflow dispatchの既定値`all / full`で開始してしまった。plan成功後にUbuntu / Windows / macOS両方のmatrix jobが起動したが、各検査完了前にcancelを要求し、全matrix jobの`cancelled`を確認した。検証証拠には数えない。Run 182（`b4c9806`、Windows 2025 x64 / webview）はpopup menuを同一Procmon processから解決し、一意な`Drop Filtered Events` itemを発見したが、`TogglePattern`が提供されず`probe-drop-filter-toggle`で停止した。Run 184（`7ce682e`、Windows 2025 x64 / webview）も同stageで停止し、追加の統合pattern診断は失敗要約から得られずpattern availabilityを確定できなかった。次runではToggle / Invoke / SelectionItem / LegacyIAccessibleの各probeに個別stageと固定booleanを付けて失敗位置を特定する。PMC保存 / WDIO / capture未到達、AC-05未達。後続の診断拡張は固定booleanのみで、既定UI操作は変更しない。関連Node test 12/12、JS syntax check、`git diff --check`成功し、Windows runtimeは未確認。
 
 Rustのregistry / git依存と`target`をキャッシュし、OS・arch・runner・固定Rust版・lockfile / manifests / Cargo設定hashを区別する。同一モードを優先し、同じ依存条件の別モードからも復元可能。キャッシュhitでもbuild / testは省略しない。キャッシュは依存・ビルド出力のみで、資格情報ストア、監査trace、メールデータは含めない。初回はcold buildとなり、短縮量はrunnerで実測する。
 
