@@ -427,11 +427,12 @@ try {
   [Console]::Out.WriteLine(
     "PROC_MON_FILTER_COMMAND_PATTERNS=invoke:$($hasFilterInvokePattern.ToString().ToLowerInvariant());selection-item:$($hasFilterSelectionPattern.ToString().ToLowerInvariant())"
   )
-  Set-Stage "probe-filter-command-clickable-point"
-  $filterClickablePoint = [System.Windows.Point]::new()
-  $hasFilterClickablePoint = $filterCommand.TryGetClickablePoint([ref]$filterClickablePoint)
+  Set-Stage "read-filter-command-bounds"
+  $filterBounds = $filterCommandState.BoundingRectangle
+  $hasFilterClickableBounds = -not $filterCommandState.IsOffscreen -and
+    $filterBounds.Width -gt 0 -and $filterBounds.Height -gt 0
   [Console]::Out.WriteLine(
-    "PROC_MON_FILTER_COMMAND_GEOMETRY=clickable-point:$($hasFilterClickablePoint.ToString().ToLowerInvariant())"
+    "PROC_MON_FILTER_COMMAND_GEOMETRY=clickable-bounds:$($hasFilterClickableBounds.ToString().ToLowerInvariant())"
   )
   Set-Stage "validate-filter-command-state"
   if (-not $filterCommandState.IsEnabled -or
@@ -443,12 +444,12 @@ try {
   $filterCommand.SetFocus()
   Set-Stage "observe-filter-command-focus"
   Write-FocusObservation "filter-command" | Out-Null
-  if (-not $hasFilterClickablePoint) {
-    throw "Process Monitor Filter command has no clickable point"
+  if (-not $hasFilterClickableBounds) {
+    throw "Process Monitor Filter command has no onscreen clickable bounds"
   }
   Set-Stage "click-filter-command"
-  $clickX = [int][Math]::Round($filterClickablePoint.X)
-  $clickY = [int][Math]::Round($filterClickablePoint.Y)
+  $clickX = [int][Math]::Round($filterBounds.X + ($filterBounds.Width / 2))
+  $clickY = [int][Math]::Round($filterBounds.Y + ($filterBounds.Height / 2))
   if (-not [WindowsAuditMouse]::SetCursorPos($clickX, $clickY)) {
     throw "Process Monitor Filter command could not be reached by pointer input"
   }
