@@ -19,7 +19,7 @@ test("AC-05: Windows filter diagnostics retain only allowlisted UIA state", () =
     "PROC_MON_FILTER_DIALOG_DISCOVERY=embedded-window",
     "PROC_MON_FILTER_DIALOG_LAYOUT=combos:3;edits:1",
     "PROC_MON_FILTER_PATH_EDIT=enabled:true;offscreen:false;read-only:false;value-pattern:true",
-    "PROC_MON_FILTER_DROP_EVENTS_PATTERN=toggle:true;state:off",
+    "PROC_MON_FILTER_DROP_EVENTS_PATTERN=toggle:true;invoke:false;selection-item:false;legacy-accessible:true;state:off;legacy-state:off",
     "PROC_MON_FILTER_FOCUS_OWNER=after-command-invoke;owner:procmon-main",
     "PROC_MON_FILTER_MENU_TREE=MenuItem:Filter>MenuBar:MenuBar>Window:ProcessMonitor",
     "PROC_MON_FILTER_MENU_FOCUS=failed-COMException",
@@ -36,7 +36,7 @@ test("AC-05: Windows filter diagnostics retain only allowlisted UIA state", () =
       + "; filter-dialog-discovery=embedded-window"
       + "; filter-dialog-layout=combos:3;edits:1"
       + "; filter-path-edit=enabled:true;offscreen:false;read-only:false;value-pattern:true"
-      + "; drop-filtered-events-pattern=toggle:true;state:off"
+      + "; drop-filtered-events-pattern=toggle:true;invoke:false;selection-item:false;legacy-accessible:true;state:off;legacy-state:off"
       + "; filter-dialog-reset-tree=Button>Pane>Window"
       + "; focus-owner-after-command-invoke=procmon-main"
       + "; menu-tree=MenuItem:Filter>MenuBar:MenuBar>Window:ProcessMonitor"
@@ -166,6 +166,17 @@ test("AC-05: Windows filter diagnostics reject unsafe Drop menu values", () => {
       "PROC_MON_FILTER_DROP_MENU_MATCH=items:11;matches:C:\\private\\mail",
     ].join("\n")),
     "",
+  );
+});
+
+test("AC-05: Windows filter diagnostics reject unknown Drop item patterns and states", () => {
+  assert.equal(
+    describeWindowsFilterDiagnostics([
+      "PROC_MON_FILTER_DROP_EVENTS_PATTERN=toggle:false;invoke:true;selection-item:false;legacy-accessible:true;state:unavailable;legacy-state:off",
+      "PROC_MON_FILTER_DROP_EVENTS_PATTERN=toggle:false;invoke:unknown;selection-item:false;legacy-accessible:true;state:off;legacy-state:off",
+      "PROC_MON_FILTER_DROP_EVENTS_PATTERN=toggle:false;invoke:true;selection-item:false;legacy-accessible:true;state:off;legacy-state:C:\\private\\mail",
+    ].join("\n")),
+    "; drop-filtered-events-pattern=toggle:false;invoke:true;selection-item:false;legacy-accessible:true;state:unavailable;legacy-state:off",
   );
 });
 

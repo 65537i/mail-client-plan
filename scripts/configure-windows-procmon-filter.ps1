@@ -709,6 +709,21 @@ try {
     [System.Windows.Automation.TogglePattern]::Pattern,
     [ref]$togglePattern
   )
+  $invokePattern = $null
+  $hasInvokePattern = $drop.TryGetCurrentPattern(
+    [System.Windows.Automation.InvokePattern]::Pattern,
+    [ref]$invokePattern
+  )
+  $selectionItemPattern = $null
+  $hasSelectionItemPattern = $drop.TryGetCurrentPattern(
+    [System.Windows.Automation.SelectionItemPattern]::Pattern,
+    [ref]$selectionItemPattern
+  )
+  $legacyAccessiblePattern = $null
+  $hasLegacyAccessiblePattern = $drop.TryGetCurrentPattern(
+    [System.Windows.Automation.LegacyIAccessiblePattern]::Pattern,
+    [ref]$legacyAccessiblePattern
+  )
   $dropToggleState = "unavailable"
   if ($hasTogglePattern) {
     $dropToggleState = switch ($togglePattern.ToggleState) {
@@ -717,8 +732,21 @@ try {
       default { "indeterminate" }
     }
   }
+  $dropLegacyState = "unavailable"
+  if ($hasLegacyAccessiblePattern) {
+    $legacyStateValue = $legacyAccessiblePattern.State
+    $legacyMixedMask = 0x20
+    $legacyCheckedMask = 0x10
+    if (($legacyStateValue -band $legacyMixedMask) -ne 0) {
+      $dropLegacyState = "mixed"
+    } elseif (($legacyStateValue -band $legacyCheckedMask) -ne 0) {
+      $dropLegacyState = "on"
+    } else {
+      $dropLegacyState = "off"
+    }
+  }
   [Console]::Out.WriteLine(
-    "PROC_MON_FILTER_DROP_EVENTS_PATTERN=toggle:$($hasTogglePattern.ToString().ToLowerInvariant());state:$dropToggleState"
+    "PROC_MON_FILTER_DROP_EVENTS_PATTERN=toggle:$($hasTogglePattern.ToString().ToLowerInvariant());invoke:$($hasInvokePattern.ToString().ToLowerInvariant());selection-item:$($hasSelectionItemPattern.ToString().ToLowerInvariant());legacy-accessible:$($hasLegacyAccessiblePattern.ToString().ToLowerInvariant());state:$dropToggleState;legacy-state:$dropLegacyState"
   )
   if (-not $dropState.IsEnabled -or $dropState.IsOffscreen -or -not $hasTogglePattern) {
     throw "Process Monitor Drop Filtered Events is unavailable or does not expose TogglePattern"

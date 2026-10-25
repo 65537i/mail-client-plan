@@ -151,6 +151,14 @@ native [Run 177](https://github.com/65537i/mail-client-plan/actions/runs/4023200
 
 native [Run 179](https://github.com/65537i/mail-client-plan/actions/runs/40232927193)（`4de93ce`、Windows / webview）はfilter dialogの構成とApplyを通過したが、`find-drop-filtered-events`で失敗した。Filter menuのInvoke後にmain window配下を検索しており、popup menuのUIA subtreeから項目を検索できていなかった可能性がある。次run向けにFocusedElementから同一Procmon processの開いたMenuを解決し、その子孫から`Drop Filtered Events` MenuItemを一意に照合する実装へ変更した。関連Node test 11/11、JS syntax check、`git diff --check`成功。PowerShell / Windows UIA runtimeは未検証。PMC保存 / WDIO / capture未到達、AC-05未達。
 
+native [Run 180](https://github.com/65537i/mail-client-plan/actions/runs/40234030861)（`b4c9806`、push / Ubuntu 24.04 x64 / basic）はsuccess。これはplanとUbuntu basicの証拠であり、Windows / webviewやAC-05の証拠ではない。
+
+Run 181（`b4c9806`）はworkflow dispatchの既定値`all / full`で誤って開始された。plan成功後に4つのmatrix jobが起動したが、各検査完了前にcancelを要求し、GitHub上で全jobの`cancelled`を確認した。検証証拠には数えない。
+
+native [Run 182](https://github.com/65537i/mail-client-plan/actions/runs/40234424259)（`b4c9806`、Windows 2025 x64 / webview）はpopup menuの同一process ownershipとenabled / onscreen状態、Drop Filtered Eventsの一意一致まで通過し、`probe-drop-filter-toggle`で停止した。対象MenuItemはTogglePatternを公開していない（`toggle:false`）。次run向けにInvokePattern、SelectionItemPattern、LegacyIAccessiblePatternの有無と、LegacyIAccessible checked stateだけをallowlist診断する。filter PMC保存 / WDIO / capture未到達、AC-05未達。
+
+Run 182後の診断拡張では、Drop itemのInvokePattern / SelectionItemPattern / LegacyIAccessiblePattern有無と、LegacyIAccessible checked / mixed stateを固定boolean・enumのみで採取する。既定UIの操作やfilter適用は変更しない。関連Node test 12/12、JS syntax check、`git diff --check`成功。PowerShell / Windows UIA runtimeは次runで初確認する。
+
 native [Run 89](https://github.com/65537i/mail-client-plan/actions/runs/40184517503)（`a862532`、all / full）はUbuntu、macOS 14 ARM、macOS 15 Intelが成功、Windowsのみ失敗。Windowsではformat / workspace test / clippy / frontend build / native build / production除外検査 / launch smoke / security-test build / TLS / Japanese FTS / IMAP / SMTP / MIME candidate / Windows harness回帰5 testsまで成功。Procmon署名確認も成功したが、capture前のUI Automation filter setupがexit 1となり、WDIOおよびcapture/export・control判定には進まなかった。元のstderrは意図的に破棄していたため、失敗したUI操作はこのrunから特定できない。Run 89はWindows file-access監査の実証ではなく、AC-05未達。
 
 native [Run 87](https://github.com/65537i/mail-client-plan/actions/runs/40179791422)（`4f75cec`、all / full）はWindowsのみ失敗。plan / Ubuntu / macOS ARM / Intelは成功。Windowsのcanary生成・worker回帰5件とbaseline UI spec 1件は成功したが、baseline終了後のPMLが273,341,060 bytesで256 MiB（268,435,456 bytes）上限を4,905,604 bytes超過し、CSV export / canary event判定前に停止。attack captureは未実行。このrunではSystem eventの有無を観測・判断できず、Run 86のwrite-through効果を否定または裏付けしない。上限引き上げ、イベントfilter、超過captureからの部分的な合格判定は行わない。Linux/macOS成功をWindows fullの代替にしない。AC-05 / Phase 00未完了。
