@@ -220,7 +220,10 @@ function Write-FocusObservation([string]$Phase) {
     ) {
       Write-MenuItemsObservation $Phase $focused
     }
-    return $focused
+    return [PSCustomObject]@{
+      Element = $focused
+      ControlType = $state.ControlType.ProgrammaticName
+    }
   } catch {
     [Console]::Out.WriteLine("PROC_MON_FILTER_FOCUSED_CONTROL=$Phase;focused:unavailable")
     return $null
@@ -302,19 +305,29 @@ try {
     throw "Process Monitor Filter menu exposes no supported open pattern"
   }
   Set-Stage "observe-menu-focus"
-  $focusedElement = Write-FocusObservation "after-open"
-  Set-Stage "find-open-filter-menu"
-  $menu = $focusedElement
-  $treeWalker = [System.Windows.Automation.TreeWalker]::ControlViewWalker
-  for ($level = 0; $null -ne $menu -and $level -lt 4; $level++) {
-    if ($menu.Current.ControlType.ProgrammaticName -eq "ControlType.Menu") { break }
-    $menu = $treeWalker.GetParent($menu)
+  Set-Stage "resolve-open-filter-menu"
+  $focusObservation = Write-FocusObservation "after-open"
+  if ($null -eq $focusObservation) {
+    throw "Process Monitor did not expose its focused menu element"
   }
-  if ($null -eq $menu -or
-    $menu.Current.ControlType.ProgrammaticName -ne "ControlType.Menu") {
+  $menu = $focusObservation.Element
+  $menuType = $focusObservation.ControlType
+  if ($menuType -ne "ControlType.Menu") {
+    Set-Stage "walk-to-open-filter-menu"
+    $treeWalker = [System.Windows.Automation.TreeWalker]::ControlViewWalker
+    for ($level = 0; $null -ne $menu -and $level -lt 4; $level++) {
+      $menu = $treeWalker.GetParent($menu)
+      if ($null -eq $menu) { break }
+      $menuType = $menu.Current.ControlType.ProgrammaticName
+      if ($menuType -eq "ControlType.Menu") { break }
+    }
+  }
+  if ($null -eq $menu -or $menuType -ne "ControlType.Menu") {
     throw "Process Monitor did not expose its open Filter menu"
   }
-  Write-MenuItemsObservation "after-open" $menu
+  if ($focusObservation.ControlType -ne "ControlType.Menu") {
+    Write-MenuItemsObservation "after-open" $menu
+  }
   Set-Stage "enumerate-filter-menu-items"
   $menuItems = $menu.FindAll(
     [System.Windows.Automation.TreeScope]::Children,
