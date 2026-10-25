@@ -95,24 +95,32 @@ function Set-FilterRule([System.Windows.Automation.AutomationElement]$Dialog, [s
 }
 
 try {
+  $stage = "wait-for-input-idle"
   if (-not $process.WaitForInputIdle(10000)) {
     throw "Process Monitor UI did not become idle"
   }
+  $stage = "find-main-window"
   $main = Wait-MainWindow $process
   $main.SetFocus()
+  $stage = "open-filter-dialog"
   [System.Windows.Forms.SendKeys]::SendWait("^l")
   $filterDialog = Wait-TopLevelWindow "Filter" 10
+  $stage = "reset-existing-filters"
   $reset = Wait-Element $filterDialog ([System.Windows.Automation.PropertyCondition]::new(
     [System.Windows.Automation.AutomationElement]::NameProperty, "Reset"
   )) 5
   $reset.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
+  $stage = "set-canary-filter"
   Set-FilterRule $filterDialog $CanaryPath
+  $stage = "set-control-filter"
   Set-FilterRule $filterDialog $ControlPath
+  $stage = "apply-filters"
   $ok = Wait-Element $filterDialog ([System.Windows.Automation.PropertyCondition]::new(
     [System.Windows.Automation.AutomationElement]::NameProperty, "OK"
   )) 5
   $ok.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
 
+  $stage = "enable-drop-filtered-events"
   $main.SetFocus()
   [System.Windows.Forms.SendKeys]::SendWait("%f")
   $drop = Wait-Element $main ([System.Windows.Automation.PropertyCondition]::new(
@@ -126,6 +134,7 @@ try {
     throw "Process Monitor did not enable Drop Filtered Events"
   }
 
+  $stage = "save-filter"
   [System.Windows.Forms.SendKeys]::SendWait("{ESC}")
   [System.Windows.Forms.SendKeys]::SendWait("%f")
   $saveFilter = Wait-Element $main ([System.Windows.Automation.PropertyCondition]::new(
@@ -142,9 +151,13 @@ try {
     [System.Windows.Automation.AutomationElement]::NameProperty, "Save"
   )) 5
   $save.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
+  $stage = "verify-filter-file"
   if (-not (Test-Path -LiteralPath $ConfigPath) -or (Get-Item -LiteralPath $ConfigPath).Length -lt 100) {
     throw "Process Monitor did not save the audit filter configuration"
   }
+} catch {
+  [Console]::Out.WriteLine("PROC_MON_FILTER_FAILED_STAGE=$stage")
+  exit 1
 } finally {
   if (-not $process.HasExited) {
     $process.CloseMainWindow() | Out-Null

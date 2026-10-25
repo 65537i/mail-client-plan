@@ -47,6 +47,8 @@ Run 86（`4f75cec`、Windows / full）は上記変更後に成功。両capture�
 
 Run 87後のWindows capture PoCは、UI Automationでexact-path Include条件と`Drop Filtered Events`を`.PMC`へ保存し、`/LoadConfig`で読み込む方式へ変更する。Path条件はcanaryとNode positive-controlだけで、process名・operation条件は加えない。capture中にpositive-controlと、filter対象外のsynthetic sentinelをNodeで読み、CSV解析は二者の結果と全path scopeをfail-closedで確認する。Procmonのapp / WebView2一般活動gateを外し、同一runのWDIO実WebView成功を別証拠とする。ID設定、drop設定、profile loadの有効性はこのPoCではLinuxのソース・CSV回帰試験だけで、Windows UI Automation / capture runtimeは未実行。256 MiB上限、全canary event拒否、Systemイベントの例外なしを維持し、未実証のままAC-05達成とはしない。
 
+Run 89（`a862532`、all / full）ではUbuntu・macOS両archのfull jobが成功。WindowsもProcmon署名確認と全native / protocol / candidate testsに成功したが、Procmon UI Automation filter setupがexit 1で、baseline capture前に停止した。旧harnessはPowerShell出力を破棄していたため失敗stageは特定できない。変更後は機微な詳細を出さず固定stageだけを表示する診断を追加し、次はWindowsのみのwebview/fullでfilter generationから実証する。Run 89をWindows監査成功やAC-05合格に数えない。
+
 Rustのregistry / git依存と`target`をキャッシュし、OS・arch・runner・固定Rust版・lockfile / manifests / Cargo設定hashを区別する。同一モードを優先し、同じ依存条件の別モードからも復元可能。キャッシュhitでもbuild / testは省略しない。キャッシュは依存・ビルド出力のみで、資格情報ストア、監査trace、メールデータは含めない。初回はcold buildとなり、短縮量はrunnerで実測する。
 
 同じevent・ref・対象・モードの古いrunだけをcancelし、pushによって進行中の手動調査をcancelしない。

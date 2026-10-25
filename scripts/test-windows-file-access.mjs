@@ -96,8 +96,14 @@ async function captureScenario(scenario) {
         "-ConfigPath",
         filterConfig,
       ],
-      { stdio: "ignore", windowsHide: true },
+      { stdio: ["ignore", "pipe", "pipe"], windowsHide: true },
     );
+    let filterSetupOutput = "";
+    filterSetup.stdout.setEncoding("utf8");
+    filterSetup.stdout.on("data", (chunk) => {
+      if (filterSetupOutput.length < 1024) filterSetupOutput += chunk;
+    });
+    filterSetup.stderr.resume();
     const filterSetupExit = waitForProcess(filterSetup);
     const filterSetupResult = await waitWithTimeout(filterSetupExit, 60_000);
     if (filterSetupResult.timedOut) {
@@ -107,7 +113,16 @@ async function captureScenario(scenario) {
       throw new Error("Process Monitor exact-path filter configuration timed out");
     }
     if (filterSetupResult.error) throw new Error("Failed to start Process Monitor filter configuration");
-    assert.equal(filterSetupResult.code, 0, "Process Monitor exact-path filter configuration failed");
+    const filterStage = filterSetupOutput.match(
+      /PROC_MON_FILTER_FAILED_STAGE=([a-z-]+)/,
+    )?.[1];
+    assert.equal(
+      filterSetupResult.code,
+      0,
+      filterStage
+        ? `Process Monitor exact-path filter configuration failed at ${filterStage}`
+        : "Process Monitor exact-path filter configuration failed",
+    );
     command = fork(
       path.join(root, "scripts", "windows-audit-wdio.mjs"),
       [path.join(root, scenario === "baseline"
