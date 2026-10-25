@@ -41,3 +41,16 @@ test("AC-05: Windows filter diagnostics retain the non-focusable menu route", ()
       + "; menu-focus=skipped-not-keyboard-focusable",
   );
 });
+
+test("AC-05: Windows filter diagnostics retain safe focused-control observations", () => {
+  const output = [
+    "PROC_MON_FILTER_FOCUSED_CONTROL=after-open;type:MenuItem;name:FilterCommand;offscreen:false;keyboard-focusable:true;tree=MenuItem:FilterCommand>Menu:Other>Window:ProcessMonitor",
+    "PROC_MON_FILTER_FOCUSED_CONTROL=after-enter;focused:none",
+    "PROC_MON_FILTER_FOCUSED_CONTROL=after-home;type:Text;name:C:\\private\\mail;offscreen:false;keyboard-focusable:true;tree=Text:Other",
+  ].join("\n");
+  assert.equal(
+    describeWindowsFilterDiagnostics(output),
+    "; focus-after-open=MenuItem:FilterCommand;offscreen:false;keyboard-focusable:true;tree=MenuItem:FilterCommand>Menu:Other>Window:ProcessMonitor"
+      + "; focus-after-enter=none",
+  );
+});

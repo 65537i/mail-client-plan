@@ -145,19 +145,49 @@ function Set-FilterRule([System.Windows.Automation.AutomationElement]$Dialog, [s
 function Get-ControlTypeLabel([System.Windows.Automation.AutomationElement]$Element) {
   switch ($Element.Current.ControlType.ProgrammaticName) {
     "ControlType.MenuBar" { return "MenuBar" }
+    "ControlType.Menu" { return "Menu" }
     "ControlType.MenuItem" { return "MenuItem" }
     "ControlType.Window" { return "Window" }
     "ControlType.Pane" { return "Pane" }
     "ControlType.ToolBar" { return "ToolBar" }
+    "ControlType.Button" { return "Button" }
+    "ControlType.Text" { return "Text" }
+    "ControlType.Edit" { return "Edit" }
     default { return "Other" }
   }
 }
 
 function Get-ControlNameLabel([System.Windows.Automation.AutomationElement]$Element) {
-  if ($Element.Current.Name -in @("Filter", "Menu Bar", "Process Monitor")) {
-    return $Element.Current.Name.Replace(" ", "")
+  switch ($Element.Current.Name) {
+    "Filter" { return "Filter" }
+    "Filter..." { return "FilterCommand" }
+    "Menu Bar" { return "MenuBar" }
+    "Process Monitor" { return "ProcessMonitor" }
+    default { return "Other" }
   }
-  return "Other"
+}
+
+function Write-FocusObservation([string]$Phase) {
+  try {
+    $focused = [System.Windows.Automation.AutomationElement]::FocusedElement
+    if ($null -eq $focused) {
+      [Console]::Out.WriteLine("PROC_MON_FILTER_FOCUSED_CONTROL=$Phase;focused:none")
+      return
+    }
+    $state = $focused.Current
+    $treeWalker = [System.Windows.Automation.TreeWalker]::ControlViewWalker
+    $treeParts = [System.Collections.Generic.List[string]]::new()
+    $treeNode = $focused
+    for ($level = 0; $null -ne $treeNode -and $level -lt 4; $level++) {
+      $treeParts.Add("$(Get-ControlTypeLabel $treeNode):$(Get-ControlNameLabel $treeNode)")
+      $treeNode = $treeWalker.GetParent($treeNode)
+    }
+    [Console]::Out.WriteLine(
+      "PROC_MON_FILTER_FOCUSED_CONTROL=$Phase;type:$(Get-ControlTypeLabel $focused);name:$(Get-ControlNameLabel $focused);offscreen:$($state.IsOffscreen.ToString().ToLowerInvariant());keyboard-focusable:$($state.IsKeyboardFocusable.ToString().ToLowerInvariant());tree=$($treeParts -join '>')"
+    )
+  } catch {
+    [Console]::Out.WriteLine("PROC_MON_FILTER_FOCUSED_CONTROL=$Phase;focused:unavailable")
+  }
 }
 
 try {
@@ -234,10 +264,16 @@ try {
   } else {
     throw "Process Monitor Filter menu exposes no supported open pattern"
   }
+  Set-Stage "observe-menu-focus"
+  Write-FocusObservation "after-open"
   Set-Stage "select-filter-command"
   [System.Windows.Forms.SendKeys]::SendWait("{HOME}")
+  Set-Stage "observe-command-focus"
+  Write-FocusObservation "after-home"
   Set-Stage "send-filter-command"
   [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
+  Set-Stage "observe-dialog-focus"
+  Write-FocusObservation "after-enter"
   Set-Stage "wait-filter-dialog"
   $filterDialog = Wait-FilterDialog $process $main
   Set-Stage "reset-existing-filters"

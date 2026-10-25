@@ -1,5 +1,5 @@
-const allowedTypes = /^(?:MenuBar|MenuItem|Window|Pane|ToolBar|Other)$/;
-const allowedNames = /^(?:Filter|MenuBar|ProcessMonitor|Other)$/;
+const allowedTypes = /^(?:MenuBar|Menu|MenuItem|Window|Pane|ToolBar|Button|Text|Edit|Other)$/;
+const allowedNames = /^(?:Filter|FilterCommand|MenuBar|ProcessMonitor|Other)$/;
 
 export function describeWindowsFilterDiagnostics(output) {
   const diagnostics = [];
@@ -31,5 +31,34 @@ export function describeWindowsFilterDiagnostics(output) {
     /PROC_MON_FILTER_MENU_FOCUS=(returned|skipped-not-keyboard-focusable|failed-(?:ElementNotEnabledException|ElementNotAvailableException|InvalidOperationException|COMException|NoClickablePointException|Other))/,
   )?.[1];
   if (focus) diagnostics.push(`menu-focus=${focus}`);
+
+  const focusObservations = [];
+  for (const match of output.matchAll(
+    /^PROC_MON_FILTER_FOCUSED_CONTROL=(after-open|after-home|after-enter);focused:(none|unavailable)\r?$/gm,
+  )) {
+    focusObservations.push({
+      index: match.index,
+      value: `focus-${match[1]}=${match[2]}`,
+    });
+  }
+  for (const match of output.matchAll(
+    /^PROC_MON_FILTER_FOCUSED_CONTROL=(after-open|after-home|after-enter);type:(MenuBar|Menu|MenuItem|Window|Pane|ToolBar|Button|Text|Edit|Other);name:(Filter|FilterCommand|MenuBar|ProcessMonitor|Other);offscreen:(true|false);keyboard-focusable:(true|false);tree=([A-Za-z:>]+)\r?$/gm,
+  )) {
+    const nodes = match[6].split(">");
+    if (
+      nodes.length <= 4
+      && nodes.every((node) => {
+        const [type, name, ...extra] = node.split(":");
+        return extra.length === 0 && allowedTypes.test(type) && allowedNames.test(name);
+      })
+    ) {
+      focusObservations.push({
+        index: match.index,
+        value: `focus-${match[1]}=${match[2]}:${match[3]};offscreen:${match[4]};keyboard-focusable:${match[5]};tree=${match[6]}`,
+      });
+    }
+  }
+  focusObservations.sort((left, right) => left.index - right.index);
+  diagnostics.push(...focusObservations.map(({ value }) => value));
   return diagnostics.length > 0 ? `; ${diagnostics.join("; ")}` : "";
 }

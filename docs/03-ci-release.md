@@ -73,6 +73,8 @@ Run 113（`4a16035`、Windows / webview）も`focus-filter-menu`で停止した�
 
 Run 115（`253853f`、Windows / webview）でUIA診断を取得。Filter menu itemはenabled / onscreenだが`IsKeyboardFocusable=false`で、control tree上はToolbar配下。`SetFocus()`は`Other`例外で失敗した。次はこの実測に基づいてnon-focusable時のSetFocusを省き、ExpandCollapsePatternを優先する。InvokePattern fallbackを含め、利用可能patternを固定形式で出力し、Windows runtimeでmenu展開とdialog遷移を確認する。Run 115はWDIO/capture未到達であり、AC-05の証拠ではない。
 
+Run 117（`ef70a3f`、Windows / webview）はmenu `ExpandCollapsePattern=false; InvokePattern=true`を観測。SetFocusをskipしInvoke後にHOME / ENTERを送ったが、Filter dialogを識別できず`wait-filter-dialog`で失敗した。次はmenu Invoke後 / HOME後 / ENTER後のFocusedElementをallowlist形式で記録し、実際のfocused controlと親treeから操作先を確認する。診断追加後のNode回帰9/9とsyntax / diff checkは成功、Windows PowerShell runtimeは未実行。Run 117はWDIO/capture未到達であり、AC-05の証拠ではない。
+
 Rustのregistry / git依存と`target`をキャッシュし、OS・arch・runner・固定Rust版・lockfile / manifests / Cargo設定hashを区別する。同一モードを優先し、同じ依存条件の別モードからも復元可能。キャッシュhitでもbuild / testは省略しない。キャッシュは依存・ビルド出力のみで、資格情報ストア、監査trace、メールデータは含めない。初回はcold buildとなり、短縮量はrunnerで実測する。
 
 同じevent・ref・対象・モードの古いrunだけをcancelし、pushによって進行中の手動調査をcancelしない。

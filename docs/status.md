@@ -81,6 +81,10 @@ native [Run 115](https://github.com/65537i/mail-client-plan/actions/runs/4019962
 
 Run 115後の修正: non-keyboard-focusable時はSetFocusを呼ばず、ExpandCollapsePatternを優先してmenuを開き、未提供時のみInvokePatternを使う。両patternの有無とskip理由をallowlist診断へ追加。関連Node回帰のWindows実行、PowerShell parse / runtimeは未確認。
 
+native [Run 117](https://github.com/65537i/mail-client-plan/actions/runs/40200552104)（`ef70a3f`、Windows / webview）は`wait-filter-dialog`で停止した。UIA menu itemは`ExpandCollapse=false; Invoke=true`で、focusをskipしてInvokeとHOME / ENTERを送信したものの、Filter dialogを識別できなかった。次はmenu Invoke後、HOME後、ENTER後のFocusedElementのcontrol type、allowlist済みname、keyboard-focusable / offscreen、親treeを固定形式で記録し、キー操作がどのUI要素へ作用しているか観測する。任意文字列やpathは出力しない。Run 117もWDIO/captureに到達せず、AC-05合格に数えない。
+
+Run 117後の修正: 現在のfocused UIA elementを最大4階層・allowlistで要約し、open / HOME / ENTER直後の状態をNode harnessへ伝える診断を追加。関連Node回帰9/9成功、Node syntax / `git diff --check`成功。PowerShell runtimeは次のWindows runで検証。
+
 native [Run 89](https://github.com/65537i/mail-client-plan/actions/runs/40184517503)（`a862532`、all / full）はUbuntu、macOS 14 ARM、macOS 15 Intelが成功、Windowsのみ失敗。Windowsではformat / workspace test / clippy / frontend build / native build / production除外検査 / launch smoke / security-test build / TLS / Japanese FTS / IMAP / SMTP / MIME candidate / Windows harness回帰5 testsまで成功。Procmon署名確認も成功したが、capture前のUI Automation filter setupがexit 1となり、WDIOおよびcapture/export・control判定には進まなかった。元のstderrは意図的に破棄していたため、失敗したUI操作はこのrunから特定できない。Run 89はWindows file-access監査の実証ではなく、AC-05未達。
 
 native [Run 87](https://github.com/65537i/mail-client-plan/actions/runs/40179791422)（`4f75cec`、all / full）はWindowsのみ失敗。plan / Ubuntu / macOS ARM / Intelは成功。Windowsのcanary生成・worker回帰5件とbaseline UI spec 1件は成功したが、baseline終了後のPMLが273,341,060 bytesで256 MiB（268,435,456 bytes）上限を4,905,604 bytes超過し、CSV export / canary event判定前に停止。attack captureは未実行。このrunではSystem eventの有無を観測・判断できず、Run 86のwrite-through効果を否定または裏付けしない。上限引き上げ、イベントfilter、超過captureからの部分的な合格判定は行わない。Linux/macOS成功をWindows fullの代替にしない。AC-05 / Phase 00未完了。
