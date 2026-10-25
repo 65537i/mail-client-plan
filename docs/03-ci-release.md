@@ -129,7 +129,9 @@ Run 169（`eab43b2`、Windows / webview）はResetと4 ComboBox / 1 Editを持�
 
 Run 171（`59d4ead`、Windows / webview）は`select-filter-column`と`select-filter-operator`を通過後、SetValueの実行前stage `set-filter-path-value`で停止した。さらにaction ComboBoxの固定index 2にはInclude optionがなかった。次runは全ComboBoxに対して要求optionの存在を個別に調べ、一意に一致したcontrolだけ選択し、Editの状態とValuePattern有無をallowlisted booleanで記録する。Run 171はPMC/WDIO/capture未到達、AC-05未達。
 
-Run 173（`fffed7d`、Windows / webview）はPath / isを固定indexでなく一意option照合により選択し、SetValue実行前の`set-filter-path-value` stageで停止した。Editのenabled / offscreen / read-only / ValuePattern状態が未出力のため、次runでその4 booleansを診断し、ValuePattern未提供・field無効・read-onlyは明示拒否する。Run 173はPMC/WDIO/capture未到達、AC-05未達。
+Run 173（`fffed7d`、Windows / webview）はPath / isを固定indexでなく一意option照合により選択し、`set-filter-path-value`付近で失敗した。Editのenabled / offscreen / read-only / ValuePattern状態が未出力のため、次runでその4 booleansを診断し、ValuePattern未提供・field無効・read-onlyは明示拒否する。Run 173はPMC/WDIO/capture未到達、AC-05未達。
+
+Run 175（`79e8d92`、Windows / webview）はEditがenabled / onscreen / writable、ValuePattern提供ありと記録したが、出力が4096文字上限に達して失敗stageが不完全なままとなった。次runでは診断上限を8192へ増やし、上限到達も固定booleanで示す。ログはallowlist済み・boundedを維持し、Run 175はPMC/WDIO/capture未到達、AC-05未達。
 
 Rustのregistry / git依存と`target`をキャッシュし、OS・arch・runner・固定Rust版・lockfile / manifests / Cargo設定hashを区別する。同一モードを優先し、同じ依存条件の別モードからも復元可能。キャッシュhitでもbuild / testは省略しない。キャッシュは依存・ビルド出力のみで、資格情報ストア、監査trace、メールデータは含めない。初回はcold buildとなり、短縮量はrunnerで実測する。
 

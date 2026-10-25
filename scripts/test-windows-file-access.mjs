@@ -13,6 +13,7 @@ import { createWindowsAuditCanary } from "./windows-audit-canary.mjs";
 import {
   appendBoundedWindowsFilterOutput,
   describeWindowsFilterDiagnostics,
+  windowsFilterOutputLimit,
 } from "./windows-filter-diagnostics.mjs";
 
 assert.equal(process.platform, "win32", "file-access tracing requires Windows");
@@ -110,6 +111,9 @@ async function captureScenario(scenario) {
     filterSetup.stderr.resume();
     const filterSetupExit = waitForProcess(filterSetup);
     const filterSetupResult = await waitWithTimeout(filterSetupExit, 60_000);
+    const outputAtCap = filterSetupOutput.length >= windowsFilterOutputLimit
+      ? "; filter-output-at-cap=true"
+      : "";
     if (filterSetupResult.timedOut) {
       const filterStage = [...filterSetupOutput.matchAll(
         /PROC_MON_FILTER_PROGRESS=([a-z-]+)/g,
@@ -119,8 +123,8 @@ async function captureScenario(scenario) {
       await runProcmon(["/AcceptEula", "/Terminate"], "filter setup cleanup");
       throw new Error(
         filterStage
-          ? `Process Monitor exact-path filter configuration timed out at ${filterStage}${describeWindowsFilterDiagnostics(filterSetupOutput)}`
-          : "Process Monitor exact-path filter configuration timed out",
+          ? `Process Monitor exact-path filter configuration timed out at ${filterStage}${describeWindowsFilterDiagnostics(filterSetupOutput)}${outputAtCap}`
+          : `Process Monitor exact-path filter configuration timed out${outputAtCap}`,
       );
     }
     if (filterSetupResult.error) throw new Error("Failed to start Process Monitor filter configuration");
@@ -133,8 +137,8 @@ async function captureScenario(scenario) {
       filterSetupResult.code,
       0,
       filterStage
-        ? `Process Monitor exact-path filter configuration failed at ${filterStage}${describeWindowsFilterDiagnostics(filterSetupOutput)}`
-        : "Process Monitor exact-path filter configuration failed",
+        ? `Process Monitor exact-path filter configuration failed at ${filterStage}${describeWindowsFilterDiagnostics(filterSetupOutput)}${outputAtCap}`
+        : `Process Monitor exact-path filter configuration failed${outputAtCap}`,
     );
     command = fork(
       path.join(root, "scripts", "windows-audit-wdio.mjs"),

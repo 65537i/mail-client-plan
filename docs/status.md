@@ -143,7 +143,9 @@ native [Run 169](https://github.com/65537i/mail-client-plan/actions/runs/4022812
 
 native [Run 171](https://github.com/65537i/mail-client-plan/actions/runs/40229037918)（`59d4ead`、Windows / webview）は列・演算子選択後に`set-filter-path-value` stageで停止した。SetValue呼び出し前にstageが出るため、値設定成功とは確認できない。次に`Include`候補が固定index 2に見つからなかったことも分離し、全ComboBoxからrequested optionが一意に存在するcontrolを選ぶ。曖昧・欠落時はfail closed。Run 171はPMC/WDIO/capture未到達でAC-05未達。
 
-native [Run 173](https://github.com/65537i/mail-client-plan/actions/runs/40230006044)（`fffed7d`、Windows / webview）は全ComboBoxから`Path`と`is`を一意に選んだ後、`set-filter-path-value` stageで停止した。Editの有効状態・ValuePattern有無をまだ記録していない。次はenabled / offscreen / read-only / ValuePatternを固定booleanで出し、値設定可否を特定する。Run 173はPMC/WDIO/capture未到達でAC-05未達。
+native [Run 173](https://github.com/65537i/mail-client-plan/actions/runs/40230006044)（`fffed7d`、Windows / webview）は全ComboBoxから`Path`と`is`を一意に選んだ後、`set-filter-path-value`付近で失敗した。正確なstageはログ上で確定できなかった。次はenabled / offscreen / read-only / ValuePatternを固定booleanで出し、値設定可否を特定する。Run 173はPMC/WDIO/capture未到達でAC-05未達。
+
+native [Run 175](https://github.com/65537i/mail-client-plan/actions/runs/40230968937)（`79e8d92`、Windows / webview）はEditをenabled・onscreen・writable、ValuePattern=trueと記録した一方、最終stage文字列が不完全で、SetValue後のどこで停止したか確定できない。診断収集は4096文字で打ち切られうる。次は上限を厳密な8192文字へ増やし、失敗出力が上限に達したかを示す。成功形・不成功形どちらもboundedのまま。Run 175はPMC/WDIO/capture未到達でAC-05未達。
 
 native [Run 89](https://github.com/65537i/mail-client-plan/actions/runs/40184517503)（`a862532`、all / full）はUbuntu、macOS 14 ARM、macOS 15 Intelが成功、Windowsのみ失敗。Windowsではformat / workspace test / clippy / frontend build / native build / production除外検査 / launch smoke / security-test build / TLS / Japanese FTS / IMAP / SMTP / MIME candidate / Windows harness回帰5 testsまで成功。Procmon署名確認も成功したが、capture前のUI Automation filter setupがexit 1となり、WDIOおよびcapture/export・control判定には進まなかった。元のstderrは意図的に破棄していたため、失敗したUI操作はこのrunから特定できない。Run 89はWindows file-access監査の実証ではなく、AC-05未達。
 

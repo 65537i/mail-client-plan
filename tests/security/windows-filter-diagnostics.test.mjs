@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   appendBoundedWindowsFilterOutput,
   describeWindowsFilterDiagnostics,
+  windowsFilterOutputLimit,
 } from "../../scripts/windows-filter-diagnostics.mjs";
 
 test("AC-05: Windows filter diagnostics retain only allowlisted UIA state", () => {
@@ -151,15 +152,16 @@ test("AC-05: Windows filter diagnostics retain bounded command match counts", ()
   );
 });
 
-test("AC-05: Windows filter output retains diagnostics within a strict 4096-character cap", () => {
+test("AC-05: Windows filter output retains diagnostics within a strict 8192-character cap", () => {
   const prefix = "x".repeat(3000);
   const snapshot = "PROC_MON_FILTER_SNAPSHOT=caller;element:present;control-type:menu";
   const captured = appendBoundedWindowsFilterOutput(prefix, snapshot);
   assert.equal(captured, `${prefix}${snapshot}`);
   assert.equal(captured.length, prefix.length + snapshot.length);
 
-  const bounded = appendBoundedWindowsFilterOutput(captured, "y".repeat(5000));
-  assert.equal(bounded.length, 4096);
+  const bounded = appendBoundedWindowsFilterOutput(captured, "y".repeat(10_000));
+  assert.equal(windowsFilterOutputLimit, 8192);
+  assert.equal(bounded.length, windowsFilterOutputLimit);
   assert.equal(bounded.slice(0, captured.length), captured);
   assert.equal(appendBoundedWindowsFilterOutput(bounded, "extra"), bounded);
 });
