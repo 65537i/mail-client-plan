@@ -431,8 +431,27 @@ try {
   $filterBounds = $filterCommandState.BoundingRectangle
   $hasFilterClickableBounds = -not $filterCommandState.IsOffscreen -and
     $filterBounds.Width -gt 0 -and $filterBounds.Height -gt 0
+  $filterCenterMatchesCommand = $false
+  if ($hasFilterClickableBounds) {
+    Set-Stage "verify-filter-command-center"
+    $clickX = [int][Math]::Round($filterBounds.X + ($filterBounds.Width / 2))
+    $clickY = [int][Math]::Round($filterBounds.Y + ($filterBounds.Height / 2))
+    $pointElement = [System.Windows.Automation.AutomationElement]::FromPoint(
+      [System.Windows.Point]::new($clickX, $clickY)
+    )
+    $treeWalker = [System.Windows.Automation.TreeWalker]::ControlViewWalker
+    for ($level = 0; $null -ne $pointElement -and $level -lt 4; $level++) {
+      $pointState = $pointElement.Current
+      if ($pointState.Name -eq "Filter..." -and
+        $pointState.ControlType.ProgrammaticName -eq "ControlType.MenuItem") {
+        $filterCenterMatchesCommand = $true
+        break
+      }
+      $pointElement = $treeWalker.GetParent($pointElement)
+    }
+  }
   [Console]::Out.WriteLine(
-    "PROC_MON_FILTER_COMMAND_GEOMETRY=clickable-bounds:$($hasFilterClickableBounds.ToString().ToLowerInvariant())"
+    "PROC_MON_FILTER_COMMAND_GEOMETRY=clickable-bounds:$($hasFilterClickableBounds.ToString().ToLowerInvariant());center-matches-command:$($filterCenterMatchesCommand.ToString().ToLowerInvariant())"
   )
   Set-Stage "validate-filter-command-state"
   if (-not $filterCommandState.IsEnabled -or
@@ -444,12 +463,10 @@ try {
   $filterCommand.SetFocus()
   Set-Stage "observe-filter-command-focus"
   Write-FocusObservation "filter-command" | Out-Null
-  if (-not $hasFilterClickableBounds) {
-    throw "Process Monitor Filter command has no onscreen clickable bounds"
+  if (-not $hasFilterClickableBounds -or -not $filterCenterMatchesCommand) {
+    throw "Process Monitor Filter command has no verified onscreen click target"
   }
   Set-Stage "click-filter-command"
-  $clickX = [int][Math]::Round($filterBounds.X + ($filterBounds.Width / 2))
-  $clickY = [int][Math]::Round($filterBounds.Y + ($filterBounds.Height / 2))
   if (-not [WindowsAuditMouse]::SetCursorPos($clickX, $clickY)) {
     throw "Process Monitor Filter command could not be reached by pointer input"
   }

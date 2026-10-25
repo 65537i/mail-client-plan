@@ -25,9 +25,13 @@ export function describeWindowsFilterDiagnostics(output) {
   if (commandPatterns) diagnostics.push(`filter-command-patterns=${commandPatterns}`);
 
   const commandGeometry = output.match(
-    /PROC_MON_FILTER_COMMAND_GEOMETRY=clickable-bounds:(true|false)/,
-  )?.[1];
-  if (commandGeometry) diagnostics.push(`filter-command-clickable-bounds=${commandGeometry}`);
+    /PROC_MON_FILTER_COMMAND_GEOMETRY=clickable-bounds:(true|false);center-matches-command:(true|false)/,
+  );
+  if (commandGeometry) {
+    diagnostics.push(
+      `filter-command-clickable-bounds=${commandGeometry[1]};center-matches-command=${commandGeometry[2]}`,
+    );
+  }
 
   const commandMatch = output.match(
     /PROC_MON_FILTER_COMMAND_MATCH=items:(\d{1,4});matches:(\d{1,4})/,
