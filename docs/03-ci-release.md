@@ -71,6 +71,8 @@ Run 111（`6bb2b95`、Windows / webview）は`focus-filter-menu`で失敗した�
 
 Run 113（`4a16035`、Windows / webview）も`focus-filter-menu`で停止した。PowerShell側でUIA診断markerを出していたが、Node harnessの失敗要約はstageだけを表示していたため、CIログから診断値を取得できなかった。後続修正でboolean state、allowlist済み親tree、固定例外型だけを抽出するhelperを追加し、失敗要約に安全な形式で含める。関連Node回帰7/7成功、PowerShell runtime / UIAの実値は次のWindows runで確認する。Run 113はWDIO/captureに到達しておらず、AC-05の証拠ではない。
 
+Run 115（`253853f`、Windows / webview）でUIA診断を取得。Filter menu itemはenabled / onscreenだが`IsKeyboardFocusable=false`で、control tree上はToolbar配下。`SetFocus()`は`Other`例外で失敗した。次はこの実測に基づいてnon-focusable時のSetFocusを省き、ExpandCollapsePatternを優先する。InvokePattern fallbackを含め、利用可能patternを固定形式で出力し、Windows runtimeでmenu展開とdialog遷移を確認する。Run 115はWDIO/capture未到達であり、AC-05の証拠ではない。
+
 Rustのregistry / git依存と`target`をキャッシュし、OS・arch・runner・固定Rust版・lockfile / manifests / Cargo設定hashを区別する。同一モードを優先し、同じ依存条件の別モードからも復元可能。キャッシュhitでもbuild / testは省略しない。キャッシュは依存・ビルド出力のみで、資格情報ストア、監査trace、メールデータは含めない。初回はcold buildとなり、短縮量はrunnerで実測する。
 
 同じevent・ref・対象・モードの古いrunだけをcancelし、pushによって進行中の手動調査をcancelしない。

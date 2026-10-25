@@ -188,43 +188,51 @@ try {
     $treeParts.Add("$(Get-ControlTypeLabel $treeNode):$(Get-ControlNameLabel $treeNode)")
     $treeNode = $treeWalker.GetParent($treeNode)
   }
+  $expandPattern = $null
+  $hasExpandPattern = $filterMenu.TryGetCurrentPattern(
+    [System.Windows.Automation.ExpandCollapsePattern]::Pattern,
+    [ref]$expandPattern
+  )
+  $invokePattern = $null
+  $hasInvokePattern = $filterMenu.TryGetCurrentPattern(
+    [System.Windows.Automation.InvokePattern]::Pattern,
+    [ref]$invokePattern
+  )
   [Console]::Out.WriteLine(
     "PROC_MON_FILTER_MENU_STATE=enabled:$($menuState.IsEnabled.ToString().ToLowerInvariant());offscreen:$($menuState.IsOffscreen.ToString().ToLowerInvariant());keyboard-focusable:$($menuState.IsKeyboardFocusable.ToString().ToLowerInvariant())"
   )
   [Console]::Out.WriteLine("PROC_MON_FILTER_MENU_TREE=$($treeParts -join '>')")
-  try {
-    $filterMenu.SetFocus()
-    [Console]::Out.WriteLine("PROC_MON_FILTER_MENU_FOCUS=returned")
-  } catch {
-    $focusError = $_.Exception.GetType().Name
-    if ($focusError -notin @(
-        "ElementNotEnabledException",
-        "ElementNotAvailableException",
-        "InvalidOperationException",
-        "COMException",
-        "NoClickablePointException"
-      )) {
-      $focusError = "Other"
+  [Console]::Out.WriteLine(
+    "PROC_MON_FILTER_MENU_PATTERNS=expand-collapse:$($hasExpandPattern.ToString().ToLowerInvariant());invoke:$($hasInvokePattern.ToString().ToLowerInvariant())"
+  )
+  if ($menuState.IsKeyboardFocusable) {
+    try {
+      $filterMenu.SetFocus()
+      [Console]::Out.WriteLine("PROC_MON_FILTER_MENU_FOCUS=returned")
+    } catch {
+      $focusError = $_.Exception.GetType().Name
+      if ($focusError -notin @(
+          "ElementNotEnabledException",
+          "ElementNotAvailableException",
+          "InvalidOperationException",
+          "COMException",
+          "NoClickablePointException"
+        )) {
+        $focusError = "Other"
+      }
+      [Console]::Out.WriteLine("PROC_MON_FILTER_MENU_FOCUS=failed-$focusError")
+      throw
     }
-    [Console]::Out.WriteLine("PROC_MON_FILTER_MENU_FOCUS=failed-$focusError")
-    throw
+  } else {
+    [Console]::Out.WriteLine("PROC_MON_FILTER_MENU_FOCUS=skipped-not-keyboard-focusable")
   }
   Set-Stage "expand-filter-menu"
-  $menuPattern = $null
-  if ($filterMenu.TryGetCurrentPattern(
-      [System.Windows.Automation.ExpandCollapsePattern]::Pattern,
-      [ref]$menuPattern
-    )) {
-    $menuPattern.Expand()
+  if ($hasExpandPattern) {
+    $expandPattern.Expand()
+  } elseif ($hasInvokePattern) {
+    $invokePattern.Invoke()
   } else {
-    $menuPattern = $null
-    if (-not $filterMenu.TryGetCurrentPattern(
-        [System.Windows.Automation.InvokePattern]::Pattern,
-        [ref]$menuPattern
-      )) {
-      throw "Process Monitor Filter menu cannot be opened"
-    }
-    $menuPattern.Invoke()
+    throw "Process Monitor Filter menu exposes no supported open pattern"
   }
   Set-Stage "select-filter-command"
   [System.Windows.Forms.SendKeys]::SendWait("{HOME}")

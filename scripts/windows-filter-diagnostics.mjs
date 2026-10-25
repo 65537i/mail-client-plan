@@ -8,6 +8,11 @@ export function describeWindowsFilterDiagnostics(output) {
   )?.[1];
   if (state) diagnostics.push(`menu-state=${state}`);
 
+  const patterns = output.match(
+    /PROC_MON_FILTER_MENU_PATTERNS=(expand-collapse:(?:true|false);invoke:(?:true|false))/,
+  )?.[1];
+  if (patterns) diagnostics.push(`menu-patterns=${patterns}`);
+
   const tree = output.match(/PROC_MON_FILTER_MENU_TREE=([A-Za-z:>]+)/)?.[1];
   if (tree) {
     const nodes = tree.split(">");
@@ -23,7 +28,7 @@ export function describeWindowsFilterDiagnostics(output) {
   }
 
   const focus = output.match(
-    /PROC_MON_FILTER_MENU_FOCUS=(returned|failed-(?:ElementNotEnabledException|ElementNotAvailableException|InvalidOperationException|COMException|NoClickablePointException|Other))/,
+    /PROC_MON_FILTER_MENU_FOCUS=(returned|skipped-not-keyboard-focusable|failed-(?:ElementNotEnabledException|ElementNotAvailableException|InvalidOperationException|COMException|NoClickablePointException|Other))/,
   )?.[1];
   if (focus) diagnostics.push(`menu-focus=${focus}`);
   return diagnostics.length > 0 ? `; ${diagnostics.join("; ")}` : "";
