@@ -410,7 +410,9 @@ try {
     throw "Process Monitor open menu did not expose one Filter command"
   }
   $filterCommand = $filterCommands[0]
+  Set-Stage "read-filter-command-state"
   $filterCommandState = $filterCommand.Current
+  Set-Stage "probe-filter-command-patterns"
   $filterInvokePattern = $null
   $hasFilterInvokePattern = $filterCommand.TryGetCurrentPattern(
     [System.Windows.Automation.InvokePattern]::Pattern,
@@ -424,11 +426,13 @@ try {
   [Console]::Out.WriteLine(
     "PROC_MON_FILTER_COMMAND_PATTERNS=invoke:$($hasFilterInvokePattern.ToString().ToLowerInvariant());selection-item:$($hasFilterSelectionPattern.ToString().ToLowerInvariant())"
   )
+  Set-Stage "probe-filter-command-clickable-point"
   $filterClickablePoint = $null
   $hasFilterClickablePoint = $filterCommand.TryGetClickablePoint([ref]$filterClickablePoint)
   [Console]::Out.WriteLine(
     "PROC_MON_FILTER_COMMAND_GEOMETRY=clickable-point:$($hasFilterClickablePoint.ToString().ToLowerInvariant())"
   )
+  Set-Stage "validate-filter-command-state"
   if (-not $filterCommandState.IsEnabled -or
     $filterCommandState.IsOffscreen -or
     -not $filterCommandState.IsKeyboardFocusable) {
