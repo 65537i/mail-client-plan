@@ -40,6 +40,29 @@ public static class ProcmonNativeMenu
         public IntPtr hbmpItem;
     }
 
+    [StructLayout(LayoutKind.Sequential)]
+    private struct Rect
+    {
+        public int Left;
+        public int Top;
+        public int Right;
+        public int Bottom;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct GuiThreadInfo
+    {
+        public uint cbSize;
+        public uint flags;
+        public IntPtr hwndActive;
+        public IntPtr hwndFocus;
+        public IntPtr hwndCapture;
+        public IntPtr hwndMenuOwner;
+        public IntPtr hwndMoveSize;
+        public IntPtr hwndCaret;
+        public Rect rcCaret;
+    }
+
     public sealed class ItemSnapshot
     {
         public string Text { get; set; }
@@ -49,6 +72,62 @@ public static class ProcmonNativeMenu
 
     [DllImport("user32.dll", ExactSpelling = true, SetLastError = true)]
     public static extern IntPtr GetMenu(IntPtr hWnd);
+
+    [DllImport("user32.dll", ExactSpelling = true, SetLastError = true)]
+    private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+
+    [DllImport("user32.dll", ExactSpelling = true, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetGUIThreadInfo(uint threadId, ref GuiThreadInfo info);
+
+    public static IntPtr GetMenuOwnerWindow(
+        IntPtr menuWindow,
+        uint expectedProcessId,
+        out bool menuWindowProcessKnown,
+        out bool menuWindowSameProcess,
+        out bool guiThreadInfoAvailable
+    )
+    {
+        menuWindowProcessKnown = false;
+        menuWindowSameProcess = false;
+        guiThreadInfoAvailable = false;
+        uint menuProcessId;
+        var menuThreadId = GetWindowThreadProcessId(menuWindow, out menuProcessId);
+        if (menuThreadId == 0)
+        {
+            return IntPtr.Zero;
+        }
+        menuWindowProcessKnown = true;
+        if (menuProcessId != expectedProcessId)
+        {
+            return IntPtr.Zero;
+        }
+        menuWindowSameProcess = true;
+
+        var info = new GuiThreadInfo
+        {
+            cbSize = (uint)Marshal.SizeOf(typeof(GuiThreadInfo))
+        };
+        if (!GetGUIThreadInfo(menuThreadId, ref info))
+        {
+            return IntPtr.Zero;
+        }
+        guiThreadInfoAvailable = true;
+        if (info.hwndMenuOwner == IntPtr.Zero)
+        {
+            return IntPtr.Zero;
+        }
+
+        uint ownerProcessId;
+        if (
+            GetWindowThreadProcessId(info.hwndMenuOwner, out ownerProcessId) == 0 ||
+            ownerProcessId != expectedProcessId
+        )
+        {
+            return IntPtr.Zero;
+        }
+        return info.hwndMenuOwner;
+    }
 
     [DllImport("user32.dll", ExactSpelling = true, SetLastError = true)]
     public static extern int GetMenuItemCount(IntPtr hMenu);
@@ -335,9 +414,33 @@ function Find-NativeDropMenuItem([System.IntPtr]$MenuHandle, [int]$Depth) {
   }
 }
 
-function Get-NativeDropMenuSnapshot([System.IntPtr]$WindowHandle) {
+function Get-NativeDropMenuSnapshot(
+  [System.IntPtr]$WindowHandle,
+  [System.IntPtr]$MenuWindowHandle,
+  [uint32]$ProcessId
+) {
   Set-Stage "get-native-menu-handle"
   $menuHandle = [ProcmonNativeMenu]::GetMenu($WindowHandle)
+  $menuSource = "main"
+  $menuOwnerWindowHandle = [System.IntPtr]::Zero
+  $menuWindowProcessKnown = $false
+  $menuWindowSameProcess = $false
+  $guiThreadInfoAvailable = $false
+  if ($menuHandle.Equals([System.IntPtr]::Zero)) {
+    $menuOwnerWindowHandle = [ProcmonNativeMenu]::GetMenuOwnerWindow(
+      $MenuWindowHandle,
+      $ProcessId,
+      [ref]$menuWindowProcessKnown,
+      [ref]$menuWindowSameProcess,
+      [ref]$guiThreadInfoAvailable
+    )
+    $menuHandle = [ProcmonNativeMenu]::GetMenu($menuOwnerWindowHandle)
+    if ($menuHandle.Equals([System.IntPtr]::Zero)) {
+      $menuSource = "unavailable"
+    } else {
+      $menuSource = "menu-owner"
+    }
+  }
   $handleAvailable = -not $menuHandle.Equals([System.IntPtr]::Zero)
   $script:nativeMenuVisited = 0
   $script:nativeMenuReadable = $handleAvailable
@@ -352,6 +455,10 @@ function Get-NativeDropMenuSnapshot([System.IntPtr]$WindowHandle) {
     $checkState = if ($script:nativeDropMenuMatches[0]) { "on" } else { "off" }
   }
   [pscustomobject]@{
+    MenuSource = $menuSource
+    MenuWindowProcess = if (-not $menuWindowProcessKnown) { "unavailable" } elseif ($menuWindowSameProcess) { "same" } else { "other" }
+    GuiThreadInfoAvailable = $guiThreadInfoAvailable
+    OwnerWindowAvailable = -not $menuOwnerWindowHandle.Equals([System.IntPtr]::Zero)
     HandleAvailable = $handleAvailable
     ItemCount = [Math]::Min($script:nativeMenuVisited, 9999)
     MatchCount = [Math]::Min($script:nativeDropMenuMatches.Count, 9999)
@@ -361,9 +468,11 @@ function Get-NativeDropMenuSnapshot([System.IntPtr]$WindowHandle) {
 }
 
 function Write-NativeDropMenuSnapshot($Snapshot, [string]$Observation) {
+  $guiThreadInfoState = if ($Snapshot.GuiThreadInfoAvailable) { "available" } else { "unavailable" }
+  $ownerWindowState = if ($Snapshot.OwnerWindowAvailable) { "available" } else { "unavailable" }
   $handleState = if ($Snapshot.HandleAvailable) { "available" } else { "unavailable" }
   [Console]::Out.WriteLine(
-    "PROC_MON_FILTER_NATIVE_MENU_STATE=observation:$Observation;handle:$handleState;items:$($Snapshot.ItemCount);matches:$($Snapshot.MatchCount);readable:$($Snapshot.Readable.ToString().ToLowerInvariant());checked:$($Snapshot.CheckState)"
+    "PROC_MON_FILTER_NATIVE_MENU_STATE=observation:$Observation;source:$($Snapshot.MenuSource);menu-window-process:$($Snapshot.MenuWindowProcess);gui-thread-info:$guiThreadInfoState;owner-window:$ownerWindowState;handle:$handleState;items:$($Snapshot.ItemCount);matches:$($Snapshot.MatchCount);readable:$($Snapshot.Readable.ToString().ToLowerInvariant());checked:$($Snapshot.CheckState)"
   )
 }
 
@@ -942,7 +1051,8 @@ try {
   )
   Set-Stage "probe-drop-native-menu-state"
   $mainWindowHandle = [System.IntPtr]$main.Current.NativeWindowHandle
-  $nativeDropMenuSnapshot = Get-NativeDropMenuSnapshot $mainWindowHandle
+  $dropMenuWindowHandle = [System.IntPtr]$dropMenu.Current.NativeWindowHandle
+  $nativeDropMenuSnapshot = Get-NativeDropMenuSnapshot $mainWindowHandle $dropMenuWindowHandle $process.Id
   Write-NativeDropMenuSnapshot $nativeDropMenuSnapshot "before"
   Set-Stage "verify-drop-native-menu-state"
   if ($nativeDropMenuSnapshot.CheckState -eq "unavailable") {
@@ -959,7 +1069,7 @@ try {
     $invokePattern.Invoke()
     Start-Sleep -Milliseconds 100
     Set-Stage "verify-drop-native-menu-state"
-    $nativeDropMenuSnapshot = Get-NativeDropMenuSnapshot $mainWindowHandle
+    $nativeDropMenuSnapshot = Get-NativeDropMenuSnapshot $mainWindowHandle $dropMenuWindowHandle $process.Id
     Write-NativeDropMenuSnapshot $nativeDropMenuSnapshot "after-invoke"
     if ($nativeDropMenuSnapshot.CheckState -ne "on") {
       throw "Process Monitor did not enable Drop Filtered Events"

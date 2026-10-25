@@ -24,8 +24,8 @@ test("AC-05: Windows filter diagnostics retain only allowlisted UIA and native m
     "PROC_MON_FILTER_DROP_PATTERN=selection-item:false",
     "PROC_MON_FILTER_DROP_ITEM_STATE=enabled:true;offscreen:false;keyboard-focusable:true;item-status:off;help-text:other",
     "PROC_MON_FILTER_DROP_ITEM_BACKEND=framework:Win32;native-window-handle:false;menu-window-handle:true",
-    "PROC_MON_FILTER_NATIVE_MENU_STATE=observation:before;handle:available;items:19;matches:1;readable:true;checked:off",
-    "PROC_MON_FILTER_NATIVE_MENU_STATE=observation:after-invoke;handle:available;items:19;matches:1;readable:true;checked:on",
+    "PROC_MON_FILTER_NATIVE_MENU_STATE=observation:before;source:menu-owner;menu-window-process:same;gui-thread-info:available;owner-window:available;handle:available;items:19;matches:1;readable:true;checked:off",
+    "PROC_MON_FILTER_NATIVE_MENU_STATE=observation:after-invoke;source:menu-owner;menu-window-process:same;gui-thread-info:available;owner-window:available;handle:available;items:19;matches:1;readable:true;checked:on",
     "PROC_MON_FILTER_FOCUS_OWNER=after-command-invoke;owner:procmon-main",
     "PROC_MON_FILTER_MENU_TREE=MenuItem:Filter>MenuBar:MenuBar>Window:ProcessMonitor",
     "PROC_MON_FILTER_MENU_FOCUS=failed-COMException",
@@ -47,8 +47,8 @@ test("AC-05: Windows filter diagnostics retain only allowlisted UIA and native m
       + "; drop-filter-pattern-selection-item=false"
       + "; drop-filter-item-state=enabled:true;offscreen:false;keyboard-focusable:true;item-status:off;help-text:other"
       + "; drop-filter-item-backend=framework:Win32;native-window-handle:false;menu-window-handle:true"
-      + "; drop-native-menu-state=observation:before;handle:available;items:19;matches:1;readable:true;checked:off"
-      + "; drop-native-menu-state=observation:after-invoke;handle:available;items:19;matches:1;readable:true;checked:on"
+      + "; drop-native-menu-state=observation:before;source:menu-owner;menu-window-process:same;gui-thread-info:available;owner-window:available;handle:available;items:19;matches:1;readable:true;checked:off"
+      + "; drop-native-menu-state=observation:after-invoke;source:menu-owner;menu-window-process:same;gui-thread-info:available;owner-window:available;handle:available;items:19;matches:1;readable:true;checked:on"
       + "; filter-dialog-reset-tree=Button>Pane>Window"
       + "; focus-owner-after-command-invoke=procmon-main"
       + "; menu-tree=MenuItem:Filter>MenuBar:MenuBar>Window:ProcessMonitor"
@@ -190,11 +190,27 @@ test("AC-05: Windows filter diagnostics reject unknown Drop item patterns", () =
       "PROC_MON_FILTER_DROP_ITEM_STATE=enabled:true;offscreen:false;keyboard-focusable:true;item-status:checked;help-text:C:\\private\\mail",
       "PROC_MON_FILTER_DROP_ITEM_BACKEND=framework:C:\\private\\mail;native-window-handle:true;menu-window-handle:true",
       "PROC_MON_FILTER_NATIVE_MENU_STATE=observation:before;handle:available;items:1000;matches:1;readable:true;checked:off",
-      "PROC_MON_FILTER_NATIVE_MENU_STATE=observation:before;handle:available;items:1;matches:1;readable:true;checked:unavailable",
-      "PROC_MON_FILTER_NATIVE_MENU_STATE=observation:private;handle:available;items:1;matches:1;readable:true;checked:on",
-      "PROC_MON_FILTER_NATIVE_MENU_STATE=observation:before;handle:true;items:19;matches:1;readable:true;checked:off",
+      "PROC_MON_FILTER_NATIVE_MENU_STATE=observation:before;source:menu-owner;menu-window-process:same;gui-thread-info:available;owner-window:available;handle:available;items:1;matches:1;readable:true;checked:unavailable",
+      "PROC_MON_FILTER_NATIVE_MENU_STATE=observation:private;source:main;menu-window-process:unavailable;gui-thread-info:unavailable;owner-window:unavailable;handle:available;items:1;matches:1;readable:true;checked:on",
+      "PROC_MON_FILTER_NATIVE_MENU_STATE=observation:before;source:menu-owner;menu-window-process:same;gui-thread-info:available;owner-window:available;handle:true;items:19;matches:1;readable:true;checked:off",
     ].join("\n")),
     "",
+  );
+});
+
+test("AC-05: Windows native menu diagnostics retain safe owner fallback and unavailable state", () => {
+  assert.equal(
+    describeWindowsFilterDiagnostics([
+      "PROC_MON_FILTER_NATIVE_MENU_STATE=observation:before;source:unavailable;menu-window-process:same;gui-thread-info:unavailable;owner-window:unavailable;handle:unavailable;items:0;matches:0;readable:false;checked:unavailable",
+      "PROC_MON_FILTER_NATIVE_MENU_STATE=observation:before;source:menu-owner;menu-window-process:same;gui-thread-info:available;owner-window:available;handle:available;items:11;matches:1;readable:true;checked:off",
+      "PROC_MON_FILTER_NATIVE_MENU_STATE=observation:before;source:menu-owner;menu-window-process:other;gui-thread-info:available;owner-window:available;handle:available;items:11;matches:1;readable:true;checked:off",
+      "PROC_MON_FILTER_NATIVE_MENU_STATE=observation:before;source:menu-owner;menu-window-process:same;gui-thread-info:available;owner-window:available;handle:available;items:11;matches:1;readable:false;checked:unavailable",
+      "PROC_MON_FILTER_NATIVE_MENU_STATE=observation:before;source:menu-owner;menu-window-process:same;gui-thread-info:available;owner-window:available;handle:available;items:2;matches:0;readable:true;checked:unavailable",
+    ].join("\n")),
+    "; drop-native-menu-state=observation:before;source:unavailable;menu-window-process:same;gui-thread-info:unavailable;owner-window:unavailable;handle:unavailable;items:0;matches:0;readable:false;checked:unavailable"
+      + "; drop-native-menu-state=observation:before;source:menu-owner;menu-window-process:same;gui-thread-info:available;owner-window:available;handle:available;items:11;matches:1;readable:true;checked:off"
+      + "; drop-native-menu-state=observation:before;source:menu-owner;menu-window-process:same;gui-thread-info:available;owner-window:available;handle:available;items:11;matches:1;readable:false;checked:unavailable"
+      + "; drop-native-menu-state=observation:before;source:menu-owner;menu-window-process:same;gui-thread-info:available;owner-window:available;handle:available;items:2;matches:0;readable:true;checked:unavailable",
   );
 });
 

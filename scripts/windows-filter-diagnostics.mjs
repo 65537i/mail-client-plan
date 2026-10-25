@@ -118,21 +118,60 @@ export function describeWindowsFilterDiagnostics(output) {
   }
 
   for (const match of output.matchAll(
-    /^PROC_MON_FILTER_NATIVE_MENU_STATE=observation:(before|after-invoke);handle:(available|unavailable);items:(\d{1,3});matches:(\d{1,3});readable:(true|false);checked:(on|off|unavailable)\r?$/gm,
+    /^PROC_MON_FILTER_NATIVE_MENU_STATE=observation:(before|after-invoke);source:(main|menu-owner|unavailable);menu-window-process:(same|other|unavailable);gui-thread-info:(available|unavailable);owner-window:(available|unavailable);handle:(available|unavailable);items:(\d{1,3});matches:(\d{1,3});readable:(true|false);checked:(on|off|unavailable)\r?$/gm,
   )) {
-    const [, observation, handle, rawItems, rawMatches, readable, checked] = match;
+    const [
+      ,
+      observation,
+      source,
+      menuWindowProcess,
+      guiThreadInfo,
+      ownerWindow,
+      handle,
+      rawItems,
+      rawMatches,
+      readable,
+      checked,
+    ] = match;
     const items = Number(rawItems);
     const matches = Number(rawMatches);
+    const validSource =
+      (source === "main" && handle === "available")
+      || (
+        source === "menu-owner"
+        && menuWindowProcess === "same"
+        && guiThreadInfo === "available"
+        && ownerWindow === "available"
+        && handle === "available"
+      )
+      || (
+        source === "unavailable"
+        && handle === "unavailable"
+        && items === 0
+        && matches === 0
+        && readable === "false"
+      );
     const consistentCheck =
-      handle === "available"
+      validSource
+      && handle === "available"
       && readable === "true"
       && matches === 1
       && (checked === "on" || checked === "off");
     const consistentUnavailable =
       checked === "unavailable"
       && (
-        (handle === "unavailable" && items === 0 && matches === 0 && readable === "false")
-        || (handle === "available" && (readable === "false" || matches !== 1))
+        (
+          validSource
+          && handle === "available"
+          && (readable === "false" || matches !== 1)
+        )
+        || (
+          source === "unavailable"
+          && handle === "unavailable"
+          && items === 0
+          && matches === 0
+          && readable === "false"
+        )
       );
     if (
       items <= 256
@@ -140,7 +179,7 @@ export function describeWindowsFilterDiagnostics(output) {
       && (consistentCheck || consistentUnavailable)
     ) {
       diagnostics.push(
-        `drop-native-menu-state=observation:${observation};handle:${handle};items:${items};matches:${matches};readable:${readable};checked:${checked}`,
+        `drop-native-menu-state=observation:${observation};source:${source};menu-window-process:${menuWindowProcess};gui-thread-info:${guiThreadInfo};owner-window:${ownerWindow};handle:${handle};items:${items};matches:${matches};readable:${readable};checked:${checked}`,
       );
     }
   }
