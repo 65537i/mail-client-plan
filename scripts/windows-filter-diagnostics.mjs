@@ -1,5 +1,5 @@
 const allowedTypes = /^(?:MenuBar|Menu|MenuItem|Window|Pane|ToolBar|Button|Text|Edit|Other)$/;
-const allowedNames = /^(?:Filter|FilterCommand|MenuBar|ProcessMonitor|Other)$/;
+const allowedNames = /^(?:Filter|FilterCommand|DropFilteredEvents|HighlightFilteredEvents|MenuBar|ProcessMonitor|Other)$/;
 
 export function describeWindowsFilterDiagnostics(output) {
   const diagnostics = [];
@@ -33,6 +33,36 @@ export function describeWindowsFilterDiagnostics(output) {
   if (focus) diagnostics.push(`menu-focus=${focus}`);
 
   const focusObservations = [];
+  for (const match of output.matchAll(
+    /^PROC_MON_FILTER_MENU_ITEMS=(after-open|after-home);unavailable\r?$/gm,
+  )) {
+    focusObservations.push({
+      index: match.index,
+      value: `menu-items-${match[1]}=unavailable`,
+    });
+  }
+  for (const match of output.matchAll(
+    /^PROC_MON_FILTER_MENU_ITEMS=(after-open|after-home);count:(\d{1,6});truncated:(true|false);items=([A-Za-z:,]*)\r?$/gm,
+  )) {
+    const items = match[4] === "" ? [] : match[4].split(",");
+    if (
+      items.length <= 8
+      && items.every((item) => {
+        const [type, name, enabled, offscreen, focusable, ...extra] = item.split(":");
+        return extra.length === 0
+          && allowedTypes.test(type)
+          && allowedNames.test(name)
+          && /^(?:true|false)$/.test(enabled)
+          && /^(?:true|false)$/.test(offscreen)
+          && /^(?:true|false)$/.test(focusable);
+      })
+    ) {
+      focusObservations.push({
+        index: match.index,
+        value: `menu-items-${match[1]}=count:${match[2]};truncated:${match[3]};items=${match[4]}`,
+      });
+    }
+  }
   for (const match of output.matchAll(
     /^PROC_MON_FILTER_FOCUSED_CONTROL=(after-open|after-home|after-enter);focused:(none|unavailable)\r?$/gm,
   )) {

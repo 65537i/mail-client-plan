@@ -161,9 +161,38 @@ function Get-ControlNameLabel([System.Windows.Automation.AutomationElement]$Elem
   switch ($Element.Current.Name) {
     "Filter" { return "Filter" }
     "Filter..." { return "FilterCommand" }
+    "Drop Filtered Events" { return "DropFilteredEvents" }
+    "Highlight Filtered Events" { return "HighlightFilteredEvents" }
     "Menu Bar" { return "MenuBar" }
     "Process Monitor" { return "ProcessMonitor" }
     default { return "Other" }
+  }
+}
+
+function Write-MenuItemsObservation(
+  [string]$Phase,
+  [System.Windows.Automation.AutomationElement]$Menu
+) {
+  try {
+    $items = $Menu.FindAll(
+      [System.Windows.Automation.TreeScope]::Children,
+      [System.Windows.Automation.Condition]::TrueCondition
+    )
+    $observedItems = [System.Collections.Generic.List[string]]::new()
+    $itemLimit = [Math]::Min($items.Count, 8)
+    for ($index = 0; $index -lt $itemLimit; $index++) {
+      $item = $items[$index]
+      $state = $item.Current
+      $observedItems.Add(
+        "$(Get-ControlTypeLabel $item):$(Get-ControlNameLabel $item):$($state.IsEnabled.ToString().ToLowerInvariant()):$($state.IsOffscreen.ToString().ToLowerInvariant()):$($state.IsKeyboardFocusable.ToString().ToLowerInvariant())"
+      )
+    }
+    $truncated = ($items.Count -gt $itemLimit).ToString().ToLowerInvariant()
+    [Console]::Out.WriteLine(
+      "PROC_MON_FILTER_MENU_ITEMS=$Phase;count:$($items.Count);truncated:$truncated;items=$($observedItems -join ',')"
+    )
+  } catch {
+    [Console]::Out.WriteLine("PROC_MON_FILTER_MENU_ITEMS=$Phase;unavailable")
   }
 }
 
@@ -185,6 +214,12 @@ function Write-FocusObservation([string]$Phase) {
     [Console]::Out.WriteLine(
       "PROC_MON_FILTER_FOCUSED_CONTROL=$Phase;type:$(Get-ControlTypeLabel $focused);name:$(Get-ControlNameLabel $focused);offscreen:$($state.IsOffscreen.ToString().ToLowerInvariant());keyboard-focusable:$($state.IsKeyboardFocusable.ToString().ToLowerInvariant());tree=$($treeParts -join '>')"
     )
+    if (
+      $Phase -in @("after-open", "after-home") -and
+      $state.ControlType.ProgrammaticName -eq "ControlType.Menu"
+    ) {
+      Write-MenuItemsObservation $Phase $focused
+    }
   } catch {
     [Console]::Out.WriteLine("PROC_MON_FILTER_FOCUSED_CONTROL=$Phase;focused:unavailable")
   }
