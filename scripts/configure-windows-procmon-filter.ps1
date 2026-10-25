@@ -178,12 +178,8 @@ try {
     }
     $menuPattern.Invoke()
   }
-  Set-Stage "find-filter-command"
-  $filterCommand = Wait-Element $filterMenu ([System.Windows.Automation.PropertyCondition]::new(
-    [System.Windows.Automation.AutomationElement]::NameProperty, "Filter..."
-  )) 5
-  Set-Stage "focus-filter-command"
-  $filterCommand.SetFocus()
+  Set-Stage "select-filter-command"
+  [System.Windows.Forms.SendKeys]::SendWait("f")
   Set-Stage "send-filter-command"
   [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
   Set-Stage "wait-filter-dialog"

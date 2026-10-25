@@ -65,7 +65,9 @@ native [Run 99](https://github.com/65537i/mail-client-plan/actions/runs/40192409
 
 native [Run 103](https://github.com/65537i/mail-client-plan/actions/runs/40194076668)（`d7e61a1`、Windows / webview）は引き続き60秒timeout、最後のmarkerは`invoke-filter-command`だった。既存markerはcommand検索・focus・Enter送信を区別しないため、これらを個別stageに分けて再試験する。Run 103もWDIO/captureに到達しておらず、AC-05合格に数えない。
 
-native [Run 105](https://github.com/65537i/mail-client-plan/actions/runs/40194936200)（`208dc20`、Windows / webview）は`find-filter-command`で60秒timeoutした。Filter menu展開後のMainWindow全体検索が停止したため、次の修正では展開したFilter menu elementの子孫だけを検索する。Run 105はWDIO/captureに到達せず、AC-05合格に数えない。
+native [Run 105](https://github.com/65537i/mail-client-plan/actions/runs/40194936200)（`208dc20`、Windows / webview）は`find-filter-command` stageで失敗した。Filter menu展開後のMainWindow全体検索が5秒timeoutを超えて戻らなかったため、次runでは展開したFilter menu element内に検索範囲を限定した。
+
+native [Run 107](https://github.com/65537i/mail-client-plan/actions/runs/40195796732)（`209bf9b`、Windows / webview）は5秒の`find-filter-command`待機後に失敗。MainWindowだけでなくFilter menu elementからもcommandをUIA検索できなかった。次の修正では展開済みmenuで`F` mnemonicを選択してEnterを送る。Run 107はWDIO/captureに到達せず、AC-05合格に数えない。
 
 native [Run 89](https://github.com/65537i/mail-client-plan/actions/runs/40184517503)（`a862532`、all / full）はUbuntu、macOS 14 ARM、macOS 15 Intelが成功、Windowsのみ失敗。Windowsではformat / workspace test / clippy / frontend build / native build / production除外検査 / launch smoke / security-test build / TLS / Japanese FTS / IMAP / SMTP / MIME candidate / Windows harness回帰5 testsまで成功。Procmon署名確認も成功したが、capture前のUI Automation filter setupがexit 1となり、WDIOおよびcapture/export・control判定には進まなかった。元のstderrは意図的に破棄していたため、失敗したUI操作はこのrunから特定できない。Run 89はWindows file-access監査の実証ではなく、AC-05未達。
 
