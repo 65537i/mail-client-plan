@@ -151,6 +151,8 @@ Run 183（`7ce682e`）、Run 185（`8921a49`）、Run 189（`3eddfa6`）のpush 
 
 native [Run 196](https://github.com/65537i/mail-client-plan/actions/runs/40242593402)（`73169a0`、manual Windows 2025 x64 / webview）はplan成功、Windows job失敗。`probe-drop-native-menu-state`でUIA popup HWNDは得られたが、main windowのWin32 `GetMenu`はnullを返し、native snapshotはhandle unavailable / items 0 / matches 0 / readable false / checked unavailableとなった。fail-closedでInvoke、`.PMC`保存、WDIO、captureは未実行、AC-05未達。後続修正はWin32 [`GetGUIThreadInfo`](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getguithreadinfo)からactive menu ownerを解決し、[`GetWindowThreadProcessId`](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getwindowthreadprocessid)でpopupとownerが同一Procmon processに属すると確認した場合に限り、owner HWNDで`GetMenu`を再試行する。取得不能・cross-process・曖昧なmenu itemは拒否を維持する。新しいallowlist診断はHWNDやpathを記録しない。Node diagnostics tests 13/13、JS syntax check、diff check成功。PowerShell / Win32の実Windows runtimeは次runで確認する。
 
+native [Run 198](https://github.com/65537i/mail-client-plan/actions/runs/40244199050)（`c3b1c3b`、manual Windows 2025 x64 / webview）はplanとsecurity-test build成功。Procmon監査setupはcanary flush / close後の`select-filter-operator`で60秒timeoutとなり、ComboBox 4個 / Edit 1個のfilter dialog確認以降、operator option探索の実行箇所を特定できなかった。`.PMC`保存、WDIO、capture / control未到達でAC-05未達。Run196後に追加したmenu-owner fallbackは未実行。次の診断変更はcolumn / operator / actionそれぞれのComboBox候補ordinal、展開、option待機に固定stageを設けるだけで、選択条件やUI操作は変えない。
+
 Rustのregistry / git依存と`target`をキャッシュし、OS・arch・runner・固定Rust版・lockfile / manifests / Cargo設定hashを区別する。同一モードを優先し、同じ依存条件の別モードからも復元可能。キャッシュhitでもbuild / testは省略しない。キャッシュは依存・ビルド出力のみで、資格情報ストア、監査trace、メールデータは含めない。初回はcold buildとなり、短縮量はrunnerで実測する。
 
 同じevent・ref・対象・モードの古いrunだけをcancelし、pushによって進行中の手動調査をcancelしない。

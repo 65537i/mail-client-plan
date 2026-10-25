@@ -507,19 +507,41 @@ function Find-ComboValue(
 
 function Select-ComboValue($Combos, [string]$Value) {
   $matchingCombos = [System.Collections.Generic.List[System.Windows.Automation.AutomationElement]]::new()
+  $optionLabel = switch ($Value) {
+    "Path" { "column" }
+    "is" { "operator" }
+    "Include" { "action" }
+    default { "other" }
+  }
+  $index = 0
   foreach ($combo in $Combos) {
+    $ordinal = switch ($index) {
+      0 { "one" }
+      1 { "two" }
+      2 { "three" }
+      3 { "four" }
+      4 { "five" }
+      5 { "six" }
+      6 { "seven" }
+      7 { "eight" }
+      default { "many" }
+    }
+    Set-Stage "probe-$optionLabel-combo-$ordinal"
     if ($null -ne (Find-ComboValue $combo $Value)) {
       $matchingCombos.Add($combo)
     }
+    $index++
   }
   if ($matchingCombos.Count -ne 1) {
     throw "Process Monitor filter dialog did not expose one exact option"
   }
+  Set-Stage "expand-$optionLabel-combo"
   $comboPattern = $matchingCombos[0].GetCurrentPattern(
     [System.Windows.Automation.ExpandCollapsePattern]::Pattern
   )
   $comboPattern.Expand()
   try {
+    Set-Stage "wait-$optionLabel-option"
     $item = Wait-Element $matchingCombos[0] ([System.Windows.Automation.PropertyCondition]::new(
       [System.Windows.Automation.AutomationElement]::NameProperty, $Value
     )) 5
