@@ -43,8 +43,22 @@ function Wait-TopLevelWindow([string]$NamePattern, [int]$TimeoutSeconds = 10) {
 
 function Wait-MainWindow([System.Diagnostics.Process]$Process, [int]$TimeoutSeconds = 15) {
   $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
+  $windowCondition = [System.Windows.Automation.PropertyCondition]::new(
+    [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+    [System.Windows.Automation.ControlType]::Window
+  )
   do {
     $Process.Refresh()
+    if ($Process.HasExited) {
+      throw "Process Monitor exited before its configuration window became available"
+    }
+    $windows = [System.Windows.Automation.AutomationElement]::RootElement.FindAll(
+      [System.Windows.Automation.TreeScope]::Children,
+      $windowCondition
+    )
+    foreach ($window in $windows) {
+      if ($window.Current.ProcessId -eq $Process.Id) { return $window }
+    }
     if ($Process.MainWindowHandle -ne [IntPtr]::Zero) {
       return [System.Windows.Automation.AutomationElement]::FromHandle($Process.MainWindowHandle)
     }
