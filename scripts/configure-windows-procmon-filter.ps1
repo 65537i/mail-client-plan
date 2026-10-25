@@ -75,6 +75,35 @@ function Wait-MainWindow([System.Diagnostics.Process]$Process, [int]$TimeoutSeco
   throw "Process Monitor did not expose its configuration window"
 }
 
+function Wait-FilterDialog([System.Diagnostics.Process]$Process, [System.Windows.Automation.AutomationElement]$MainWindow, [int]$TimeoutSeconds = 10) {
+  $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
+  $windowCondition = [System.Windows.Automation.PropertyCondition]::new(
+    [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+    [System.Windows.Automation.ControlType]::Window
+  )
+  $resetCondition = [System.Windows.Automation.PropertyCondition]::new(
+    [System.Windows.Automation.AutomationElement]::NameProperty,
+    "Reset"
+  )
+  do {
+    $windows = [System.Windows.Automation.AutomationElement]::RootElement.FindAll(
+      [System.Windows.Automation.TreeScope]::Children,
+      $windowCondition
+    )
+    foreach ($window in $windows) {
+      if ($window.Current.ProcessId -ne $Process.Id -or
+        $window.Current.NativeWindowHandle -eq $MainWindow.Current.NativeWindowHandle) {
+        continue
+      }
+      if ($null -ne $window.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $resetCondition)) {
+        return $window
+      }
+    }
+    Start-Sleep -Milliseconds 100
+  } while ([DateTime]::UtcNow -lt $deadline)
+  throw "Process Monitor filter dialog did not expose its Reset control"
+}
+
 function Select-ComboValue([System.Windows.Automation.AutomationElement]$Combo, [string]$Value) {
   $comboPattern = $Combo.GetCurrentPattern([System.Windows.Automation.ExpandCollapsePattern]::Pattern)
   $comboPattern.Expand()
@@ -132,7 +161,7 @@ try {
   $stage = "send-filter-shortcut"
   [System.Windows.Forms.SendKeys]::SendWait("^l")
   $stage = "wait-filter-dialog"
-  $filterDialog = Wait-TopLevelWindow "Filter" 10
+  $filterDialog = Wait-FilterDialog $process $main
   $stage = "reset-existing-filters"
   $reset = Wait-Element $filterDialog ([System.Windows.Automation.PropertyCondition]::new(
     [System.Windows.Automation.AutomationElement]::NameProperty, "Reset"

@@ -53,6 +53,8 @@ Run 91（`d38647f`、Windows / webview）ではsecurity-test build、Procmon署�
 
 Run 93（`534b434`、Windows / webview）では同じfilter setupが`find-main-window`を通過したが、`open-filter-dialog`で停止した。Procmon windowを検出できたことと、keyboard shortcutでdialogを開けたことは別に診断する。Run 93もWDIO/captureに到達しておらず、AC-05の証拠ではない。
 
+Run 95（`fe49719`、Windows / webview）ではforeground化とshortcut送信を通過した後、title patternでFilter dialogを検出できず停止した。dialogはProcmon process ID、main windowとは別のtop-level window、`Reset` controlで識別するよう変更する。Run 95はWDIO/captureに到達しておらず、AC-05の証拠ではない。
+
 Rustのregistry / git依存と`target`をキャッシュし、OS・arch・runner・固定Rust版・lockfile / manifests / Cargo設定hashを区別する。同一モードを優先し、同じ依存条件の別モードからも復元可能。キャッシュhitでもbuild / testは省略しない。キャッシュは依存・ビルド出力のみで、資格情報ストア、監査trace、メールデータは含めない。初回はcold buildとなり、短縮量はrunnerで実測する。
 
 同じevent・ref・対象・モードの古いrunだけをcancelし、pushによって進行中の手動調査をcancelしない。
