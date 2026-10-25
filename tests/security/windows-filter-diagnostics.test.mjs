@@ -89,6 +89,21 @@ test("AC-05: Windows filter diagnostics omit unknown exception types", () => {
   );
 });
 
+test("AC-05: Windows filter diagnostics retain bounded dialog scan counts", () => {
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_DIALOG_SCAN=process-windows:2;non-main-windows:1;reset-control:false",
+    ),
+    "; filter-dialog-scan=process-windows:2;non-main-windows:1;reset-control:false",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_DIALOG_SCAN=process-windows:20000;non-main-windows:1;reset-control:false",
+    ),
+    "",
+  );
+});
+
 test("AC-05: Windows filter output retains diagnostics within a strict 4096-character cap", () => {
   const prefix = "x".repeat(3000);
   const snapshot = "PROC_MON_FILTER_SNAPSHOT=caller;element:present;control-type:menu";

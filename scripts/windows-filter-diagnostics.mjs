@@ -24,6 +24,15 @@ export function describeWindowsFilterDiagnostics(output) {
   )?.[1];
   if (commandPatterns) diagnostics.push(`filter-command-patterns=${commandPatterns}`);
 
+  const dialogScan = output.match(
+    /PROC_MON_FILTER_DIALOG_SCAN=process-windows:(\d{1,4});non-main-windows:(\d{1,4});reset-control:(true|false)/,
+  );
+  if (dialogScan) {
+    diagnostics.push(
+      `filter-dialog-scan=process-windows:${dialogScan[1]};non-main-windows:${dialogScan[2]};reset-control:${dialogScan[3]}`,
+    );
+  }
+
   const tree = output.match(/PROC_MON_FILTER_MENU_TREE=([A-Za-z:>]+)/)?.[1];
   if (tree) {
     const nodes = tree.split(">");

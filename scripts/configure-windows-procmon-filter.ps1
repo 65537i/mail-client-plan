@@ -74,6 +74,9 @@ function Wait-MainWindow([System.Diagnostics.Process]$Process, [int]$TimeoutSeco
 
 function Wait-FilterDialog([System.Diagnostics.Process]$Process, [System.Windows.Automation.AutomationElement]$MainWindow, [int]$TimeoutSeconds = 10) {
   $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
+  $processWindowCount = 0
+  $nonMainWindowCount = 0
+  $resetControlPresent = $false
   $windowCondition = [System.Windows.Automation.PropertyCondition]::new(
     [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
     [System.Windows.Automation.ControlType]::Window
@@ -87,17 +90,28 @@ function Wait-FilterDialog([System.Diagnostics.Process]$Process, [System.Windows
       [System.Windows.Automation.TreeScope]::Children,
       $windowCondition
     )
+    $processWindowCount = 0
+    $nonMainWindowCount = 0
+    $resetControlPresent = $false
     foreach ($window in $windows) {
-      if ($window.Current.ProcessId -ne $Process.Id -or
-        $window.Current.NativeWindowHandle -eq $MainWindow.Current.NativeWindowHandle) {
+      if ($window.Current.ProcessId -ne $Process.Id) {
         continue
       }
+      $processWindowCount++
+      if ($window.Current.NativeWindowHandle -eq $MainWindow.Current.NativeWindowHandle) {
+        continue
+      }
+      $nonMainWindowCount++
       if ($null -ne $window.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $resetCondition)) {
+        $resetControlPresent = $true
         return $window
       }
     }
     Start-Sleep -Milliseconds 100
   } while ([DateTime]::UtcNow -lt $deadline)
+  [Console]::Out.WriteLine(
+    "PROC_MON_FILTER_DIALOG_SCAN=process-windows:$processWindowCount;non-main-windows:$nonMainWindowCount;reset-control:$($resetControlPresent.ToString().ToLowerInvariant())"
+  )
   throw "Process Monitor filter dialog did not expose its Reset control"
 }
 
