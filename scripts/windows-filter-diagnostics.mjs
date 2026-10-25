@@ -1,5 +1,11 @@
 const allowedTypes = /^(?:MenuBar|Menu|MenuItem|Window|Pane|ToolBar|Button|Text|Edit|Other)$/;
 const allowedNames = /^(?:Filter|FilterCommand|DropFilteredEvents|HighlightFilteredEvents|MenuBar|ProcessMonitor|Other)$/;
+const windowsFilterOutputLimit = 4096;
+
+export function appendBoundedWindowsFilterOutput(current, chunk) {
+  const remaining = windowsFilterOutputLimit - current.length;
+  return remaining > 0 ? current + chunk.slice(0, remaining) : current;
+}
 
 export function describeWindowsFilterDiagnostics(output) {
   const diagnostics = [];

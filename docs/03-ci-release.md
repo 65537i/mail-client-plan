@@ -95,6 +95,8 @@ Run 134（`cc24913`、main push）はplanとUbuntu / basicのみ成功し、Wind
 
 Run 137（`f06c83d`、Windows / webview）はsecurity-test build、実WebView security spec、audit harness testsに成功した後、`observe-menu-focus`で失敗した。writer側snapshotはelement present / ControlType Menuで、子control 11件も観測された一方、caller側診断markerは出ていない。次runではcaller確認を独立stageにし、例外messageを抑止したままallowlist済み例外種別を記録する。WDIOはProcmon filter setup後のstepで未実行となり、capture/export/control判定にも到達していない。Run 137はAC-05の証拠ではない。
 
+Run 139（`153a08b`、Windows / webview）もProcmon filter setupで失敗。ログ要約にはwriter markerとMenu / 11 child controlsがあるが、caller / failure-type markerはなく、報告stageは最後に観測された`observe-menu-focus`。Node harnessはstdoutの先頭1024文字だけを保持するため、診断末尾が切れた可能性がある。次runは固定形式・allowlist診断のみに限定したまま、収集上限を厳密な4096文字へ増やして後続markerを確認する。Run 139はWDIO/capture未到達でAC-05の証拠ではない。
+
 Rustのregistry / git依存と`target`をキャッシュし、OS・arch・runner・固定Rust版・lockfile / manifests / Cargo設定hashを区別する。同一モードを優先し、同じ依存条件の別モードからも復元可能。キャッシュhitでもbuild / testは省略しない。キャッシュは依存・ビルド出力のみで、資格情報ストア、監査trace、メールデータは含めない。初回はcold buildとなり、短縮量はrunnerで実測する。
 
 同じevent・ref・対象・モードの古いrunだけをcancelし、pushによって進行中の手動調査をcancelしない。

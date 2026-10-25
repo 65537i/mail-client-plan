@@ -10,7 +10,10 @@ import {
   inspectWindowsFileTrace,
 } from "./windows-file-trace.mjs";
 import { createWindowsAuditCanary } from "./windows-audit-canary.mjs";
-import { describeWindowsFilterDiagnostics } from "./windows-filter-diagnostics.mjs";
+import {
+  appendBoundedWindowsFilterOutput,
+  describeWindowsFilterDiagnostics,
+} from "./windows-filter-diagnostics.mjs";
 
 assert.equal(process.platform, "win32", "file-access tracing requires Windows");
 assert(process.env.MAIL_CLIENT_PROCMON_PATH, "MAIL_CLIENT_PROCMON_PATH is required");
@@ -102,7 +105,7 @@ async function captureScenario(scenario) {
     let filterSetupOutput = "";
     filterSetup.stdout.setEncoding("utf8");
     filterSetup.stdout.on("data", (chunk) => {
-      if (filterSetupOutput.length < 1024) filterSetupOutput += chunk;
+      filterSetupOutput = appendBoundedWindowsFilterOutput(filterSetupOutput, chunk);
     });
     filterSetup.stderr.resume();
     const filterSetupExit = waitForProcess(filterSetup);
