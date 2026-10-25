@@ -21,8 +21,10 @@ async function captureScenario(scenario) {
   const temporaryDirectory = await mkdtemp(path.join(os.tmpdir(), "mail-client-file-audit-"));
   const canaryPath = path.join(temporaryDirectory, `mc-${randomUUID().slice(0, 12)}.png`);
   const positiveControlPath = path.join(temporaryDirectory, `mc-control-${randomUUID().slice(0, 12)}.png`);
+  const excludedPath = path.join(temporaryDirectory, `mc-excluded-${randomUUID().slice(0, 12)}.png`);
   const backingFile = path.join(temporaryDirectory, "process-monitor.pml");
   const csvFile = path.join(temporaryDirectory, "process-monitor.csv");
+  const filterConfig = path.join(temporaryDirectory, "canary-only.pmc");
 
   function waitWithTimeout(promise, milliseconds) {
     return new Promise((resolve) => {
@@ -74,6 +76,38 @@ async function captureScenario(scenario) {
     assert.equal(canaryStats.size, canaryBytes, "Synthetic canary has an unexpected size");
     console.log(`Windows audit ${scenario}: canary flushed and closed UTC=${canaryCreatedAt}; bytes=${canaryStats.size}`);
     await writeFile(positiveControlPath, "Synthetic Process Monitor positive control.\n");
+    await writeFile(excludedPath, "Synthetic Process Monitor filter negative control.\n");
+    const filterSetup = spawn(
+      "powershell.exe",
+      [
+        "-STA",
+        "-NoProfile",
+        "-NonInteractive",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        path.join(root, "scripts", "configure-windows-procmon-filter.ps1"),
+        "-ProcmonPath",
+        procmonPath,
+        "-CanaryPath",
+        canaryPath,
+        "-ControlPath",
+        positiveControlPath,
+        "-ConfigPath",
+        filterConfig,
+      ],
+      { stdio: "ignore", windowsHide: true },
+    );
+    const filterSetupExit = waitForProcess(filterSetup);
+    const filterSetupResult = await waitWithTimeout(filterSetupExit, 60_000);
+    if (filterSetupResult.timedOut) {
+      filterSetup.kill();
+      await filterSetupExit;
+      await runProcmon(["/AcceptEula", "/Terminate"], "filter setup cleanup");
+      throw new Error("Process Monitor exact-path filter configuration timed out");
+    }
+    if (filterSetupResult.error) throw new Error("Failed to start Process Monitor filter configuration");
+    assert.equal(filterSetupResult.code, 0, "Process Monitor exact-path filter configuration failed");
     command = fork(
       path.join(root, "scripts", "windows-audit-wdio.mjs"),
       [path.join(root, scenario === "baseline"
@@ -101,7 +135,15 @@ async function captureScenario(scenario) {
     console.log(`Windows audit ${scenario}: capture requested UTC=${new Date().toISOString()}; local UTC offset minutes=${-new Date().getTimezoneOffset()}`);
     capture = spawn(
       procmonPath,
-      ["/AcceptEula", "/Quiet", "/Minimized", "/NoFilter", "/BackingFile", backingFile],
+      [
+        "/AcceptEula",
+        "/Quiet",
+        "/Minimized",
+        "/LoadConfig",
+        filterConfig,
+        "/BackingFile",
+        backingFile,
+      ],
       { stdio: "ignore", windowsHide: true },
     );
     captureExit = waitForProcess(capture);
@@ -146,6 +188,26 @@ async function captureScenario(scenario) {
       0,
       "Node synthetic-canary positive control failed",
     );
+    const excludedControl = spawn(
+      process.execPath,
+      [
+        "-e",
+        "require('node:fs').readFileSync(process.env.MAIL_CLIENT_FILE_CANARY)",
+      ],
+      {
+        env: {
+          ...process.env,
+          MAIL_CLIENT_FILE_CANARY: excludedPath,
+        },
+        stdio: "ignore",
+        windowsHide: true,
+      },
+    );
+    const excludedControlResult = await waitForProcess(excludedControl);
+    if (excludedControlResult.error) {
+      throw new Error("Failed to start the synthetic filter negative control");
+    }
+    assert.equal(excludedControlResult.code, 0, "Synthetic filter negative control failed");
 
     command.send("start");
     console.log(`Windows audit ${scenario}: WDIO start sent UTC=${new Date().toISOString()}`);
@@ -187,7 +249,7 @@ async function captureScenario(scenario) {
       "Process Monitor CSV export exceeded the 256 MiB safety limit",
     );
     const trace = decodeWindowsFileTrace(await readFile(csvFile));
-    const result = inspectWindowsFileTrace(trace, canaryPath, positiveControlPath);
+    const result = inspectWindowsFileTrace(trace, canaryPath, positiveControlPath, excludedPath);
     console.log(
       `Windows audit ${scenario}: positive-control ReadFile events=${result.positiveControlEvents}; canary events=${result.canaryEvents.length}; diagnostics=${JSON.stringify(result.canaryDiagnostics)}`,
     );

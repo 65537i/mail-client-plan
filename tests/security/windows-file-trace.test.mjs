@@ -9,25 +9,23 @@ import {
 
 const canaryPath = "C:\\Users\\runner\\Temp\\mc-synthetic.png";
 const controlPath = "C:\\Users\\runner\\Temp\\mc-control.png";
+const excludedPath = "C:\\Users\\runner\\Temp\\mc-excluded.png";
 const header =
   '"Time of Day","Process Name","PID","Operation","Path","Result","Detail"\r\n';
 const controlEvent =
   '"10:00:00.0000000","node.exe","100","ReadFile","C:\\Users\\runner\\Temp\\mc-control.png","SUCCESS","Offset: 0"\r\n';
-const applicationEvents =
-  '"10:00:00.0000001","mail-client.exe","200","CreateFile","C:\\app\\mail.db","SUCCESS",""\r\n' +
-  '"10:00:00.0000002","msedgewebview2.exe","300","ReadFile","C:\\app\\WebView2Loader.dll","SUCCESS",""\r\n';
-const verify = (trace) => verifyWindowsFileTrace(trace, canaryPath, controlPath);
+const verify = (trace) => verifyWindowsFileTrace(trace, canaryPath, controlPath, excludedPath);
 
-test("AC-05: requires a positive control and observes the app and WebView2", () => {
-  assert.deepEqual(verify(header + controlEvent + applicationEvents), {
+test("AC-05: requires the exact-path positive control", () => {
+  assert.deepEqual(verify(header + controlEvent), {
     positiveControlEvents: 1,
     canaryEvents: 0,
   });
 });
 
-test("AC-05: rejects canary access from the app or any other process", () => {
+test("AC-05: rejects canary access from any process", () => {
   for (const processName of ["mail-client.exe", "msedgewebview2.exe", "System", "powershell.exe", "node.exe"]) {
-    const trace = header + controlEvent + applicationEvents +
+    const trace = header + controlEvent +
       `"10:00:00.0000003","${processName}","400","CreateFile","${canaryPath}","SUCCESS",""\r\n`;
     assert.throws(
       () => verify(trace),
@@ -41,7 +39,7 @@ test("AC-05: rejects canary access from the app or any other process", () => {
 });
 
 test("AC-05: control-file System events cannot hide attack-canary activity", () => {
-  const trace = header + controlEvent + applicationEvents +
+  const trace = header + controlEvent +
     `"10:00:00.0000003","System","4","CreateFileMapping","${controlPath}","SUCCESS",""\r\n`;
   assert.equal(verify(trace).canaryEvents, 0);
   assert.throws(
@@ -49,26 +47,55 @@ test("AC-05: control-file System events cannot hide attack-canary activity", () 
     /1 unexpected event/,
   );
   assert.throws(
-    () => verifyWindowsFileTrace(trace, canaryPath, canaryPath),
+    () => verifyWindowsFileTrace(trace, canaryPath, canaryPath, excludedPath),
     /different file/,
   );
 });
 
 test("AC-05: diagnostic inspection records baseline events without granting attack exemptions", () => {
-  const trace = header + controlEvent + applicationEvents +
+  const trace = header + controlEvent +
     `"10:00:00.0000003","System","4","CreateFileMapping","${canaryPath}","SUCCESS",""\r\n`;
-  const baseline = inspectWindowsFileTrace(trace, canaryPath, controlPath);
+  const baseline = inspectWindowsFileTrace(trace, canaryPath, controlPath, excludedPath);
   assert.deepEqual(baseline.canaryEvents, [
     { processName: "System", operation: "CreateFileMapping" },
   ]);
   assert.throws(() => verify(trace), /1 unexpected event/);
   assert.throws(
-    () => inspectWindowsFileTrace(header + applicationEvents, canaryPath, controlPath),
+    () => inspectWindowsFileTrace(header, canaryPath, controlPath, excludedPath),
     /positive control/,
   );
   assert.throws(
+    () => inspectWindowsFileTrace(
+      header + controlEvent + `"10:00:00.0000001","System","4","ReadFile","C:\\other\\unrelated.txt","SUCCESS",""\r\n`,
+      canaryPath,
+      controlPath,
+      excludedPath,
+    ),
+    /outside the exact canary and control paths/,
+  );
+  assert.throws(
+    () => inspectWindowsFileTrace(
+      header + controlEvent +
+        `"10:00:00.0000002","node.exe","100","ReadFile","${excludedPath}","SUCCESS",""\r\n`,
+      canaryPath,
+      controlPath,
+      excludedPath,
+    ),
+    /outside the exact canary and control paths/,
+  );
+  assert.throws(
+    () => inspectWindowsFileTrace(
+      header + controlEvent +
+        '"10:00:00.0000002","node.exe","100","ReadFile","C:\\Users\\runner\\Other\\mc-synthetic.png","SUCCESS",""\r\n',
+      canaryPath,
+      controlPath,
+      excludedPath,
+    ),
+    /outside the exact canary and control paths/,
+  );
+  assert.throws(
     () => inspectWindowsFileTrace(header + controlEvent, canaryPath, controlPath),
-    /Tauri application/,
+    /paths are required/,
   );
 });
 
@@ -86,8 +113,7 @@ test("AC-05: rejects unknown CSV layouts and missing positive controls", () => {
     /missing Process Name, Operation, or Path columns/,
   );
   assert.throws(
-    () =>
-      verify(header + applicationEvents),
+    () => verify(header),
     /did not observe the Node synthetic-canary positive control/,
   );
 });
@@ -98,7 +124,7 @@ test("AC-05: requires an exact Node ReadFile control, not a lookalike or metadat
     controlEvent.replace("node.exe", "not-node.exe"),
     controlEvent.replace("ReadFile", "CreateFile"),
   ]) {
-    assert.throws(() => verify(header + event + applicationEvents), /positive control/);
+    assert.throws(() => verify(header + event), /positive control/);
   }
 });
 
@@ -137,11 +163,11 @@ test("AC-05: canary diagnostics expose only bounded allowlisted metadata", () =>
   assert(!diagnostic.includes("private"));
   assert(!diagnostic.includes("synthetic-secret"));
   assert(!diagnostic.includes(canaryPath));
-  assert.throws(() => verify(header + controlEvent + applicationEvents + event), /1 unexpected event/);
+  assert.throws(() => verify(header + controlEvent + event), /1 unexpected event/);
 });
 
 test("AC-05: malformed rows fail rather than hiding canary events", () => {
-  assert.throws(() => verify(header + controlEvent + applicationEvents + '"truncated"\r\n'), /column count/);
+  assert.throws(() => verify(header + controlEvent + '"truncated"\r\n'), /column count/);
 });
 
 test("AC-05: unknown diagnostic formats are redacted without dropping the event", () => {

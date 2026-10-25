@@ -29,7 +29,7 @@ Actions → native → Run workflowで最新のmainを選び、以下を指定�
 
 全モードの前にLinuxの短いplan jobでCI選択ロジックとmacOS / Windows trace解析のNode回帰試験を行い、失敗したら重いmatrixを開始しない。選択scopeと部分検証の注意をActions summaryへ記録する。PRと節目の`all / full`で全OSのgateを確認し、basic / webviewの成功を総合検証成功と読み替えない。
 
-Windows監査stepはProcmon captureをbaseline → attackの順に行う。baselineは専用WDIO configで既定UIを観測し、攻撃fixture / canary URLは渡さない。attackは従来の全security specsを維持し、各captureでpositive controlとapp / WebView2観測を必須とする。双方のcanary eventを診断表示した後、両方0件でなければ失敗する。baselineは攻撃テストの代用でも、System eventを除外するallowlistでもない。raw traceは各capture終了時に削除する。Run 78では両captureでSystem canary eventを3件検出して失敗。Run 79ではbaselineのPMLが256 MiBを超え、export前に失敗したためattackは未実行。記録上限超過は監査不成立であり、イベント0件や攻撃遮断の証拠には数えない。
+Windows監査stepはProcmon captureをbaseline → attackの順に行う。baselineは専用WDIO configで既定UIを観測し、攻撃fixture / canary URLは渡さない。attackは従来の全security specsを維持する。各capture開始前にUI AutomationでcanaryとNode positive-controlの完全一致Path Include条件だけを持つ`.PMC`を生成し、Procmonを`/LoadConfig`で起動する。capture中は別の合成sentinelをNodeで読み、CSVにpositive-controlのNode `ReadFile`があり、sentinelおよび対象外pathがないことを必須とする。全process / operationの対象path eventを保持し、canary event、positive control欠落、想定外path、filter設定・読込失敗、256 MiB上限超過はいずれも失敗。Tauri / WebView2一般活動のProcmon観測は要求せず、WDIO実WebView試験の成功を独立の証拠とする。baselineは攻撃テストの代用でもSystem event除外でもない。raw traceは各capture終了時に削除する。run 87ではbaseline PMLが256 MiBを超え、export前に失敗したためattackは未実行。記録上限超過は監査不成立であり、イベント0件や攻撃遮断の証拠には数えない。UI Automationによるfilter生成・実Windows runtimeは初回実行前には未検証で、成功扱いにはしない。
 
 Run 79後のharnessは、WDIO moduleを子Nodeで事前importしてreadyを待ち、Procmon起動と別control fileへのNode ReadFileを確認してからLauncherを開始する。アプリ起動・WDIO実行・終了処理は引き続きcapture内で行い、record filterや容量上限は変えない。準備 / capture時間とPML / CSV byte数を診断表示する。workerのIPC回帰試験は依存install後のWindows build jobで実行し、依存不要のplan試験には含めない。変更後のWindows runtime・容量削減効果は未検証。
 
@@ -40,6 +40,12 @@ Run 81（`5f17ae3`、Windows / webview）で上記変更後のruntime成功。ba
 Run 82後の診断はcanary最大10件のローカル時刻 / Result / allowlist済みDetail（最大8項目）を出す。生Detailは出さず、未知項目は件数だけ表示する。capture開始要求・WDIO開始送信と終了のUTC、およびlocal UTC offsetも記録し、時刻の照合を可能にする。CSV列数不正は監査失敗とする。これは原因調査用で、Systemの除外や失敗gateの変更ではない。新診断のWindows runtimeは未実行。
 
 Run 84ではbaseline / attackのSystem eventがWDIO開始指示より前に発生していた。次の比較ではcanaryをO_SYNC（WindowsのFILE_FLAG_WRITE_THROUGH）付きで排他的に作成し、sync / close後のUTCと生成byte数を記録する。内容は既存の44 bytesを維持し、生成エラー時のbuffered fallbackや固定待機は追加しない。Windows jobではcanary生成試験とworker IPC試験を実行する。write-throughでSystem eventが解消するかは未確認で、全event拒否・無filter・256 MiB上限を維持する。
+
+Run 86（`4f75cec`、Windows / full）は上記変更後に成功。両captureのcontrol 1件・canary 0件、PML 145,440,481 / 154,757,518 bytes、CSV 56,857,312 / 61,445,045 bytesで上限内。単一成功をSystem eventの原因確定・再発防止保証とせず、最新commitのall / fullは別途確認する。
+
+同commitのRun 87（all / full）はUbuntu / macOS両arch成功、Windows baseline PMLが273,341,060 bytesとなり256 MiB上限超過で失敗。baseline UIは成功したが、CSV export / canary分類前に停止し、attack captureは未実行。Windows以外の成功はWindows fullの代替ではない。Run 86のwrite-through成功を否定・裏付けるevent evidenceはこのrunから得られず、容量上限・無filterを維持する。
+
+Run 87後のWindows capture PoCは、UI Automationでexact-path Include条件と`Drop Filtered Events`を`.PMC`へ保存し、`/LoadConfig`で読み込む方式へ変更する。Path条件はcanaryとNode positive-controlだけで、process名・operation条件は加えない。capture中にpositive-controlと、filter対象外のsynthetic sentinelをNodeで読み、CSV解析は二者の結果と全path scopeをfail-closedで確認する。Procmonのapp / WebView2一般活動gateを外し、同一runのWDIO実WebView成功を別証拠とする。ID設定、drop設定、profile loadの有効性はこのPoCではLinuxのソース・CSV回帰試験だけで、Windows UI Automation / capture runtimeは未実行。256 MiB上限、全canary event拒否、Systemイベントの例外なしを維持し、未実証のままAC-05達成とはしない。
 
 Rustのregistry / git依存と`target`をキャッシュし、OS・arch・runner・固定Rust版・lockfile / manifests / Cargo設定hashを区別する。同一モードを優先し、同じ依存条件の別モードからも復元可能。キャッシュhitでもbuild / testは省略しない。キャッシュは依存・ビルド出力のみで、資格情報ストア、監査trace、メールデータは含めない。初回はcold buildとなり、短縮量はrunnerで実測する。
 

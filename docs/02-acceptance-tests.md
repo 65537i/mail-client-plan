@@ -39,6 +39,8 @@ AC-05のLinux CIでは、WebView/Tauriプロセスツリーのfile-related sysca
 
 macOSでは`fs_usage`、WindowsではMicrosoft Sysinternals Process Monitorを使った合成canaryのOS-level auditを候補として評価する。runner上で観測権限、Tauri/WebView process coverage、canary path判定を実証できない場合は、そのOSのfile-access条件を未確認のままとする。実装・ログが未確認の候補をAC-05合格の証拠に数えない。
 
+WindowsのProcmon captureは、UI Automationで保存・再読込する`.PMC`にcanaryとpositive-controlの完全一致Path Include条件だけを設定し、全process / operationの対象イベントを保持する。別の合成sentinelをcapture中にNodeで読み、positive-controlのNode `ReadFile`が記録され、sentinelが記録されないことをfilter動作の陽性・陰性controlとする。captureに他のpathが残る、control欠落、canary event、filter設定/読込失敗、256 MiB上限超過はいずれも監査失敗。Procmon上のTauri / WebView2一般活動観測は要件にせず、同じ実行でWDIO実WebView試験が成功したことを別証拠として記録する。これらはWindows上の全descendant coverageを証明しない。
+
 macOS run 22で、system-wide traceにOS daemon `fseventsd`の`lstat64`が1件記録された。利用者確認済みのPoC判定として、この操作と`fseventsd.<数値>`の組み合わせだけを別集計してログへ明示する。それ以外のcanaryイベント（同daemonのopen/read、アプリ、WebKit、未知process / formatを含む）は失敗とする。これはシステム全体のcanaryイベント0件という旧判定からの限定的変更であり、完全なprocess coverageやAC-05合格の証明ではない。process名はtraceのprocess/thread欄に基づき、実行ファイルの同一性までは検証していない。
 
 ## 3. テスト層

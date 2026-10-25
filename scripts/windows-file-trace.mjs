@@ -49,6 +49,10 @@ function diagnosticToken(value) {
   return /^[A-Za-z0-9_. -]{1,80}$/.test(value) ? value : "[redacted]";
 }
 
+function normalizeWindowsPath(value) {
+  return path.win32.normalize(value.trim()).replace(/^(?:\\\\\?\\|\\\?\?\\)/, "").toLowerCase();
+}
+
 function diagnosticDetail(value) {
   const allowed = [];
   let redacted = 0;
@@ -87,18 +91,17 @@ export function summarizeWindowsFileTrace(traceOutput, canaryPath) {
     "Process Monitor CSV is missing Process Name, Operation, or Path columns",
   );
 
-  const canaryName = path.win32.basename(canaryPath).toLowerCase();
-  const observedProcessNames = new Set();
+  const normalizedCanaryPath = normalizeWindowsPath(canaryPath);
   const canaryEvents = [];
   const canaryDiagnostics = [];
+  const observedPaths = new Set();
 
   for (const fields of records) {
     assert.equal(fields.length, headers.length, "Process Monitor CSV row has an unexpected column count");
     const processName = fields[processColumn].trim();
-    if (processName) observedProcessNames.add(processName.toLowerCase());
-
-    const eventPath = path.win32.normalize(fields[pathColumn].trim()).toLowerCase();
-    if (path.win32.basename(eventPath) === canaryName) {
+    const eventPath = normalizeWindowsPath(fields[pathColumn]);
+    if (eventPath) observedPaths.add(eventPath);
+    if (eventPath === normalizedCanaryPath) {
       canaryEvents.push({
         processName,
         operation: fields[operationColumn].trim(),
@@ -117,17 +120,35 @@ export function summarizeWindowsFileTrace(traceOutput, canaryPath) {
     }
   }
 
-  return { canaryEvents, canaryDiagnostics, observedProcessNames };
+  return { canaryEvents, canaryDiagnostics, observedPaths };
 }
 
-export function inspectWindowsFileTrace(traceOutput, canaryPath, positiveControlPath) {
+export function inspectWindowsFileTrace(traceOutput, canaryPath, positiveControlPath, excludedPath) {
   assert(
-    path.win32.basename(canaryPath).toLowerCase() !==
-      path.win32.basename(positiveControlPath).toLowerCase(),
-    "positive control must use a different file from the attack canary",
+    [canaryPath, positiveControlPath, excludedPath].every(
+      (value) => typeof value === "string" && value.trim().length > 0,
+    ),
+    "canary, positive control, and excluded paths are required",
+  );
+  assert(
+    new Set([canaryPath, positiveControlPath, excludedPath].map(normalizeWindowsPath)).size === 3,
+    "canary, positive control, and excluded paths must be different files",
   );
   const summary = summarizeWindowsFileTrace(traceOutput, canaryPath);
   const controlSummary = summarizeWindowsFileTrace(traceOutput, positiveControlPath);
+  const expectedPaths = new Set([
+    normalizeWindowsPath(canaryPath),
+    normalizeWindowsPath(positiveControlPath),
+  ]);
+  assert(
+    [...summary.observedPaths, ...controlSummary.observedPaths].every((eventPath) => expectedPaths.has(eventPath)),
+    "Process Monitor capture contained events outside the exact canary and control paths",
+  );
+  assert(
+    !summary.observedPaths.has(normalizeWindowsPath(excludedPath)) &&
+      !controlSummary.observedPaths.has(normalizeWindowsPath(excludedPath)),
+    "Process Monitor capture retained an excluded synthetic file event",
+  );
   const positiveControlEvents = controlSummary.canaryEvents.filter(
     ({ processName, operation }) =>
       processName.toLowerCase() === "node.exe" && operation === "ReadFile",
@@ -137,15 +158,6 @@ export function inspectWindowsFileTrace(traceOutput, canaryPath, positiveControl
     "Process Monitor did not observe the Node synthetic-canary positive control",
   );
 
-  assert(
-    summary.observedProcessNames.has("mail-client.exe"),
-    "Process Monitor did not observe file activity from the Tauri application",
-  );
-  assert(
-    summary.observedProcessNames.has("msedgewebview2.exe"),
-    "Process Monitor did not observe file activity from a WebView2 process",
-  );
-
   return {
     positiveControlEvents: positiveControlEvents.length,
     canaryEvents: summary.canaryEvents,
@@ -153,8 +165,8 @@ export function inspectWindowsFileTrace(traceOutput, canaryPath, positiveControl
   };
 }
 
-export function verifyWindowsFileTrace(traceOutput, canaryPath, positiveControlPath) {
-  const result = inspectWindowsFileTrace(traceOutput, canaryPath, positiveControlPath);
+export function verifyWindowsFileTrace(traceOutput, canaryPath, positiveControlPath, excludedPath) {
+  const result = inspectWindowsFileTrace(traceOutput, canaryPath, positiveControlPath, excludedPath);
   assert.equal(
     result.canaryEvents.length,
     0,

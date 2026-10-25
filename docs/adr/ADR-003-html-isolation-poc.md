@@ -1,6 +1,6 @@
 # ADR-003: HTML本文の隔離PoC
 
-- 状態: 暫定。Linux file-access syscall監査は成功。macOS監査はrun 22でOS daemonのmetadata参照を検出し、限定的な分類を追加（変更後のmacOS再検証待ち）。Windows Process Monitor監査を実装したが、Windows runnerでの実行・process coverage確認待ち
+- 状態: 暫定。Linux file-access syscall監査は成功。macOS監査はrun 22でOS daemonのmetadata参照を検出し、限定的な分類を追加（変更後のmacOS再検証待ち）。WindowsはProcmonの動的exact-path filter / positive・negative controlを実装したが、UI AutomationとWindows runtimeは未検証。全process coverageは未証明
 - 決定日: 2026-10-20
 
 ## 背景
@@ -44,6 +44,9 @@ Linux PoCの結果はこの環境のWebKitGTKに限る。AC-05全体の合格や
 
 ## 制限と次の検証
 
+- Run 87（`4f75cec`、all / full）はWindows baselineのProcmon PMLが273,341,060 bytesとなり、256 MiB上限を4,905,604 bytes超過して失敗。baseline UI specは通ったが、CSV export / canary分類前に停止し、attack captureは未実行。従ってSystem eventの有無について証拠は得られていない。Windows以外の3 runnerは成功。PML上限や全system event観測を弱めて成功扱いにしない。
+- Run 87後に、canary / positive-controlの完全一致Path Include条件だけを設定した`.PMC`をUI Automationで生成し、`/LoadConfig`でcaptureするPoCへ変更。Drop Filtered Eventsを有効化し、capture中にNode positive-controlと別sentinelをreadして、positive ReadFileの保存とsentinelの非保存を検証する。CSVの対象外path、canary event、control欠落、設定・load失敗はすべて拒否する。ProcmonのTauri / WebView2一般活動観測は要件から外し、WDIO実WebView成功を独立証拠とする。対象pathの全process / operation event判定、256 MiB上限、System例外なしを維持する。この実装のUI Automation・`.PMC`再読込・容量改善は未検証で、AC-05達成には数えない。
+- Run 86（`4f75cec`、Windows / full）でwrite-through生成後の監査成功。baseline / attackとも44-byte canaryをcapture前にsync / closeし、control ReadFile 1件・canary event 0件。baseline 1 spec / attack 2 specsとHTTP 0 requestsも成功。PMLは145,440,481 / 154,757,518 bytes、CSVは56,857,312 / 61,445,045 bytes。既存の全process拒否・無filter・256 MiB上限を維持した成功だが、変更前にもRun 81成功例があるため単一比較で因果関係を確定しない。最新commitのall / fullと完全なdescendant coverageは未確認。
 - Run 84後の比較変更はcanary生成にO_SYNCを指定するもの。[固定Node 24.22.0のlibuv実装](https://github.com/nodejs/node/blob/v24.22.0/deps/uv/src/win/fs.c)ではFILE_FLAG_WRITE_THROUGHへ変換される。44-byte内容、排他作成、明示sync / closeは維持し、生成完了UTCとサイズをcapture前に確認する。遅延したcanary生成処理という仮説を調べるもので、write-throughでもmetadataや他のOS処理が残る可能性があり原因解明・再発防止を保証しない。Linux回帰31件成功、Windows runtime未実施。待機時間の水増し、buffered fallback、System例外やpre-start event除外は追加しない。
 - Run 84（`8eb9b8a`、Windows / full）はbaseline / attackともSystem canary 3 eventsで失敗。Resultは全てSUCCESS、DetailはEndOfFile: 44 / SyncType: SyncTypeOther / 空。時刻はbaseline 19:40:38.445、attack 19:40:53.473 UTCで、それぞれWDIO start送信より約1.44 / 1.21秒前。attackのfixture注入より約6.89秒前で、このrunのeventはfixture注入後に起きたものではない。canary生成時の遅延処理は調査仮説であり、原因確定ではない。生成・flush・close側を次の調査対象とし、System eventや試験開始前eventを自動的に除外しない。UI全specs / HTTP 0 requests / trace容量gateは通過したが、AC-05合格ではない。
 - Run 82後の追加診断はcanary最大10件の時刻 / Resultとallowlist Detailだけを記録する。Detailは非負整数のOffset / Length / EndOfFile / AllocationSize、既知SyncType / PageProtectionに限定し最大8項目、未知項目は伏せた件数だけを返す。capture / WDIO区間のUTCとlocal UTC offsetを併記するが、fixture注入との因果関係はこれだけでは証明できない。未知形式でもeventを落とさず、列数不正のCSVは明示失敗とする。Linux回帰29 tests成功、Windowsの新診断は未実行。

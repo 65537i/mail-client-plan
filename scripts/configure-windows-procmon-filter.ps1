@@ -1,0 +1,155 @@
+param(
+  [Parameter(Mandatory = $true)][string]$ProcmonPath,
+  [Parameter(Mandatory = $true)][string]$CanaryPath,
+  [Parameter(Mandatory = $true)][string]$ControlPath,
+  [Parameter(Mandatory = $true)][string]$ConfigPath
+)
+
+$ErrorActionPreference = "Stop"
+Add-Type -AssemblyName UIAutomationClient
+Add-Type -AssemblyName UIAutomationTypes
+Add-Type -AssemblyName System.Windows.Forms
+
+$process = Start-Process -FilePath $ProcmonPath -ArgumentList "/AcceptEula" -PassThru
+
+function Wait-Element([System.Windows.Automation.AutomationElement]$Root, [System.Windows.Automation.Condition]$Condition, [int]$TimeoutSeconds = 10) {
+  $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
+  do {
+    $element = $Root.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $Condition)
+    if ($null -ne $element) { return $element }
+    Start-Sleep -Milliseconds 100
+  } while ([DateTime]::UtcNow -lt $deadline)
+  throw "Timed out waiting for a Process Monitor UI control"
+}
+
+function Wait-TopLevelWindow([string]$NamePattern, [int]$TimeoutSeconds = 10) {
+  $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
+  $windowCondition = [System.Windows.Automation.PropertyCondition]::new(
+    [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+    [System.Windows.Automation.ControlType]::Window
+  )
+  do {
+    $windows = [System.Windows.Automation.AutomationElement]::RootElement.FindAll(
+      [System.Windows.Automation.TreeScope]::Children,
+      $windowCondition
+    )
+    foreach ($window in $windows) {
+      if ($window.Current.Name -match $NamePattern) { return $window }
+    }
+    Start-Sleep -Milliseconds 100
+  } while ([DateTime]::UtcNow -lt $deadline)
+  throw "Timed out waiting for Process Monitor window $NamePattern"
+}
+
+function Wait-MainWindow([System.Diagnostics.Process]$Process, [int]$TimeoutSeconds = 15) {
+  $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
+  do {
+    $Process.Refresh()
+    if ($Process.MainWindowHandle -ne [IntPtr]::Zero) {
+      return [System.Windows.Automation.AutomationElement]::FromHandle($Process.MainWindowHandle)
+    }
+    Start-Sleep -Milliseconds 100
+  } while ([DateTime]::UtcNow -lt $deadline)
+  throw "Process Monitor did not expose its configuration window"
+}
+
+function Select-ComboValue([System.Windows.Automation.AutomationElement]$Combo, [string]$Value) {
+  $comboPattern = $Combo.GetCurrentPattern([System.Windows.Automation.ExpandCollapsePattern]::Pattern)
+  $comboPattern.Expand()
+  try {
+    $item = Wait-Element $Combo ([System.Windows.Automation.PropertyCondition]::new(
+      [System.Windows.Automation.AutomationElement]::NameProperty, $Value
+    )) 5
+    $item.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select()
+  } finally {
+    $comboPattern.Collapse()
+  }
+}
+
+function Set-FilterRule([System.Windows.Automation.AutomationElement]$Dialog, [string]$Path) {
+  $combos = $Dialog.FindAll(
+    [System.Windows.Automation.TreeScope]::Descendants,
+    [System.Windows.Automation.PropertyCondition]::new(
+      [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+      [System.Windows.Automation.ControlType]::ComboBox
+    )
+  )
+  $edits = $Dialog.FindAll(
+    [System.Windows.Automation.TreeScope]::Descendants,
+    [System.Windows.Automation.PropertyCondition]::new(
+      [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+      [System.Windows.Automation.ControlType]::Edit
+    )
+  )
+  if ($combos.Count -lt 3 -or $edits.Count -lt 1) {
+    throw "Process Monitor filter dialog has an unexpected control layout"
+  }
+  Select-ComboValue $combos[0] "Path"
+  Select-ComboValue $combos[1] "is"
+  $edits[0].GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).SetValue($Path)
+  Select-ComboValue $combos[2] "Include"
+  $add = Wait-Element $Dialog ([System.Windows.Automation.PropertyCondition]::new(
+    [System.Windows.Automation.AutomationElement]::NameProperty, "Add"
+  )) 5
+  $add.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
+}
+
+try {
+  if (-not $process.WaitForInputIdle(10000)) {
+    throw "Process Monitor UI did not become idle"
+  }
+  $main = Wait-MainWindow $process
+  $main.SetFocus()
+  [System.Windows.Forms.SendKeys]::SendWait("^l")
+  $filterDialog = Wait-TopLevelWindow "Filter" 10
+  $reset = Wait-Element $filterDialog ([System.Windows.Automation.PropertyCondition]::new(
+    [System.Windows.Automation.AutomationElement]::NameProperty, "Reset"
+  )) 5
+  $reset.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
+  Set-FilterRule $filterDialog $CanaryPath
+  Set-FilterRule $filterDialog $ControlPath
+  $ok = Wait-Element $filterDialog ([System.Windows.Automation.PropertyCondition]::new(
+    [System.Windows.Automation.AutomationElement]::NameProperty, "OK"
+  )) 5
+  $ok.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
+
+  $main.SetFocus()
+  [System.Windows.Forms.SendKeys]::SendWait("%f")
+  $drop = Wait-Element $main ([System.Windows.Automation.PropertyCondition]::new(
+    [System.Windows.Automation.AutomationElement]::NameProperty, "Drop Filtered Events"
+  )) 5
+  $toggle = $drop.GetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern)
+  if ($toggle.ToggleState -ne [System.Windows.Automation.ToggleState]::On) {
+    $toggle.Toggle()
+  }
+  if ($toggle.ToggleState -ne [System.Windows.Automation.ToggleState]::On) {
+    throw "Process Monitor did not enable Drop Filtered Events"
+  }
+
+  [System.Windows.Forms.SendKeys]::SendWait("{ESC}")
+  [System.Windows.Forms.SendKeys]::SendWait("%f")
+  $saveFilter = Wait-Element $main ([System.Windows.Automation.PropertyCondition]::new(
+    [System.Windows.Automation.AutomationElement]::NameProperty, "Save Filter..."
+  )) 5
+  $saveFilter.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
+  $saveDialog = Wait-TopLevelWindow "Save" 10
+  $fileName = Wait-Element $saveDialog ([System.Windows.Automation.PropertyCondition]::new(
+    [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+    [System.Windows.Automation.ControlType]::Edit
+  )) 5
+  $fileName.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).SetValue($ConfigPath)
+  $save = Wait-Element $saveDialog ([System.Windows.Automation.PropertyCondition]::new(
+    [System.Windows.Automation.AutomationElement]::NameProperty, "Save"
+  )) 5
+  $save.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
+  if (-not (Test-Path -LiteralPath $ConfigPath) -or (Get-Item -LiteralPath $ConfigPath).Length -lt 100) {
+    throw "Process Monitor did not save the audit filter configuration"
+  }
+} finally {
+  if (-not $process.HasExited) {
+    $process.CloseMainWindow() | Out-Null
+    if (-not $process.WaitForExit(5000)) {
+      Stop-Process -Id $process.Id -Force
+    }
+  }
+}
