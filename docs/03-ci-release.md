@@ -69,6 +69,8 @@ Run 109（`4d136c7`、Windows / webview）ではF mnemonic選択後も`wait-filt
 
 Run 111（`6bb2b95`、Windows / webview）は`focus-filter-menu`で失敗した。このstageはmenuのSetFocus()直前に設定していたが、UIA状態・親control tree・例外型は記録しておらず、失敗原因の確定には至っていない。次は操作方法を推測で変えず、Filter menu itemのenabled / offscreen / keyboard-focusable状態、allowlist済みcontrol type/nameだけの親tree、SetFocus結果の例外型を固定形式で記録する。任意のUIA名、path、例外messageはログへ出さない。Run 111はWDIO/captureに到達しておらず、AC-05の証拠ではない。
 
+Run 113（`4a16035`、Windows / webview）も`focus-filter-menu`で停止した。PowerShell側でUIA診断markerを出していたが、Node harnessの失敗要約はstageだけを表示していたため、CIログから診断値を取得できなかった。後続修正でboolean state、allowlist済み親tree、固定例外型だけを抽出するhelperを追加し、失敗要約に安全な形式で含める。関連Node回帰7/7成功、PowerShell runtime / UIAの実値は次のWindows runで確認する。Run 113はWDIO/captureに到達しておらず、AC-05の証拠ではない。
+
 Rustのregistry / git依存と`target`をキャッシュし、OS・arch・runner・固定Rust版・lockfile / manifests / Cargo設定hashを区別する。同一モードを優先し、同じ依存条件の別モードからも復元可能。キャッシュhitでもbuild / testは省略しない。キャッシュは依存・ビルド出力のみで、資格情報ストア、監査trace、メールデータは含めない。初回はcold buildとなり、短縮量はrunnerで実測する。
 
 同じevent・ref・対象・モードの古いrunだけをcancelし、pushによって進行中の手動調査をcancelしない。

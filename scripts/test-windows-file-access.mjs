@@ -10,6 +10,7 @@ import {
   inspectWindowsFileTrace,
 } from "./windows-file-trace.mjs";
 import { createWindowsAuditCanary } from "./windows-audit-canary.mjs";
+import { describeWindowsFilterDiagnostics } from "./windows-filter-diagnostics.mjs";
 
 assert.equal(process.platform, "win32", "file-access tracing requires Windows");
 assert(process.env.MAIL_CLIENT_PROCMON_PATH, "MAIL_CLIENT_PROCMON_PATH is required");
@@ -115,7 +116,7 @@ async function captureScenario(scenario) {
       await runProcmon(["/AcceptEula", "/Terminate"], "filter setup cleanup");
       throw new Error(
         filterStage
-          ? `Process Monitor exact-path filter configuration timed out at ${filterStage}`
+          ? `Process Monitor exact-path filter configuration timed out at ${filterStage}${describeWindowsFilterDiagnostics(filterSetupOutput)}`
           : "Process Monitor exact-path filter configuration timed out",
       );
     }
@@ -129,7 +130,7 @@ async function captureScenario(scenario) {
       filterSetupResult.code,
       0,
       filterStage
-        ? `Process Monitor exact-path filter configuration failed at ${filterStage}`
+        ? `Process Monitor exact-path filter configuration failed at ${filterStage}${describeWindowsFilterDiagnostics(filterSetupOutput)}`
         : "Process Monitor exact-path filter configuration failed",
     );
     command = fork(
