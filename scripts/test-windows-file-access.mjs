@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { fork, spawn } from "node:child_process";
-import { access, mkdtemp, open, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { access, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -9,6 +9,7 @@ import {
   decodeWindowsFileTrace,
   inspectWindowsFileTrace,
 } from "./windows-file-trace.mjs";
+import { createWindowsAuditCanary } from "./windows-audit-canary.mjs";
 
 assert.equal(process.platform, "win32", "file-access tracing requires Windows");
 assert(process.env.MAIL_CLIENT_PROCMON_PATH, "MAIL_CLIENT_PROCMON_PATH is required");
@@ -66,13 +67,12 @@ async function captureScenario(scenario) {
   let captureStartedAt;
 
   try {
-    const canaryFile = await open(canaryPath, "wx");
-    try {
-      await canaryFile.writeFile("Synthetic file-access canary; no user data.\n");
-      await canaryFile.sync();
-    } finally {
-      await canaryFile.close();
-    }
+    console.log(`Windows audit ${scenario}: canary creation requested UTC=${new Date().toISOString()}; mode=write-through`);
+    const canaryBytes = await createWindowsAuditCanary(canaryPath);
+    const canaryCreatedAt = new Date().toISOString();
+    const canaryStats = await stat(canaryPath);
+    assert.equal(canaryStats.size, canaryBytes, "Synthetic canary has an unexpected size");
+    console.log(`Windows audit ${scenario}: canary flushed and closed UTC=${canaryCreatedAt}; bytes=${canaryStats.size}`);
     await writeFile(positiveControlPath, "Synthetic Process Monitor positive control.\n");
     command = fork(
       path.join(root, "scripts", "windows-audit-wdio.mjs"),

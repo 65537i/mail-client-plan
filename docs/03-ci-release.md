@@ -39,6 +39,8 @@ Run 81（`5f17ae3`、Windows / webview）で上記変更後のruntime成功。ba
 
 Run 82後の診断はcanary最大10件のローカル時刻 / Result / allowlist済みDetail（最大8項目）を出す。生Detailは出さず、未知項目は件数だけ表示する。capture開始要求・WDIO開始送信と終了のUTC、およびlocal UTC offsetも記録し、時刻の照合を可能にする。CSV列数不正は監査失敗とする。これは原因調査用で、Systemの除外や失敗gateの変更ではない。新診断のWindows runtimeは未実行。
 
+Run 84ではbaseline / attackのSystem eventがWDIO開始指示より前に発生していた。次の比較ではcanaryをO_SYNC（WindowsのFILE_FLAG_WRITE_THROUGH）付きで排他的に作成し、sync / close後のUTCと生成byte数を記録する。内容は既存の44 bytesを維持し、生成エラー時のbuffered fallbackや固定待機は追加しない。Windows jobではcanary生成試験とworker IPC試験を実行する。write-throughでSystem eventが解消するかは未確認で、全event拒否・無filter・256 MiB上限を維持する。
+
 Rustのregistry / git依存と`target`をキャッシュし、OS・arch・runner・固定Rust版・lockfile / manifests / Cargo設定hashを区別する。同一モードを優先し、同じ依存条件の別モードからも復元可能。キャッシュhitでもbuild / testは省略しない。キャッシュは依存・ビルド出力のみで、資格情報ストア、監査trace、メールデータは含めない。初回はcold buildとなり、短縮量はrunnerで実測する。
 
 同じevent・ref・対象・モードの古いrunだけをcancelし、pushによって進行中の手動調査をcancelしない。

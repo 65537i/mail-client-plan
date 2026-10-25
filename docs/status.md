@@ -1,6 +1,6 @@
 # 開発状況
 
-更新日: 2026-10-24
+更新日: 2026-10-25
 
 ## 現在の範囲
 
@@ -50,6 +50,10 @@
 - SMTP TLS fixtureを本文送信へ拡張。暗黙TLS / 必須STARTTLSそれぞれで最終250・550・応答消失を試験し、認証 / envelope / DATAが暗号化後各1回、合成本文のwire bytes一致、lost reply時の成功誤判定なし・250ms内の再接続なしを確認。本番送信UI / adapter / Outboxは未実装。
 
 ## 最新の確認
+
+Windows canary生成のwrite-through化（Run 84後）: Node 24.22.0同梱[libuv Windows open実装](https://github.com/nodejs/node/blob/v24.22.0/deps/uv/src/win/fs.c)でO_SYNCがFILE_FLAG_WRITE_THROUGHに対応することを確認し、canary作成をO_WRONLY | O_CREAT | O_EXCL | O_SYNCへ変更。既存の44-byte本文、明示sync、finallyでのclose、capture前の生成は維持する。生成要求・flush/close完了のUTCとstatによるbyte数を記録し、内容サイズの不一致は明示失敗にする。固定待機の追加、buffered fallback、System例外、capture開始前eventの減算はしない。write-throughは遅延metadata処理の消滅を保証せず、Run 84のSystem eventの原因確定でもない。Linux arm64でCI / trace / worker / canary試験31件成功、harness syntax / diff check成功。新規canary試験は内容・サイズ・上書き拒否・生成エラー伝播を確認し、Windowsの依存install後の試験stepへも接続した。Windows runtimeとSystem event再発有無は未確認。AC-05未達。
+
+native [Run 84](https://github.com/65537i/mail-client-plan/actions/runs/40125191305)（`8eb9b8a`、Windows / full）はcanary gateで失敗。baseline / attackともcontrol ReadFile 1件、canary 3件。新診断は全3件でSUCCESSを記録し、SetEndOfFileInformationFileのEndOfFileは44、CreateFileMappingのSyncTypeはSyncTypeOther、FASTIO_RELEASE_FOR_SECTION_SYNCHRONIZATIONのDetailは空だった。baselineのeventsは19:40:38.445 UTCでWDIO start送信19:40:39.882より約1.44秒前。attackのeventsは19:40:53.473 UTCでstart送信19:40:54.683より約1.21秒前、fixture注入19:41:00.358より約6.89秒前。runnerのlocal UTC offsetは0。したがってこのrunの6 eventsは今回のfixture注入より前に発生しており、fixture実行後のアクセスとして扱わない。ただしcanary生成の44-byte書込に関する遅延処理か、別のOS処理かは未確定で、System例外や開始前eventの自動除外は加えない。PMLは139,562,153 / 171,526,388 bytes、CSVは56,921,333 / 67,634,736 bytesで上限内。baseline 1 spec / attack 2 specs、HTTP 0 requestsは成功。次はcanary作成・flush・closeからcapture開始までの生成側処理を調べる。証跡文書のみ更新、コード変更・CI再実行なし。AC-05 / Phase 00未完了。
 
 Windows canary診断拡張（Run 82後）: 最大10 eventsにTime of Day / Resultと限定Detailを追加。DetailはOffset / Length / EndOfFile / AllocationSizeの非負整数、既知SyncType / PageProtectionのみを最大8 fields保持し、その他は内容を出さずredacted件数にする。未知の時刻・process / operation / Result形式は伏せるが、canary event countと失敗判定は維持する。capture開始要求とWDIO開始送信・終了にUTC時刻、capture開始にlocal UTC offsetを表示し、Procmonのローカル時刻との比較材料とする。fixture注入時刻そのものの計測ではなく、eventの原因やprocess identityの証明にはしない。列数不正のCSV行は黙ってskipせず監査失敗にした。raw trace / pathは公開せず、256 MiB上限と全process canary拒否は変更しない。Linux arm64でCI / macOS / Windows classifier / worker回帰29 tests、harness syntaxとdiff check成功。Windows runtime未実行、未commit / push。
 
