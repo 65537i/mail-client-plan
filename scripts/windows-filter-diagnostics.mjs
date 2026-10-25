@@ -24,6 +24,11 @@ export function describeWindowsFilterDiagnostics(output) {
   )?.[1];
   if (commandPatterns) diagnostics.push(`filter-command-patterns=${commandPatterns}`);
 
+  const commandGeometry = output.match(
+    /PROC_MON_FILTER_COMMAND_GEOMETRY=clickable-point:(true|false)/,
+  )?.[1];
+  if (commandGeometry) diagnostics.push(`filter-command-clickable-point=${commandGeometry}`);
+
   const dialogScan = output.match(
     /PROC_MON_FILTER_DIALOG_SCAN=process-windows:(\d{1,4});non-main-windows:(\d{1,4});reset-control:(true|false)/,
   );
@@ -97,7 +102,7 @@ export function describeWindowsFilterDiagnostics(output) {
     }
   }
   for (const match of output.matchAll(
-    /^PROC_MON_FILTER_FOCUSED_CONTROL=(after-open|after-home|filter-command|after-enter|after-invoke);focused:(none|unavailable)\r?$/gm,
+    /^PROC_MON_FILTER_FOCUSED_CONTROL=(after-open|after-home|filter-command|after-enter|after-invoke|after-click);focused:(none|unavailable)\r?$/gm,
   )) {
     focusObservations.push({
       index: match.index,
@@ -105,7 +110,7 @@ export function describeWindowsFilterDiagnostics(output) {
     });
   }
   for (const match of output.matchAll(
-    /^PROC_MON_FILTER_FOCUSED_CONTROL=(after-open|after-home|filter-command|after-enter|after-invoke);type:(MenuBar|Menu|MenuItem|Window|Pane|ToolBar|Button|Text|Edit|Other);name:(Filter|FilterCommand|MenuBar|ProcessMonitor|Other);offscreen:(true|false);keyboard-focusable:(true|false);tree=([A-Za-z:>]+)\r?$/gm,
+    /^PROC_MON_FILTER_FOCUSED_CONTROL=(after-open|after-home|filter-command|after-enter|after-invoke|after-click);type:(MenuBar|Menu|MenuItem|Window|Pane|ToolBar|Button|Text|Edit|Other);name:(Filter|FilterCommand|MenuBar|ProcessMonitor|Other);offscreen:(true|false);keyboard-focusable:(true|false);tree=([A-Za-z:>]+)\r?$/gm,
   )) {
     const nodes = match[6].split(">");
     if (

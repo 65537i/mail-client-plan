@@ -9,6 +9,15 @@ $ErrorActionPreference = "Stop"
 Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName UIAutomationTypes
 Add-Type -AssemblyName System.Windows.Forms
+Add-Type -TypeDefinition @"
+using System.Runtime.InteropServices;
+public static class WindowsAuditMouse {
+  [DllImport("user32.dll", SetLastError = true)]
+  public static extern bool SetCursorPos(int x, int y);
+  [DllImport("user32.dll", SetLastError = true)]
+  public static extern void mouse_event(uint flags, uint dx, uint dy, uint data, System.UIntPtr extraInfo);
+}
+"@
 
 $process = Start-Process -FilePath $ProcmonPath -ArgumentList "/AcceptEula" -PassThru
 
@@ -407,6 +416,11 @@ try {
   [Console]::Out.WriteLine(
     "PROC_MON_FILTER_COMMAND_PATTERNS=invoke:$($hasFilterInvokePattern.ToString().ToLowerInvariant());selection-item:$($hasFilterSelectionPattern.ToString().ToLowerInvariant())"
   )
+  $filterClickablePoint = $null
+  $hasFilterClickablePoint = $filterCommand.TryGetClickablePoint([ref]$filterClickablePoint)
+  [Console]::Out.WriteLine(
+    "PROC_MON_FILTER_COMMAND_GEOMETRY=clickable-point:$($hasFilterClickablePoint.ToString().ToLowerInvariant())"
+  )
   if (-not $filterCommandState.IsEnabled -or
     $filterCommandState.IsOffscreen -or
     -not $filterCommandState.IsKeyboardFocusable) {
@@ -416,13 +430,19 @@ try {
   $filterCommand.SetFocus()
   Set-Stage "observe-filter-command-focus"
   Write-FocusObservation "filter-command" | Out-Null
-  if (-not $hasFilterInvokePattern) {
-    throw "Process Monitor Filter command does not expose InvokePattern"
+  if (-not $hasFilterClickablePoint) {
+    throw "Process Monitor Filter command has no clickable point"
   }
-  Set-Stage "invoke-filter-command"
-  $filterInvokePattern.Invoke()
+  Set-Stage "click-filter-command"
+  $clickX = [int][Math]::Round($filterClickablePoint.X)
+  $clickY = [int][Math]::Round($filterClickablePoint.Y)
+  if (-not [WindowsAuditMouse]::SetCursorPos($clickX, $clickY)) {
+    throw "Process Monitor Filter command could not be reached by pointer input"
+  }
+  [WindowsAuditMouse]::mouse_event(0x0002, 0, 0, 0, [UIntPtr]::Zero)
+  [WindowsAuditMouse]::mouse_event(0x0004, 0, 0, 0, [UIntPtr]::Zero)
   Set-Stage "observe-dialog-focus"
-  Write-FocusObservation "after-invoke" | Out-Null
+  Write-FocusObservation "after-click" | Out-Null
   Set-Stage "wait-filter-dialog"
   $filterDialog = Wait-FilterDialog $process $main
   Set-Stage "reset-existing-filters"
