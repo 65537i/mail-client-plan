@@ -336,14 +336,17 @@ function Find-NativeDropMenuItem([System.IntPtr]$MenuHandle, [int]$Depth) {
 }
 
 function Get-NativeDropMenuSnapshot([System.IntPtr]$WindowHandle) {
+  Set-Stage "get-native-menu-handle"
   $menuHandle = [ProcmonNativeMenu]::GetMenu($WindowHandle)
   $handleAvailable = -not $menuHandle.Equals([System.IntPtr]::Zero)
   $script:nativeMenuVisited = 0
   $script:nativeMenuReadable = $handleAvailable
   $script:nativeDropMenuMatches = [System.Collections.Generic.List[bool]]::new()
   if ($handleAvailable) {
+    Set-Stage "scan-native-menu-state"
     Find-NativeDropMenuItem $menuHandle 0
   }
+  Set-Stage "report-native-menu-state"
   $checkState = "unavailable"
   if ($script:nativeMenuReadable -and $script:nativeDropMenuMatches.Count -eq 1) {
     $checkState = if ($script:nativeDropMenuMatches[0]) { "on" } else { "off" }
@@ -938,8 +941,9 @@ try {
   )
   Set-Stage "probe-drop-native-menu-state"
   $mainWindowHandle = [System.IntPtr]$main.Current.NativeWindowHandle
-  $nativeDropMenuSnapshot = Get-NativeDropMenuSnapshot -WindowHandle $mainWindowHandle
+  $nativeDropMenuSnapshot = Get-NativeDropMenuSnapshot $mainWindowHandle
   Write-NativeDropMenuSnapshot $nativeDropMenuSnapshot "before"
+  Set-Stage "verify-drop-native-menu-state"
   if ($nativeDropMenuSnapshot.CheckState -eq "unavailable") {
     throw "Process Monitor native menu state could not be verified"
   }
@@ -954,7 +958,7 @@ try {
     $invokePattern.Invoke()
     Start-Sleep -Milliseconds 100
     Set-Stage "verify-drop-native-menu-state"
-    $nativeDropMenuSnapshot = Get-NativeDropMenuSnapshot -WindowHandle $mainWindowHandle
+    $nativeDropMenuSnapshot = Get-NativeDropMenuSnapshot $mainWindowHandle
     Write-NativeDropMenuSnapshot $nativeDropMenuSnapshot "after-invoke"
     if ($nativeDropMenuSnapshot.CheckState -ne "on") {
       throw "Process Monitor did not enable Drop Filtered Events"
