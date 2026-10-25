@@ -161,6 +161,8 @@ try {
     )
   )
   $filterMenu = Wait-Element $main $filterMenuCondition 5
+  Set-Stage "focus-filter-menu"
+  $filterMenu.SetFocus()
   Set-Stage "expand-filter-menu"
   $menuPattern = $null
   if ($filterMenu.TryGetCurrentPattern(
@@ -179,7 +181,7 @@ try {
     $menuPattern.Invoke()
   }
   Set-Stage "select-filter-command"
-  [System.Windows.Forms.SendKeys]::SendWait("f")
+  [System.Windows.Forms.SendKeys]::SendWait("{HOME}")
   Set-Stage "send-filter-command"
   [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
   Set-Stage "wait-filter-dialog"

@@ -65,6 +65,8 @@ Run 105（`208dc20`、Windows / webview）では`find-filter-command`の5秒待�
 
 Run 107（`209bf9b`、Windows / webview）ではFilter menu element内のcommand検索も5秒で失敗した。SendKeysでmenuを展開してF mnemonicを選択しEnterでcommandを実行する。Run 105 / 107はいずれもWDIO/captureに到達せず、AC-05の証拠ではない。
 
+Run 109（`4d136c7`、Windows / webview）ではF mnemonic選択後も`wait-filter-dialog`で失敗した。次はFilter menu elementへfocusし、先頭commandを選択してEnterを送る。Run 109もWDIO/captureに到達しておらず、AC-05の証拠ではない。
+
 Rustのregistry / git依存と`target`をキャッシュし、OS・arch・runner・固定Rust版・lockfile / manifests / Cargo設定hashを区別する。同一モードを優先し、同じ依存条件の別モードからも復元可能。キャッシュhitでもbuild / testは省略しない。キャッシュは依存・ビルド出力のみで、資格情報ストア、監査trace、メールデータは含めない。初回はcold buildとなり、短縮量はrunnerで実測する。
 
 同じevent・ref・対象・モードの古いrunだけをcancelし、pushによって進行中の手動調査をcancelしない。
