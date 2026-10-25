@@ -61,7 +61,7 @@ native [Run 95](https://github.com/65537i/mail-client-plan/actions/runs/40190802
 
 native [Run 97](https://github.com/65537i/mail-client-plan/actions/runs/40191688029)（`9d21d13`、Windows / webview）も`wait-filter-dialog`で失敗。Filter dialogはProcess Monitor process ID・別window・`Reset` controlの組み合わせでは確認できず、WDIO/captureには進んでいない。keyboard shortcut方式をやめ、UI AutomationでFilter menuを展開して`Filter...` commandをinvokeする経路へ変更する。Run 97は監査成功やAC-05合格に数えない。
 
-native [Run 99](https://github.com/65537i/mail-client-plan/actions/runs/40192409809)（`6e57722`、Windows / webview）はfilter setup子processが60秒timeoutとなり、WDIO/captureへ進まなかった。Run 99のdiagnosticは子processが正常終了しないtimeoutを示すが、最後に実行中だったPowerShell UIA操作までは記録していない。次の変更では固定stageの進捗markerをtimeout前にも出し、待ち続ける操作を秘密情報なしで特定する。Run 99は監査成功やAC-05合格に数えない。
+native [Run 99](https://github.com/65537i/mail-client-plan/actions/runs/40192409809)（`6e57722`、Windows / webview）はfilter setup子processが60秒timeoutとなり、WDIO/captureへ進まなかった。追加した進捗診断で停止stageは`invoke-filter-command`と特定できた。modalを開くMenuItemの同期`Invoke()`が戻らない可能性を避け、展開済みmenu内のcommandをfocusしてEnterで実行する。Run 99は監査成功やAC-05合格に数えない。
 
 native [Run 89](https://github.com/65537i/mail-client-plan/actions/runs/40184517503)（`a862532`、all / full）はUbuntu、macOS 14 ARM、macOS 15 Intelが成功、Windowsのみ失敗。Windowsではformat / workspace test / clippy / frontend build / native build / production除外検査 / launch smoke / security-test build / TLS / Japanese FTS / IMAP / SMTP / MIME candidate / Windows harness回帰5 testsまで成功。Procmon署名確認も成功したが、capture前のUI Automation filter setupがexit 1となり、WDIOおよびcapture/export・control判定には進まなかった。元のstderrは意図的に破棄していたため、失敗したUI操作はこのrunから特定できない。Run 89はWindows file-access監査の実証ではなく、AC-05未達。
 

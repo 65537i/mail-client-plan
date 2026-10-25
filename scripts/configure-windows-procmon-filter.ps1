@@ -182,7 +182,8 @@ try {
   $filterCommand = Wait-Element $main ([System.Windows.Automation.PropertyCondition]::new(
     [System.Windows.Automation.AutomationElement]::NameProperty, "Filter..."
   )) 5
-  $filterCommand.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
+  $filterCommand.SetFocus()
+  [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
   Set-Stage "wait-filter-dialog"
   $filterDialog = Wait-FilterDialog $process $main
   Set-Stage "reset-existing-filters"
@@ -220,7 +221,8 @@ try {
   $saveFilter = Wait-Element $main ([System.Windows.Automation.PropertyCondition]::new(
     [System.Windows.Automation.AutomationElement]::NameProperty, "Save Filter..."
   )) 5
-  $saveFilter.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
+  $saveFilter.SetFocus()
+  [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
   $saveDialog = Wait-TopLevelWindow "Save" 10
   $fileName = Wait-Element $saveDialog ([System.Windows.Automation.PropertyCondition]::new(
     [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
