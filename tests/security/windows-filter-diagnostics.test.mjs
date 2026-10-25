@@ -108,6 +108,21 @@ test("AC-05: Windows filter diagnostics retain bounded dialog scan counts", () =
   );
 });
 
+test("AC-05: Windows filter diagnostics retain bounded command match counts", () => {
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_COMMAND_MATCH=items:11;matches:1",
+    ),
+    "; filter-command-match=items:11;matches:1",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_COMMAND_MATCH=items:10000;matches:1",
+    ),
+    "",
+  );
+});
+
 test("AC-05: Windows filter output retains diagnostics within a strict 4096-character cap", () => {
   const prefix = "x".repeat(3000);
   const snapshot = "PROC_MON_FILTER_SNAPSHOT=caller;element:present;control-type:menu";

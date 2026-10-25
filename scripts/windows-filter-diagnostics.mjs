@@ -29,6 +29,15 @@ export function describeWindowsFilterDiagnostics(output) {
   )?.[1];
   if (commandGeometry) diagnostics.push(`filter-command-clickable-point=${commandGeometry}`);
 
+  const commandMatch = output.match(
+    /PROC_MON_FILTER_COMMAND_MATCH=items:(\d{1,4});matches:(\d{1,4})/,
+  );
+  if (commandMatch) {
+    diagnostics.push(
+      `filter-command-match=items:${commandMatch[1]};matches:${commandMatch[2]}`,
+    );
+  }
+
   const dialogScan = output.match(
     /PROC_MON_FILTER_DIALOG_SCAN=process-windows:(\d{1,4});non-main-windows:(\d{1,4});reset-control:(true|false)/,
   );

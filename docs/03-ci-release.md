@@ -105,6 +105,8 @@ Run 145（`7d8ee5b`、Windows / webview）はFilter commandのInvokePattern呼�
 
 Run 147（`1a8ba42`、Windows / webview）はProcess Monitor所有のroot windowが1つ（mainのみ）、non-main window 0、Reset controlなしと観測し、InvokePattern後もFilter dialogが生成されなかったことを確認した。次runは`TryGetClickablePoint`がtrueの場合だけ、観測済みFilter command上でpointer clickを実施する。クリック点の座標や任意UI文字列はログに出さず、falseなら失敗する。Run 147はWDIO/capture未到達でAC-05の証拠ではない。
 
+Run 149（`d8af080`、Windows / webview）はUIAのafter-open観測ではFilter commandを示したが、後段の直接子要素の再列挙後、`match-filter-command`で失敗した。pointer click前に停止し、clickable-point有無の証拠は得られていない。次runはchild item property read / exact match / match-count validationを独立stageにし、最大9999にboundedした件数のみ記録する。Run 149はAC-05の証拠ではない。
+
 Rustのregistry / git依存と`target`をキャッシュし、OS・arch・runner・固定Rust版・lockfile / manifests / Cargo設定hashを区別する。同一モードを優先し、同じ依存条件の別モードからも復元可能。キャッシュhitでもbuild / testは省略しない。キャッシュは依存・ビルド出力のみで、資格情報ストア、監査trace、メールデータは含めない。初回はcold buildとなり、短縮量はrunnerで実測する。
 
 同じevent・ref・対象・モードの古いrunだけをcancelし、pushによって進行中の手動調査をcancelしない。

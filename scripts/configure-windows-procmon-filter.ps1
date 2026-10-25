@@ -390,14 +390,22 @@ try {
     [System.Windows.Automation.TreeScope]::Children,
     [System.Windows.Automation.Condition]::TrueCondition
   )
-  Set-Stage "match-filter-command"
+  $menuItemCount = [Math]::Min($menuItems.Count, 9999)
   $filterCommands = [System.Collections.Generic.List[System.Windows.Automation.AutomationElement]]::new()
   foreach ($item in $menuItems) {
-    if ($item.Current.Name -eq "Filter..." -and
-      $item.Current.ControlType.ProgrammaticName -eq "ControlType.MenuItem") {
+    Set-Stage "read-filter-menu-item"
+    $itemState = $item.Current
+    Set-Stage "match-filter-menu-item"
+    if ($itemState.Name -eq "Filter..." -and
+      $itemState.ControlType.ProgrammaticName -eq "ControlType.MenuItem") {
       $filterCommands.Add($item)
     }
   }
+  Set-Stage "verify-filter-command-count"
+  $filterMatchCount = [Math]::Min($filterCommands.Count, 9999)
+  [Console]::Out.WriteLine(
+    "PROC_MON_FILTER_COMMAND_MATCH=items:$menuItemCount;matches:$filterMatchCount"
+  )
   if ($filterCommands.Count -ne 1) {
     throw "Process Monitor open menu did not expose one Filter command"
   }
