@@ -9,6 +9,7 @@ $ErrorActionPreference = "Stop"
 Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName UIAutomationTypes
 Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName WindowsBase
 Add-Type -TypeDefinition @"
 using System.Runtime.InteropServices;
 public static class WindowsAuditMouse {
@@ -427,7 +428,7 @@ try {
     "PROC_MON_FILTER_COMMAND_PATTERNS=invoke:$($hasFilterInvokePattern.ToString().ToLowerInvariant());selection-item:$($hasFilterSelectionPattern.ToString().ToLowerInvariant())"
   )
   Set-Stage "probe-filter-command-clickable-point"
-  $filterClickablePoint = $null
+  $filterClickablePoint = [System.Windows.Point]::new()
   $hasFilterClickablePoint = $filterCommand.TryGetClickablePoint([ref]$filterClickablePoint)
   [Console]::Out.WriteLine(
     "PROC_MON_FILTER_COMMAND_GEOMETRY=clickable-point:$($hasFilterClickablePoint.ToString().ToLowerInvariant())"

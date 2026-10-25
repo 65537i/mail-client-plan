@@ -109,6 +109,8 @@ Run 149（`d8af080`、Windows / webview）はUIAのafter-open観測ではFilter 
 
 Run 151（`c2ba7fb`、Windows / webview）は11子からFilter command 1件をmatchしたが、count marker出力後に`verify-filter-command-count` stageで停止した。UIA failure typeはallowlist上`Other`で、pattern / clickable-point probe前だった。次runはcommand Current state、pattern probe、clickable point、availability checkを別stage化する。pointer input、WDIO、captureは未実行、AC-05の証拠ではない。
 
+Run 153（`34313de`、Windows / webview）はmenu item read / exact match / command state / pattern probeを通過後、`TryGetClickablePoint`呼び出し中の`probe-filter-command-clickable-point`で停止した。geometry markerは未出力。out Pointを明示初期化しWindowsBaseを参照する変更を次runで検証する。pointer click、WDIO、capture/export/control判定は未実行。Run 153はAC-05の証拠ではない。
+
 Rustのregistry / git依存と`target`をキャッシュし、OS・arch・runner・固定Rust版・lockfile / manifests / Cargo設定hashを区別する。同一モードを優先し、同じ依存条件の別モードからも復元可能。キャッシュhitでもbuild / testは省略しない。キャッシュは依存・ビルド出力のみで、資格情報ストア、監査trace、メールデータは含めない。初回はcold buildとなり、短縮量はrunnerで実測する。
 
 同じevent・ref・対象・モードの古いrunだけをcancelし、pushによって進行中の手動調査をcancelしない。
