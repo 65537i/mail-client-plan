@@ -123,6 +123,8 @@ Run 163（`61658f2`、Windows / webview）ではFilter command自身のInvokePat
 
 Run 165（`747d074`、Windows / webview）でReset ownerはProcmon main、UIA ancestorは`Button>Window>Window>Pane`と記録された。root scanはmain windowだけを検出していたため、Filter dialogがmain UIA subtreeに埋め込まれたwindowである可能性が高い。次runではmain descendantsからResetを探し、ControlView parentにあるWindowのうちProcmon PID一致・非zero HWND・main HWNDと異なるものだけをdialog候補として返す。process境界とfail-closed条件は維持する。Run 165はWDIO/capture未到達、AC-05未達。
 
+Run 167（`d453245`、Windows / webview）はembedded Window候補を検出し`wait-filter-dialog`を通過、Reset操作後に`set-canary-filter`へ進んだ。しかし選択した最も近いWindow ancestorでは規定の3 ComboBox / 1 Editが見つからず停止。次runはResetを含むWindow ancestorを上方へ探索し、same-process / nonzero / non-main HWNDに加え、Resetと少なくとも3 ComboBox / 1 Editを含むlayoutを満たす候補だけを返す。Run 167はPMC/WDIO/capture未到達、AC-05未達。
+
 Rustのregistry / git依存と`target`をキャッシュし、OS・arch・runner・固定Rust版・lockfile / manifests / Cargo設定hashを区別する。同一モードを優先し、同じ依存条件の別モードからも復元可能。キャッシュhitでもbuild / testは省略しない。キャッシュは依存・ビルド出力のみで、資格情報ストア、監査trace、メールデータは含めない。初回はcold buildとなり、短縮量はrunnerで実測する。
 
 同じevent・ref・対象・モードの古いrunだけをcancelし、pushによって進行中の手動調査をcancelしない。

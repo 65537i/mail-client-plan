@@ -124,8 +124,36 @@ function Wait-FilterDialog([System.Diagnostics.Process]$Process, [System.Windows
           $candidateState.NativeWindowHandle -ne 0 -and
           $candidateState.NativeWindowHandle -ne $MainWindow.Current.NativeWindowHandle
         ) {
-          [Console]::Out.WriteLine("PROC_MON_FILTER_DIALOG_DISCOVERY=embedded-window")
-          return $candidateWindow
+          $candidateCombos = $candidateWindow.FindAll(
+            [System.Windows.Automation.TreeScope]::Descendants,
+            [System.Windows.Automation.PropertyCondition]::new(
+              [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+              [System.Windows.Automation.ControlType]::ComboBox
+            )
+          )
+          $candidateEdits = $candidateWindow.FindAll(
+            [System.Windows.Automation.TreeScope]::Descendants,
+            [System.Windows.Automation.PropertyCondition]::new(
+              [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+              [System.Windows.Automation.ControlType]::Edit
+            )
+          )
+          if (
+            $null -ne $candidateWindow.FindFirst(
+              [System.Windows.Automation.TreeScope]::Descendants,
+              $resetCondition
+            ) -and
+            $candidateCombos.Count -ge 3 -and
+            $candidateEdits.Count -ge 1
+          ) {
+            $comboCount = [Math]::Min($candidateCombos.Count, 9999)
+            $editCount = [Math]::Min($candidateEdits.Count, 9999)
+            [Console]::Out.WriteLine("PROC_MON_FILTER_DIALOG_DISCOVERY=embedded-window")
+            [Console]::Out.WriteLine(
+              "PROC_MON_FILTER_DIALOG_LAYOUT=combos:$comboCount;edits:$editCount"
+            )
+            return $candidateWindow
+          }
         }
         $candidateWindow = $treeWalker.GetParent($candidateWindow)
       }

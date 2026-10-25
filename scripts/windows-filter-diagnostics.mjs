@@ -57,6 +57,15 @@ export function describeWindowsFilterDiagnostics(output) {
     diagnostics.push("filter-dialog-discovery=embedded-window");
   }
 
+  const dialogLayout = output.match(
+    /^PROC_MON_FILTER_DIALOG_LAYOUT=combos:(\d{1,4});edits:(\d{1,4})\r?$/m,
+  );
+  if (dialogLayout) {
+    diagnostics.push(
+      `filter-dialog-layout=combos:${dialogLayout[1]};edits:${dialogLayout[2]}`,
+    );
+  }
+
   const resetTree = output.match(
     /^PROC_MON_FILTER_DIALOG_RESET_TREE=(Window|Pane|ToolBar|Button|Text|Edit|Other)(?:>(?:Window|Pane|ToolBar|Button|Text|Edit|Other)){0,3}\r?$/m,
   )?.[0]?.replace("PROC_MON_FILTER_DIALOG_RESET_TREE=", "");
