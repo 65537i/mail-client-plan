@@ -53,6 +53,10 @@ export function describeWindowsFilterDiagnostics(output) {
     diagnostics.push(`filter-dialog-desktop-reset-owner=${desktopResetOwner}`);
   }
 
+  if (/^PROC_MON_FILTER_DIALOG_DISCOVERY=embedded-window\r?$/m.test(output)) {
+    diagnostics.push("filter-dialog-discovery=embedded-window");
+  }
+
   const resetTree = output.match(
     /^PROC_MON_FILTER_DIALOG_RESET_TREE=(Window|Pane|ToolBar|Button|Text|Edit|Other)(?:>(?:Window|Pane|ToolBar|Button|Text|Edit|Other)){0,3}\r?$/m,
   )?.[0]?.replace("PROC_MON_FILTER_DIALOG_RESET_TREE=", "");

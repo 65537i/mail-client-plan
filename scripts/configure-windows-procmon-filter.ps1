@@ -109,6 +109,27 @@ function Wait-FilterDialog([System.Diagnostics.Process]$Process, [System.Windows
         return $window
       }
     }
+    $mainReset = $MainWindow.FindFirst(
+      [System.Windows.Automation.TreeScope]::Descendants,
+      $resetCondition
+    )
+    if ($null -ne $mainReset) {
+      $treeWalker = [System.Windows.Automation.TreeWalker]::ControlViewWalker
+      $candidateWindow = $mainReset
+      for ($level = 0; $null -ne $candidateWindow -and $level -lt 8; $level++) {
+        $candidateState = $candidateWindow.Current
+        if (
+          $candidateState.ControlType -eq [System.Windows.Automation.ControlType]::Window -and
+          $candidateState.ProcessId -eq $Process.Id -and
+          $candidateState.NativeWindowHandle -ne 0 -and
+          $candidateState.NativeWindowHandle -ne $MainWindow.Current.NativeWindowHandle
+        ) {
+          [Console]::Out.WriteLine("PROC_MON_FILTER_DIALOG_DISCOVERY=embedded-window")
+          return $candidateWindow
+        }
+        $candidateWindow = $treeWalker.GetParent($candidateWindow)
+      }
+    }
     Start-Sleep -Milliseconds 100
   } while ([DateTime]::UtcNow -lt $deadline)
   foreach ($window in $windows) {
