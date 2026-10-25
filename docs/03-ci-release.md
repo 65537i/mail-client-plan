@@ -97,6 +97,8 @@ Run 137（`f06c83d`、Windows / webview）はsecurity-test build、実WebView se
 
 Run 139（`153a08b`、Windows / webview）もProcmon filter setupで失敗。ログ要約にはwriter markerとMenu / 11 child controlsがあるが、caller / failure-type markerはなく、報告stageは最後に観測された`observe-menu-focus`。Node harnessはstdoutの先頭1024文字だけを保持するため、診断末尾が切れた可能性がある。次runは固定形式・allowlist診断のみに限定したまま、収集上限を厳密な4096文字へ増やして後続markerを確認する。Run 139はWDIO/capture未到達でAC-05の証拠ではない。
 
+Run 141（`541365e`、Windows / webview）では4096文字上限下でcaller snapshotもelement present / ControlType Menuと観測し、Filter commandを一意に特定してfocusできた。Enter後のFocusedElementはButtonとなり、filter dialogは見つからず`wait-filter-dialog`で停止した。次runはFilter commandのInvokePattern / SelectionItemPattern対応を固定booleanで観測する。未確認のactivation操作を試さず、WDIO/capture/export/control判定は未到達のまま。Run 141はAC-05の証拠ではない。
+
 Rustのregistry / git依存と`target`をキャッシュし、OS・arch・runner・固定Rust版・lockfile / manifests / Cargo設定hashを区別する。同一モードを優先し、同じ依存条件の別モードからも復元可能。キャッシュhitでもbuild / testは省略しない。キャッシュは依存・ビルド出力のみで、資格情報ストア、監査trace、メールデータは含めない。初回はcold buildとなり、短縮量はrunnerで実測する。
 
 同じevent・ref・対象・モードの古いrunだけをcancelし、pushによって進行中の手動調査をcancelしない。

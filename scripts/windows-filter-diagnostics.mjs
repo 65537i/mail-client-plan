@@ -19,6 +19,11 @@ export function describeWindowsFilterDiagnostics(output) {
   )?.[1];
   if (patterns) diagnostics.push(`menu-patterns=${patterns}`);
 
+  const commandPatterns = output.match(
+    /PROC_MON_FILTER_COMMAND_PATTERNS=(invoke:(?:true|false);selection-item:(?:true|false))/,
+  )?.[1];
+  if (commandPatterns) diagnostics.push(`filter-command-patterns=${commandPatterns}`);
+
   const tree = output.match(/PROC_MON_FILTER_MENU_TREE=([A-Za-z:>]+)/)?.[1];
   if (tree) {
     const nodes = tree.split(">");

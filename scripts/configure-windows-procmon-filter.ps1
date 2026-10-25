@@ -380,6 +380,19 @@ try {
   }
   $filterCommand = $filterCommands[0]
   $filterCommandState = $filterCommand.Current
+  $filterInvokePattern = $null
+  $hasFilterInvokePattern = $filterCommand.TryGetCurrentPattern(
+    [System.Windows.Automation.InvokePattern]::Pattern,
+    [ref]$filterInvokePattern
+  )
+  $filterSelectionPattern = $null
+  $hasFilterSelectionPattern = $filterCommand.TryGetCurrentPattern(
+    [System.Windows.Automation.SelectionItemPattern]::Pattern,
+    [ref]$filterSelectionPattern
+  )
+  [Console]::Out.WriteLine(
+    "PROC_MON_FILTER_COMMAND_PATTERNS=invoke:$($hasFilterInvokePattern.ToString().ToLowerInvariant());selection-item:$($hasFilterSelectionPattern.ToString().ToLowerInvariant())"
+  )
   if (-not $filterCommandState.IsEnabled -or
     $filterCommandState.IsOffscreen -or
     -not $filterCommandState.IsKeyboardFocusable) {
