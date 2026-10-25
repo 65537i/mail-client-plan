@@ -94,9 +94,18 @@ export function describeWindowsFilterDiagnostics(output) {
   }
 
   for (const match of output.matchAll(
-    /^PROC_MON_FILTER_DROP_PATTERN=(toggle|invoke|selection-item|legacy-accessible):(true|false)\r?$/gm,
+    /^PROC_MON_FILTER_DROP_PATTERN=(toggle|invoke|selection-item):(true|false)\r?$/gm,
   )) {
     diagnostics.push(`drop-filter-pattern-${match[1]}=${match[2]}`);
+  }
+
+  const dropItemState = output.match(
+    /^PROC_MON_FILTER_DROP_ITEM_STATE=keyboard-focusable:(true|false);item-status:(checked|unchecked|on|off|mixed|other);help-text:(checked|unchecked|on|off|mixed|other)\r?$/m,
+  );
+  if (dropItemState) {
+    diagnostics.push(
+      `drop-filter-item-state=keyboard-focusable:${dropItemState[1]};item-status:${dropItemState[2]};help-text:${dropItemState[3]}`,
+    );
   }
 
   const resetTree = output.match(

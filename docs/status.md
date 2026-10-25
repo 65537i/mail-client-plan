@@ -157,9 +157,17 @@ Run 181（`b4c9806`）はworkflow dispatchの既定値`all / full`で誤って�
 
 native [Run 182](https://github.com/65537i/mail-client-plan/actions/runs/40234424259)（`b4c9806`、Windows 2025 x64 / webview）はpopup menuの同一process ownershipとenabled / onscreen状態、Drop Filtered Eventsの一意一致まで通過し、`probe-drop-filter-toggle`で停止した。対象MenuItemはTogglePatternを公開していない（`toggle:false`）。次run向けにInvokePattern、SelectionItemPattern、LegacyIAccessiblePatternの有無と、LegacyIAccessible checked stateだけをallowlist診断する。filter PMC保存 / WDIO / capture未到達、AC-05未達。
 
+native [Run 183](https://github.com/65537i/mail-client-plan/actions/runs/40235462868)（`7ce682e`、push / Ubuntu 24.04 x64 / basic）はsuccess。planとUbuntu basicの証拠であり、Windows / webviewやAC-05の証拠ではない。
+
 Run 184（`7ce682e`、Windows 2025 x64 / webview）は`probe-drop-filter-toggle`で停止した。追加した統合pattern診断は失敗出力から得られず、各pattern確認の成否も未確定。次runではToggle / Invoke / SelectionItem / LegacyIAccessibleの各probeに個別stageと固定booleanを付けて失敗位置を特定する。filter PMC保存 / WDIO / capture未到達、AC-05未達。
 
 Run 184後の診断拡張では、各pattern query直後に固定booleanを出し、各probeのstageを分離する。既定UIの操作やfilter適用は変更しない。関連Node test 12/12、JS syntax check、`git diff --check`成功。PowerShell / Windows UIA runtimeは次runで初確認する。
+
+native [Run 185](https://github.com/65537i/mail-client-plan/actions/runs/40236502909)（`8921a49`、push / Ubuntu 24.04 x64 / basic）はsuccess。planとUbuntu basicの証拠であり、Windows / webviewやAC-05の証拠ではない。
+
+native [Run 186](https://github.com/65537i/mail-client-plan/actions/runs/40236618411)（`8921a49`、Windows 2025 x64 / webview）は`probe-drop-legacy-accessible-pattern`で失敗。Drop itemはTogglePattern=false、InvokePattern=true、SelectionItemPattern=falseだったが、LegacyIAccessiblePattern取得時に失敗しstateは未確認。次runではそのpatternを使わず、UIAのItemStatus / HelpTextとkeyboard-focusableだけを固定enum / booleanで確認する。PMC保存 / WDIO / capture未到達、AC-05未達。
+
+Run 186後の診断変更は同じInvokePattern経路のstateを推測せず、ItemStatus / HelpTextの厳密なallowlist値だけを記録する。既定UIの操作やfilter適用は変更しない。関連Node test 12/12、JS syntax check、`git diff --check`成功。Windows runtime未確認。
 
 native [Run 89](https://github.com/65537i/mail-client-plan/actions/runs/40184517503)（`a862532`、all / full）はUbuntu、macOS 14 ARM、macOS 15 Intelが成功、Windowsのみ失敗。Windowsではformat / workspace test / clippy / frontend build / native build / production除外検査 / launch smoke / security-test build / TLS / Japanese FTS / IMAP / SMTP / MIME candidate / Windows harness回帰5 testsまで成功。Procmon署名確認も成功したが、capture前のUI Automation filter setupがexit 1となり、WDIOおよびcapture/export・control判定には進まなかった。元のstderrは意図的に破棄していたため、失敗したUI操作はこのrunから特定できない。Run 89はWindows file-access監査の実証ではなく、AC-05未達。
 

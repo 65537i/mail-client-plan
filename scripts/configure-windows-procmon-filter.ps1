@@ -730,14 +730,25 @@ try {
   [Console]::Out.WriteLine(
     "PROC_MON_FILTER_DROP_PATTERN=selection-item:$($hasSelectionItemPattern.ToString().ToLowerInvariant())"
   )
-  $legacyAccessiblePattern = $null
-  Set-Stage "probe-drop-legacy-accessible-pattern"
-  $hasLegacyAccessiblePattern = $drop.TryGetCurrentPattern(
-    [System.Windows.Automation.LegacyIAccessiblePattern]::Pattern,
-    [ref]$legacyAccessiblePattern
-  )
+  Set-Stage "probe-drop-item-state"
+  $dropItemStatus = switch ($dropState.ItemStatus) {
+    "Checked" { "checked" }
+    "Unchecked" { "unchecked" }
+    "On" { "on" }
+    "Off" { "off" }
+    "Mixed" { "mixed" }
+    default { "other" }
+  }
+  $dropHelpText = switch ($dropState.HelpText) {
+    "Checked" { "checked" }
+    "Unchecked" { "unchecked" }
+    "On" { "on" }
+    "Off" { "off" }
+    "Mixed" { "mixed" }
+    default { "other" }
+  }
   [Console]::Out.WriteLine(
-    "PROC_MON_FILTER_DROP_PATTERN=legacy-accessible:$($hasLegacyAccessiblePattern.ToString().ToLowerInvariant())"
+    "PROC_MON_FILTER_DROP_ITEM_STATE=keyboard-focusable:$($dropState.IsKeyboardFocusable.ToString().ToLowerInvariant());item-status:$dropItemStatus;help-text:$dropHelpText"
   )
   $dropToggleState = "unavailable"
   if ($hasTogglePattern) {

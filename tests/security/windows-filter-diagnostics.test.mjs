@@ -22,7 +22,7 @@ test("AC-05: Windows filter diagnostics retain only allowlisted UIA state", () =
     "PROC_MON_FILTER_DROP_PATTERN=toggle:true",
     "PROC_MON_FILTER_DROP_PATTERN=invoke:false",
     "PROC_MON_FILTER_DROP_PATTERN=selection-item:false",
-    "PROC_MON_FILTER_DROP_PATTERN=legacy-accessible:true",
+    "PROC_MON_FILTER_DROP_ITEM_STATE=keyboard-focusable:true;item-status:off;help-text:other",
     "PROC_MON_FILTER_FOCUS_OWNER=after-command-invoke;owner:procmon-main",
     "PROC_MON_FILTER_MENU_TREE=MenuItem:Filter>MenuBar:MenuBar>Window:ProcessMonitor",
     "PROC_MON_FILTER_MENU_FOCUS=failed-COMException",
@@ -42,7 +42,7 @@ test("AC-05: Windows filter diagnostics retain only allowlisted UIA state", () =
       + "; drop-filter-pattern-toggle=true"
       + "; drop-filter-pattern-invoke=false"
       + "; drop-filter-pattern-selection-item=false"
-      + "; drop-filter-pattern-legacy-accessible=true"
+      + "; drop-filter-item-state=keyboard-focusable:true;item-status:off;help-text:other"
       + "; filter-dialog-reset-tree=Button>Pane>Window"
       + "; focus-owner-after-command-invoke=procmon-main"
       + "; menu-tree=MenuItem:Filter>MenuBar:MenuBar>Window:ProcessMonitor"
@@ -179,8 +179,9 @@ test("AC-05: Windows filter diagnostics reject unknown Drop item patterns", () =
   assert.equal(
     describeWindowsFilterDiagnostics([
       "PROC_MON_FILTER_DROP_PATTERN=toggle:true;private-value",
-      "PROC_MON_FILTER_DROP_PATTERN=private-pattern:true",
+      "PROC_MON_FILTER_DROP_PATTERN=legacy-accessible:true",
       "PROC_MON_FILTER_DROP_PATTERN=invoke:unknown",
+      "PROC_MON_FILTER_DROP_ITEM_STATE=keyboard-focusable:true;item-status:checked;help-text:C:\\private\\mail",
     ].join("\n")),
     "",
   );
