@@ -85,7 +85,9 @@ Run 125（`6b6afd5`、Windows / webview）は`find-open-filter-menu`で停止。
 
 Run 127（`48a5248`、Windows / webview）はafter-openのFocusedElementが`MenuItem:Other`で、親tree内に`Menu`を観測した。Run 125でFocusedElementが直接Menuだった状態と異なるため、次は取得済みfocused elementからControlView parentを上り、最初のMenuを子列挙に使用する。Run 127はWDIO/capture未到達でAC-05の証拠ではない。
 
-Run 129（`fcf3d08`、Windows / webview）はafter-openのFocusedElementがMenuで、直接子11件も観測したが`find-open-filter-menu`で停止した。次はFocus elementと取得済みControlTypeをsnapshotとして返し、後段の再照会を避け、parent traversalだけを個別stageで切り分ける。Run 129はWDIO/capture未到達でAC-05の証拠ではない。
+Run 129（`fcf3d08`、Windows / webview）はafter-openのFocusedElementがMenuで、直接子11件も観測したが`find-open-filter-menu`で停止した。後続runで参照の引き渡しを見直す。
+
+Run 131（`163d157`、Windows / webview）はafter-openのFocusedElement=Menuと子control 11件を観測した後、`resolve-open-filter-menu`で停止した。PowerShell functionからのAutomationElement object returnが次段へ渡らなかった可能性があるため、次はscript-scoped変数で参照とControlType snapshotを保持する。Run 131はWDIO/capture未到達でAC-05の証拠ではない。
 
 Rustのregistry / git依存と`target`をキャッシュし、OS・arch・runner・固定Rust版・lockfile / manifests / Cargo設定hashを区別する。同一モードを優先し、同じ依存条件の別モードからも復元可能。キャッシュhitでもbuild / testは省略しない。キャッシュは依存・ビルド出力のみで、資格情報ストア、監査trace、メールデータは含めない。初回はcold buildとなり、短縮量はrunnerで実測する。
 
