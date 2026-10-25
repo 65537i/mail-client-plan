@@ -338,6 +338,7 @@ try {
   Set-Stage "observe-menu-focus"
   $focusSnapshot = @{}
   Write-FocusObservation "after-open" $focusSnapshot
+  Set-Stage "verify-menu-focus-snapshot"
   Write-FocusSnapshotObservation "caller" $focusSnapshot
   Set-Stage "resolve-open-filter-menu"
   if ($null -eq $focusSnapshot["Element"]) {
@@ -449,6 +450,18 @@ try {
   }
 } catch {
   [Console]::Out.WriteLine("PROC_MON_FILTER_FAILED_STAGE=$stage")
+  $failureType = $_.Exception.GetType().Name
+  if ($failureType -notin @(
+      "ArgumentException",
+      "COMException",
+      "ElementNotAvailableException",
+      "InvalidOperationException",
+      "NullReferenceException",
+      "RuntimeException"
+    )) {
+    $failureType = "Other"
+  }
+  [Console]::Out.WriteLine("PROC_MON_FILTER_FAILURE=$failureType")
   exit 1
 } finally {
   if (-not $process.HasExited) {

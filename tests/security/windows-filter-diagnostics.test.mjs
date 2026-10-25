@@ -62,13 +62,22 @@ test("AC-05: Windows filter diagnostics retain safe focused-control observations
 
 test("AC-05: Windows filter diagnostics retain only snapshot handoff state", () => {
   const output = [
+    "PROC_MON_FILTER_FAILURE=InvalidOperationException",
     "PROC_MON_FILTER_SNAPSHOT=writer;element:present;control-type:menu",
     "PROC_MON_FILTER_SNAPSHOT=caller;element:missing;control-type:missing",
     "PROC_MON_FILTER_SNAPSHOT=caller;element:present;control-type:C:\\private\\mail",
   ].join("\n");
   assert.equal(
     describeWindowsFilterDiagnostics(output),
-    "; focus-snapshot-writer=element:present;control-type:menu"
+    "; failure-type=InvalidOperationException"
+      + "; focus-snapshot-writer=element:present;control-type:menu"
       + "; focus-snapshot-caller=element:missing;control-type:missing",
+  );
+});
+
+test("AC-05: Windows filter diagnostics omit unknown exception types", () => {
+  assert.equal(
+    describeWindowsFilterDiagnostics("PROC_MON_FILTER_FAILURE=SecretException"),
+    "",
   );
 });

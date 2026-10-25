@@ -32,6 +32,11 @@ export function describeWindowsFilterDiagnostics(output) {
   )?.[1];
   if (focus) diagnostics.push(`menu-focus=${focus}`);
 
+  const failureType = output.match(
+    /PROC_MON_FILTER_FAILURE=(ArgumentException|COMException|ElementNotAvailableException|InvalidOperationException|NullReferenceException|RuntimeException|Other)/,
+  )?.[1];
+  if (failureType) diagnostics.push(`failure-type=${failureType}`);
+
   for (const match of output.matchAll(
     /^PROC_MON_FILTER_SNAPSHOT=(writer|caller);element:(present|missing);control-type:(menu|menu-item|window|pane|toolbar|other|missing)\r?$/gm,
   )) {
