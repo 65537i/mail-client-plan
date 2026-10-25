@@ -142,6 +142,24 @@ function Set-FilterRule([System.Windows.Automation.AutomationElement]$Dialog, [s
   $add.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
 }
 
+function Get-ControlTypeLabel([System.Windows.Automation.AutomationElement]$Element) {
+  switch ($Element.Current.ControlType.ProgrammaticName) {
+    "ControlType.MenuBar" { return "MenuBar" }
+    "ControlType.MenuItem" { return "MenuItem" }
+    "ControlType.Window" { return "Window" }
+    "ControlType.Pane" { return "Pane" }
+    "ControlType.ToolBar" { return "ToolBar" }
+    default { return "Other" }
+  }
+}
+
+function Get-ControlNameLabel([System.Windows.Automation.AutomationElement]$Element) {
+  if ($Element.Current.Name -in @("Filter", "Menu Bar", "Process Monitor")) {
+    return $Element.Current.Name.Replace(" ", "")
+  }
+  return "Other"
+}
+
 try {
   Set-Stage "wait-for-input-idle"
   if (-not $process.WaitForInputIdle(10000)) {
@@ -162,7 +180,35 @@ try {
   )
   $filterMenu = Wait-Element $main $filterMenuCondition 5
   Set-Stage "focus-filter-menu"
-  $filterMenu.SetFocus()
+  $menuState = $filterMenu.Current
+  $treeWalker = [System.Windows.Automation.TreeWalker]::ControlViewWalker
+  $treeParts = [System.Collections.Generic.List[string]]::new()
+  $treeNode = $filterMenu
+  for ($level = 0; $null -ne $treeNode -and $level -lt 4; $level++) {
+    $treeParts.Add("$(Get-ControlTypeLabel $treeNode):$(Get-ControlNameLabel $treeNode)")
+    $treeNode = $treeWalker.GetParent($treeNode)
+  }
+  [Console]::Out.WriteLine(
+    "PROC_MON_FILTER_MENU_STATE=enabled:$($menuState.IsEnabled.ToString().ToLowerInvariant());offscreen:$($menuState.IsOffscreen.ToString().ToLowerInvariant());keyboard-focusable:$($menuState.IsKeyboardFocusable.ToString().ToLowerInvariant())"
+  )
+  [Console]::Out.WriteLine("PROC_MON_FILTER_MENU_TREE=$($treeParts -join '>')")
+  try {
+    $filterMenu.SetFocus()
+    [Console]::Out.WriteLine("PROC_MON_FILTER_MENU_FOCUS=returned")
+  } catch {
+    $focusError = $_.Exception.GetType().Name
+    if ($focusError -notin @(
+        "ElementNotEnabledException",
+        "ElementNotAvailableException",
+        "InvalidOperationException",
+        "COMException",
+        "NoClickablePointException"
+      )) {
+      $focusError = "Other"
+    }
+    [Console]::Out.WriteLine("PROC_MON_FILTER_MENU_FOCUS=failed-$focusError")
+    throw
+  }
   Set-Stage "expand-filter-menu"
   $menuPattern = $null
   if ($filterMenu.TryGetCurrentPattern(
