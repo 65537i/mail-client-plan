@@ -33,6 +33,24 @@ export function describeWindowsFilterDiagnostics(output) {
     );
   }
 
+  const dropMenuState = output.match(
+    /^PROC_MON_FILTER_DROP_MENU_STATE=owner-same-process:(true|false);enabled:(true|false);offscreen:(true|false)\r?$/m,
+  );
+  if (dropMenuState) {
+    diagnostics.push(
+      `drop-filter-menu-state=owner-same-process:${dropMenuState[1]};enabled:${dropMenuState[2]};offscreen:${dropMenuState[3]}`,
+    );
+  }
+
+  const dropMenuMatch = output.match(
+    /^PROC_MON_FILTER_DROP_MENU_MATCH=items:(\d{1,4});matches:(\d{1,4})\r?$/m,
+  );
+  if (dropMenuMatch) {
+    diagnostics.push(
+      `drop-filter-menu-match=items:${dropMenuMatch[1]};matches:${dropMenuMatch[2]}`,
+    );
+  }
+
   if (/^PROC_MON_FILTER_COMMAND_ACTIVATION=invoke-pattern\r?$/m.test(output)) {
     diagnostics.push("filter-command-activation=invoke-pattern");
   }

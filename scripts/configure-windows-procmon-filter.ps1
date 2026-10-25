@@ -653,11 +653,57 @@ try {
   }
   Set-Stage "open-drop-filtered-events-menu"
   $dropMenuPattern.Invoke()
+  Set-Stage "resolve-drop-filtered-events-menu"
+  $dropMenu = $null
+  $dropMenuDeadline = [DateTime]::UtcNow.AddSeconds(5)
+  do {
+    $focused = [System.Windows.Automation.AutomationElement]::FocusedElement
+    for ($level = 0; $null -ne $focused -and $level -lt 5; $level++) {
+      if ($focused.Current.ControlType -eq [System.Windows.Automation.ControlType]::Menu) {
+        $dropMenu = $focused
+        break
+      }
+      $focused = $treeWalker.GetParent($focused)
+    }
+    if ($null -ne $dropMenu) { break }
+    Start-Sleep -Milliseconds 100
+  } while ([DateTime]::UtcNow -lt $dropMenuDeadline)
+  if ($null -eq $dropMenu) {
+    throw "Process Monitor did not expose the opened Filter menu"
+  }
+  $dropMenuState = $dropMenu.Current
+  $dropMenuOwned = ($dropMenuState.ProcessId -eq $process.Id)
+  [Console]::Out.WriteLine(
+    "PROC_MON_FILTER_DROP_MENU_STATE=owner-same-process:$($dropMenuOwned.ToString().ToLowerInvariant());enabled:$($dropMenuState.IsEnabled.ToString().ToLowerInvariant());offscreen:$($dropMenuState.IsOffscreen.ToString().ToLowerInvariant())"
+  )
+  if (-not $dropMenuOwned -or -not $dropMenuState.IsEnabled -or $dropMenuState.IsOffscreen) {
+    throw "Process Monitor Filter menu is not available in its own process"
+  }
+  Set-Stage "enumerate-drop-filtered-events-items"
+  $dropItems = $dropMenu.FindAll(
+    [System.Windows.Automation.TreeScope]::Descendants,
+    [System.Windows.Automation.Condition]::TrueCondition
+  )
+  $dropMatches = [System.Collections.Generic.List[System.Windows.Automation.AutomationElement]]::new()
+  foreach ($item in $dropItems) {
+    $itemState = $item.Current
+    if ($itemState.Name -eq "Drop Filtered Events" -and
+      $itemState.ControlType.ProgrammaticName -eq "ControlType.MenuItem") {
+      $dropMatches.Add($item)
+    }
+  }
+  $dropItemCount = [Math]::Min($dropItems.Count, 9999)
+  $dropMatchCount = [Math]::Min($dropMatches.Count, 9999)
+  [Console]::Out.WriteLine(
+    "PROC_MON_FILTER_DROP_MENU_MATCH=items:$dropItemCount;matches:$dropMatchCount"
+  )
+  if ($dropMatches.Count -ne 1) {
+    throw "Process Monitor open Filter menu did not expose one Drop Filtered Events item"
+  }
   Set-Stage "find-drop-filtered-events"
-  $drop = Wait-Element $main ([System.Windows.Automation.PropertyCondition]::new(
-    [System.Windows.Automation.AutomationElement]::NameProperty, "Drop Filtered Events"
-  )) 5
+  $drop = $dropMatches[0]
   Set-Stage "probe-drop-filter-toggle"
+  $dropState = $drop.Current
   $togglePattern = $null
   $hasTogglePattern = $drop.TryGetCurrentPattern(
     [System.Windows.Automation.TogglePattern]::Pattern,
@@ -674,8 +720,8 @@ try {
   [Console]::Out.WriteLine(
     "PROC_MON_FILTER_DROP_EVENTS_PATTERN=toggle:$($hasTogglePattern.ToString().ToLowerInvariant());state:$dropToggleState"
   )
-  if (-not $hasTogglePattern) {
-    throw "Process Monitor Drop Filtered Events does not expose TogglePattern"
+  if (-not $dropState.IsEnabled -or $dropState.IsOffscreen -or -not $hasTogglePattern) {
+    throw "Process Monitor Drop Filtered Events is unavailable or does not expose TogglePattern"
   }
   Set-Stage "enable-drop-filtered-events"
   if ($dropToggleState -ne "on") {

@@ -12,6 +12,8 @@ test("AC-05: Windows filter diagnostics retain only allowlisted UIA state", () =
     "PROC_MON_FILTER_MENU_PATTERNS=expand-collapse:true;invoke:false",
     "PROC_MON_FILTER_COMMAND_PATTERNS=invoke:true;selection-item:false",
     "PROC_MON_FILTER_COMMAND_ACTIVATION=invoke-pattern",
+    "PROC_MON_FILTER_DROP_MENU_STATE=owner-same-process:true;enabled:true;offscreen:false",
+    "PROC_MON_FILTER_DROP_MENU_MATCH=items:11;matches:1",
     "PROC_MON_FILTER_DIALOG_DESKTOP_RESET_OWNER=procmon-main",
     "PROC_MON_FILTER_DIALOG_RESET_TREE=Button>Pane>Window",
     "PROC_MON_FILTER_DIALOG_DISCOVERY=embedded-window",
@@ -27,6 +29,8 @@ test("AC-05: Windows filter diagnostics retain only allowlisted UIA state", () =
     "; menu-state=enabled:true;offscreen:false;keyboard-focusable:true"
       + "; menu-patterns=expand-collapse:true;invoke:false"
       + "; filter-command-patterns=invoke:true;selection-item:false"
+      + "; drop-filter-menu-state=owner-same-process:true;enabled:true;offscreen:false"
+      + "; drop-filter-menu-match=items:11;matches:1"
       + "; filter-command-activation=invoke-pattern"
       + "; filter-dialog-desktop-reset-owner=procmon-main"
       + "; filter-dialog-discovery=embedded-window"
@@ -150,6 +154,17 @@ test("AC-05: Windows filter diagnostics retain bounded command match counts", ()
     describeWindowsFilterDiagnostics(
       "PROC_MON_FILTER_COMMAND_MATCH=items:10000;matches:1",
     ),
+    "",
+  );
+});
+
+test("AC-05: Windows filter diagnostics reject unsafe Drop menu values", () => {
+  assert.equal(
+    describeWindowsFilterDiagnostics([
+      "PROC_MON_FILTER_DROP_MENU_STATE=owner-same-process:true;enabled:yes;offscreen:false",
+      "PROC_MON_FILTER_DROP_MENU_MATCH=items:10000;matches:1",
+      "PROC_MON_FILTER_DROP_MENU_MATCH=items:11;matches:C:\\private\\mail",
+    ].join("\n")),
     "",
   );
 });

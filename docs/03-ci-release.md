@@ -135,6 +135,8 @@ Run 175（`79e8d92`、Windows / webview）はEditがenabled / onscreen / writabl
 
 Run 177（`ab488e6`、Windows / webview）は8192文字以内にcomplete failure markerを保持し、stageが`enable-drop-filtered-events`と確定した。embedded filter dialogのReset / rules / path value / Applyまでは成功している。後続の`Alt+F`によるDrop Filtered Events切替で停止したため、次runでは既に観測済みのFilter menuをUIA InvokePatternで開き、該当項目とTogglePatternを特定する。Run 177はPMC保存 / WDIO / capture未到達、AC-05未達。
 
+Run 179（`4de93ce`、Windows / webview）はfilter dialog discovery / rule設定 / Applyまで成功したが、Filter menuを開いた後の`find-drop-filtered-events`で停止した。UIA lookupがmain window subtreeを対象にしており、popup menu側の項目を見ていなかった可能性がある。次run向けにFocusedElementから開いたMenuをたどり、same-process・enabled・onscreenを確認後、menu descendantsから`Drop Filtered Events` MenuItemを一意に解決してTogglePatternを検査する変更を実装した。新たなdiagnosticは固定enum / bounded countsのみ。関連Node test 11/11、JS syntax check、`git diff --check`成功。PowerShell / Windows UIA runtimeは未検証で、Run 179時点ではPMC保存 / WDIO / capture未到達、AC-05未達。
+
 Rustのregistry / git依存と`target`をキャッシュし、OS・arch・runner・固定Rust版・lockfile / manifests / Cargo設定hashを区別する。同一モードを優先し、同じ依存条件の別モードからも復元可能。キャッシュhitでもbuild / testは省略しない。キャッシュは依存・ビルド出力のみで、資格情報ストア、監査trace、メールデータは含めない。初回はcold buildとなり、短縮量はrunnerで実測する。
 
 同じevent・ref・対象・モードの古いrunだけをcancelし、pushによって進行中の手動調査をcancelしない。
