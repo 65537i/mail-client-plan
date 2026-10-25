@@ -83,6 +83,8 @@ Run 123（`a878d05`、Windows / webview）は`find-filter-command-in-menu`で停
 
 Run 125（`6b6afd5`、Windows / webview）は`find-open-filter-menu`で停止。直前の診断からFocusedElement=`Menu`とその子control一覧が読めた一方、次段のFocusedElement再取得で失敗した。次は診断時に得た同じAutomationElement参照を後段に渡して再取得を避ける。Run 125はWDIO/capture未到達でAC-05の証拠ではない。
 
+Run 127（`48a5248`、Windows / webview）はafter-openのFocusedElementが`MenuItem:Other`で、親tree内に`Menu`を観測した。Run 125でFocusedElementが直接Menuだった状態と異なるため、次は取得済みfocused elementからControlView parentを上り、最初のMenuを子列挙に使用する。Run 127はWDIO/capture未到達でAC-05の証拠ではない。
+
 Rustのregistry / git依存と`target`をキャッシュし、OS・arch・runner・固定Rust版・lockfile / manifests / Cargo設定hashを区別する。同一モードを優先し、同じ依存条件の別モードからも復元可能。キャッシュhitでもbuild / testは省略しない。キャッシュは依存・ビルド出力のみで、資格情報ストア、監査trace、メールデータは含めない。初回はcold buildとなり、短縮量はrunnerで実測する。
 
 同じevent・ref・対象・モードの古いrunだけをcancelし、pushによって進行中の手動調査をcancelしない。

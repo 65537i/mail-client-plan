@@ -302,12 +302,19 @@ try {
     throw "Process Monitor Filter menu exposes no supported open pattern"
   }
   Set-Stage "observe-menu-focus"
-  $menu = Write-FocusObservation "after-open"
+  $focusedElement = Write-FocusObservation "after-open"
   Set-Stage "find-open-filter-menu"
+  $menu = $focusedElement
+  $treeWalker = [System.Windows.Automation.TreeWalker]::ControlViewWalker
+  for ($level = 0; $null -ne $menu -and $level -lt 4; $level++) {
+    if ($menu.Current.ControlType.ProgrammaticName -eq "ControlType.Menu") { break }
+    $menu = $treeWalker.GetParent($menu)
+  }
   if ($null -eq $menu -or
     $menu.Current.ControlType.ProgrammaticName -ne "ControlType.Menu") {
     throw "Process Monitor did not expose its open Filter menu"
   }
+  Write-MenuItemsObservation "after-open" $menu
   Set-Stage "enumerate-filter-menu-items"
   $menuItems = $menu.FindAll(
     [System.Windows.Automation.TreeScope]::Children,

@@ -93,7 +93,9 @@ native [Run 123](https://github.com/65537i/mail-client-plan/actions/runs/4020343
 
 native [Run 125](https://github.com/65537i/mail-client-plan/actions/runs/40204350018)（`6b6afd5`、Windows / webview）は`find-open-filter-menu`で停止した。直前のFocusedElement観測ではMenuと11子controlが読めているが、直後の再取得ではMenuとして扱えなかった。次は観測時に得た同じAutomationElement参照を後段へ渡し、open-menu取得で再度Focus APIを呼ばずに子control列挙へ進む。Run 125もWDIO/capture前で停止し、AC-05合格に数えない。
 
-Run 125後の修正: after-openのFocus observationからAutomationElement参照を返して再利用し、後段のFocusedElement再取得を除去。診断以外の呼び出しでは返却値を破棄し、生UIA情報がPowerShell stdoutに流れないようにする。PowerShell runtimeは次のWindows runで確認。
+native [Run 127](https://github.com/65537i/mail-client-plan/actions/runs/40205266118)（`48a5248`、Windows / webview）は`find-open-filter-menu`で停止。after-openのFocusedElementは`MenuItem:Other`で、親treeに`Menu`があった。Run 125ではFocusedElement自体がMenuだったため、UIA focus対象がrun間で異なることが分かった。次は取得済みfocused elementからControlView parentを上にたどり、最初に見つかるMenuを使う。Run 127もWDIO/capture前で停止し、AC-05合格に数えない。
+
+Run 127後の修正: after-openのFocus observation参照から親を最大4階層たどってMenuを取得し、Menu項目を列挙する。FocusedElementがMenu自身でもMenuItemでも扱えるようにする。PowerShell runtimeは次のWindows runで確認。
 
 native [Run 89](https://github.com/65537i/mail-client-plan/actions/runs/40184517503)（`a862532`、all / full）はUbuntu、macOS 14 ARM、macOS 15 Intelが成功、Windowsのみ失敗。Windowsではformat / workspace test / clippy / frontend build / native build / production除外検査 / launch smoke / security-test build / TLS / Japanese FTS / IMAP / SMTP / MIME candidate / Windows harness回帰5 testsまで成功。Procmon署名確認も成功したが、capture前のUI Automation filter setupがexit 1となり、WDIOおよびcapture/export・control判定には進まなかった。元のstderrは意図的に破棄していたため、失敗したUI操作はこのrunから特定できない。Run 89はWindows file-access監査の実証ではなく、AC-05未達。
 
