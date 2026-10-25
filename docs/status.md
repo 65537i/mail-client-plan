@@ -85,9 +85,11 @@ native [Run 117](https://github.com/65537i/mail-client-plan/actions/runs/4020055
 
 Run 117後の修正: 現在のfocused UIA elementを最大4階層・allowlistで要約し、open / HOME / ENTER直後の状態をNode harnessへ伝える診断を追加。関連Node回帰9/9成功、Node syntax / `git diff --check`成功。PowerShell runtimeは次のWindows runで検証。
 
-native [Run 119](https://github.com/65537i/mail-client-plan/actions/runs/40201524221)（`9eb8f38`、Windows / webview）は`observe-dialog-focus`で失敗。Invoke後とHOME後はFocusedElement=`Menu`（`keyboard-focusable=false`）、ENTER後はFocusedElement=`Other`（`keyboard-focusable=true`）へ変化したが、Filter dialogは開かず、WDIO/captureへ進まなかった。次はInvoke直後とHOME後にMenuの直接の子controlを最大8件、type / 固定allowlist名 / enabled / offscreen / keyboard-focusableだけ記録し、commandの可視性とキーボード対象を観測する。任意のUI文字列とpathは記録しない。Run 119はAC-05合格に数えない。
+native [Run 119](https://github.com/65537i/mail-client-plan/actions/runs/40201524221)（`9eb8f38`、Windows / webview）は`observe-dialog-focus`で失敗。Invoke後とHOME後はFocusedElement=`Menu`（`keyboard-focusable=false`）、ENTER後はFocusedElement=`Other`（`keyboard-focusable=true`）へ変化したが、Filter dialogは開かず、WDIO/captureへ進まなかった。Menuの直接の子controlを観測する診断を追加する。
 
-Run 119後の修正: FocusedElementがMenuのときに直接の子controlを最大8件で要約する診断を追加。未知の名前・状態はNode helperで除外。関連テストとPowerShell runtimeの実行は次のWindows runで確認。
+native [Run 121](https://github.com/65537i/mail-client-plan/actions/runs/40202472222)（`cfc9319`、Windows / webview）は`select-filter-command`で失敗し、WDIO/captureへ進まなかった。UIA Menuの直接の子は11件、診断上3番目が`FilterCommand`（enabled、onscreen、keyboard-focusable）と判明した。これによりHOME操作前に直接のFilter... commandを一意に取得できる。次はMenu直下の完全一致`Filter...` MenuItemのみを取得し、状態を再確認してfocus後にEnterを送る。Run 121はAC-05合格に数えない。
+
+Run 121後の修正: Home/first-item選択をやめ、観測済みのFilter... direct childを一意に検索し、enabled / onscreen / keyboard-focusableを検査してfocus後にEnterを送る。allowlist focused-control診断を引き続き有効にする。関連テストとPowerShell runtimeは次のWindows runで確認。
 
 native [Run 89](https://github.com/65537i/mail-client-plan/actions/runs/40184517503)（`a862532`、all / full）はUbuntu、macOS 14 ARM、macOS 15 Intelが成功、Windowsのみ失敗。Windowsではformat / workspace test / clippy / frontend build / native build / production除外検査 / launch smoke / security-test build / TLS / Japanese FTS / IMAP / SMTP / MIME candidate / Windows harness回帰5 testsまで成功。Procmon署名確認も成功したが、capture前のUI Automation filter setupがexit 1となり、WDIOおよびcapture/export・control判定には進まなかった。元のstderrは意図的に破棄していたため、失敗したUI操作はこのrunから特定できない。Run 89はWindows file-access監査の実証ではなく、AC-05未達。
 

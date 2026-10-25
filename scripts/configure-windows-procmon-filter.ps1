@@ -301,10 +301,38 @@ try {
   }
   Set-Stage "observe-menu-focus"
   Write-FocusObservation "after-open"
-  Set-Stage "select-filter-command"
-  [System.Windows.Forms.SendKeys]::SendWait("{HOME}")
-  Set-Stage "observe-command-focus"
-  Write-FocusObservation "after-home"
+  Set-Stage "find-filter-command-in-menu"
+  $menu = [System.Windows.Automation.AutomationElement]::FocusedElement
+  if ($null -eq $menu -or
+    $menu.Current.ControlType.ProgrammaticName -ne "ControlType.Menu") {
+    throw "Process Monitor did not expose its open Filter menu"
+  }
+  $filterCommands = $menu.FindAll(
+    [System.Windows.Automation.TreeScope]::Children,
+    [System.Windows.Automation.AndCondition]::new(
+      [System.Windows.Automation.PropertyCondition]::new(
+        [System.Windows.Automation.AutomationElement]::NameProperty, "Filter..."
+      ),
+      [System.Windows.Automation.PropertyCondition]::new(
+        [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+        [System.Windows.Automation.ControlType]::MenuItem
+      )
+    )
+  )
+  if ($filterCommands.Count -ne 1) {
+    throw "Process Monitor open menu did not expose one Filter command"
+  }
+  $filterCommand = $filterCommands[0]
+  $filterCommandState = $filterCommand.Current
+  if (-not $filterCommandState.IsEnabled -or
+    $filterCommandState.IsOffscreen -or
+    -not $filterCommandState.IsKeyboardFocusable) {
+    throw "Process Monitor Filter command is not available for keyboard input"
+  }
+  Set-Stage "focus-filter-command"
+  $filterCommand.SetFocus()
+  Set-Stage "observe-filter-command-focus"
+  Write-FocusObservation "filter-command"
   Set-Stage "send-filter-command"
   [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
   Set-Stage "observe-dialog-focus"
