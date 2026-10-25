@@ -91,6 +91,8 @@ Run 131（`163d157`、Windows / webview）はafter-openのFocusedElement=Menuと
 
 Run 133（`25109db`、Windows / webview）も`resolve-open-filter-menu`で停止した。after-open markerはMenuと11子controlを示すが、script-scope referenceは後段で取得できなかった。次runではhashtable snapshotを使い、Menu解決を再確認する。Run 133はWDIO/capture未到達でAC-05の証拠ではない。
 
+Run 134（`cc24913`、main push）はplanとUbuntu / basicのみ成功し、Windows jobは選択されていない。Run 135（`cc24913`、Windows / webview）はsecurity-test build、Procmon署名確認、audit harness testsを通過したが、UI Automation filter setupが`resolve-open-filter-menu`で停止した。after-open FocusedElementはMenu controlで、直接子11件と3番目のFilter commandを観測したが、WDIO/captureは未実行。hashtable snapshot handoffのどちら側で値が失われるか不明なため、次runはwriter / callerそれぞれのelement presenceとallowlist済みControlTypeのみを固定診断に出す。Run 135はAC-05の証拠ではない。
+
 Rustのregistry / git依存と`target`をキャッシュし、OS・arch・runner・固定Rust版・lockfile / manifests / Cargo設定hashを区別する。同一モードを優先し、同じ依存条件の別モードからも復元可能。キャッシュhitでもbuild / testは省略しない。キャッシュは依存・ビルド出力のみで、資格情報ストア、監査trace、メールデータは含めない。初回はcold buildとなり、短縮量はrunnerで実測する。
 
 同じevent・ref・対象・モードの古いrunだけをcancelし、pushによって進行中の手動調査をcancelしない。

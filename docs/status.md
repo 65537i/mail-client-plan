@@ -103,6 +103,10 @@ native [Run 133](https://github.com/65537i/mail-client-plan/actions/runs/4020809
 
 Run 133後の修正: after-openのFocusedElement / ControlTypeを呼び出し元が作成したhashtableへ書き込み、resolverがそのsnapshotを読む。PowerShell runtimeは次のWindows runで確認。
 
+native [Run 134](https://github.com/65537i/mail-client-plan/actions/runs/40209031148)（`cc24913`、main push）はplanと`ubuntu-24.04-x64 (basic)`のみ成功。Windows jobは実行されておらず、PowerShell / UIA handoffの証拠ではない。
+
+native [Run 135](https://github.com/65537i/mail-client-plan/actions/runs/40212142444)（`cc24913`、Windows / webview）はsecurity-test build、Procmon署名確認、Windows audit harness testsに成功したが、`resolve-open-filter-menu`で停止し、WDIO/capture前に失敗した。FocusedElementはMenu controlとして観測され、その直接子11件には3番目のFilter commandが含まれるため、UIA表示・列挙は成功している一方、呼び出し元snapshotの値は確認できていない。次は関数内writerと呼び出し元caller双方で要素の有無・allowlist済みControlTypeだけを記録し、handoff境界を切り分ける。Run 135はAC-05の証拠ではない。
+
 native [Run 89](https://github.com/65537i/mail-client-plan/actions/runs/40184517503)（`a862532`、all / full）はUbuntu、macOS 14 ARM、macOS 15 Intelが成功、Windowsのみ失敗。Windowsではformat / workspace test / clippy / frontend build / native build / production除外検査 / launch smoke / security-test build / TLS / Japanese FTS / IMAP / SMTP / MIME candidate / Windows harness回帰5 testsまで成功。Procmon署名確認も成功したが、capture前のUI Automation filter setupがexit 1となり、WDIOおよびcapture/export・control判定には進まなかった。元のstderrは意図的に破棄していたため、失敗したUI操作はこのrunから特定できない。Run 89はWindows file-access監査の実証ではなく、AC-05未達。
 
 native [Run 87](https://github.com/65537i/mail-client-plan/actions/runs/40179791422)（`4f75cec`、all / full）はWindowsのみ失敗。plan / Ubuntu / macOS ARM / Intelは成功。Windowsのcanary生成・worker回帰5件とbaseline UI spec 1件は成功したが、baseline終了後のPMLが273,341,060 bytesで256 MiB（268,435,456 bytes）上限を4,905,604 bytes超過し、CSV export / canary event判定前に停止。attack captureは未実行。このrunではSystem eventの有無を観測・判断できず、Run 86のwrite-through効果を否定または裏付けしない。上限引き上げ、イベントfilter、超過captureからの部分的な合格判定は行わない。Linux/macOS成功をWindows fullの代替にしない。AC-05 / Phase 00未完了。

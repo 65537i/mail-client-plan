@@ -32,6 +32,14 @@ export function describeWindowsFilterDiagnostics(output) {
   )?.[1];
   if (focus) diagnostics.push(`menu-focus=${focus}`);
 
+  for (const match of output.matchAll(
+    /^PROC_MON_FILTER_SNAPSHOT=(writer|caller);element:(present|missing);control-type:(menu|menu-item|window|pane|toolbar|other|missing)\r?$/gm,
+  )) {
+    diagnostics.push(
+      `focus-snapshot-${match[1]}=element:${match[2]};control-type:${match[3]}`,
+    );
+  }
+
   const focusObservations = [];
   for (const match of output.matchAll(
     /^PROC_MON_FILTER_MENU_ITEMS=(after-open|after-home);unavailable\r?$/gm,

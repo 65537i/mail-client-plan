@@ -196,6 +196,25 @@ function Write-MenuItemsObservation(
   }
 }
 
+function Write-FocusSnapshotObservation(
+  [string]$Phase,
+  [System.Collections.IDictionary]$Snapshot
+) {
+  $elementState = if ($null -eq $Snapshot["Element"]) { "missing" } else { "present" }
+  $controlType = switch ($Snapshot["ControlType"]) {
+    "ControlType.Menu" { "menu" }
+    "ControlType.MenuItem" { "menu-item" }
+    "ControlType.Window" { "window" }
+    "ControlType.Pane" { "pane" }
+    "ControlType.ToolBar" { "toolbar" }
+    $null { "missing" }
+    default { "other" }
+  }
+  [Console]::Out.WriteLine(
+    "PROC_MON_FILTER_SNAPSHOT=$Phase;element:$elementState;control-type:$controlType"
+  )
+}
+
 function Write-FocusObservation(
   [string]$Phase,
   [System.Collections.IDictionary]$Snapshot = $null
@@ -207,6 +226,9 @@ function Write-FocusObservation(
   try {
     $focused = [System.Windows.Automation.AutomationElement]::FocusedElement
     if ($null -eq $focused) {
+      if ($null -ne $Snapshot) {
+        Write-FocusSnapshotObservation "writer" $Snapshot
+      }
       [Console]::Out.WriteLine("PROC_MON_FILTER_FOCUSED_CONTROL=$Phase;focused:none")
       return
     }
@@ -221,6 +243,9 @@ function Write-FocusObservation(
     if ($null -ne $Snapshot) {
       $Snapshot["Element"] = $focused
       $Snapshot["ControlType"] = $state.ControlType.ProgrammaticName
+    }
+    if ($null -ne $Snapshot) {
+      Write-FocusSnapshotObservation "writer" $Snapshot
     }
     [Console]::Out.WriteLine(
       "PROC_MON_FILTER_FOCUSED_CONTROL=$Phase;type:$(Get-ControlTypeLabel $focused);name:$(Get-ControlNameLabel $focused);offscreen:$($state.IsOffscreen.ToString().ToLowerInvariant());keyboard-focusable:$($state.IsKeyboardFocusable.ToString().ToLowerInvariant());tree=$($treeParts -join '>')"
@@ -313,6 +338,7 @@ try {
   Set-Stage "observe-menu-focus"
   $focusSnapshot = @{}
   Write-FocusObservation "after-open" $focusSnapshot
+  Write-FocusSnapshotObservation "caller" $focusSnapshot
   Set-Stage "resolve-open-filter-menu"
   if ($null -eq $focusSnapshot["Element"]) {
     throw "Process Monitor did not expose its focused menu element"
