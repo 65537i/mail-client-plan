@@ -16,6 +16,15 @@ const controlEvent =
   '"10:00:00.0000000","node.exe","100","ReadFile","C:\\Users\\runner\\Temp\\mc-control.png","SUCCESS","Offset: 0"\r\n';
 const verify = (trace) => verifyWindowsFileTrace(trace, canaryPath, controlPath, excludedPath);
 
+function assertMissingPositiveControl(trace, expectedCounts) {
+  assert.throws(() => verify(trace), (error) => {
+    assert.match(error.message, /did not observe the Node synthetic-canary positive control/);
+    assert.match(error.message, expectedCounts);
+    assert(!error.message.includes(controlPath));
+    return true;
+  });
+}
+
 test("AC-05: requires the exact-path positive control", () => {
   assert.deepEqual(verify(header + controlEvent), {
     positiveControlEvents: 1,
@@ -112,20 +121,27 @@ test("AC-05: rejects unknown CSV layouts and missing positive controls", () => {
     () => verify('"Process Name","Path"\r\n'),
     /missing Process Name, Operation, or Path columns/,
   );
-  assert.throws(
-    () => verify(header),
-    /did not observe the Node synthetic-canary positive control/,
+  assertMissingPositiveControl(
+    header,
+    /control-path-events:0; node-process-events:0; node-readfile-events:0/,
   );
 });
 
 test("AC-05: requires an exact Node ReadFile control, not a lookalike or metadata event", () => {
-  for (const event of [
-    controlEvent.replace("node.exe", "powershell.exe"),
-    controlEvent.replace("node.exe", "not-node.exe"),
-    controlEvent.replace("ReadFile", "CreateFile"),
-  ]) {
-    assert.throws(() => verify(header + event), /positive control/);
-  }
+  assertMissingPositiveControl(
+    header + controlEvent.replace("node.exe", "powershell.exe"),
+    /control-path-events:1; node-process-events:0; node-readfile-events:0/,
+  );
+
+  assertMissingPositiveControl(
+    header + controlEvent.replace("ReadFile", "CreateFile"),
+    /control-path-events:1; node-process-events:1; node-readfile-events:0/,
+  );
+
+  assertMissingPositiveControl(
+    header + controlEvent.replace("node.exe", "not-node.exe"),
+    /control-path-events:1; node-process-events:0; node-readfile-events:0/,
+  );
 });
 
 test("AC-05: decodes UTF-8 and UTF-16 Process Monitor exports", () => {

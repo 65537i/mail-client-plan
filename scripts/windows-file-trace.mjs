@@ -155,7 +155,7 @@ export function inspectWindowsFileTrace(traceOutput, canaryPath, positiveControl
   );
   assert(
     positiveControlEvents.length > 0,
-    "Process Monitor did not observe the Node synthetic-canary positive control",
+    `Process Monitor did not observe the Node synthetic-canary positive control (control-path-events:${controlSummary.canaryEvents.length}; node-process-events:${controlSummary.canaryEvents.filter(({ processName }) => processName.toLowerCase() === "node.exe").length}; node-readfile-events:${positiveControlEvents.length})`,
   );
 
   return {
