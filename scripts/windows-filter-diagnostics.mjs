@@ -1,10 +1,19 @@
 const allowedTypes = /^(?:MenuBar|Menu|MenuItem|Window|Pane|ToolBar|Button|Text|Edit|Other)$/;
 const allowedNames = /^(?:Filter|FilterCommand|DropFilteredEvents|HighlightFilteredEvents|MenuBar|ProcessMonitor|Other)$/;
 export const windowsFilterOutputLimit = 8192;
+const windowsFilterOutputHeadLimit = 3072;
+const windowsFilterOutputTruncationMarker = "\nPROC_MON_FILTER_OUTPUT_TRUNCATED=true\n";
+const windowsFilterOutputTailLimit =
+  windowsFilterOutputLimit
+  - windowsFilterOutputHeadLimit
+  - windowsFilterOutputTruncationMarker.length;
 
 export function appendBoundedWindowsFilterOutput(current, chunk) {
-  const remaining = windowsFilterOutputLimit - current.length;
-  return remaining > 0 ? current + chunk.slice(0, remaining) : current;
+  const combined = current + chunk;
+  if (combined.length <= windowsFilterOutputLimit) return combined;
+  return combined.slice(0, windowsFilterOutputHeadLimit)
+    + windowsFilterOutputTruncationMarker
+    + combined.slice(-windowsFilterOutputTailLimit);
 }
 
 export function describeWindowsFilterDiagnostics(output) {

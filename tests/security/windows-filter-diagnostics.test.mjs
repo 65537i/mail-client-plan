@@ -280,6 +280,10 @@ test("AC-05: Windows filter output retains diagnostics within a strict 8192-char
   const bounded = appendBoundedWindowsFilterOutput(captured, "y".repeat(10_000));
   assert.equal(windowsFilterOutputLimit, 8192);
   assert.equal(bounded.length, windowsFilterOutputLimit);
-  assert.equal(bounded.slice(0, captured.length), captured);
-  assert.equal(appendBoundedWindowsFilterOutput(bounded, "extra"), bounded);
+  assert.ok(bounded.startsWith(prefix));
+  assert.ok(bounded.includes("PROC_MON_FILTER_OUTPUT_TRUNCATED=true"));
+  assert.ok(bounded.endsWith("y".repeat(100)));
+  assert.ok(
+    appendBoundedWindowsFilterOutput(bounded, "extra").endsWith("extra"),
+  );
 });

@@ -173,6 +173,8 @@ Run 216（`9179aad`、manual Windows 2025 x64 / webview）はsecurity-test app b
 
 Run 218（`e017fe3`、manual Windows 2025 x64 / webview）はsecurity-test app buildとWindows audit / worker / diagnostics regression tests成功後、filter setupが`compile-native-menu-helper`で失敗した（`failure-type:Other`）。起動診断により停止stageは特定したが、compiler codeはまだ出力されず、IAccessible stateは未取得。`.PMC`保存 / WDIO / capture / controls未到達、AC-05未達。Run218後、`Add-Type`へAccessibility assemblyのpathを明示参照させ、compiler outputからC# error codeのみを限定診断する。ソース本文 / file path / 完全な例外メッセージは出さず、失敗は引き続きnonzeroとする。Node diagnostics regression testにcompiler-code allowlistを追加。明示referenceと新diagnosticのWindows runtimeは次runで確認する。
 
+Run 220（`2e005c0`、manual Windows 2025 x64 / webview）はsecurity-test build / Windows regression tests成功後、MSAA state取得まで進んだ。Win32 handleは従来どおりinvalidだが、same-process `IAccessible`から11 children、対象1件、全読取成功、初期checked state `off`を確認した。filter setupは`verify-drop-native-menu-state`で失敗。harnessの8192文字first-only capに達し、invoke後state / failure markerがsummaryに残らなかったため、toggle後の成功・失敗は特定できない。fail-closedで`.PMC`保存 / WDIO / capture / control未到達、AC-05未達。Run220後は、同じ8192文字上限内で最初の3 KiBと末尾を保持し、中間を明示markするbounded head/tail captureへ変更し、後続stageと最終stateを残す。診断単体testでは上限・prefix・tail保持を検証する。
+
 Rustのregistry / git依存と`target`をキャッシュし、OS・arch・runner・固定Rust版・lockfile / manifests / Cargo設定hashを区別する。同一モードを優先し、同じ依存条件の別モードからも復元可能。キャッシュhitでもbuild / testは省略しない。キャッシュは依存・ビルド出力のみで、資格情報ストア、監査trace、メールデータは含めない。初回はcold buildとなり、短縮量はrunnerで実測する。
 
 同じevent・ref・対象・モードの古いrunだけをcancelし、pushによって進行中の手動調査をcancelしない。
