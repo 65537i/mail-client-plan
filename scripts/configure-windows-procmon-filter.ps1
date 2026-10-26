@@ -2424,6 +2424,8 @@ try {
   }
   Set-Stage "activate-reloaded-filter-menu"
   [System.Windows.Forms.SendKeys]::SendWait($reloadMenuShortcut)
+  Set-Stage "observe-reloaded-filter-menu-focus"
+  Write-FocusObservation "after-reload-access-key" | Out-Null
   Set-Stage "wait-reloaded-filter-menu"
   $reloadMenu = $null
   $reloadMenuDeadline = [DateTime]::UtcNow.AddSeconds(5)
