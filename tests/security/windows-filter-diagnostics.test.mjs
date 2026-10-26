@@ -188,6 +188,23 @@ test("AC-05: configuration save observations expose states, not paths or dialog 
   );
 });
 
+test("AC-05: Procmon export inventory retains bounded type and header classes only", () => {
+  assert.equal(
+    describeWindowsFilterDiagnostics([
+      "PROC_MON_FILTER_CONFIG_OUTPUT=phase:before-save;target:missing;target-header:not-file;pmc-count:0;headers:empty:0;short:0;mz:0;xml:0;other:0;other-count:4;truncated:false",
+      "PROC_MON_FILTER_CONFIG_OUTPUT=phase:after-invoke;target:missing;target-header:not-file;pmc-count:1;headers:empty:0;short:0;mz:0;xml:1;other:0;other-count:4;truncated:false",
+      "PROC_MON_FILTER_CONFIG_OUTPUT=phase:after-wait;target:ready;target-header:xml;pmc-count:1;headers:empty:0;short:0;mz:0;xml:0;other:1;other-count:4;truncated:false",
+      "PROC_MON_FILTER_CONFIG_OUTPUT=phase:after-wait;target:C:\\private\\mail;target-header:xml;pmc-count:1;headers:empty:0;short:0;mz:0;xml:0;other:1;other-count:4;truncated:false",
+      "PROC_MON_FILTER_CONFIG_OUTPUT=phase:after-wait;target:missing;target-header:other;pmc-count:99;headers:empty:0;short:0;mz:0;xml:0;other:0;other-count:0;truncated:false",
+      "PROC_MON_FILTER_CONFIG_OUTPUT=phase:after-wait;target:missing;target-header:not-file;pmc-count:1;headers:empty:0;short:2;mz:0;xml:0;other:0;other-count:0;truncated:false",
+      "PROC_MON_FILTER_CONFIG_OUTPUT=phase:after-wait;target:missing;target-header:not-file;pmc-count:1;headers:empty:0;short:0;mz:0;xml:0;other:0;other-count:0;truncated:false;path:private",
+    ].join("\n")),
+    "; config-output-before-save=target:missing;target-header:not-file;pmc-count:0;headers:empty:0;short:0;mz:0;xml:0;other:0;other-count:4;truncated:false"
+      + "; config-output-after-invoke=target:missing;target-header:not-file;pmc-count:1;headers:empty:0;short:0;mz:0;xml:1;other:0;other-count:4;truncated:false"
+      + "; config-output-after-wait=target:ready;target-header:xml;pmc-count:1;headers:empty:0;short:0;mz:0;xml:0;other:1;other-count:4;truncated:false",
+  );
+});
+
 test("AC-05: Windows filter diagnostics omit unknown exception types", () => {
   assert.equal(
     describeWindowsFilterDiagnostics("PROC_MON_FILTER_FAILURE=SecretException"),

@@ -101,6 +101,23 @@ export function describeWindowsFilterDiagnostics(output) {
     diagnostics.push(`config-save-${match[1]}=${match[2]}`);
   }
 
+  for (const match of output.matchAll(
+    /^PROC_MON_FILTER_CONFIG_OUTPUT=phase:(before-save|after-invoke|after-wait);target:(missing|directory|undersized|ready);target-header:(not-file|empty|short|mz|xml|other);pmc-count:(\d{1,2});headers:empty:(\d{1,2});short:(\d{1,2});mz:(\d{1,2});xml:(\d{1,2});other:(\d{1,2});other-count:(\d{1,2});truncated:(true|false)\r?$/gm,
+  )) {
+    const counts = match.slice(4, 10).map(Number);
+    const [pmcCount, ...headerCounts] = counts;
+    if (
+      pmcCount <= 32
+      && counts.every((count) => count <= 32)
+      && headerCounts.reduce((sum, count) => sum + count, 0) <= pmcCount
+      && Number(match[10]) <= 32
+    ) {
+      diagnostics.push(
+        `config-output-${match[1]}=target:${match[2]};target-header:${match[3]};pmc-count:${match[4]};headers:empty:${match[5]};short:${match[6]};mz:${match[7]};xml:${match[8]};other:${match[9]};other-count:${match[10]};truncated:${match[11]}`,
+      );
+    }
+  }
+
   const desktopResetOwner = output.match(
     /^PROC_MON_FILTER_DIALOG_DESKTOP_RESET_OWNER=(procmon-main|procmon-other|other-process|none)\r?$/m,
   )?.[1];

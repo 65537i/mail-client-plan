@@ -438,6 +438,71 @@ function Set-Stage([string]$Name) {
   [Console]::Out.WriteLine("PROC_MON_FILTER_PROGRESS=$Name")
 }
 
+function Get-ConfigHeaderClass([string]$Path) {
+  $stream = [System.IO.File]::OpenRead($Path)
+  try {
+    $header = [byte[]]::new(8)
+    $length = $stream.Read($header, 0, $header.Length)
+  } finally {
+    $stream.Dispose()
+  }
+  if ($length -eq 0) { return "empty" }
+  if ($length -lt 4) { return "short" }
+  if ($header[0] -eq 0x4d -and $header[1] -eq 0x5a) { return "mz" }
+  if ([System.Text.Encoding]::ASCII.GetString($header, 0, $length).StartsWith(
+      "<?xml", [System.StringComparison]::Ordinal
+    )) {
+    return "xml"
+  }
+  return "other"
+}
+
+function Write-ConfigOutputObservation([string]$Phase, [string]$Path) {
+  $targetState = "missing"
+  $targetHeader = "not-file"
+  if (Test-Path -LiteralPath $Path) {
+    $target = Get-Item -LiteralPath $Path
+    $targetState = if ($target.PSIsContainer) {
+      "directory"
+    } elseif ($target.Length -lt 100) {
+      "undersized"
+    } else {
+      "ready"
+    }
+    if (-not $target.PSIsContainer) {
+      $targetHeader = Get-ConfigHeaderClass $Path
+    }
+  }
+  $pmcCount = 0
+  $headerCounts = @{
+    empty = 0
+    short = 0
+    mz = 0
+    xml = 0
+    other = 0
+  }
+  $otherCount = 0
+  $entries = @(
+    Get-ChildItem -LiteralPath ([System.IO.Path]::GetDirectoryName($Path)) -Force |
+      Select-Object -First 33
+  )
+  $truncated = ($entries.Count -gt 32)
+  foreach ($entry in $entries | Select-Object -First 32) {
+    if ($entry.PSIsContainer) {
+      $otherCount++
+    } elseif ($entry.Extension -ieq ".pmc") {
+      $pmcCount++
+      $headerCounts[(Get-ConfigHeaderClass $entry.FullName)]++
+    } else {
+      $otherCount++
+    }
+  }
+  $headerSummary = "empty:$($headerCounts.empty);short:$($headerCounts.short);mz:$($headerCounts.mz);xml:$($headerCounts.xml);other:$($headerCounts.other)"
+  [Console]::Out.WriteLine(
+    "PROC_MON_FILTER_CONFIG_OUTPUT=phase:$Phase;target:$targetState;target-header:$targetHeader;pmc-count:$pmcCount;headers:$headerSummary;other-count:$otherCount;truncated:$($truncated.ToString().ToLowerInvariant())"
+  )
+}
+
 function Wait-Element([System.Windows.Automation.AutomationElement]$Root, [System.Windows.Automation.Condition]$Condition, [int]$TimeoutSeconds = 10) {
   $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
   do {
@@ -1697,16 +1762,20 @@ try {
   if ($fileNamePattern.Current.Value -cne $ConfigPath) {
     throw "Process Monitor configuration file name did not retain the requested path"
   }
+  Write-ConfigOutputObservation "before-save" $ConfigPath
   Set-Stage "confirm-export-config"
   $save.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
   Write-ConfigSaveObservation "after-invoke" $saveControls $process.Id $ConfigPath
+  Write-ConfigOutputObservation "after-invoke" $ConfigPath
   Set-Stage "verify-filter-file"
   try {
     Wait-FilterConfigFile $ConfigPath
   } catch {
     Write-ConfigSaveObservation "verify-failed" $saveControls $process.Id $ConfigPath
+    Write-ConfigOutputObservation "after-wait" $ConfigPath
     throw
   }
+  Write-ConfigOutputObservation "after-wait" $ConfigPath
 } catch {
   [Console]::Out.WriteLine("PROC_MON_FILTER_FAILED_STAGE=$stage")
   $failureException = $_.Exception

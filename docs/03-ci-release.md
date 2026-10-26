@@ -19,6 +19,8 @@ Windows: MSVC toolchain、WebView2、必要SDK。WebDriverを外部利用する�
 
 ### nativeの短い検証ループ
 
+Run 242（`9414d9f`、Windows / webview）はWindows PowerShell 5.1のfile-wait testに成功。実UIAではExport Configurationの保存先入力・readback・Save Invokeまで通過したが、直後のdialogとSave controlは同一processで`offscreen:true`、target fileは即時・5秒後とも`missing`。timeout後に保持elementは`other-process`となった。よって、ボタン操作が有効に保存したが別先へ書いたのか、dialogが保存前に閉じたのか、failed/cancelしたのか未確定。これをUI actionの失敗と断定せず、UI経路変更もしないで測定を追加する。Save前・Invoke直後・bounded wait後にtarget stateとheader class、temporary directory内PMC候補数・header classes・non-PMC件数・truncationのみを出し、PMC bytes / path / filenames / arbitrary UI textを禁止する。対象の先頭8 bytesは`empty/short/mz/xml/other`へ分類し、生bytesは出さない。actual exported PMCの妥当性は後続の`/LoadConfig`とpositive/negative controlsが別途検証する。run間でtargetのfile setがどう変化するか、Windows runtimeで確認する。Node関連・CI tests 30/30、PowerShell 7.4.13/Linux arm64でfile waitとoutput inventory test成功。`.PMC`確認・再読込 / capture未達、AC-05未達。
+
 Run 240（`88d7133`、Windows / webview）はWindows PowerShell 5.1のfile-wait試験（未作成・99 bytes timeout、100 bytes受理、遅延保存、directory拒否）とNode関連試験が成功。実監査では指定pathのreadbackとSave Invokeまで進んだが、file-waitの初回・最終とも`missing`で失敗し、`.PMC`保存 / capture未到達。待機だけでは解消せず、保存後のdialog状態は未記録だった。次の変更はSave buttonへの明示的focus移動、移動後のpath再照合、1回のInvoke後と検証失敗時のsafe state診断。dialog / buttonの有効・表示状態とpath一致だけを出し、raw path / UI text / 例外詳細は出さない。local関連25 tests / JS syntax / diff check成功、Windows runtimeは再検証待ち。待機上限・file下限・fail-closedを緩和せず、自動再保存も行わない。
 
 Run 238（`2f48084`、Windows / webview）はExport Configurationの発見・Invoke、保存dialogとcontrolsの検証、パス入力・Save Invokeまで通過し、直後の`verify-filter-file`で失敗した。未作成 / 100 bytes未満のどちらかは旧診断から特定できない。保存の非同期完了を待てるよう、同じ100 bytes下限を最大5秒・100ms以下間隔でpollし、初回と最終の状態だけを出力する。入力欄のreadbackが指定パスと一致しない場合はSave前に停止。未作成・過小・directory・IOエラーを成功へ変換せず、固定sleepや保存操作の再送は追加しない。期限切れ後は従来どおり監査を失敗させる。

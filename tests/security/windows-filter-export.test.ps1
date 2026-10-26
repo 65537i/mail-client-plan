@@ -12,12 +12,18 @@ if ($parseErrors.Count -ne 0) {
 $functions = $ast.FindAll({
   param($node)
   $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
-    $node.Name -eq "Wait-FilterConfigFile"
+    $node.Name -in @(
+      "Get-ConfigHeaderClass",
+      "Write-ConfigOutputObservation",
+      "Wait-FilterConfigFile"
+    )
 }, $true)
-if ($functions.Count -ne 1) {
-  throw "Expected one configuration file wait function"
+if ($functions.Count -ne 3) {
+  throw "Expected the configuration file observation functions"
 }
-. ([scriptblock]::Create($functions[0].Extent.Text))
+foreach ($function in $functions) {
+  . ([scriptblock]::Create($function.Extent.Text))
+}
 
 function Assert-Timeout([string]$Path) {
   $timer = [System.Diagnostics.Stopwatch]::StartNew()
@@ -40,6 +46,7 @@ function Assert-Timeout([string]$Path) {
 $directory = Join-Path ([IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString("N"))
 [IO.Directory]::CreateDirectory($directory) | Out-Null
 $path = Join-Path $directory "synthetic.pmc"
+$inventoryDirectory = Join-Path $directory "inventory"
 $writer = $null
 try {
   Assert-Timeout $path
@@ -78,11 +85,54 @@ try {
   }
   if (-not $rejectedDirectory) { throw "Configuration directory was accepted as a file" }
   Write-Host "PASS AC-05: directory is rejected"
+
+  [IO.File]::Delete($path)
+  [IO.Directory]::CreateDirectory($inventoryDirectory) | Out-Null
+  $headers = @{
+    "empty.pmc" = [byte[]]::new(0)
+    "short.pmc" = [byte[]](1, 2)
+    "mz.pmc" = [byte[]](0x4d, 0x5a, 1, 2)
+    "xml.pmc" = [Text.Encoding]::ASCII.GetBytes("<?xml ver")
+    "other.pmc" = [byte[]](1, 2, 3, 4)
+  }
+  foreach ($entry in $headers.GetEnumerator()) {
+    [IO.File]::WriteAllBytes((Join-Path $inventoryDirectory $entry.Key), $entry.Value)
+  }
+  $safePath = Join-Path $inventoryDirectory "audit-config.pmc"
+  $targetBytes = [byte[]]::new(100)
+  [Array]::Copy([Text.Encoding]::ASCII.GetBytes("<?xml ver"), $targetBytes, 8)
+  [IO.File]::WriteAllBytes($safePath, $targetBytes)
+  [IO.File]::WriteAllText((Join-Path $inventoryDirectory "control.txt"), "synthetic")
+
+  $previousOutput = [Console]::Out
+  $capturedOutput = [IO.StringWriter]::new()
+  try {
+    [Console]::SetOut($capturedOutput)
+    Write-ConfigOutputObservation "after-wait" $safePath
+  } finally {
+    [Console]::SetOut($previousOutput)
+  }
+  $observation = $capturedOutput.ToString().Trim()
+  if ($observation -notmatch
+    "^PROC_MON_FILTER_CONFIG_OUTPUT=phase:after-wait;target:ready;target-header:xml;pmc-count:6;headers:empty:1;short:1;mz:1;xml:2;other:1;other-count:1;truncated:false$" -or
+    $observation.Contains($directory) -or $observation.Contains("audit-config.pmc")) {
+    throw "Configuration output inventory was not bounded or sanitized"
+  }
+  Write-Host "PASS AC-05: output inventory exposes only bounded header classes and counts"
 } finally {
   if ($null -ne $writer) {
     $writer.Stop()
     $writer.Dispose()
   }
   [IO.File]::Delete($path)
+  if (Test-Path -LiteralPath $inventoryDirectory) {
+    foreach ($name in @(
+        "empty.pmc", "short.pmc", "mz.pmc", "xml.pmc",
+        "other.pmc", "audit-config.pmc", "control.txt"
+      )) {
+      [IO.File]::Delete((Join-Path $inventoryDirectory $name))
+    }
+    [IO.Directory]::Delete($inventoryDirectory)
+  }
   [IO.Directory]::Delete($directory)
 }
