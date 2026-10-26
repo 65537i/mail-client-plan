@@ -247,11 +247,13 @@ test("AC-05: Windows MSAA diagnostics retain only exact, same-process menu state
       "PROC_MON_FILTER_MSAA_MENU_STATE=observation:after-invoke;process:same;object:available;items:11;matches:1;read-failure:none;checked:on",
       "PROC_MON_FILTER_MSAA_MENU_STATE=observation:before;process:same;object:available;items:11;matches:0;read-failure:no-match;checked:unavailable",
       "PROC_MON_FILTER_MSAA_MENU_STATE=observation:before;process:unavailable;object:unavailable;items:0;matches:0;read-failure:window-unavailable;checked:unavailable",
+      "PROC_MON_FILTER_MSAA_MENU_STATE=observation:after-invoke;process:unavailable;object:unavailable;items:0;matches:0;read-failure:window-unavailable;checked:unavailable",
     ].join("\n")),
     "; drop-msaa-menu-state=observation:before;process:same;object:available;items:11;matches:1;read-failure:none;checked:off"
       + "; drop-msaa-menu-state=observation:after-invoke;process:same;object:available;items:11;matches:1;read-failure:none;checked:on"
       + "; drop-msaa-menu-state=observation:before;process:same;object:available;items:11;matches:0;read-failure:no-match;checked:unavailable"
-      + "; drop-msaa-menu-state=observation:before;process:unavailable;object:unavailable;items:0;matches:0;read-failure:window-unavailable;checked:unavailable",
+      + "; drop-msaa-menu-state=observation:before;process:unavailable;object:unavailable;items:0;matches:0;read-failure:window-unavailable;checked:unavailable"
+      + "; drop-msaa-menu-state=observation:after-invoke;process:unavailable;object:unavailable;items:0;matches:0;read-failure:window-unavailable;checked:unavailable",
   );
 });
 

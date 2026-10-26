@@ -1416,8 +1416,69 @@ try {
     Set-Stage "invoke-drop-filtered-events"
     $invokePattern.Invoke()
     Start-Sleep -Milliseconds 100
+
+    Set-Stage "reopen-drop-filtered-events-menu"
+    $filterMenu = Wait-Element $main $filterMenuCondition 5
+    $reopenMenuPattern = $null
+    if (-not $filterMenu.TryGetCurrentPattern(
+        [System.Windows.Automation.InvokePattern]::Pattern,
+        [ref]$reopenMenuPattern
+      )) {
+      throw "Process Monitor Filter menu does not expose InvokePattern after toggle"
+    }
+    $reopenMenuPattern.Invoke()
+
+    Set-Stage "resolve-drop-filtered-events-menu-after-invoke"
+    $dropMenu = $null
+    $dropMenuDeadline = [DateTime]::UtcNow.AddSeconds(5)
+    do {
+      $focused = [System.Windows.Automation.AutomationElement]::FocusedElement
+      for ($level = 0; $null -ne $focused -and $level -lt 5; $level++) {
+        if ($focused.Current.ControlType -eq [System.Windows.Automation.ControlType]::Menu) {
+          $dropMenu = $focused
+          break
+        }
+        $focused = $treeWalker.GetParent($focused)
+      }
+      if ($null -ne $dropMenu) { break }
+      Start-Sleep -Milliseconds 100
+    } while ([DateTime]::UtcNow -lt $dropMenuDeadline)
+    if ($null -eq $dropMenu) {
+      throw "Process Monitor did not expose the reopened Filter menu"
+    }
+    $dropMenuState = $dropMenu.Current
+    if ($dropMenuState.ProcessId -ne $process.Id -or
+      -not $dropMenuState.IsEnabled -or
+      $dropMenuState.IsOffscreen) {
+      throw "Process Monitor reopened Filter menu is not available in its own process"
+    }
+
+    Set-Stage "enumerate-drop-filtered-events-items-after-invoke"
+    $dropItems = $dropMenu.FindAll(
+      [System.Windows.Automation.TreeScope]::Descendants,
+      [System.Windows.Automation.Condition]::TrueCondition
+    )
+    $dropMatches = [System.Collections.Generic.List[System.Windows.Automation.AutomationElement]]::new()
+    foreach ($item in $dropItems) {
+      $itemState = $item.Current
+      if ($itemState.Name -eq "Drop Filtered Events" -and
+        $itemState.ControlType.ProgrammaticName -eq "ControlType.MenuItem") {
+        $dropMatches.Add($item)
+      }
+    }
+    if ($dropMatches.Count -ne 1) {
+      throw "Process Monitor reopened Filter menu did not expose one Drop Filtered Events item"
+    }
+    $drop = $dropMatches[0]
+    $dropState = $drop.Current
+    if (-not $dropState.IsEnabled -or $dropState.IsOffscreen) {
+      throw "Process Monitor reopened Drop Filtered Events item is unavailable"
+    }
+
+    $dropMenuWindowHandle = [System.IntPtr]$dropMenu.Current.NativeWindowHandle
     Set-Stage "verify-drop-native-menu-state"
-    $nativeDropMenuSnapshot = Get-NativeDropMenuSnapshot $mainWindowHandle $dropMenuWindowHandle $process.Id
+    $nativeDropMenuSnapshot = Get-NativeDropMenuSnapshot `
+      $mainWindowHandle $dropMenuWindowHandle $process.Id
     Write-NativeDropMenuSnapshot $nativeDropMenuSnapshot "after-invoke"
     $accessibleDropMenuSnapshot = $null
     if ($nativeDropMenuSnapshot.CheckState -eq "unavailable") {
