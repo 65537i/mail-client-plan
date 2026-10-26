@@ -1495,7 +1495,11 @@ try {
 
   Set-Stage "save-filter"
   [System.Windows.Forms.SendKeys]::SendWait("{ESC}")
+  Set-Stage "focus-main-window-for-save-filter"
+  $main.SetFocus()
+  Set-Stage "open-file-menu-for-save-filter"
   [System.Windows.Forms.SendKeys]::SendWait("%f")
+  Set-Stage "find-save-filter-command"
   $saveFilter = Wait-Element $main ([System.Windows.Automation.PropertyCondition]::new(
     [System.Windows.Automation.AutomationElement]::NameProperty, "Save Filter..."
   )) 5
