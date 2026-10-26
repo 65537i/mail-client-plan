@@ -121,6 +121,24 @@ export function describeWindowsFilterDiagnostics(output) {
     diagnostics.push(`config-save-final-foreground-gate=${saveFinalForegroundGate}`);
   }
 
+  const filterPathForegroundGates = Array.from(output.matchAll(
+    /^PROC_MON_FILTER_PATH_FOREGROUND=gate:(passed|failed)\r?$/gm,
+  ), (match) => match[1]);
+  if (filterPathForegroundGates.length > 0) {
+    diagnostics.push(
+      `filter-path-foreground-gates=passed:${filterPathForegroundGates.filter((gate) => gate === "passed").length},failed:${filterPathForegroundGates.filter((gate) => gate === "failed").length}`,
+    );
+  }
+
+  const filterPathGates = Array.from(output.matchAll(
+    /^PROC_MON_FILTER_PATH=gate:(passed|failed)\r?$/gm,
+  ), (match) => match[1]);
+  if (filterPathGates.length > 0) {
+    diagnostics.push(
+      `filter-path-input-gates=passed:${filterPathGates.filter((gate) => gate === "passed").length},failed:${filterPathGates.filter((gate) => gate === "failed").length}`,
+    );
+  }
+
   for (const match of output.matchAll(
     /^PROC_MON_FILTER_SAVE_RESULT=phase:(after-enter|after-wait);foreground:(procmon-main|procmon-other|other-process|unavailable);same-process-dialogs:(\d{1,2});other-process-windows:(\d{1,2});buttons:save:(\d{1,2});cancel:(\d{1,2});yes:(\d{1,2});no:(\d{1,2});ok:(\d{1,2});retry:(\d{1,2});close:(\d{1,2});truncated:(true|false)\r?$/gm,
   )) {

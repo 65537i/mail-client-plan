@@ -556,10 +556,10 @@ function Wait-FilterConfigFile([string]$Path, [int]$TimeoutMilliseconds = 5000) 
   throw "Process Monitor did not save the audit filter configuration before the deadline"
 }
 
-function Wait-ConfigSaveFocus($Save, [int]$TimeoutMilliseconds = 2000) {
+function Wait-KeyboardFocus($Control, [int]$TimeoutMilliseconds = 2000) {
   $deadline = [DateTime]::UtcNow.AddMilliseconds($TimeoutMilliseconds)
   do {
-    $state = $Save.Current
+    $state = $Control.Current
     if ($state.HasKeyboardFocus) {
       return $state
     }
@@ -568,6 +568,61 @@ function Wait-ConfigSaveFocus($Save, [int]$TimeoutMilliseconds = 2000) {
     Start-Sleep -Milliseconds ([int][Math]::Min(50, $remaining))
   } while ([DateTime]::UtcNow -lt $deadline)
   return $null
+}
+
+function Set-ProcmonEditValueByKeyboard($Dialog, $Edit, $ValuePattern, [string]$Value, [int]$OwnerProcessId) {
+  $dialogState = $Dialog.Current
+  $editState = $Edit.Current
+  $dialogHandle = [IntPtr]$dialogState.NativeWindowHandle
+  $foregroundGate = "failed"
+  if (
+    $dialogState.ProcessId -eq $OwnerProcessId -and
+    $editState.ProcessId -eq $OwnerProcessId -and
+    $dialogHandle -ne [IntPtr]::Zero -and
+    [ProcmonNativeMenu]::GetWindowProcessId($dialogHandle) -eq $OwnerProcessId
+  ) {
+    [ProcmonNativeMenu]::SetForegroundWindow($dialogHandle) | Out-Null
+    $foregroundDeadline = [DateTime]::UtcNow.AddSeconds(2)
+    do {
+      $foregroundHandle = [ProcmonNativeMenu]::GetForegroundWindow()
+      if (
+        $foregroundHandle -eq $dialogHandle -and
+        [ProcmonNativeMenu]::GetWindowProcessId($foregroundHandle) -eq $OwnerProcessId
+      ) {
+        $foregroundGate = "passed"
+        break
+      }
+      Start-Sleep -Milliseconds 50
+    } while ([DateTime]::UtcNow -lt $foregroundDeadline)
+  }
+  [Console]::Out.WriteLine("PROC_MON_FILTER_PATH_FOREGROUND=gate:$foregroundGate")
+  if ($foregroundGate -ne "passed") {
+    throw "Process Monitor filter dialog did not become the foreground window"
+  }
+  $Edit.SetFocus()
+  $editFocus = Wait-KeyboardFocus $Edit
+  if (
+    $null -eq $editFocus -or
+    $editFocus.ProcessId -ne $OwnerProcessId -or
+    -not $editFocus.IsEnabled -or
+    $editFocus.IsOffscreen -or
+    -not $editFocus.IsKeyboardFocusable -or
+    [ProcmonNativeMenu]::GetForegroundWindow() -ne $dialogHandle
+  ) {
+    [Console]::Out.WriteLine("PROC_MON_FILTER_PATH=gate:failed")
+    throw "Process Monitor filter path control did not receive keyboard focus"
+  }
+  [System.Windows.Forms.SendKeys]::SendWait("^a")
+  [System.Windows.Forms.SendKeys]::SendWait((ConvertTo-SendKeysLiteral $Value))
+  $pathGate = if ($ValuePattern.Current.Value -ceq $Value) {
+    "passed"
+  } else {
+    "failed"
+  }
+  [Console]::Out.WriteLine("PROC_MON_FILTER_PATH=gate:$pathGate")
+  if ($pathGate -ne "passed") {
+    throw "Process Monitor filter path did not retain the requested value"
+  }
 }
 
 function ConvertTo-SendKeysLiteral([string]$Value) {
@@ -1192,7 +1247,7 @@ function Select-ComboValue($Combos, [string]$Value) {
   }
 }
 
-function Set-FilterRule([System.Windows.Automation.AutomationElement]$Dialog, [string]$Path) {
+function Set-FilterRule([System.Windows.Automation.AutomationElement]$Dialog, [string]$Path, [int]$OwnerProcessId) {
   $combos = $Dialog.FindAll(
     [System.Windows.Automation.TreeScope]::Descendants,
     [System.Windows.Automation.PropertyCondition]::new(
@@ -1235,7 +1290,7 @@ function Set-FilterRule([System.Windows.Automation.AutomationElement]$Dialog, [s
     throw "Process Monitor filter path field is not writable"
   }
   Set-Stage "set-filter-path-value"
-  $valuePattern.SetValue($Path)
+  Set-ProcmonEditValueByKeyboard $Dialog $edits[0] $valuePattern $Path $OwnerProcessId
   Set-Stage "select-filter-action"
   Select-ComboValue $combos "Include"
   Set-Stage "add-filter-rule"
@@ -1574,9 +1629,9 @@ try {
   )) 5
   $reset.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
   Set-Stage "set-canary-filter"
-  Set-FilterRule $filterDialog $CanaryPath
+  Set-FilterRule $filterDialog $CanaryPath $process.Id
   Set-Stage "set-control-filter"
-  Set-FilterRule $filterDialog $ControlPath
+  Set-FilterRule $filterDialog $ControlPath $process.Id
   Set-Stage "apply-filters"
   $ok = Wait-Element $filterDialog ([System.Windows.Automation.PropertyCondition]::new(
     [System.Windows.Automation.AutomationElement]::NameProperty, "OK"
@@ -1922,7 +1977,7 @@ try {
     throw "Process Monitor configuration file name is read-only"
   }
   $fileName.SetFocus()
-  $fileNameFocus = Wait-ConfigSaveFocus $fileName
+  $fileNameFocus = Wait-KeyboardFocus $fileName
   if (
     $null -eq $fileNameFocus -or
     $fileNameFocus.ProcessId -ne $process.Id -or
@@ -1951,7 +2006,7 @@ try {
   }
   $save.SetFocus()
   Set-Stage "verify-export-config-path"
-  $saveFocusState = Wait-ConfigSaveFocus $save
+  $saveFocusState = Wait-KeyboardFocus $save
   $saveFocusGate = if (
     $null -ne $saveFocusState -and
     $saveFocusState.ProcessId -eq $process.Id -and

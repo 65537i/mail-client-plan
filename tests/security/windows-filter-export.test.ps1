@@ -16,7 +16,7 @@ $functions = $ast.FindAll({
       "Get-ConfigHeaderClass",
       "Write-ConfigOutputObservation",
       "Wait-FilterConfigFile",
-      "Wait-ConfigSaveFocus",
+      "Wait-KeyboardFocus",
       "ConvertTo-SendKeysLiteral"
     )
 }, $true)
@@ -34,7 +34,7 @@ $focusState | Add-Member -MemberType ScriptProperty -Name HasKeyboardFocus -Valu
 }
 $focusState | Add-Member -MemberType NoteProperty -Name ReadCount -Value 0
 $saveControl = [pscustomobject]@{ Current = $focusState }
-$confirmedFocus = Wait-ConfigSaveFocus $saveControl 500
+$confirmedFocus = Wait-KeyboardFocus $saveControl 500
 if ($null -eq $confirmedFocus -or -not $confirmedFocus.HasKeyboardFocus) {
   throw "Transient Save button focus was not observed before the deadline"
 }
@@ -42,7 +42,7 @@ if ($null -eq $confirmedFocus -or -not $confirmedFocus.HasKeyboardFocus) {
 $unfocusedControl = [pscustomobject]@{
   Current = [pscustomobject]@{ HasKeyboardFocus = $false }
 }
-$unconfirmedFocus = Wait-ConfigSaveFocus $unfocusedControl 100
+$unconfirmedFocus = Wait-KeyboardFocus $unfocusedControl 100
 if ($null -ne $unconfirmedFocus) {
   throw "Save button without keyboard focus passed the focus gate"
 }

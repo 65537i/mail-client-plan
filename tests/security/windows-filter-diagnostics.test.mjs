@@ -208,6 +208,16 @@ test("AC-05: configuration save observations expose states, not paths or dialog 
   );
   assert.equal(
     describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_PATH_FOREGROUND=gate:passed\nPROC_MON_FILTER_PATH_FOREGROUND=gate:failed\nPROC_MON_FILTER_PATH=gate:passed\nPROC_MON_FILTER_PATH=gate:passed",
+    ),
+    "; filter-path-foreground-gates=passed:1,failed:1; filter-path-input-gates=passed:2,failed:0",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics("PROC_MON_FILTER_PATH=gate:C:\\private"),
+    "",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(
       "PROC_MON_FILTER_SAVE_RESULT=phase:after-enter;foreground:procmon-main;same-process-dialogs:0;other-process-windows:0;buttons:save:0;cancel:0;yes:0;no:0;ok:0;retry:0;close:0;truncated:false",
     ),
     "; config-save-result-after-enter=foreground:procmon-main;same-process-dialogs:0;other-process-windows:0;buttons:save:0;cancel:0;yes:0;no:0;ok:0;retry:0;close:0;truncated:false",
