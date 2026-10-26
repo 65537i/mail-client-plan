@@ -1821,29 +1821,31 @@ try {
   } else {
     throw "Process Monitor Filter menu exposes no supported open pattern"
   }
+  Set-Stage "wait-for-open-filter-menu"
+  $menu = $null
+  $menuDeadline = [DateTime]::UtcNow.AddSeconds(5)
+  do {
+    $focused = [System.Windows.Automation.AutomationElement]::FocusedElement
+    for ($level = 0; $null -ne $focused -and $level -lt 5; $level++) {
+      if ($focused.Current.ControlType -eq [System.Windows.Automation.ControlType]::Menu) {
+        if ($focused.Current.ProcessId -eq $process.Id) {
+          $menu = $focused
+        }
+        break
+      }
+      $focused = $treeWalker.GetParent($focused)
+    }
+    if ($null -ne $menu) { break }
+    Start-Sleep -Milliseconds 100
+  } while ([DateTime]::UtcNow -lt $menuDeadline)
   Set-Stage "observe-menu-focus"
   $focusSnapshot = @{}
   Write-FocusObservation "after-open" $focusSnapshot
   Set-Stage "verify-menu-focus-snapshot"
   Write-FocusSnapshotObservation "caller" $focusSnapshot
   Set-Stage "resolve-open-filter-menu"
-  if ($null -eq $focusSnapshot["Element"]) {
-    throw "Process Monitor did not expose its focused menu element"
-  }
-  $menu = $focusSnapshot["Element"]
-  $menuType = $focusSnapshot["ControlType"]
-  if ($menuType -ne "ControlType.Menu") {
-    Set-Stage "walk-to-open-filter-menu"
-    $treeWalker = [System.Windows.Automation.TreeWalker]::ControlViewWalker
-    for ($level = 0; $null -ne $menu -and $level -lt 4; $level++) {
-      $menu = $treeWalker.GetParent($menu)
-      if ($null -eq $menu) { break }
-      $menuType = $menu.Current.ControlType.ProgrammaticName
-      if ($menuType -eq "ControlType.Menu") { break }
-    }
-  }
-  if ($null -eq $menu -or $menuType -ne "ControlType.Menu") {
-    throw "Process Monitor did not expose its open Filter menu"
+  if ($null -eq $menu -or $menu.Current.ProcessId -ne $process.Id) {
+    throw "Process Monitor did not expose its own open Filter menu"
   }
   if ($focusSnapshot["ControlType"] -ne "ControlType.Menu") {
     Write-MenuItemsObservation "after-open" $menu
