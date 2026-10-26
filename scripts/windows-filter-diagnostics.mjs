@@ -33,6 +33,13 @@ export function describeWindowsFilterDiagnostics(output) {
     );
   }
 
+  const compileError = output.match(
+    /^PROC_MON_FILTER_COMPILE_ERROR=(CS\d{4})\r?$/m,
+  )?.[1];
+  if (compileError) {
+    diagnostics.push(`filter-compile-error=${compileError}`);
+  }
+
   const dropMenuState = output.match(
     /^PROC_MON_FILTER_DROP_MENU_STATE=owner-same-process:(true|false);enabled:(true|false);offscreen:(true|false)\r?$/m,
   );

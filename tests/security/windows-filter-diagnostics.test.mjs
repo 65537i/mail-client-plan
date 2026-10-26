@@ -128,6 +128,17 @@ test("AC-05: Windows filter diagnostics omit unknown exception types", () => {
   );
 });
 
+test("AC-05: Windows filter diagnostics retain only compiler error codes", () => {
+  assert.equal(
+    describeWindowsFilterDiagnostics([
+      "PROC_MON_FILTER_COMPILE_ERROR=CS0234",
+      "PROC_MON_FILTER_COMPILE_ERROR=CS99999",
+      "PROC_MON_FILTER_COMPILE_ERROR=CS0234;C:\\private\\mail",
+    ].join("\n")),
+    "; filter-compile-error=CS0234",
+  );
+});
+
 test("AC-05: Windows filter diagnostics retain bounded dialog scan counts", () => {
   assert.equal(
     describeWindowsFilterDiagnostics(

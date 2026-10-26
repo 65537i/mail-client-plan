@@ -21,6 +21,15 @@ function Write-StartupFailure([string]$FailedStage, $Failure) {
     $failureType = "Other"
   }
   [Console]::Out.WriteLine("PROC_MON_FILTER_FAILURE=$failureType")
+  if ($FailedStage -eq "compile-native-menu-helper") {
+    $compileCode = [regex]::Match(
+      $Failure.ToString(),
+      "\bCS\d{4}\b"
+    ).Value
+    if ($compileCode -match "^CS\d{4}$") {
+      [Console]::Out.WriteLine("PROC_MON_FILTER_COMPILE_ERROR=$compileCode")
+    }
+  }
 }
 
 try {
@@ -40,7 +49,7 @@ try {
 }
 
 try {
-  Add-Type -TypeDefinition @"
+  $nativeMenuTypeDefinition = @"
 using System;
 using System.Runtime.InteropServices;
 
@@ -410,6 +419,8 @@ public static class ProcmonNativeMenu
     }
 }
 "@
+  Add-Type -TypeDefinition $nativeMenuTypeDefinition `
+    -ReferencedAssemblies ([Accessibility.IAccessible].Assembly.Location)
 } catch {
   Write-StartupFailure "compile-native-menu-helper" $_
   exit 1

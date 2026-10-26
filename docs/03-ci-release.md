@@ -171,6 +171,8 @@ Run 214（`95e18e8`、Windows 2025 x64 / webview）はplan、security-test build
 
 Run 216（`9179aad`、manual Windows 2025 x64 / webview）はsecurity-test app buildとWindows audit setup / worker / filter-diagnostics regression tests成功後、実監査のfilter setup assertionで失敗した。canaryをflush / closeした直後にPowerShell childはnonzero exitし、harness出力には`PROC_MON_FILTER_FAILED_STAGE`やnative / MSAA state lineがなかった。PowerShell stderrは従来どおり破棄されるため、script parse、assembly load、helper compile、Procmon起動、または後段のどこで停止したかは特定できず、MSAAが実行された証拠もない。`.PMC`保存 / WDIO / capture / controls未到達、AC-05未達。次runに向け、UI Automation assembly load、MSAA assembly load、native helper compile、Procmon startを個別にtry/catchし、stageと固定例外型だけをstdoutへ報告する起動診断を追加した。失敗はnonzeroのまま保持する。Windows runtime未検証。
 
+Run 218（`e017fe3`、manual Windows 2025 x64 / webview）はsecurity-test app buildとWindows audit / worker / diagnostics regression tests成功後、filter setupが`compile-native-menu-helper`で失敗した（`failure-type:Other`）。起動診断により停止stageは特定したが、compiler codeはまだ出力されず、IAccessible stateは未取得。`.PMC`保存 / WDIO / capture / controls未到達、AC-05未達。Run218後、`Add-Type`へAccessibility assemblyのpathを明示参照させ、compiler outputからC# error codeのみを限定診断する。ソース本文 / file path / 完全な例外メッセージは出さず、失敗は引き続きnonzeroとする。Node diagnostics regression testにcompiler-code allowlistを追加。明示referenceと新diagnosticのWindows runtimeは次runで確認する。
+
 Rustのregistry / git依存と`target`をキャッシュし、OS・arch・runner・固定Rust版・lockfile / manifests / Cargo設定hashを区別する。同一モードを優先し、同じ依存条件の別モードからも復元可能。キャッシュhitでもbuild / testは省略しない。キャッシュは依存・ビルド出力のみで、資格情報ストア、監査trace、メールデータは含めない。初回はcold buildとなり、短縮量はrunnerで実測する。
 
 同じevent・ref・対象・モードの古いrunだけをcancelし、pushによって進行中の手動調査をcancelしない。
