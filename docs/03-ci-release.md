@@ -159,6 +159,8 @@ native [Run 202](https://github.com/65537i/mail-client-plan/actions/runs/4024642
 
 native [Run 204](https://github.com/65537i/mail-client-plan/actions/runs/40248126925)（`3bc5788`、manual Windows 2025 x64 / webview）はplan、security-test build、WebView security tests、Windows audit setup / worker tests成功。実監査はcanaryのflush / close後、filter setupの`scan-native-menu-state`段階で失敗し、native menu stateのcount-error分類lineは出なかった。`.PMC`保存 / WDIO / capture / control未到達、AC-05未達。失敗原因はrun evidenceから未確定。Run204後はPowerShellからC# `out` 引数を渡す境界を避け、countと固定failure enumを含むmanaged snapshotを返すよう変更し、`read-native-menu-count` stageを追加する。errorはP/Invoke直後に捕捉し、生error値を出さない。引き続き全失敗を拒否する。変更後のWindows runtimeは次runで検証する。
 
+native [Run 206](https://github.com/65537i/mail-client-plan/actions/runs/40251553577)（`f521d65`、manual Windows 2025 x64 / webview）はplan、security-test build、WebView security tests、Windows audit setup / worker tests成功。実監査はcanary flush / close後の`read-native-menu-count`で失敗。sanitized診断は`failure-type:Other`でnative state lineは出ず、managed snapshot呼出し/取得の具体的失敗原因は未確認。`.PMC`保存 / WDIO / capture / control未到達、AC-05未達。Run206後はC# wrapperの戻り値をintに限定し、正常countか内部の負値statusを返す。Win32 errorはP/Invoke直後に捕捉してPowerShellで固定allowlist enumへ対応付ける。raw error / handleは出さず、全失敗は拒否する。新しいWindows runtimeは次runで確認する。
+
 Rustのregistry / git依存と`target`をキャッシュし、OS・arch・runner・固定Rust版・lockfile / manifests / Cargo設定hashを区別する。同一モードを優先し、同じ依存条件の別モードからも復元可能。キャッシュhitでもbuild / testは省略しない。キャッシュは依存・ビルド出力のみで、資格情報ストア、監査trace、メールデータは含めない。初回はcold buildとなり、短縮量はrunnerで実測する。
 
 同じevent・ref・対象・モードの古いrunだけをcancelし、pushによって進行中の手動調査をcancelしない。

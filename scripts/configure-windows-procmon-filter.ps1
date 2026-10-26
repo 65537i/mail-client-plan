@@ -70,12 +70,6 @@ public static class ProcmonNativeMenu
         public IntPtr Submenu { get; set; }
     }
 
-    public sealed class MenuItemCountSnapshot
-    {
-        public int ItemCount { get; set; }
-        public string Failure { get; set; }
-    }
-
     [DllImport("user32.dll", ExactSpelling = true, SetLastError = true)]
     public static extern IntPtr GetMenu(IntPtr hWnd);
 
@@ -138,24 +132,15 @@ public static class ProcmonNativeMenu
     [DllImport("user32.dll", ExactSpelling = true, SetLastError = true)]
     private static extern int GetMenuItemCountNative(IntPtr hMenu);
 
-    public static MenuItemCountSnapshot GetMenuItemCount(IntPtr hMenu)
+    public static int GetMenuItemCount(IntPtr hMenu)
     {
         var itemCount = GetMenuItemCountNative(hMenu);
-        var failure = "none";
-        if (itemCount < 0)
+        if (itemCount >= 0)
         {
-            var lastError = Marshal.GetLastWin32Error();
-            failure = lastError == 1401
-                ? "invalid-menu-handle"
-                : lastError == 0
-                    ? "menu-count-invalid"
-                    : "menu-count-failed";
+            return itemCount;
         }
-        return new MenuItemCountSnapshot
-        {
-            ItemCount = itemCount,
-            Failure = failure
-        };
+        var lastError = Marshal.GetLastWin32Error();
+        return lastError == 1401 ? -2 : lastError == 0 ? -3 : -4;
     }
 
     [DllImport(
@@ -414,12 +399,17 @@ function Find-NativeDropMenuItem([System.IntPtr]$MenuHandle, [int]$Depth) {
     return
   }
   Set-Stage "read-native-menu-count"
-  $menuCount = [ProcmonNativeMenu]::GetMenuItemCount($MenuHandle)
-  $itemCount = $menuCount.ItemCount
+  $itemCount = [ProcmonNativeMenu]::GetMenuItemCount($MenuHandle)
   if ($itemCount -lt 0) {
     $script:nativeMenuReadable = $false
     if ($script:nativeMenuFailure -eq "none") {
-      $script:nativeMenuFailure = $menuCount.Failure
+      $script:nativeMenuFailure = if ($itemCount -eq -2) {
+        "invalid-menu-handle"
+      } elseif ($itemCount -eq -3) {
+        "menu-count-invalid"
+      } else {
+        "menu-count-failed"
+      }
     }
     return
   }
