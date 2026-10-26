@@ -129,7 +129,12 @@ public static class ProcmonNativeMenu
         return info.hwndMenuOwner;
     }
 
-    [DllImport("user32.dll", ExactSpelling = true, SetLastError = true)]
+    [DllImport(
+        "user32.dll",
+        EntryPoint = "GetMenuItemCount",
+        ExactSpelling = true,
+        SetLastError = true
+    )]
     private static extern int GetMenuItemCountNative(IntPtr hMenu);
 
     public static int GetMenuItemCount(IntPtr hMenu)

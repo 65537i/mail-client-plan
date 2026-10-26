@@ -163,6 +163,8 @@ native [Run 206](https://github.com/65537i/mail-client-plan/actions/runs/4025155
 
 native [Run 208](https://github.com/65537i/mail-client-plan/actions/runs/40252567274)（`6ec4fcc`、manual Windows 2025 x64 / webview）はplan、security-test build、WebView security tests、Windows audit setup / worker tests成功。実監査は`read-native-menu-count`で失敗し、sanitized診断は`failure-type:Other`、native state lineなし。`.PMC`保存 / WDIO / capture / control未到達、AC-05未達。Run208後はnative method invocationと戻り値分類をstage分離し、PowerShell invocation wrapperのinner exception typeだけを限定allowlistで出す（message / stackは出力しない）。raw error / handleは出さず、fail-closedを維持する。次runで失敗位置とexception categoryを確認する。
 
+native [Run 210](https://github.com/65537i/mail-client-plan/actions/runs/40253580555)（`b26e11a`、manual Windows 2025 x64 / webview）はplan、security-test build、WebView security tests、Windows audit setup / worker tests成功。実監査は`invoke-native-menu-count`で失敗し、allowlist診断は`EntryPointNotFoundException`、native state lineなし。原因はP/Invoke managed名を`GetMenuItemCountNative`に変更したときWin32 export名`GetMenuItemCount`を明記しなかったこと。`.PMC`保存 / WDIO / capture / control未到達、AC-05未達。修正は`DllImport(EntryPoint = "GetMenuItemCount")`を指定する。error capture・固定enum mapping・fail-closed guardは維持し、修正版Windows runtimeを次runで確認する。
+
 Rustのregistry / git依存と`target`をキャッシュし、OS・arch・runner・固定Rust版・lockfile / manifests / Cargo設定hashを区別する。同一モードを優先し、同じ依存条件の別モードからも復元可能。キャッシュhitでもbuild / testは省略しない。キャッシュは依存・ビルド出力のみで、資格情報ストア、監査trace、メールデータは含めない。初回はcold buildとなり、短縮量はrunnerで実測する。
 
 同じevent・ref・対象・モードの古いrunだけをcancelし、pushによって進行中の手動調査をcancelしない。
