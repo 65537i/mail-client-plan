@@ -1173,6 +1173,13 @@ function Wait-ProcessMenu(
   $visibleMenuCount = 0
   $menus = [System.Collections.Generic.List[System.Windows.Automation.AutomationElement]]::new()
   do {
+    $rootMenus = [System.Windows.Automation.AutomationElement]::RootElement.FindAll(
+      [System.Windows.Automation.TreeScope]::Children,
+      $menuCondition
+    )
+    if ($rootMenus.Count -gt 256) {
+      throw "Process Monitor menu scan exceeded the bounded menu limit"
+    }
     $windows = [System.Windows.Automation.AutomationElement]::RootElement.FindAll(
       [System.Windows.Automation.TreeScope]::Children,
       $windowCondition
@@ -1181,10 +1188,28 @@ function Wait-ProcessMenu(
       throw "Process Monitor menu scan exceeded the bounded window limit"
     }
     $seenHandles = [System.Collections.Generic.HashSet[int]]::new()
+    $seenMenuRuntimeIds = [System.Collections.Generic.HashSet[string]]::new()
     $menus.Clear()
     $ownedWindowCount = 0
-    $menuCount = 0
+    $menuCount = $rootMenus.Count
     $visibleMenuCount = 0
+    foreach ($menu in $rootMenus) {
+      $menuState = $menu.Current
+      if (
+        $menuState.ProcessId -eq $Process.Id -and
+        $menuState.IsEnabled -and
+        -not $menuState.IsOffscreen
+      ) {
+        $runtimeId = $menu.GetRuntimeId() -join ","
+        if ([string]::IsNullOrWhiteSpace($runtimeId)) {
+          throw "Process Monitor menu did not expose a runtime identifier"
+        }
+        if ($seenMenuRuntimeIds.Add($runtimeId)) {
+          $menus.Add($menu)
+          $visibleMenuCount++
+        }
+      }
+    }
     foreach ($window in $windows) {
       $windowState = $window.Current
       if (
@@ -1210,8 +1235,14 @@ function Wait-ProcessMenu(
           $menuState.IsEnabled -and
           -not $menuState.IsOffscreen
         ) {
-          $menus.Add($menu)
-          $visibleMenuCount++
+          $runtimeId = $menu.GetRuntimeId() -join ","
+          if ([string]::IsNullOrWhiteSpace($runtimeId)) {
+            throw "Process Monitor menu did not expose a runtime identifier"
+          }
+          if ($seenMenuRuntimeIds.Add($runtimeId)) {
+            $menus.Add($menu)
+            $visibleMenuCount++
+          }
         }
       }
     }
