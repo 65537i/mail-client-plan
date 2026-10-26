@@ -19,7 +19,11 @@ Windows: MSVC toolchain、WebView2、必要SDK。WebDriverを外部利用する�
 
 ### nativeの短い検証ループ
 
-最新Windows診断（Run 236、`97caac1`）はSave Filter commandのInvokeを通過したが、保存dialog待機で失敗した。[Microsoft公式配布版](https://learn.microsoft.com/en-us/sysinternals/downloads/procmon)のProcmon64メニュー・dialog resourcesを確認し、`Save Filter...`は名前付きfilter用、`.PMC`保存はFile → `Export Configuration...`と判明した。`ProcmonConfiguration.pmc`と`Procmon Configuration (*.PMC)`も同resourcesに存在する。Run234後のFilter menu routeでは目的のfile exportにならないため、現在はFile menu内のexact uniqueなExport ConfigurationをInvokeし、same-processのtop-level / embedded Windowに一意の`File name:` Edit / `Save` Buttonがあることを検証する。任意の最初のEditや別processのSave dialogには書き込まない。保存前summaryは`before-save`、失敗時のdialog診断は上限付きcontrol件数のみ。以下の過去runのmenu推測はこの調査で訂正され、変更後Windows runtimeと`.PMC`保存以降は未確認。
+Run 238（`2f48084`、Windows / webview）はExport Configurationの発見・Invoke、保存dialogとcontrolsの検証、パス入力・Save Invokeまで通過し、直後の`verify-filter-file`で失敗した。未作成 / 100 bytes未満のどちらかは旧診断から特定できない。保存の非同期完了を待てるよう、同じ100 bytes下限を最大5秒・100ms以下間隔でpollし、初回と最終の状態だけを出力する。入力欄のreadbackが指定パスと一致しない場合はSave前に停止。未作成・過小・directory・IOエラーを成功へ変換せず、固定sleepや保存操作の再送は追加しない。期限切れ後は従来どおり監査を失敗させる。
+
+回帰試験はproduction scriptのASTからfile-wait関数だけを読み込み、実ファイルで未作成・99 bytesのtimeout、100 bytesの受理、別runspaceからの遅延作成 / 増加、directory拒否を確認する。Windows CIではharnessと同じWindows PowerShell 5.1で、UIA監査前の独立stepとして実行する。Linux arm64 / PowerShell 7.4.13でこの試験成功、Node関連28 tests / syntax / diff check成功。これはWindowsでの実保存・filter再読込の証跡ではない。
+
+先行するRun 236（`97caac1`）はSave Filter commandのInvokeを通過したが、保存dialog待機で失敗した。[Microsoft公式配布版](https://learn.microsoft.com/en-us/sysinternals/downloads/procmon)のProcmon64メニュー・dialog resourcesを確認し、`Save Filter...`は名前付きfilter用、`.PMC`保存はFile → `Export Configuration...`と判明した。`ProcmonConfiguration.pmc`と`Procmon Configuration (*.PMC)`も同resourcesに存在する。Run234後のFilter menu routeでは目的のfile exportにならないため、File menu内のexact uniqueなExport ConfigurationをInvokeし、same-processのtop-level / embedded Windowに一意の`File name:` Edit / `Save` Buttonがあることを検証する経路へ変更した。この経路はRun238で通過したが、`.PMC`保存確認以降は未達。任意の最初のEditや別processのSave dialogには書き込まない。保存前summaryは`before-save`、失敗時のdialog診断は上限付きcontrol件数のみ。以下の過去runのmenu推測はこの調査で訂正される。
 
 Actions → native → Run workflowで最新のmainを選び、以下を指定する。旧runのRe-run jobsは旧commitを使うため、修正確認には新規実行を使う。
 

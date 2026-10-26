@@ -152,6 +152,24 @@ test("AC-05: Windows filter diagnostics retain only snapshot handoff state", () 
   );
 });
 
+test("AC-05: configuration file wait reports states without file paths or contents", () => {
+  assert.equal(
+    describeWindowsFilterDiagnostics([
+      "PROC_MON_FILTER_CONFIG_FILE=observation:initial;state:missing",
+      "PROC_MON_FILTER_CONFIG_FILE=observation:final;state:ready",
+      "PROC_MON_FILTER_CONFIG_FILE=observation:final;state:C:\\private\\mail",
+      "PROC_MON_FILTER_CONFIG_FILE=observation:final;state:ready;path:private",
+    ].join("\n")),
+    "; config-file-initial=missing; config-file-final=ready",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_CONFIG_FILE=observation:final;state:undersized",
+    ),
+    "; config-file-final=undersized",
+  );
+});
+
 test("AC-05: Windows filter diagnostics omit unknown exception types", () => {
   assert.equal(
     describeWindowsFilterDiagnostics("PROC_MON_FILTER_FAILURE=SecretException"),

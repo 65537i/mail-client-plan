@@ -230,6 +230,11 @@ jobs:
         run: |
           node --test tests/security/windows-audit-canary.test.mjs tests/security/windows-audit-wdio.test.mjs tests/security/windows-filter-diagnostics.test.mjs
 
+      - name: Test Windows configuration export wait
+        if: needs.plan.outputs.mode != 'basic' && runner.os == 'Windows'
+        shell: powershell
+        run: .\tests\security\windows-filter-export.test.ps1
+
       - name: Test real WebView security boundaries
         if: needs.plan.outputs.mode != 'basic' && runner.os == 'Windows'
         run: pnpm run test:security:file-access:windows

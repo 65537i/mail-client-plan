@@ -89,6 +89,12 @@ export function describeWindowsFilterDiagnostics(output) {
     );
   }
 
+  for (const match of output.matchAll(
+    /^PROC_MON_FILTER_CONFIG_FILE=observation:(initial|final);state:(missing|undersized|ready)\r?$/gm,
+  )) {
+    diagnostics.push(`config-file-${match[1]}=${match[2]}`);
+  }
+
   const desktopResetOwner = output.match(
     /^PROC_MON_FILTER_DIALOG_DESKTOP_RESET_OWNER=(procmon-main|procmon-other|other-process|none)\r?$/m,
   )?.[1];

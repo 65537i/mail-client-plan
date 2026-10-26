@@ -448,6 +448,34 @@ function Wait-Element([System.Windows.Automation.AutomationElement]$Root, [Syste
   throw "Timed out waiting for a Process Monitor UI control"
 }
 
+function Wait-FilterConfigFile([string]$Path, [int]$TimeoutMilliseconds = 5000) {
+  $timer = [System.Diagnostics.Stopwatch]::StartNew()
+  $firstObservation = $true
+  do {
+    $state = "missing"
+    if (Test-Path -LiteralPath $Path) {
+      $file = Get-Item -LiteralPath $Path
+      if ($file.PSIsContainer) {
+        throw "Process Monitor configuration path is not a file"
+      }
+      $state = if ($file.Length -ge 100) { "ready" } else { "undersized" }
+    }
+    if ($firstObservation) {
+      [Console]::Out.WriteLine("PROC_MON_FILTER_CONFIG_FILE=observation:initial;state:$state")
+      $firstObservation = $false
+    }
+    if ($state -eq "ready") {
+      [Console]::Out.WriteLine("PROC_MON_FILTER_CONFIG_FILE=observation:final;state:ready")
+      return
+    }
+    $remaining = $TimeoutMilliseconds - $timer.ElapsedMilliseconds
+    if ($remaining -le 0) { break }
+    Start-Sleep -Milliseconds ([int][Math]::Min(100, $remaining))
+  } while ($true)
+  [Console]::Out.WriteLine("PROC_MON_FILTER_CONFIG_FILE=observation:final;state:$state")
+  throw "Process Monitor did not save the audit filter configuration before the deadline"
+}
+
 function Wait-ConfigSaveDialog(
   [System.Diagnostics.Process]$Process,
   [System.Windows.Automation.AutomationElement]$MainWindow,
@@ -1631,12 +1659,13 @@ try {
     throw "Process Monitor configuration file name is read-only"
   }
   $fileNamePattern.SetValue($ConfigPath)
+  if ($fileNamePattern.Current.Value -cne $ConfigPath) {
+    throw "Process Monitor configuration file name did not retain the requested path"
+  }
   Set-Stage "confirm-export-config"
   $save.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
   Set-Stage "verify-filter-file"
-  if (-not (Test-Path -LiteralPath $ConfigPath) -or (Get-Item -LiteralPath $ConfigPath).Length -lt 100) {
-    throw "Process Monitor did not save the audit filter configuration"
-  }
+  Wait-FilterConfigFile $ConfigPath
 } catch {
   [Console]::Out.WriteLine("PROC_MON_FILTER_FAILED_STAGE=$stage")
   $failureException = $_.Exception
