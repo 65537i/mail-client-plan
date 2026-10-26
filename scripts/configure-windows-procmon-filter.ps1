@@ -2422,8 +2422,9 @@ try {
     [ProcmonNativeMenu]::GetWindowProcessId($currentForegroundHandle) -ne $process.Id) {
     throw "Process Monitor reloaded main window lost the foreground before menu activation"
   }
-  Set-Stage "open-reloaded-filter-menu"
+  Set-Stage "activate-reloaded-filter-menu"
   [System.Windows.Forms.SendKeys]::SendWait($reloadMenuShortcut)
+  Set-Stage "wait-reloaded-filter-menu"
   $reloadMenu = $null
   $reloadMenuDeadline = [DateTime]::UtcNow.AddSeconds(5)
   do {
