@@ -1497,8 +1497,25 @@ try {
   [System.Windows.Forms.SendKeys]::SendWait("{ESC}")
   Set-Stage "focus-main-window-for-save-filter"
   $main.SetFocus()
+  Set-Stage "find-file-menu-for-save-filter"
+  $fileMenu = Wait-Element $main ([System.Windows.Automation.AndCondition]::new(
+    [System.Windows.Automation.PropertyCondition]::new(
+      [System.Windows.Automation.AutomationElement]::NameProperty, "File"
+    ),
+    [System.Windows.Automation.PropertyCondition]::new(
+      [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+      [System.Windows.Automation.ControlType]::MenuItem
+    )
+  )) 5
+  $fileMenuInvokePattern = $null
+  if (-not $fileMenu.TryGetCurrentPattern(
+      [System.Windows.Automation.InvokePattern]::Pattern,
+      [ref]$fileMenuInvokePattern
+    )) {
+    throw "Process Monitor File menu does not expose InvokePattern"
+  }
   Set-Stage "open-file-menu-for-save-filter"
-  [System.Windows.Forms.SendKeys]::SendWait("%f")
+  $fileMenuInvokePattern.Invoke()
   Set-Stage "find-save-filter-command"
   $saveFilter = Wait-Element $main ([System.Windows.Automation.PropertyCondition]::new(
     [System.Windows.Automation.AutomationElement]::NameProperty, "Save Filter..."
