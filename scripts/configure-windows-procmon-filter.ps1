@@ -1499,11 +1499,18 @@ try {
   $main.SetFocus()
   Set-Stage "open-file-menu-for-save-filter"
   [System.Windows.Forms.SendKeys]::SendWait("%f")
+  Set-Stage "observe-file-menu-focus"
+  $fileMenuFocusSnapshot = @{}
+  Write-FocusObservation "after-open" $fileMenuFocusSnapshot
+  Write-FocusSnapshotObservation "file-menu" $fileMenuFocusSnapshot
   Set-Stage "resolve-file-menu-for-save-filter"
   $fileMenu = $null
   $fileMenuDeadline = [DateTime]::UtcNow.AddSeconds(5)
   do {
-    $focused = [System.Windows.Automation.AutomationElement]::FocusedElement
+    $focused = $fileMenuFocusSnapshot["Element"]
+    if ($null -eq $focused) {
+      $focused = [System.Windows.Automation.AutomationElement]::FocusedElement
+    }
     for ($level = 0; $null -ne $focused -and $level -lt 5; $level++) {
       if ($focused.Current.ControlType -eq [System.Windows.Automation.ControlType]::Menu) {
         $fileMenu = $focused
