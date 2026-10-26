@@ -563,7 +563,7 @@ function Write-ConfigSaveObservation(
       ).Current.Value -ceq $ExpectedPath
     ) { "matches" } else { "different" }
     [Console]::Out.WriteLine(
-      "PROC_MON_FILTER_CONFIG_SAVE=$Phase;dialog:available;enabled:$($dialogState.IsEnabled.ToString().ToLowerInvariant());offscreen:$($dialogState.IsOffscreen.ToString().ToLowerInvariant());path:$pathState;save-enabled:$($saveState.IsEnabled.ToString().ToLowerInvariant());save-offscreen:$($saveState.IsOffscreen.ToString().ToLowerInvariant())"
+      "PROC_MON_FILTER_CONFIG_SAVE=$Phase;dialog:available;enabled:$($dialogState.IsEnabled.ToString().ToLowerInvariant());offscreen:$($dialogState.IsOffscreen.ToString().ToLowerInvariant());path:$pathState;save-enabled:$($saveState.IsEnabled.ToString().ToLowerInvariant());save-offscreen:$($saveState.IsOffscreen.ToString().ToLowerInvariant());save-focusable:$($saveState.IsKeyboardFocusable.ToString().ToLowerInvariant());save-focused:$($saveState.HasKeyboardFocus.ToString().ToLowerInvariant())"
     )
   } catch {
     [Console]::Out.WriteLine("PROC_MON_FILTER_CONFIG_SAVE=$Phase;dialog:unavailable")
@@ -1759,12 +1759,16 @@ try {
   }
   $save.SetFocus()
   Set-Stage "verify-export-config-path"
+  if (-not $save.Current.HasKeyboardFocus) {
+    Write-ConfigSaveObservation "focus-failed" $saveControls $process.Id $ConfigPath
+    throw "Process Monitor configuration Save button did not receive keyboard focus"
+  }
   if ($fileNamePattern.Current.Value -cne $ConfigPath) {
     throw "Process Monitor configuration file name did not retain the requested path"
   }
   Write-ConfigOutputObservation "before-save" $ConfigPath
-  Set-Stage "confirm-export-config"
-  $save.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
+  Set-Stage "confirm-export-config-enter"
+  [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
   Write-ConfigSaveObservation "after-invoke" $saveControls $process.Id $ConfigPath
   Write-ConfigOutputObservation "after-invoke" $ConfigPath
   Set-Stage "verify-filter-file"

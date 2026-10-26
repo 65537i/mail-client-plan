@@ -96,7 +96,7 @@ export function describeWindowsFilterDiagnostics(output) {
   }
 
   for (const match of output.matchAll(
-    /^PROC_MON_FILTER_CONFIG_SAVE=(after-invoke|verify-failed);(dialog:(?:unavailable|other-process)|dialog:available;enabled:(?:true|false);offscreen:(?:true|false);path:(?:matches|different);save-enabled:(?:true|false);save-offscreen:(?:true|false))\r?$/gm,
+    /^PROC_MON_FILTER_CONFIG_SAVE=(after-invoke|verify-failed|focus-failed);(dialog:(?:unavailable|other-process)|dialog:available;enabled:(?:true|false);offscreen:(?:true|false);path:(?:matches|different);save-enabled:(?:true|false);save-offscreen:(?:true|false);save-focusable:(?:true|false);save-focused:(?:true|false))\r?$/gm,
   )) {
     diagnostics.push(`config-save-${match[1]}=${match[2]}`);
   }
