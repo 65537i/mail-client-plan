@@ -224,7 +224,7 @@ export function describeWindowsFilterDiagnostics(output) {
   if (focus) diagnostics.push(`menu-focus=${focus}`);
 
   const failureType = output.match(
-    /PROC_MON_FILTER_FAILURE=(ArgumentException|COMException|ElementNotAvailableException|InvalidOperationException|NullReferenceException|RuntimeException|Other)/,
+    /PROC_MON_FILTER_FAILURE=(AmbiguousMatchException|ArgumentException|COMException|DllNotFoundException|ElementNotAvailableException|EntryPointNotFoundException|InvalidOperationException|MethodAccessException|MethodException|MethodInvocationException|MissingMethodException|NullReferenceException|RuntimeException|TargetInvocationException|TypeInitializationException|Other)/,
   )?.[1];
   if (failureType) diagnostics.push(`failure-type=${failureType}`);
 

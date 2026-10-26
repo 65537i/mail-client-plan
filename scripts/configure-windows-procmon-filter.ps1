@@ -398,8 +398,9 @@ function Find-NativeDropMenuItem([System.IntPtr]$MenuHandle, [int]$Depth) {
     }
     return
   }
-  Set-Stage "read-native-menu-count"
+  Set-Stage "invoke-native-menu-count"
   $itemCount = [ProcmonNativeMenu]::GetMenuItemCount($MenuHandle)
+  Set-Stage "classify-native-menu-count"
   if ($itemCount -lt 0) {
     $script:nativeMenuReadable = $false
     if ($script:nativeMenuFailure -eq "none") {
@@ -1174,14 +1175,30 @@ try {
   }
 } catch {
   [Console]::Out.WriteLine("PROC_MON_FILTER_FAILED_STAGE=$stage")
-  $failureType = $_.Exception.GetType().Name
+  $failureException = $_.Exception
+  if (
+    $failureException.GetType().Name -eq "MethodInvocationException" -and
+    $null -ne $failureException.InnerException
+  ) {
+    $failureException = $failureException.InnerException
+  }
+  $failureType = $failureException.GetType().Name
   if ($failureType -notin @(
+      "AmbiguousMatchException",
       "ArgumentException",
+      "DllNotFoundException",
+      "EntryPointNotFoundException",
       "COMException",
       "ElementNotAvailableException",
       "InvalidOperationException",
+      "MethodAccessException",
+      "MethodException",
+      "MethodInvocationException",
+      "MissingMethodException",
       "NullReferenceException",
-      "RuntimeException"
+      "RuntimeException",
+      "TargetInvocationException",
+      "TypeInitializationException"
     )) {
     $failureType = "Other"
   }

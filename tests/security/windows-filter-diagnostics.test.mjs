@@ -122,6 +122,10 @@ test("AC-05: Windows filter diagnostics omit unknown exception types", () => {
     describeWindowsFilterDiagnostics("PROC_MON_FILTER_FAILURE=SecretException"),
     "",
   );
+  assert.equal(
+    describeWindowsFilterDiagnostics("PROC_MON_FILTER_FAILURE=EntryPointNotFoundException"),
+    "; failure-type=EntryPointNotFoundException",
+  );
 });
 
 test("AC-05: Windows filter diagnostics retain bounded dialog scan counts", () => {
