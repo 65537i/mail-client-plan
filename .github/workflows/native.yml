@@ -227,7 +227,8 @@ jobs:
 
       - name: Test Windows audit setup and worker coordination
         if: needs.plan.outputs.mode != 'basic' && runner.os == 'Windows'
-        run: node --test tests/security/windows-audit-canary.test.mjs tests/security/windows-audit-wdio.test.mjs
+        run: |
+          node --test tests/security/windows-audit-canary.test.mjs tests/security/windows-audit-wdio.test.mjs tests/security/windows-filter-diagnostics.test.mjs
 
       - name: Test real WebView security boundaries
         if: needs.plan.outputs.mode != 'basic' && runner.os == 'Windows'

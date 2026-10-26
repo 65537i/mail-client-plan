@@ -229,6 +229,36 @@ test("AC-05: Windows native menu diagnostics retain safe owner fallback and unav
   );
 });
 
+test("AC-05: Windows MSAA diagnostics retain only exact, same-process menu state", () => {
+  assert.equal(
+    describeWindowsFilterDiagnostics([
+      "PROC_MON_FILTER_MSAA_MENU_STATE=observation:before;process:same;object:available;items:11;matches:1;read-failure:none;checked:off",
+      "PROC_MON_FILTER_MSAA_MENU_STATE=observation:after-invoke;process:same;object:available;items:11;matches:1;read-failure:none;checked:on",
+      "PROC_MON_FILTER_MSAA_MENU_STATE=observation:before;process:same;object:available;items:11;matches:0;read-failure:no-match;checked:unavailable",
+      "PROC_MON_FILTER_MSAA_MENU_STATE=observation:before;process:unavailable;object:unavailable;items:0;matches:0;read-failure:window-unavailable;checked:unavailable",
+    ].join("\n")),
+    "; drop-msaa-menu-state=observation:before;process:same;object:available;items:11;matches:1;read-failure:none;checked:off"
+      + "; drop-msaa-menu-state=observation:after-invoke;process:same;object:available;items:11;matches:1;read-failure:none;checked:on"
+      + "; drop-msaa-menu-state=observation:before;process:same;object:available;items:11;matches:0;read-failure:no-match;checked:unavailable"
+      + "; drop-msaa-menu-state=observation:before;process:unavailable;object:unavailable;items:0;matches:0;read-failure:window-unavailable;checked:unavailable",
+  );
+});
+
+test("AC-05: Windows MSAA diagnostics reject inconsistent or unsafe state", () => {
+  assert.equal(
+    describeWindowsFilterDiagnostics([
+      "PROC_MON_FILTER_MSAA_MENU_STATE=observation:before;process:other;object:available;items:11;matches:1;read-failure:none;checked:off",
+      "PROC_MON_FILTER_MSAA_MENU_STATE=observation:before;process:same;object:unavailable;items:0;matches:0;read-failure:none;checked:unavailable",
+      "PROC_MON_FILTER_MSAA_MENU_STATE=observation:before;process:same;object:available;items:65;matches:1;read-failure:none;checked:off",
+      "PROC_MON_FILTER_MSAA_MENU_STATE=observation:before;process:same;object:available;items:11;matches:2;read-failure:none;checked:on",
+      "PROC_MON_FILTER_MSAA_MENU_STATE=observation:before;process:same;object:available;items:11;matches:1;read-failure:duplicate-match;checked:off",
+      "PROC_MON_FILTER_MSAA_MENU_STATE=observation:private;process:same;object:available;items:11;matches:1;read-failure:none;checked:on",
+      "PROC_MON_FILTER_MSAA_MENU_STATE=observation:before;process:same;object:available;items:11;matches:1;read-failure:none;checked:C:\\private\\mail",
+    ].join("\n")),
+    "",
+  );
+});
+
 test("AC-05: Windows filter output retains diagnostics within a strict 8192-character cap", () => {
   const prefix = "x".repeat(3000);
   const snapshot = "PROC_MON_FILTER_SNAPSHOT=caller;element:present;control-type:menu";

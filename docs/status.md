@@ -1,6 +1,6 @@
 # 開発状況
 
-更新日: 2026-10-25
+更新日: 2026-10-26
 
 ## 現在の範囲
 
@@ -204,6 +204,8 @@ native [Run 208](https://github.com/65537i/mail-client-plan/actions/runs/4025256
 native [Run 210](https://github.com/65537i/mail-client-plan/actions/runs/40253580555)（`b26e11a`、manual Windows 2025 x64 / webview）はplan、security-test build、WebView security tests、Windows audit setup / worker tests成功。実監査はcanary flush / close後、`invoke-native-menu-count`で失敗。allowlist診断は`EntryPointNotFoundException`となり、native menu state lineは未出力。原因はP/Invoke managed名を`GetMenuItemCountNative`へ変えた際にWin32 export名`GetMenuItemCount`を明記しなかったことと特定。`.PMC`保存 / WDIO / capture / control未到達、AC-05未達。修正は`DllImport(EntryPoint = "GetMenuItemCount")`を指定する。Win32 errorの即時捕捉、内部固定statusからのenum化、未知状態のfail-closedを維持。Node diagnostics tests 13/13、JS syntax checks、`git diff --check`成功。修正版Windows runtimeは次runで確認する。
 
 native [Run 212](https://github.com/65537i/mail-client-plan/actions/runs/40254506604)（`654da74`、manual Windows 2025 x64 / webview）はplan、security-test build、WebView security tests、Windows audit setup / worker tests成功。実監査はentry point修正後、`verify-drop-native-menu-state`まで進み、native診断は`source:menu-owner;menu-window-process:same;gui-thread-info:available;owner-window:available;handle:available;items:0;matches:0;read-failure:invalid-menu-handle;readable:false;checked:unavailable`。ownerから得たhandleは無効と確認、fail-closedでInvoke / `.PMC`保存 / WDIO / capture / control未到達、AC-05未達。Run212後はpopup HWND自身の`GetMenu`をread-only候補として試す。ただしpopupとownerが同じProcmon processに属すると既に確認できる場合だけ候補にし、全native scanを引き続き完全・一意一致必須とする。候補handle不正、読取失敗、曖昧一致なら停止し、未検証handleをInvokeや保存に使わない。Node diagnostics tests 13/13、JS syntax checks、`git diff --check`成功。候補経路のWindows runtimeは次runで確認する。
+
+native [Run 214](https://github.com/65537i/mail-client-plan/actions/runs/40255680754)（`95e18e8`、manual Windows 2025 x64 / webview）はplan、security-test build、WebView security tests、Windows audit setup / worker tests成功後、`verify-drop-native-menu-state`で失敗した。native診断はRun 212と同じ`source:menu-owner;menu-window-process:same;gui-thread-info:available;owner-window:available;handle:available;items:0;matches:0;read-failure:invalid-menu-handle;readable:false;checked:unavailable`で、popup HWNDの`GetMenu`からは使用可能なhandleを得られず、owner handleも無効だった。fail-closedでInvoke / `.PMC`保存 / WDIO / capture / control未到達、AC-05未達。Run 214後は、Microsoft `AccessibleObjectFromWindow` / `IAccessible`によるread-only state取得を同一process確認済みmenu HWNDに限って追加した。全子要素を最大64件まで読み、MenuItem roleと`Drop Filtered Events`のexact unique match、checked / unchecked stateが完全に読めた場合だけ状態を採用する。未知・重複・不完全・cross-processは拒否。Node diagnostics tests 15/15、JS syntax check、`git diff --check`成功。診断parser testをWindows audit regression stepへ追加した。C# / PowerShellとMSAAのWindows runtimeは未検証で、次のWindows webview runが必要。
 
 native [Run 89](https://github.com/65537i/mail-client-plan/actions/runs/40184517503)（`a862532`、all / full）はUbuntu、macOS 14 ARM、macOS 15 Intelが成功、Windowsのみ失敗。Windowsではformat / workspace test / clippy / frontend build / native build / production除外検査 / launch smoke / security-test build / TLS / Japanese FTS / IMAP / SMTP / MIME candidate / Windows harness回帰5 testsまで成功。Procmon署名確認も成功したが、capture前のUI Automation filter setupがexit 1となり、WDIOおよびcapture/export・control判定には進まなかった。元のstderrは意図的に破棄していたため、失敗したUI操作はこのrunから特定できない。Run 89はWindows file-access監査の実証ではなく、AC-05未達。
 

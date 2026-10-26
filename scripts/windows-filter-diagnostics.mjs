@@ -190,6 +190,49 @@ export function describeWindowsFilterDiagnostics(output) {
     }
   }
 
+  for (const match of output.matchAll(
+    /^PROC_MON_FILTER_MSAA_MENU_STATE=observation:(before|after-invoke);process:(same|other|unavailable);object:(available|unavailable);items:(\d{1,2});matches:(\d{1,2});read-failure:(none|window-unavailable|process-mismatch|object-unavailable|count-invalid|count-limit|child-read-failed|state-invalid|no-match|duplicate-match);checked:(on|off|unavailable)\r?$/gm,
+  )) {
+    const [
+      ,
+      observation,
+      process,
+      object,
+      rawItems,
+      rawMatches,
+      readFailure,
+      checked,
+    ] = match;
+    const items = Number(rawItems);
+    const matches = Number(rawMatches);
+    const sameProcessObject = process === "same" && object === "available";
+    const unavailableObject =
+      (process === "unavailable" && readFailure === "window-unavailable")
+      || (process === "other" && readFailure === "process-mismatch")
+      || (process === "same" && readFailure === "object-unavailable");
+    const consistentCheck =
+      sameProcessObject
+      && readFailure === "none"
+      && matches === 1
+      && (checked === "on" || checked === "off");
+    const consistentUnavailable =
+      checked === "unavailable"
+      && (
+        (sameProcessObject && readFailure !== "none")
+        || (unavailableObject && items === 0 && matches === 0 && object === "unavailable")
+        || (sameProcessObject && readFailure === "none" && matches !== 1)
+      );
+    if (
+      items <= 64
+      && matches <= items
+      && (consistentCheck || consistentUnavailable)
+    ) {
+      diagnostics.push(
+        `drop-msaa-menu-state=observation:${observation};process:${process};object:${object};items:${items};matches:${matches};read-failure:${readFailure};checked:${checked}`,
+      );
+    }
+  }
+
   const resetTree = output.match(
     /^PROC_MON_FILTER_DIALOG_RESET_TREE=(Window|Pane|ToolBar|Button|Text|Edit|Other)(?:>(?:Window|Pane|ToolBar|Button|Text|Edit|Other)){0,3}\r?$/m,
   )?.[0]?.replace("PROC_MON_FILTER_DIALOG_RESET_TREE=", "");

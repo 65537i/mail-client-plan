@@ -9,6 +9,7 @@ $ErrorActionPreference = "Stop"
 Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName UIAutomationTypes
 Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName Accessibility
 Add-Type -TypeDefinition @"
 using System;
 using System.Runtime.InteropServices;
@@ -22,6 +23,10 @@ public static class ProcmonNativeMenu
     private const uint MFS_CHECKED = 0x00000008;
     private const uint MFT_OWNERDRAW = 0x00000100;
     private const uint MaximumTextCharacters = 255;
+    private const int MaximumAccessibleMenuItems = 64;
+    private const int MenuItemRole = 12;
+    private const int CheckedState = 0x10;
+    private const int MixedState = 0x20;
 
     [StructLayout(LayoutKind.Sequential)]
     private struct MenuItemInfo
@@ -70,6 +75,17 @@ public static class ProcmonNativeMenu
         public IntPtr Submenu { get; set; }
     }
 
+    public sealed class AccessibleMenuSnapshot
+    {
+        public bool ProcessKnown { get; set; }
+        public bool ProcessSame { get; set; }
+        public bool AccessibleAvailable { get; set; }
+        public int ItemCount { get; set; }
+        public int MatchCount { get; set; }
+        public string ReadFailure { get; set; }
+        public string CheckState { get; set; }
+    }
+
     [DllImport("user32.dll", ExactSpelling = true, SetLastError = true)]
     public static extern IntPtr GetMenu(IntPtr hWnd);
 
@@ -79,6 +95,157 @@ public static class ProcmonNativeMenu
     [DllImport("user32.dll", ExactSpelling = true, SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool GetGUIThreadInfo(uint threadId, ref GuiThreadInfo info);
+
+    [DllImport("oleacc.dll", ExactSpelling = true)]
+    private static extern int AccessibleObjectFromWindow(
+        IntPtr hWnd,
+        uint objectId,
+        ref Guid interfaceId,
+        [MarshalAs(UnmanagedType.Interface)] out Accessibility.IAccessible accessibleObject
+    );
+
+    private static bool TryGetInteger(object value, out int number)
+    {
+        if (value is short)
+        {
+            number = (short)value;
+            return true;
+        }
+        if (value is int)
+        {
+            number = (int)value;
+            return true;
+        }
+        if (value is uint && (uint)value <= int.MaxValue)
+        {
+            number = (int)(uint)value;
+            return true;
+        }
+        if (value is long && (long)value >= int.MinValue && (long)value <= int.MaxValue)
+        {
+            number = (int)(long)value;
+            return true;
+        }
+        number = 0;
+        return false;
+    }
+
+    public static AccessibleMenuSnapshot ReadAccessibleDropMenuState(
+        IntPtr menuWindow,
+        uint expectedProcessId
+    )
+    {
+        var snapshot = new AccessibleMenuSnapshot
+        {
+            ReadFailure = "window-unavailable",
+            CheckState = "unavailable"
+        };
+        uint menuProcessId;
+        if (GetWindowThreadProcessId(menuWindow, out menuProcessId) == 0)
+        {
+            return snapshot;
+        }
+        snapshot.ProcessKnown = true;
+        if (menuProcessId != expectedProcessId)
+        {
+            snapshot.ReadFailure = "process-mismatch";
+            return snapshot;
+        }
+        snapshot.ProcessSame = true;
+
+        var interfaceId = new Guid("618736E0-3C3D-11CF-810C-00AA00389B71");
+        Accessibility.IAccessible accessibleObject;
+        var result = AccessibleObjectFromWindow(
+            menuWindow,
+            unchecked((uint)-4),
+            ref interfaceId,
+            out accessibleObject
+        );
+        if (result != 0 || accessibleObject == null)
+        {
+            snapshot.ReadFailure = "object-unavailable";
+            return snapshot;
+        }
+        snapshot.AccessibleAvailable = true;
+
+        try
+        {
+            var itemCount = accessibleObject.accChildCount;
+            if (itemCount < 0)
+            {
+                snapshot.ReadFailure = "count-invalid";
+                return snapshot;
+            }
+            if (itemCount > MaximumAccessibleMenuItems)
+            {
+                snapshot.ReadFailure = "count-limit";
+                return snapshot;
+            }
+            snapshot.ItemCount = itemCount;
+
+            var matchState = 0;
+            for (var childId = 1; childId <= itemCount; childId++)
+            {
+                var child = (object)childId;
+                var name = accessibleObject.get_accName(child) ?? string.Empty;
+                var roleValue = accessibleObject.get_accRole(child);
+                int role;
+                if (!TryGetInteger(roleValue, out role))
+                {
+                    snapshot.ReadFailure = "child-read-failed";
+                    return snapshot;
+                }
+                if (role != MenuItemRole)
+                {
+                    continue;
+                }
+
+                var normalizedName = name.Replace("&", "");
+                var acceleratorIndex = normalizedName.IndexOf('\t');
+                if (acceleratorIndex >= 0)
+                {
+                    normalizedName = normalizedName.Substring(0, acceleratorIndex);
+                }
+                if (!string.Equals(
+                    normalizedName.Trim(),
+                    "Drop Filtered Events",
+                    StringComparison.Ordinal
+                ))
+                {
+                    continue;
+                }
+
+                snapshot.MatchCount++;
+                var stateValue = accessibleObject.get_accState(child);
+                int state;
+                if (!TryGetInteger(stateValue, out state) || (state & MixedState) != 0)
+                {
+                    snapshot.ReadFailure = "state-invalid";
+                    return snapshot;
+                }
+                matchState = state;
+            }
+
+            if (snapshot.MatchCount == 0)
+            {
+                snapshot.ReadFailure = "no-match";
+                return snapshot;
+            }
+            if (snapshot.MatchCount != 1)
+            {
+                snapshot.ReadFailure = "duplicate-match";
+                return snapshot;
+            }
+            snapshot.ReadFailure = "none";
+            snapshot.CheckState = (matchState & CheckedState) != 0 ? "on" : "off";
+            return snapshot;
+        }
+        catch (COMException)
+        {
+            snapshot.ReadFailure = "child-read-failed";
+            return snapshot;
+        }
+    }
 
     public static IntPtr GetMenuOwnerWindow(
         IntPtr menuWindow,
@@ -538,6 +705,44 @@ function Write-NativeDropMenuSnapshot($Snapshot, [string]$Observation) {
   [Console]::Out.WriteLine(
     "PROC_MON_FILTER_NATIVE_MENU_STATE=observation:$Observation;source:$($Snapshot.MenuSource);menu-window-process:$($Snapshot.MenuWindowProcess);gui-thread-info:$guiThreadInfoState;owner-window:$ownerWindowState;handle:$handleState;items:$($Snapshot.ItemCount);matches:$($Snapshot.MatchCount);read-failure:$($Snapshot.ReadFailure);readable:$($Snapshot.Readable.ToString().ToLowerInvariant());checked:$($Snapshot.CheckState)"
   )
+}
+
+function Get-AccessibleDropMenuSnapshot(
+  [System.IntPtr]$MenuWindowHandle,
+  [uint32]$ProcessId,
+  [string]$Observation
+) {
+  Set-Stage "invoke-msaa-menu-state"
+  $snapshot = [ProcmonNativeMenu]::ReadAccessibleDropMenuState(
+    $MenuWindowHandle,
+    $ProcessId
+  )
+  Set-Stage "report-msaa-menu-state"
+  $processState = if (-not $snapshot.ProcessKnown) {
+    "unavailable"
+  } elseif ($snapshot.ProcessSame) {
+    "same"
+  } else {
+    "other"
+  }
+  $objectState = if ($snapshot.AccessibleAvailable) { "available" } else { "unavailable" }
+  [Console]::Out.WriteLine(
+    "PROC_MON_FILTER_MSAA_MENU_STATE=observation:$Observation;process:$processState;object:$objectState;items:$($snapshot.ItemCount);matches:$($snapshot.MatchCount);read-failure:$($snapshot.ReadFailure);checked:$($snapshot.CheckState)"
+  )
+  return $snapshot
+}
+
+function Get-VerifiedDropMenuCheckState($NativeSnapshot, $AccessibleSnapshot) {
+  if ($NativeSnapshot.CheckState -in @("on", "off")) {
+    return $NativeSnapshot.CheckState
+  }
+  if (
+    $null -ne $AccessibleSnapshot -and
+    $AccessibleSnapshot.CheckState -in @("on", "off")
+  ) {
+    return $AccessibleSnapshot.CheckState
+  }
+  return "unavailable"
 }
 
 function Find-ComboValue(
@@ -1140,14 +1345,21 @@ try {
   $dropMenuWindowHandle = [System.IntPtr]$dropMenu.Current.NativeWindowHandle
   $nativeDropMenuSnapshot = Get-NativeDropMenuSnapshot $mainWindowHandle $dropMenuWindowHandle $process.Id
   Write-NativeDropMenuSnapshot $nativeDropMenuSnapshot "before"
-  Set-Stage "verify-drop-native-menu-state"
+  $accessibleDropMenuSnapshot = $null
   if ($nativeDropMenuSnapshot.CheckState -eq "unavailable") {
+    $accessibleDropMenuSnapshot = Get-AccessibleDropMenuSnapshot `
+      $dropMenuWindowHandle $process.Id "before"
+  }
+  $dropCheckState = Get-VerifiedDropMenuCheckState `
+    $nativeDropMenuSnapshot $accessibleDropMenuSnapshot
+  Set-Stage "verify-drop-native-menu-state"
+  if ($dropCheckState -eq "unavailable") {
     throw "Process Monitor native menu state could not be verified"
   }
   if (-not $dropState.IsEnabled -or $dropState.IsOffscreen) {
     throw "Process Monitor Drop Filtered Events is unavailable"
   }
-  if ($nativeDropMenuSnapshot.CheckState -eq "off") {
+  if ($dropCheckState -eq "off") {
     if (-not $hasInvokePattern) {
       throw "Process Monitor Drop Filtered Events cannot be enabled without InvokePattern"
     }
@@ -1157,7 +1369,14 @@ try {
     Set-Stage "verify-drop-native-menu-state"
     $nativeDropMenuSnapshot = Get-NativeDropMenuSnapshot $mainWindowHandle $dropMenuWindowHandle $process.Id
     Write-NativeDropMenuSnapshot $nativeDropMenuSnapshot "after-invoke"
-    if ($nativeDropMenuSnapshot.CheckState -ne "on") {
+    $accessibleDropMenuSnapshot = $null
+    if ($nativeDropMenuSnapshot.CheckState -eq "unavailable") {
+      $accessibleDropMenuSnapshot = Get-AccessibleDropMenuSnapshot `
+        $dropMenuWindowHandle $process.Id "after-invoke"
+    }
+    $dropCheckState = Get-VerifiedDropMenuCheckState `
+      $nativeDropMenuSnapshot $accessibleDropMenuSnapshot
+    if ($dropCheckState -ne "on") {
       throw "Process Monitor did not enable Drop Filtered Events"
     }
   }
