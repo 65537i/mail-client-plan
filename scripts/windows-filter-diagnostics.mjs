@@ -95,6 +95,12 @@ export function describeWindowsFilterDiagnostics(output) {
     diagnostics.push(`config-file-${match[1]}=${match[2]}`);
   }
 
+  for (const match of output.matchAll(
+    /^PROC_MON_FILTER_CONFIG_SAVE=(after-invoke|verify-failed);(dialog:(?:unavailable|other-process)|dialog:available;enabled:(?:true|false);offscreen:(?:true|false);path:(?:matches|different);save-enabled:(?:true|false);save-offscreen:(?:true|false))\r?$/gm,
+  )) {
+    diagnostics.push(`config-save-${match[1]}=${match[2]}`);
+  }
+
   const desktopResetOwner = output.match(
     /^PROC_MON_FILTER_DIALOG_DESKTOP_RESET_OWNER=(procmon-main|procmon-other|other-process|none)\r?$/m,
   )?.[1];

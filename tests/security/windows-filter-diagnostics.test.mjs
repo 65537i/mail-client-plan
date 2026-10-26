@@ -170,6 +170,24 @@ test("AC-05: configuration file wait reports states without file paths or conten
   );
 });
 
+test("AC-05: configuration save observations expose states, not paths or dialog text", () => {
+  assert.equal(
+    describeWindowsFilterDiagnostics([
+      "PROC_MON_FILTER_CONFIG_SAVE=after-invoke;dialog:available;enabled:true;offscreen:false;path:matches;save-enabled:true;save-offscreen:false",
+      "PROC_MON_FILTER_CONFIG_SAVE=verify-failed;dialog:available;enabled:false;offscreen:false;path:different;save-enabled:false;save-offscreen:false",
+      "PROC_MON_FILTER_CONFIG_SAVE=verify-failed;dialog:unavailable",
+      "PROC_MON_FILTER_CONFIG_SAVE=after-invoke;dialog:other-process",
+      "PROC_MON_FILTER_CONFIG_SAVE=verify-failed;dialog:C:\\private\\mail",
+      "PROC_MON_FILTER_CONFIG_SAVE=after-invoke;dialog:available;enabled:true;offscreen:false;path:C:\\private\\mail;save-enabled:true;save-offscreen:false",
+      "PROC_MON_FILTER_CONFIG_SAVE=verify-failed;dialog:unavailable;title:private",
+    ].join("\n")),
+    "; config-save-after-invoke=dialog:available;enabled:true;offscreen:false;path:matches;save-enabled:true;save-offscreen:false"
+      + "; config-save-verify-failed=dialog:available;enabled:false;offscreen:false;path:different;save-enabled:false;save-offscreen:false"
+      + "; config-save-verify-failed=dialog:unavailable"
+      + "; config-save-after-invoke=dialog:other-process",
+  );
+});
+
 test("AC-05: Windows filter diagnostics omit unknown exception types", () => {
   assert.equal(
     describeWindowsFilterDiagnostics("PROC_MON_FILTER_FAILURE=SecretException"),

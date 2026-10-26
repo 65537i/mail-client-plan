@@ -476,6 +476,35 @@ function Wait-FilterConfigFile([string]$Path, [int]$TimeoutMilliseconds = 5000) 
   throw "Process Monitor did not save the audit filter configuration before the deadline"
 }
 
+function Write-ConfigSaveObservation(
+  [string]$Phase,
+  [System.Collections.IDictionary]$Controls,
+  [int]$OwnerProcessId,
+  [string]$ExpectedPath
+) {
+  try {
+    $dialogState = $Controls.Dialog.Current
+    $fileNameState = $Controls.FileName.Current
+    $saveState = $Controls.Save.Current
+    if ($dialogState.ProcessId -ne $OwnerProcessId -or
+      $fileNameState.ProcessId -ne $OwnerProcessId -or
+      $saveState.ProcessId -ne $OwnerProcessId) {
+      [Console]::Out.WriteLine("PROC_MON_FILTER_CONFIG_SAVE=$Phase;dialog:other-process")
+      return
+    }
+    $pathState = if (
+      $Controls.FileName.GetCurrentPattern(
+        [System.Windows.Automation.ValuePattern]::Pattern
+      ).Current.Value -ceq $ExpectedPath
+    ) { "matches" } else { "different" }
+    [Console]::Out.WriteLine(
+      "PROC_MON_FILTER_CONFIG_SAVE=$Phase;dialog:available;enabled:$($dialogState.IsEnabled.ToString().ToLowerInvariant());offscreen:$($dialogState.IsOffscreen.ToString().ToLowerInvariant());path:$pathState;save-enabled:$($saveState.IsEnabled.ToString().ToLowerInvariant());save-offscreen:$($saveState.IsOffscreen.ToString().ToLowerInvariant())"
+    )
+  } catch {
+    [Console]::Out.WriteLine("PROC_MON_FILTER_CONFIG_SAVE=$Phase;dialog:unavailable")
+  }
+}
+
 function Wait-ConfigSaveDialog(
   [System.Diagnostics.Process]$Process,
   [System.Windows.Automation.AutomationElement]$MainWindow,
@@ -1659,13 +1688,25 @@ try {
     throw "Process Monitor configuration file name is read-only"
   }
   $fileNamePattern.SetValue($ConfigPath)
+  Set-Stage "focus-export-config-save"
+  if (-not $save.Current.IsKeyboardFocusable) {
+    throw "Process Monitor configuration Save button cannot receive focus"
+  }
+  $save.SetFocus()
+  Set-Stage "verify-export-config-path"
   if ($fileNamePattern.Current.Value -cne $ConfigPath) {
     throw "Process Monitor configuration file name did not retain the requested path"
   }
   Set-Stage "confirm-export-config"
   $save.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
+  Write-ConfigSaveObservation "after-invoke" $saveControls $process.Id $ConfigPath
   Set-Stage "verify-filter-file"
-  Wait-FilterConfigFile $ConfigPath
+  try {
+    Wait-FilterConfigFile $ConfigPath
+  } catch {
+    Write-ConfigSaveObservation "verify-failed" $saveControls $process.Id $ConfigPath
+    throw
+  }
 } catch {
   [Console]::Out.WriteLine("PROC_MON_FILTER_FAILED_STAGE=$stage")
   $failureException = $_.Exception
