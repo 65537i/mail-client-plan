@@ -140,6 +140,14 @@ async function captureScenario(scenario) {
         ? `Process Monitor exact-path filter configuration failed at ${filterStage}${describeWindowsFilterDiagnostics(filterSetupOutput)}${outputAtCap}`
         : `Process Monitor exact-path filter configuration failed${outputAtCap}`,
     );
+    const filterPathEvidence = describeWindowsFilterDiagnostics(filterSetupOutput)
+      .split("; ")
+      .find((diagnostic) => diagnostic.startsWith("config-filter-paths="));
+    assert(
+      filterPathEvidence,
+      "Process Monitor exported filter path evidence was not captured",
+    );
+    console.log(`Windows audit ${scenario}: ${filterPathEvidence}`);
     command = fork(
       path.join(root, "scripts", "windows-audit-wdio.mjs"),
       [path.join(root, scenario === "baseline"
