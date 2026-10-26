@@ -218,6 +218,18 @@ test("AC-05: configuration save observations expose states, not paths or dialog 
   );
   assert.equal(
     describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_CONFIG_PATHS=canary:1;control:1",
+    ),
+    "; config-filter-paths=canary:1;control:1",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_CONFIG_PATHS=canary:C:\\private;control:1",
+    ),
+    "",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(
       "PROC_MON_FILTER_SAVE_RESULT=phase:after-enter;foreground:procmon-main;same-process-dialogs:0;other-process-windows:0;buttons:save:0;cancel:0;yes:0;no:0;ok:0;retry:0;close:0;truncated:false",
     ),
     "; config-save-result-after-enter=foreground:procmon-main;same-process-dialogs:0;other-process-windows:0;buttons:save:0;cancel:0;yes:0;no:0;ok:0;retry:0;close:0;truncated:false",

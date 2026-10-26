@@ -139,6 +139,15 @@ export function describeWindowsFilterDiagnostics(output) {
     );
   }
 
+  const filterConfigPaths = output.match(
+    /^PROC_MON_FILTER_CONFIG_PATHS=canary:(\d{1,3});control:(\d{1,3})\r?$/m,
+  );
+  if (filterConfigPaths) {
+    diagnostics.push(
+      `config-filter-paths=canary:${filterConfigPaths[1]};control:${filterConfigPaths[2]}`,
+    );
+  }
+
   for (const match of output.matchAll(
     /^PROC_MON_FILTER_SAVE_RESULT=phase:(after-enter|after-wait);foreground:(procmon-main|procmon-other|other-process|unavailable);same-process-dialogs:(\d{1,2});other-process-windows:(\d{1,2});buttons:save:(\d{1,2});cancel:(\d{1,2});yes:(\d{1,2});no:(\d{1,2});ok:(\d{1,2});retry:(\d{1,2});close:(\d{1,2});truncated:(true|false)\r?$/gm,
   )) {

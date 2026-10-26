@@ -16,11 +16,12 @@ $functions = $ast.FindAll({
       "Get-ConfigHeaderClass",
       "Write-ConfigOutputObservation",
       "Wait-FilterConfigFile",
+      "Get-ConfigFilterPathEvidence",
       "Wait-KeyboardFocus",
       "ConvertTo-SendKeysLiteral"
     )
 }, $true)
-if ($functions.Count -ne 5) {
+if ($functions.Count -ne 6) {
   throw "Expected the configuration file observation functions"
 }
 foreach ($function in $functions) {
@@ -74,8 +75,63 @@ $directory = Join-Path ([IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString("N
 [IO.Directory]::CreateDirectory($directory) | Out-Null
 $path = Join-Path $directory "synthetic.pmc"
 $inventoryDirectory = Join-Path $directory "inventory"
+$evidencePath = Join-Path $directory "filter-evidence.pmc"
 $writer = $null
 try {
+  [IO.File]::WriteAllText(
+    $evidencePath,
+    '<?xml version="1.0"?><config><filter><path>C:\audit\canary.png</path><path>C:\audit\control.png</path></filter></config>'
+  )
+  $previousOutput = [Console]::Out
+  $capturedOutput = [IO.StringWriter]::new()
+  try {
+    [Console]::SetOut($capturedOutput)
+    $evidence = Get-ConfigFilterPathEvidence $evidencePath "C:\audit\canary.png" "C:\audit\control.png"
+  } finally {
+    [Console]::SetOut($previousOutput)
+  }
+  if (
+    $evidence.CanaryMatches -ne 1 -or
+    $evidence.ControlMatches -ne 1 -or
+    $capturedOutput.ToString().Trim() -cne
+    "PROC_MON_FILTER_CONFIG_PATHS=canary:1;control:1" -or
+    $capturedOutput.ToString().Contains("C:\audit")
+  ) {
+    throw "Exported filter path evidence was not bounded and sanitized"
+  }
+  Write-Host "PASS AC-05: exported filter evidence reports exact-path presence without values"
+
+  [IO.File]::WriteAllText(
+    $evidencePath,
+    '<?xml version="1.0"?><config><filter><path>C:\audit\canary.png</path></filter></config>'
+  )
+  $previousOutput = [Console]::Out
+  $capturedOutput = [IO.StringWriter]::new()
+  $missingControlRejected = $false
+  try {
+    [Console]::SetOut($capturedOutput)
+    try {
+      Get-ConfigFilterPathEvidence $evidencePath "C:\audit\canary.png" "C:\audit\control.png" | Out-Null
+    } catch {
+      if ($_.Exception.Message -ne
+        "Process Monitor configuration did not retain both audit filter paths") {
+        throw
+      }
+      $missingControlRejected = $true
+    }
+  } finally {
+    [Console]::SetOut($previousOutput)
+  }
+  if (
+    -not $missingControlRejected -or
+    $capturedOutput.ToString().Trim() -cne
+    "PROC_MON_FILTER_CONFIG_PATHS=canary:1;control:0" -or
+    $capturedOutput.ToString().Contains("C:\audit")
+  ) {
+    throw "Missing exported filter path was not rejected with safe evidence"
+  }
+  Write-Host "PASS AC-05: missing exported filter paths fail closed"
+
   Assert-Timeout $path
   [IO.File]::WriteAllBytes($path, [byte[]]::new(99))
   Assert-Timeout $path
@@ -84,6 +140,7 @@ try {
   Write-Host "PASS AC-05: absent and 99-byte files time out; 100-byte file is accepted"
 
   [IO.File]::Delete($path)
+  [IO.File]::Delete($evidencePath)
   $writer = [PowerShell]::Create()
   $null = $writer.AddScript({
     param($Path)

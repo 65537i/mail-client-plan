@@ -556,6 +556,54 @@ function Wait-FilterConfigFile([string]$Path, [int]$TimeoutMilliseconds = 5000) 
   throw "Process Monitor did not save the audit filter configuration before the deadline"
 }
 
+function Get-ConfigFilterPathEvidence([string]$Path, [string]$CanaryPath, [string]$ControlPath) {
+  $file = Get-Item -LiteralPath $Path
+  if ($file.PSIsContainer -or $file.Length -gt 1MB) {
+    throw "Process Monitor configuration file is not a bounded file"
+  }
+  $settings = [System.Xml.XmlReaderSettings]::new()
+  $settings.DtdProcessing = [System.Xml.DtdProcessing]::Prohibit
+  $settings.XmlResolver = $null
+  $settings.MaxCharactersInDocument = 1MB
+  $reader = [System.Xml.XmlReader]::Create($Path, $settings)
+  try {
+    $document = [System.Xml.XmlDocument]::new()
+    $document.Load($reader)
+  } finally {
+    $reader.Dispose()
+  }
+  $canaryMatches = 0
+  $controlMatches = 0
+  foreach ($node in $document.SelectNodes("//text() | //@*")) {
+    if ([string]::Equals(
+        $node.Value,
+        $CanaryPath,
+        [System.StringComparison]::OrdinalIgnoreCase
+      )) {
+      $canaryMatches++
+    }
+    if ([string]::Equals(
+        $node.Value,
+        $ControlPath,
+        [System.StringComparison]::OrdinalIgnoreCase
+      )) {
+      $controlMatches++
+    }
+  }
+  $canaryMatches = [Math]::Min($canaryMatches, 999)
+  $controlMatches = [Math]::Min($controlMatches, 999)
+  [Console]::Out.WriteLine(
+    "PROC_MON_FILTER_CONFIG_PATHS=canary:$canaryMatches;control:$controlMatches"
+  )
+  if ($canaryMatches -eq 0 -or $controlMatches -eq 0) {
+    throw "Process Monitor configuration did not retain both audit filter paths"
+  }
+  return [pscustomobject]@{
+    CanaryMatches = $canaryMatches
+    ControlMatches = $controlMatches
+  }
+}
+
 function Wait-KeyboardFocus($Control, [int]$TimeoutMilliseconds = 2000) {
   $deadline = [DateTime]::UtcNow.AddMilliseconds($TimeoutMilliseconds)
   do {
@@ -2047,6 +2095,8 @@ try {
     Write-ConfigSaveResultObservation "after-wait" $process $main
     throw
   }
+  Set-Stage "verify-exported-filter-paths"
+  Get-ConfigFilterPathEvidence $ConfigPath $CanaryPath $ControlPath | Out-Null
   Write-ConfigOutputObservation "after-wait" $ConfigPath
   Write-ConfigSaveResultObservation "after-wait" $process $main
 } catch {
