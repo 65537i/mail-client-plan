@@ -172,7 +172,16 @@ test("AC-05: configuration file wait reports states without file paths or conten
 
 test("AC-05: configuration save observations expose states, not paths or dialog text", () => {
   assert.equal(
+    describeWindowsFilterDiagnostics("PROC_MON_FILTER_SAVE_FOCUS=gate:passed"),
+    "; config-save-focus-gate=passed",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics("PROC_MON_FILTER_SAVE_FOCUS=gate:failed"),
+    "; config-save-focus-gate=failed",
+  );
+  assert.equal(
     describeWindowsFilterDiagnostics([
+      "PROC_MON_FILTER_SAVE_FOCUS=gate:C:\\private\\mail",
       "PROC_MON_FILTER_CONFIG_SAVE=after-invoke;dialog:available;enabled:true;offscreen:false;path:matches;save-enabled:true;save-offscreen:false;save-focusable:true;save-focused:true",
       "PROC_MON_FILTER_CONFIG_SAVE=focus-failed;dialog:available;enabled:true;offscreen:true;path:matches;save-enabled:true;save-offscreen:true;save-focusable:true;save-focused:false",
       "PROC_MON_FILTER_CONFIG_SAVE=verify-failed;dialog:available;enabled:false;offscreen:false;path:different;save-enabled:false;save-offscreen:false;save-focusable:false;save-focused:false",

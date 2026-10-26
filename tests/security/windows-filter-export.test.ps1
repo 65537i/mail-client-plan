@@ -15,15 +15,37 @@ $functions = $ast.FindAll({
     $node.Name -in @(
       "Get-ConfigHeaderClass",
       "Write-ConfigOutputObservation",
-      "Wait-FilterConfigFile"
+      "Wait-FilterConfigFile",
+      "Wait-ConfigSaveFocus"
     )
 }, $true)
-if ($functions.Count -ne 3) {
+if ($functions.Count -ne 4) {
   throw "Expected the configuration file observation functions"
 }
 foreach ($function in $functions) {
   . ([scriptblock]::Create($function.Extent.Text))
 }
+
+$focusState = [pscustomobject]@{}
+$focusState | Add-Member -MemberType ScriptProperty -Name HasKeyboardFocus -Value {
+  $this.ReadCount++
+  return $this.ReadCount -ge 3
+}
+$focusState | Add-Member -MemberType NoteProperty -Name ReadCount -Value 0
+$saveControl = [pscustomobject]@{ Current = $focusState }
+$confirmedFocus = Wait-ConfigSaveFocus $saveControl 500
+if ($null -eq $confirmedFocus -or -not $confirmedFocus.HasKeyboardFocus) {
+  throw "Transient Save button focus was not observed before the deadline"
+}
+
+$unfocusedControl = [pscustomobject]@{
+  Current = [pscustomobject]@{ HasKeyboardFocus = $false }
+}
+$unconfirmedFocus = Wait-ConfigSaveFocus $unfocusedControl 100
+if ($null -ne $unconfirmedFocus) {
+  throw "Save button without keyboard focus passed the focus gate"
+}
+Write-Host "PASS AC-05: transient Save focus is awaited and missing focus is rejected"
 
 function Assert-Timeout([string]$Path) {
   $timer = [System.Diagnostics.Stopwatch]::StartNew()

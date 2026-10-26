@@ -541,6 +541,20 @@ function Wait-FilterConfigFile([string]$Path, [int]$TimeoutMilliseconds = 5000) 
   throw "Process Monitor did not save the audit filter configuration before the deadline"
 }
 
+function Wait-ConfigSaveFocus($Save, [int]$TimeoutMilliseconds = 2000) {
+  $deadline = [DateTime]::UtcNow.AddMilliseconds($TimeoutMilliseconds)
+  do {
+    $state = $Save.Current
+    if ($state.HasKeyboardFocus) {
+      return $state
+    }
+    $remaining = [int]($deadline - [DateTime]::UtcNow).TotalMilliseconds
+    if ($remaining -le 0) { break }
+    Start-Sleep -Milliseconds ([int][Math]::Min(50, $remaining))
+  } while ([DateTime]::UtcNow -lt $deadline)
+  return $null
+}
+
 function Write-ConfigSaveObservation(
   [string]$Phase,
   [System.Collections.IDictionary]$Controls,
@@ -1759,7 +1773,17 @@ try {
   }
   $save.SetFocus()
   Set-Stage "verify-export-config-path"
-  if (-not $save.Current.HasKeyboardFocus) {
+  $saveFocusState = Wait-ConfigSaveFocus $save
+  $saveFocusGate = if (
+    $null -ne $saveFocusState -and
+    $saveFocusState.ProcessId -eq $process.Id -and
+    $saveFocusState.IsEnabled -and
+    -not $saveFocusState.IsOffscreen -and
+    $saveFocusState.IsKeyboardFocusable -and
+    $saveFocusState.HasKeyboardFocus
+  ) { "passed" } else { "failed" }
+  [Console]::Out.WriteLine("PROC_MON_FILTER_SAVE_FOCUS=gate:$saveFocusGate")
+  if ($saveFocusGate -ne "passed") {
     Write-ConfigSaveObservation "focus-failed" $saveControls $process.Id $ConfigPath
     throw "Process Monitor configuration Save button did not receive keyboard focus"
   }
