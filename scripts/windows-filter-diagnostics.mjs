@@ -297,7 +297,7 @@ export function describeWindowsFilterDiagnostics(output) {
 
   const focusObservations = [];
   for (const match of output.matchAll(
-    /^PROC_MON_FILTER_MENU_ITEMS=(after-open|after-home);unavailable\r?$/gm,
+    /^PROC_MON_FILTER_MENU_ITEMS=(after-open|after-home|before-save);unavailable\r?$/gm,
   )) {
     focusObservations.push({
       index: match.index,
@@ -305,7 +305,7 @@ export function describeWindowsFilterDiagnostics(output) {
     });
   }
   for (const match of output.matchAll(
-    /^PROC_MON_FILTER_MENU_ITEMS=(after-open|after-home);count:(\d{1,6});truncated:(true|false);items=([A-Za-z:,]*)\r?$/gm,
+    /^PROC_MON_FILTER_MENU_ITEMS=(after-open|after-home|before-save);count:(\d{1,6});truncated:(true|false);items=([A-Za-z:,]*)\r?$/gm,
   )) {
     const items = match[4] === "" ? [] : match[4].split(",");
     if (

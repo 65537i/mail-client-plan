@@ -19,6 +19,8 @@ Windows: MSVC toolchain、WebView2、必要SDK。WebDriverを外部利用する�
 
 ### nativeの短い検証ループ
 
+最新Windows診断（Run 234、`8720bc8`）では、初期Filter menuのbounded summaryに`SaveFilterCommand`が見えた。Save FilterをFile menu内で探していたことが失敗原因であり、Alt+Fのfocus取得自体の失敗ではなかった。保存処理はDrop Filtered Eventsの`checked:on`を検証したFilter popupをそのまま利用し、menuと保存項目のprocess / enabled / visible、exact unique名、InvokePatternを確認して実行する。保存前summaryは`before-save`として区別する。22件のlocal Windows関連tests、JS syntax、diff check成功。以下のRun232までの診断履歴は過去の状況であり、この修正後のWindows runtimeと`.PMC`保存以降は未確認。
+
 Actions → native → Run workflowで最新のmainを選び、以下を指定する。旧runのRe-run jobsは旧commitを使うため、修正確認には新規実行を使う。
 
 - `target`: `all` / `ubuntu-24.04-x64` / `windows-2025-x64` / `macos-14-arm64` / `macos-15-intel`
@@ -186,6 +188,8 @@ Run 228（`1a8dbef`、manual Windows 2025 x64 / webview）はplan、security-tes
 Run 230（`9c54fef`、manual Windows 2025 x64 / webview）はplan、security-test build、Windows audit setup / worker / diagnostics regression tests成功。MSAAは初期`checked:off`からInvoke後`checked:on`となったが、`find-save-filter-command`でtimeout。`.PMC`保存 / WDIO / capture / controls未到達、AC-05未達。Run230後、Alt+F直後のfocused-control snapshotとbounded menu-item summaryを追加し、menu非表示とitem欠落を判別する。FocusedElementが最初の取得でnull / unavailableでも、既存5秒期限内にwait loopで再queryする。local regression testsとPowerShell runtimeは次runで確認する。
 
 Run 232（`a47df87`、manual Windows 2025 x64 / webview）はplan、security-test build、Windows audit setup / worker / filter diagnostics regression tests成功。MSAAは初期`checked:off`からInvoke後`checked:on`となったが、`find-save-filter-command`でtimeoutし、`.PMC`保存 / WDIO / capture / controls未到達、AC-05未達。Alt+F後のFocusedElementはsame-process `MenuItem`で、親Menuも取得できていた。次の修正でfocused MenuItemの場合も親Menu内の子要素をbounded summary出力する。FileとSave Filter commandは固定safe labelのみにして、任意UI textはログへ出さない。
+
+Run 234（`8720bc8`、manual Windows 2025 x64 / webview）はWindows関連regression tests成功後、初期MSAA `checked:off`とInvoke後`checked:on`を確認したが、`find-save-filter-command`でRuntimeExceptionとなった。初期Filter menuには`FilterCommand`と`SaveFilterCommand`が共存し、後続File menuの先頭8件には保存項目がなかった。従来の「timeout」という記述とは異なり、このrunはexact unique項目の欠落を明示して停止している。`.PMC`保存 / WDIO / capture / controls未到達、AC-05未達。File menuへ切り替える経路を除去し、既存Filter popup内の保存項目をInvokeする修正を加えた。任意UI textの非出力、8192文字上限、fail-closedおよび256 MiB gateは維持する。
 
 Rustのregistry / git依存と`target`をキャッシュし、OS・arch・runner・固定Rust版・lockfile / manifests / Cargo設定hashを区別する。同一モードを優先し、同じ依存条件の別モードからも復元可能。キャッシュhitでもbuild / testは省略しない。キャッシュは依存・ビルド出力のみで、資格情報ストア、監査trace、メールデータは含めない。初回はcold buildとなり、短縮量はrunnerで実測する。
 

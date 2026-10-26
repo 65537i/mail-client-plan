@@ -1496,45 +1496,15 @@ try {
   Set-Stage "drop-filtered-events-verified"
 
   Set-Stage "save-filter"
-  [System.Windows.Forms.SendKeys]::SendWait("{ESC}")
-  Set-Stage "focus-main-window-for-save-filter"
-  $main.SetFocus()
-  Set-Stage "open-file-menu-for-save-filter"
-  [System.Windows.Forms.SendKeys]::SendWait("%f")
-  Set-Stage "observe-file-menu-focus"
-  $fileMenuFocusSnapshot = @{}
-  Write-FocusObservation "after-open" $fileMenuFocusSnapshot
-  Write-FocusSnapshotObservation "file-menu" $fileMenuFocusSnapshot
-  Set-Stage "resolve-file-menu-for-save-filter"
-  $fileMenu = $null
-  $fileMenuDeadline = [DateTime]::UtcNow.AddSeconds(5)
-  do {
-    $focused = $fileMenuFocusSnapshot["Element"]
-    if ($null -eq $focused) {
-      $focused = [System.Windows.Automation.AutomationElement]::FocusedElement
-    }
-    for ($level = 0; $null -ne $focused -and $level -lt 5; $level++) {
-      if ($focused.Current.ControlType -eq [System.Windows.Automation.ControlType]::Menu) {
-        $fileMenu = $focused
-        break
-      }
-      $focused = $treeWalker.GetParent($focused)
-    }
-    if ($null -ne $fileMenu) { break }
-    Start-Sleep -Milliseconds 100
-  } while ([DateTime]::UtcNow -lt $fileMenuDeadline)
-  if ($null -eq $fileMenu) {
-    throw "Process Monitor did not expose the opened File menu"
+  $saveMenuState = $dropMenu.Current
+  if ($saveMenuState.ProcessId -ne $process.Id -or
+    -not $saveMenuState.IsEnabled -or
+    $saveMenuState.IsOffscreen) {
+    throw "Process Monitor Filter menu is not available for saving in its own process"
   }
-  $fileMenuState = $fileMenu.Current
-  if ($fileMenuState.ProcessId -ne $process.Id -or
-    -not $fileMenuState.IsEnabled -or
-    $fileMenuState.IsOffscreen) {
-    throw "Process Monitor File menu is not available in its own process"
-  }
-  Write-MenuItemsObservation "after-open" $fileMenu
+  Write-MenuItemsObservation "before-save" $dropMenu
   Set-Stage "find-save-filter-command"
-  $saveCommands = $fileMenu.FindAll(
+  $saveCommands = $dropMenu.FindAll(
     [System.Windows.Automation.TreeScope]::Descendants,
     [System.Windows.Automation.Condition]::TrueCondition
   )
@@ -1547,17 +1517,25 @@ try {
     }
   }
   if ($saveMatches.Count -ne 1) {
-    throw "Process Monitor File menu did not expose one Save Filter command"
+    throw "Process Monitor Filter menu did not expose one Save Filter command"
   }
   $saveFilter = $saveMatches[0]
   $saveFilterState = $saveFilter.Current
-  if (-not $saveFilterState.IsEnabled -or $saveFilterState.IsOffscreen) {
+  if ($saveFilterState.ProcessId -ne $process.Id -or
+    -not $saveFilterState.IsEnabled -or $saveFilterState.IsOffscreen) {
     throw "Process Monitor Save Filter command is unavailable"
   }
-  Set-Stage "focus-save-filter-command"
-  $saveFilter.SetFocus()
-  Set-Stage "send-save-filter-command"
-  [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
+  Set-Stage "probe-save-filter-command"
+  $saveInvokePattern = $null
+  if (-not $saveFilter.TryGetCurrentPattern(
+      [System.Windows.Automation.InvokePattern]::Pattern,
+      [ref]$saveInvokePattern
+    )) {
+    throw "Process Monitor Save Filter command does not expose InvokePattern"
+  }
+  Set-Stage "invoke-save-filter-command"
+  $saveInvokePattern.Invoke()
+  Set-Stage "wait-save-filter-dialog"
   $saveDialog = Wait-TopLevelWindow "Save" 10
   $fileName = Wait-Element $saveDialog ([System.Windows.Automation.PropertyCondition]::new(
     [System.Windows.Automation.AutomationElement]::ControlTypeProperty,

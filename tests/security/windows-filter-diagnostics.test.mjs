@@ -106,6 +106,19 @@ test("AC-05: Windows filter diagnostics retain safe focused-control observations
   );
 });
 
+test("AC-05: Windows save-menu diagnostics retain bounded labels, not arbitrary text", () => {
+  const output = [
+    "PROC_MON_FILTER_MENU_ITEMS=before-save;count:11;truncated:true;items=MenuItem:Other:true:false:true,Other:Other:false:false:false,MenuItem:FilterCommand:true:false:true,MenuItem:Other:true:false:true,MenuItem:Other:true:false:true,MenuItem:SaveFilterCommand:true:false:true,MenuItem:Other:true:false:true,Other:Other:false:false:false",
+    "PROC_MON_FILTER_MENU_ITEMS=before-save;count:1;truncated:false;items=MenuItem:C:\\private\\mail:true:false:true",
+    "PROC_MON_FILTER_MENU_ITEMS=before-save;unavailable",
+  ].join("\n");
+  assert.equal(
+    describeWindowsFilterDiagnostics(output),
+    "; menu-items-before-save=count:11;truncated:true;items=MenuItem:Other:true:false:true,Other:Other:false:false:false,MenuItem:FilterCommand:true:false:true,MenuItem:Other:true:false:true,MenuItem:Other:true:false:true,MenuItem:SaveFilterCommand:true:false:true,MenuItem:Other:true:false:true,Other:Other:false:false:false"
+      + "; menu-items-before-save=unavailable",
+  );
+});
+
 test("AC-05: Windows filter diagnostics retain only snapshot handoff state", () => {
   const output = [
     "PROC_MON_FILTER_FAILURE=InvalidOperationException",
