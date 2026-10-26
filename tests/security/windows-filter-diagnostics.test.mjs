@@ -197,6 +197,7 @@ test("AC-05: Windows filter diagnostics reject unknown Drop item patterns", () =
       "PROC_MON_FILTER_NATIVE_MENU_STATE=observation:before;source:menu-owner;menu-window-process:same;gui-thread-info:available;owner-window:available;handle:available;items:1;matches:1;read-failure:none;readable:true;checked:unavailable",
       "PROC_MON_FILTER_NATIVE_MENU_STATE=observation:private;source:main;menu-window-process:unavailable;gui-thread-info:unavailable;owner-window:unavailable;handle:available;items:1;matches:1;read-failure:none;readable:true;checked:on",
       "PROC_MON_FILTER_NATIVE_MENU_STATE=observation:before;source:menu-owner;menu-window-process:same;gui-thread-info:available;owner-window:available;handle:true;items:19;matches:1;read-failure:none;readable:true;checked:off",
+      "PROC_MON_FILTER_NATIVE_MENU_STATE=observation:before;source:menu-window;menu-window-process:other;gui-thread-info:available;owner-window:available;handle:available;items:19;matches:1;read-failure:none;readable:true;checked:off",
     ].join("\n")),
     "",
   );
@@ -207,6 +208,7 @@ test("AC-05: Windows native menu diagnostics retain safe owner fallback and unav
     describeWindowsFilterDiagnostics([
       "PROC_MON_FILTER_NATIVE_MENU_STATE=observation:before;source:unavailable;menu-window-process:same;gui-thread-info:unavailable;owner-window:unavailable;handle:unavailable;items:0;matches:0;read-failure:none;readable:false;checked:unavailable",
       "PROC_MON_FILTER_NATIVE_MENU_STATE=observation:before;source:menu-owner;menu-window-process:same;gui-thread-info:available;owner-window:available;handle:available;items:11;matches:1;read-failure:none;readable:true;checked:off",
+      "PROC_MON_FILTER_NATIVE_MENU_STATE=observation:before;source:menu-window;menu-window-process:same;gui-thread-info:available;owner-window:available;handle:available;items:11;matches:1;read-failure:none;readable:true;checked:off",
       "PROC_MON_FILTER_NATIVE_MENU_STATE=observation:before;source:menu-owner;menu-window-process:other;gui-thread-info:available;owner-window:available;handle:available;items:11;matches:1;read-failure:none;readable:true;checked:off",
       "PROC_MON_FILTER_NATIVE_MENU_STATE=observation:before;source:menu-owner;menu-window-process:same;gui-thread-info:available;owner-window:available;handle:available;items:11;matches:1;read-failure:item-read-failed;readable:false;checked:unavailable",
       "PROC_MON_FILTER_NATIVE_MENU_STATE=observation:before;source:menu-owner;menu-window-process:same;gui-thread-info:available;owner-window:available;handle:available;items:2;matches:0;read-failure:none;readable:true;checked:unavailable",
@@ -217,6 +219,7 @@ test("AC-05: Windows native menu diagnostics retain safe owner fallback and unav
     ].join("\n")),
     "; drop-native-menu-state=observation:before;source:unavailable;menu-window-process:same;gui-thread-info:unavailable;owner-window:unavailable;handle:unavailable;items:0;matches:0;read-failure:none;readable:false;checked:unavailable"
       + "; drop-native-menu-state=observation:before;source:menu-owner;menu-window-process:same;gui-thread-info:available;owner-window:available;handle:available;items:11;matches:1;read-failure:none;readable:true;checked:off"
+      + "; drop-native-menu-state=observation:before;source:menu-window;menu-window-process:same;gui-thread-info:available;owner-window:available;handle:available;items:11;matches:1;read-failure:none;readable:true;checked:off"
       + "; drop-native-menu-state=observation:before;source:menu-owner;menu-window-process:same;gui-thread-info:available;owner-window:available;handle:available;items:11;matches:1;read-failure:item-read-failed;readable:false;checked:unavailable"
       + "; drop-native-menu-state=observation:before;source:menu-owner;menu-window-process:same;gui-thread-info:available;owner-window:available;handle:available;items:2;matches:0;read-failure:none;readable:true;checked:unavailable"
       + "; drop-native-menu-state=observation:before;source:menu-owner;menu-window-process:same;gui-thread-info:available;owner-window:available;handle:available;items:0;matches:0;read-failure:owner-drawn;readable:false;checked:unavailable"

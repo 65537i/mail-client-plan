@@ -118,7 +118,7 @@ export function describeWindowsFilterDiagnostics(output) {
   }
 
   for (const match of output.matchAll(
-    /^PROC_MON_FILTER_NATIVE_MENU_STATE=observation:(before|after-invoke);source:(main|menu-owner|unavailable);menu-window-process:(same|other|unavailable);gui-thread-info:(available|unavailable);owner-window:(available|unavailable);handle:(available|unavailable);items:(\d{1,3});matches:(\d{1,3});read-failure:(none|depth-limit|total-limit|menu-count-invalid|menu-count-failed|menu-count-limit|invalid-menu-handle|owner-drawn|item-read-failed);readable:(true|false);checked:(on|off|unavailable)\r?$/gm,
+    /^PROC_MON_FILTER_NATIVE_MENU_STATE=observation:(before|after-invoke);source:(main|menu-window|menu-owner|unavailable);menu-window-process:(same|other|unavailable);gui-thread-info:(available|unavailable);owner-window:(available|unavailable);handle:(available|unavailable);items:(\d{1,3});matches:(\d{1,3});read-failure:(none|depth-limit|total-limit|menu-count-invalid|menu-count-failed|menu-count-limit|invalid-menu-handle|owner-drawn|item-read-failed);readable:(true|false);checked:(on|off|unavailable)\r?$/gm,
   )) {
     const [
       ,
@@ -139,7 +139,7 @@ export function describeWindowsFilterDiagnostics(output) {
     const validSource =
       (source === "main" && handle === "available")
       || (
-        source === "menu-owner"
+        (source === "menu-window" || source === "menu-owner")
         && menuWindowProcess === "same"
         && guiThreadInfo === "available"
         && ownerWindow === "available"

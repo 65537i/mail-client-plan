@@ -487,11 +487,20 @@ function Get-NativeDropMenuSnapshot(
       [ref]$menuWindowSameProcess,
       [ref]$guiThreadInfoAvailable
     )
-    $menuHandle = [ProcmonNativeMenu]::GetMenu($menuOwnerWindowHandle)
-    if ($menuHandle.Equals([System.IntPtr]::Zero)) {
-      $menuSource = "unavailable"
+    if (-not $menuOwnerWindowHandle.Equals([System.IntPtr]::Zero)) {
+      $menuHandle = [ProcmonNativeMenu]::GetMenu($MenuWindowHandle)
+      if ($menuHandle.Equals([System.IntPtr]::Zero)) {
+        $menuHandle = [ProcmonNativeMenu]::GetMenu($menuOwnerWindowHandle)
+        if ($menuHandle.Equals([System.IntPtr]::Zero)) {
+          $menuSource = "unavailable"
+        } else {
+          $menuSource = "menu-owner"
+        }
+      } else {
+        $menuSource = "menu-window"
+      }
     } else {
-      $menuSource = "menu-owner"
+      $menuSource = "unavailable"
     }
   }
   $handleAvailable = -not $menuHandle.Equals([System.IntPtr]::Zero)
