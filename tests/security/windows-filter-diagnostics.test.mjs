@@ -91,6 +91,8 @@ test("AC-05: Windows filter diagnostics retain safe focused-control observations
     "PROC_MON_FILTER_FOCUSED_CONTROL=filter-command;type:MenuItem;name:FilterCommand;offscreen:false;keyboard-focusable:true;tree=MenuItem:FilterCommand>Menu:Other",
     "PROC_MON_FILTER_FOCUSED_CONTROL=after-enter;focused:none",
     "PROC_MON_FILTER_FOCUSED_CONTROL=after-invoke;type:Window;name:ProcessMonitor;offscreen:false;keyboard-focusable:false;tree=Window:ProcessMonitor",
+    "PROC_MON_FILTER_FOCUSED_CONTROL=after-invoke;type:Button;name:Other;offscreen:false;keyboard-focusable:true;tree=Button:Other>Window:ProcessMonitor",
+    "PROC_MON_FILTER_FOCUSED_CONTROL=after-invoke;type:Text;name:C:\\private\\mail;offscreen:false;keyboard-focusable:true;tree=Text:Other",
     "PROC_MON_FILTER_FOCUSED_CONTROL=after-command-invoke;type:Window;name:ProcessMonitor;offscreen:false;keyboard-focusable:false;tree=Window:ProcessMonitor",
   ].join("\n");
   assert.equal(
@@ -102,6 +104,7 @@ test("AC-05: Windows filter diagnostics retain safe focused-control observations
       + "; focus-filter-command=MenuItem:FilterCommand;offscreen:false;keyboard-focusable:true;tree=MenuItem:FilterCommand>Menu:Other"
       + "; focus-after-enter=none"
       + "; focus-after-invoke=Window:ProcessMonitor;offscreen:false;keyboard-focusable:false;tree=Window:ProcessMonitor"
+      + "; focus-after-invoke=Button:Other;offscreen:false;keyboard-focusable:true;tree=Button:Other>Window:ProcessMonitor"
       + "; focus-after-command-invoke=Window:ProcessMonitor;offscreen:false;keyboard-focusable:false;tree=Window:ProcessMonitor",
   );
 });
@@ -262,11 +265,18 @@ test("AC-05: Windows filter diagnostics retain safe dialog ownership state", () 
       "PROC_MON_FILTER_FOCUS_OWNER=after-command-invoke;owner:other-process",
       "PROC_MON_FILTER_FOCUS_OWNER=after-command-invoke;owner:unavailable;reason:COMException",
       "PROC_MON_FILTER_FOCUS_OWNER=after-command-invoke;owner:other-process;reason:C:\\private\\mail",
+      "PROC_MON_FILTER_FOCUS_OWNER=after-save-enter;owner:procmon-main",
+      "PROC_MON_FILTER_FOCUS_OWNER=after-save-enter;owner:procmon-other",
+      "PROC_MON_FILTER_FOCUS_OWNER=after-save-enter;owner:other-process",
+      "PROC_MON_FILTER_FOCUS_OWNER=after-save-enter;owner:C:\\private\\mail",
     ].join("\n")),
     "; filter-dialog-desktop-reset-owner=other-process"
       + "; filter-dialog-reset-tree=Button>Pane>Window"
       + "; focus-owner-after-command-invoke=other-process"
-      + "; focus-owner-after-command-invoke=unavailable;reason:COMException",
+      + "; focus-owner-after-command-invoke=unavailable;reason:COMException"
+      + "; focus-owner-after-save-enter=procmon-main"
+      + "; focus-owner-after-save-enter=procmon-other"
+      + "; focus-owner-after-save-enter=other-process",
   );
 });
 

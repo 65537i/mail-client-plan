@@ -1793,6 +1793,8 @@ try {
   Write-ConfigOutputObservation "before-save" $ConfigPath
   Set-Stage "confirm-export-config-enter"
   [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
+  Write-FocusObservation "after-invoke"
+  Write-FocusOwnerObservation "after-save-enter" $process $main
   Write-ConfigSaveObservation "after-invoke" $saveControls $process.Id $ConfigPath
   Write-ConfigOutputObservation "after-invoke" $ConfigPath
   Set-Stage "verify-filter-file"

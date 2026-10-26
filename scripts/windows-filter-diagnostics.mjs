@@ -300,7 +300,7 @@ export function describeWindowsFilterDiagnostics(output) {
   }
 
   for (const match of output.matchAll(
-    /^PROC_MON_FILTER_FOCUS_OWNER=(after-command-invoke);owner:(procmon-main|procmon-other|other-process|no-window|unavailable)(?:;reason:(ElementNotAvailableException|InvalidOperationException|COMException|Other))?\r?$/gm,
+    /^PROC_MON_FILTER_FOCUS_OWNER=(after-command-invoke|after-save-enter);owner:(procmon-main|procmon-other|other-process|no-window|unavailable)(?:;reason:(ElementNotAvailableException|InvalidOperationException|COMException|Other))?\r?$/gm,
   )) {
     const reason = match[3] ? `;reason:${match[3]}` : "";
     diagnostics.push(`focus-owner-${match[1]}=${match[2]}${reason}`);
