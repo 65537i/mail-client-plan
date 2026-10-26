@@ -107,6 +107,20 @@ export function describeWindowsFilterDiagnostics(output) {
     diagnostics.push(`config-save-foreground-gate=${saveForegroundGate}`);
   }
 
+  const saveFilenameGate = output.match(
+    /^PROC_MON_FILTER_SAVE_FILENAME=gate:(passed|failed)\r?$/m,
+  )?.[1];
+  if (saveFilenameGate) {
+    diagnostics.push(`config-save-filename-gate=${saveFilenameGate}`);
+  }
+
+  const saveFinalForegroundGate = output.match(
+    /^PROC_MON_FILTER_SAVE_FINAL_FOREGROUND=gate:(passed|failed)\r?$/m,
+  )?.[1];
+  if (saveFinalForegroundGate) {
+    diagnostics.push(`config-save-final-foreground-gate=${saveFinalForegroundGate}`);
+  }
+
   for (const match of output.matchAll(
     /^PROC_MON_FILTER_SAVE_RESULT=phase:(after-enter|after-wait);foreground:(procmon-main|procmon-other|other-process|unavailable);same-process-dialogs:(\d{1,2});other-process-windows:(\d{1,2});buttons:save:(\d{1,2});cancel:(\d{1,2});yes:(\d{1,2});no:(\d{1,2});ok:(\d{1,2});retry:(\d{1,2});close:(\d{1,2});truncated:(true|false)\r?$/gm,
   )) {

@@ -16,10 +16,11 @@ $functions = $ast.FindAll({
       "Get-ConfigHeaderClass",
       "Write-ConfigOutputObservation",
       "Wait-FilterConfigFile",
-      "Wait-ConfigSaveFocus"
+      "Wait-ConfigSaveFocus",
+      "ConvertTo-SendKeysLiteral"
     )
 }, $true)
-if ($functions.Count -ne 4) {
+if ($functions.Count -ne 5) {
   throw "Expected the configuration file observation functions"
 }
 foreach ($function in $functions) {
@@ -44,6 +45,10 @@ $unfocusedControl = [pscustomobject]@{
 $unconfirmedFocus = Wait-ConfigSaveFocus $unfocusedControl 100
 if ($null -ne $unconfirmedFocus) {
   throw "Save button without keyboard focus passed the focus gate"
+}
+if ((ConvertTo-SendKeysLiteral "C:\audit\filter +1%~(^).pmc{}") -cne
+  "C:\audit\filter {+}1{%}{~}{(}{^}{)}.pmc{{}{}}") {
+  throw "Filename keyboard input did not escape SendKeys metacharacters"
 }
 Write-Host "PASS AC-05: transient Save focus is awaited and missing focus is rejected"
 

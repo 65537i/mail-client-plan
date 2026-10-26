@@ -570,6 +570,24 @@ function Wait-ConfigSaveFocus($Save, [int]$TimeoutMilliseconds = 2000) {
   return $null
 }
 
+function ConvertTo-SendKeysLiteral([string]$Value) {
+  $escaped = [System.Text.StringBuilder]::new()
+  foreach ($character in $Value.ToCharArray()) {
+    switch ([string]$character) {
+      "+" { $null = $escaped.Append("{+}") }
+      "^" { $null = $escaped.Append("{^}") }
+      "%" { $null = $escaped.Append("{%}") }
+      "~" { $null = $escaped.Append("{~}") }
+      "(" { $null = $escaped.Append("{(}") }
+      ")" { $null = $escaped.Append("{)}") }
+      "{" { $null = $escaped.Append("{{}") }
+      "}" { $null = $escaped.Append("{}}") }
+      default { $null = $escaped.Append($character) }
+    }
+  }
+  return $escaped.ToString()
+}
+
 function Write-ConfigSaveObservation(
   [string]$Phase,
   [System.Collections.IDictionary]$Controls,
@@ -1872,35 +1890,6 @@ try {
     -not $save.Current.IsEnabled -or $save.Current.IsOffscreen) {
     throw "Process Monitor configuration save controls are unavailable"
   }
-  Set-Stage "set-export-config-path"
-  $fileNamePattern = $fileName.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern)
-  if ($fileNamePattern.Current.IsReadOnly) {
-    throw "Process Monitor configuration file name is read-only"
-  }
-  $fileNamePattern.SetValue($ConfigPath)
-  Set-Stage "focus-export-config-save"
-  if (-not $save.Current.IsKeyboardFocusable) {
-    throw "Process Monitor configuration Save button cannot receive focus"
-  }
-  $save.SetFocus()
-  Set-Stage "verify-export-config-path"
-  $saveFocusState = Wait-ConfigSaveFocus $save
-  $saveFocusGate = if (
-    $null -ne $saveFocusState -and
-    $saveFocusState.ProcessId -eq $process.Id -and
-    $saveFocusState.IsEnabled -and
-    -not $saveFocusState.IsOffscreen -and
-    $saveFocusState.IsKeyboardFocusable -and
-    $saveFocusState.HasKeyboardFocus
-  ) { "passed" } else { "failed" }
-  [Console]::Out.WriteLine("PROC_MON_FILTER_SAVE_FOCUS=gate:$saveFocusGate")
-  if ($saveFocusGate -ne "passed") {
-    Write-ConfigSaveObservation "focus-failed" $saveControls $process.Id $ConfigPath
-    throw "Process Monitor configuration Save button did not receive keyboard focus"
-  }
-  if ($fileNamePattern.Current.Value -cne $ConfigPath) {
-    throw "Process Monitor configuration file name did not retain the requested path"
-  }
   Set-Stage "activate-export-config-dialog"
   $dialogHandle = [IntPtr]$saveControls.Dialog.Current.NativeWindowHandle
   $foregroundGate = "failed"
@@ -1926,6 +1915,65 @@ try {
   if ($foregroundGate -ne "passed") {
     Write-ConfigSaveObservation "foreground-failed" $saveControls $process.Id $ConfigPath
     throw "Process Monitor configuration save dialog did not become the foreground window"
+  }
+  Set-Stage "set-export-config-path"
+  $fileNamePattern = $fileName.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern)
+  if ($fileNamePattern.Current.IsReadOnly) {
+    throw "Process Monitor configuration file name is read-only"
+  }
+  $fileName.SetFocus()
+  $fileNameFocus = Wait-ConfigSaveFocus $fileName
+  if (
+    $null -eq $fileNameFocus -or
+    $fileNameFocus.ProcessId -ne $process.Id -or
+    -not $fileNameFocus.IsEnabled -or
+    $fileNameFocus.IsOffscreen -or
+    -not $fileNameFocus.IsKeyboardFocusable -or
+    [ProcmonNativeMenu]::GetForegroundWindow() -ne $dialogHandle
+  ) {
+    [Console]::Out.WriteLine("PROC_MON_FILTER_SAVE_FILENAME=gate:failed")
+    throw "Process Monitor configuration file name control did not receive keyboard focus"
+  }
+  [System.Windows.Forms.SendKeys]::SendWait("^a")
+  [System.Windows.Forms.SendKeys]::SendWait((ConvertTo-SendKeysLiteral $ConfigPath))
+  $fileNameGate = if ($fileNamePattern.Current.Value -ceq $ConfigPath) {
+    "passed"
+  } else {
+    "failed"
+  }
+  [Console]::Out.WriteLine("PROC_MON_FILTER_SAVE_FILENAME=gate:$fileNameGate")
+  if ($fileNameGate -ne "passed") {
+    throw "Process Monitor configuration file name did not retain the requested path"
+  }
+  Set-Stage "focus-export-config-save"
+  if (-not $save.Current.IsKeyboardFocusable) {
+    throw "Process Monitor configuration Save button cannot receive focus"
+  }
+  $save.SetFocus()
+  Set-Stage "verify-export-config-path"
+  $saveFocusState = Wait-ConfigSaveFocus $save
+  $saveFocusGate = if (
+    $null -ne $saveFocusState -and
+    $saveFocusState.ProcessId -eq $process.Id -and
+    $saveFocusState.IsEnabled -and
+    -not $saveFocusState.IsOffscreen -and
+    $saveFocusState.IsKeyboardFocusable -and
+    $saveFocusState.HasKeyboardFocus
+  ) { "passed" } else { "failed" }
+  [Console]::Out.WriteLine("PROC_MON_FILTER_SAVE_FOCUS=gate:$saveFocusGate")
+  if ($saveFocusGate -ne "passed") {
+    Write-ConfigSaveObservation "focus-failed" $saveControls $process.Id $ConfigPath
+    throw "Process Monitor configuration Save button did not receive keyboard focus"
+  }
+  $finalForegroundHandle = [ProcmonNativeMenu]::GetForegroundWindow()
+  $finalForegroundGate = if (
+    $finalForegroundHandle -eq $dialogHandle -and
+    [ProcmonNativeMenu]::GetWindowProcessId($finalForegroundHandle) -eq $process.Id
+  ) { "passed" } else { "failed" }
+  [Console]::Out.WriteLine("PROC_MON_FILTER_SAVE_FINAL_FOREGROUND=gate:$finalForegroundGate")
+  if ($finalForegroundGate -ne "passed") {
+    Write-ConfigSaveObservation "foreground-failed" $saveControls $process.Id $ConfigPath
+    throw "Process Monitor configuration save dialog lost foreground before activation"
   }
   Write-ConfigOutputObservation "before-save" $ConfigPath
   Set-Stage "confirm-export-config-enter"
