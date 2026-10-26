@@ -171,6 +171,7 @@ test("AC-05: Windows filter diagnostics retain safe focused-control observations
     "PROC_MON_FILTER_FOCUSED_CONTROL=after-reload-menu-invoke;type:Button;name:C:\\private\\mail;offscreen:false;keyboard-focusable:true;tree=Button:Other",
     "PROC_MON_FILTER_FOCUSED_CONTROL=after-reload-menu-expand;type:Button;name:Other;offscreen:false;keyboard-focusable:true;tree=Button:Other>Window:ProcessMonitor",
     "PROC_MON_FILTER_FOCUSED_CONTROL=after-reload-menu-select;type:Button;name:Other;offscreen:false;keyboard-focusable:true;tree=Button:Other>Window:ProcessMonitor",
+    "PROC_MON_FILTER_FOCUSED_CONTROL=after-reload-menu-pointer;type:Menu;name:Filter;offscreen:false;keyboard-focusable:true;tree=Menu:Filter>Window:ProcessMonitor",
   ].join("\n");
   assert.equal(
     describeWindowsFilterDiagnostics(output),
@@ -185,7 +186,8 @@ test("AC-05: Windows filter diagnostics retain safe focused-control observations
       + "; focus-after-command-invoke=Window:ProcessMonitor;offscreen:false;keyboard-focusable:false;tree=Window:ProcessMonitor"
       + "; focus-after-reload-menu-invoke=MenuItem:Filter;offscreen:false;keyboard-focusable:true;tree=MenuItem:Filter>Menu:Other"
       + "; focus-after-reload-menu-expand=Button:Other;offscreen:false;keyboard-focusable:true;tree=Button:Other>Window:ProcessMonitor"
-      + "; focus-after-reload-menu-select=Button:Other;offscreen:false;keyboard-focusable:true;tree=Button:Other>Window:ProcessMonitor",
+      + "; focus-after-reload-menu-select=Button:Other;offscreen:false;keyboard-focusable:true;tree=Button:Other>Window:ProcessMonitor"
+      + "; focus-after-reload-menu-pointer=Menu:Filter;offscreen:false;keyboard-focusable:true;tree=Menu:Filter>Window:ProcessMonitor",
   );
 });
 
@@ -250,6 +252,39 @@ test("AC-05: configuration file wait reports states without file paths or conten
       "PROC_MON_FILTER_CONFIG_FILE=observation:final;state:undersized",
     ),
     "; config-file-final=undersized",
+  );
+});
+
+test("AC-05: reloaded Filter pointer diagnostics expose only verified bounded state", () => {
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_RELOAD_MENU_POINTER=geometry:valid;point-match:true;input:sent",
+    ),
+    "; reload-menu-pointer=geometry:valid;point-match:true;input:sent",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_RELOAD_MENU_POINTER=geometry:valid;point-match:false;input:sent",
+    ),
+    "",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_RELOAD_MENU_POINTER=geometry:invalid;point-match:false;input:not-attempted",
+    ),
+    "; reload-menu-pointer=geometry:invalid;point-match:false;input:not-attempted",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_RELOAD_MENU_POINTER=geometry:valid;point-match:true;input:unknown",
+    ),
+    "",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_RELOAD_MENU_POINTER=geometry:valid;point-match:true;input:sent;name=C:\\private",
+    ),
+    "",
   );
 });
 

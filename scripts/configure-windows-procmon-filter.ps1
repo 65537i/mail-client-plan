@@ -66,6 +66,9 @@ public static class ProcmonNativeMenu
     private const int MenuItemRole = 12;
     private const int CheckedState = 0x10;
     private const int MixedState = 0x20;
+    private const uint InputMouse = 0;
+    private const uint MouseLeftDown = 0x0002;
+    private const uint MouseLeftUp = 0x0004;
 
     [StructLayout(LayoutKind.Sequential)]
     private struct MenuItemInfo
@@ -107,6 +110,31 @@ public static class ProcmonNativeMenu
         public Rect rcCaret;
     }
 
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MouseInput
+    {
+        public int Dx;
+        public int Dy;
+        public uint MouseData;
+        public uint Flags;
+        public uint Time;
+        public IntPtr ExtraInfo;
+    }
+
+    [StructLayout(LayoutKind.Explicit)]
+    private struct InputUnion
+    {
+        [FieldOffset(0)]
+        public MouseInput Mouse;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct Input
+    {
+        public uint Type;
+        public InputUnion Data;
+    }
+
     public sealed class ItemSnapshot
     {
         public string Text { get; set; }
@@ -138,12 +166,72 @@ public static class ProcmonNativeMenu
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool SetForegroundWindow(IntPtr hWnd);
 
+    [DllImport("user32.dll", ExactSpelling = true, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetCursorPos(int x, int y);
+
+    [DllImport("user32.dll", ExactSpelling = true, SetLastError = true)]
+    private static extern uint SendInput(uint count, [In] Input[] inputs, int size);
+
     public static int GetWindowProcessId(IntPtr hWnd)
     {
         uint processId;
         return GetWindowThreadProcessId(hWnd, out processId) == 0
             ? 0
             : processId > int.MaxValue ? 0 : (int)processId;
+    }
+
+    public static string ClickAtScreenPoint(
+        IntPtr expectedForegroundWindow,
+        uint expectedProcessId,
+        int x,
+        int y
+    )
+    {
+        if (
+            expectedForegroundWindow == IntPtr.Zero ||
+            GetForegroundWindow() != expectedForegroundWindow ||
+            GetWindowProcessId(expectedForegroundWindow) != expectedProcessId
+        )
+        {
+            return "foreground-mismatch";
+        }
+        if (!SetCursorPos(x, y))
+        {
+            return "position-failed";
+        }
+        if (
+            GetForegroundWindow() != expectedForegroundWindow ||
+            GetWindowProcessId(expectedForegroundWindow) != expectedProcessId
+        )
+        {
+            return "foreground-mismatch";
+        }
+
+        var down = new Input
+        {
+            Type = InputMouse,
+            Data = new InputUnion
+            {
+                Mouse = new MouseInput { Flags = MouseLeftDown }
+            }
+        };
+        var up = new Input
+        {
+            Type = InputMouse,
+            Data = new InputUnion
+            {
+                Mouse = new MouseInput { Flags = MouseLeftUp }
+            }
+        };
+        var size = Marshal.SizeOf(typeof(Input));
+        var downSent = SendInput(1, new[] { down }, size);
+        var upSent = SendInput(1, new[] { up }, size);
+        if (downSent != 1)
+        {
+            return "down-failed";
+        }
+        return upSent == 1 ? "sent" : "up-failed";
     }
 
     [DllImport("user32.dll", ExactSpelling = true, SetLastError = true)]
@@ -2487,7 +2575,7 @@ try {
     throw "Process Monitor reloaded main window did not become the foreground window"
   }
   Set-Stage "find-reloaded-filter-menu"
-  $reloadFilterMenu = Wait-Element $main ([System.Windows.Automation.AndCondition]::new(
+  $reloadFilterMenuCondition = [System.Windows.Automation.AndCondition]::new(
     [System.Windows.Automation.PropertyCondition]::new(
       [System.Windows.Automation.AutomationElement]::NameProperty, "Filter"
     ),
@@ -2495,7 +2583,16 @@ try {
       [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
       [System.Windows.Automation.ControlType]::MenuItem
     )
-  )) 5
+  )
+  $reloadFilterMenu = Wait-Element $main $reloadFilterMenuCondition 5
+  $reloadFilterMenuMatches = $main.FindAll(
+    [System.Windows.Automation.TreeScope]::Descendants,
+    $reloadFilterMenuCondition
+  )
+  if ($reloadFilterMenuMatches.Count -ne 1) {
+    throw "Reloaded Process Monitor did not expose one Filter menu item"
+  }
+  $reloadFilterMenu = $reloadFilterMenuMatches[0]
   $reloadFilterMenuState = $reloadFilterMenu.Current
   if (
     $reloadFilterMenuState.ProcessId -ne $process.Id -or
@@ -2533,12 +2630,6 @@ try {
   [Console]::Out.WriteLine(
     "PROC_MON_FILTER_RELOAD_MENU_PATTERN=invoke:$($hasReloadMenuInvoke.ToString().ToLowerInvariant())"
   )
-  if (-not $hasReloadMenuExpand -and
-    -not $hasReloadMenuSelection -and
-    -not $hasReloadMenuLegacyAccessible -and
-    -not $hasReloadMenuInvoke) {
-    throw "Reloaded Process Monitor Filter menu exposes no supported open pattern"
-  }
   $currentForegroundHandle = [ProcmonNativeMenu]::GetForegroundWindow()
   if ($currentForegroundHandle -ne $mainWindowHandle -or
     [ProcmonNativeMenu]::GetWindowProcessId($currentForegroundHandle) -ne $process.Id) {
@@ -2555,8 +2646,80 @@ try {
     $reloadMenuLegacyAccessible.DoDefaultAction()
     $reloadMenuAction = "legacy-ia"
   } else {
-    $reloadMenuInvoke.Invoke()
-    $reloadMenuAction = "invoke"
+    Set-Stage "verify-reloaded-filter-menu-pointer-target"
+    $pointerGeometry = "invalid"
+    $pointerMatch = "false"
+    $pointerInput = "not-attempted"
+    $bounds = $reloadFilterMenuState.BoundingRectangle
+    $boundsValid = (
+      -not $bounds.IsEmpty -and
+      $bounds.Width -gt 0 -and
+      $bounds.Height -gt 0 -and
+      -not [double]::IsNaN($bounds.Left) -and
+      -not [double]::IsNaN($bounds.Top) -and
+      -not [double]::IsInfinity($bounds.Left) -and
+      -not [double]::IsInfinity($bounds.Top)
+    )
+    $centerX = 0.0
+    $centerY = 0.0
+    if ($boundsValid) {
+      $centerX = [Math]::Floor($bounds.Left + ($bounds.Width / 2))
+      $centerY = [Math]::Floor($bounds.Top + ($bounds.Height / 2))
+      $boundsValid = (
+        $centerX -ge [int]::MinValue -and
+        $centerX -le [int]::MaxValue -and
+        $centerY -ge [int]::MinValue -and
+        $centerY -le [int]::MaxValue
+      )
+    }
+    if ($boundsValid) {
+      $pointerGeometry = "valid"
+      $targetRuntimeId = $reloadFilterMenu.GetRuntimeId() -join ","
+      if (-not [string]::IsNullOrWhiteSpace($targetRuntimeId)) {
+        $pointElement = [System.Windows.Automation.AutomationElement]::FromPoint(
+          [System.Windows.Point]::new($centerX, $centerY)
+        )
+        $treeWalker = [System.Windows.Automation.TreeWalker]::ControlViewWalker
+        for (
+          $pointLevel = 0;
+          $null -ne $pointElement -and $pointLevel -lt 4;
+          $pointLevel++
+        ) {
+          $pointState = $pointElement.Current
+          if ($pointState.ProcessId -ne $process.Id) {
+            break
+          }
+          $pointRuntimeId = $pointElement.GetRuntimeId() -join ","
+          if (
+            $pointRuntimeId -ceq $targetRuntimeId -and
+            $pointState.ControlType -eq [System.Windows.Automation.ControlType]::MenuItem -and
+            $pointState.Name -ceq "Filter" -and
+            $pointState.IsEnabled -and
+            -not $pointState.IsOffscreen
+          ) {
+            $pointerMatch = "true"
+            break
+          }
+          $pointElement = $treeWalker.GetParent($pointElement)
+        }
+      }
+    }
+    if ($pointerMatch -eq "true") {
+      Set-Stage "click-reloaded-filter-menu"
+      $pointerInput = [ProcmonNativeMenu]::ClickAtScreenPoint(
+        $mainWindowHandle,
+        [uint32]$process.Id,
+        [int]$centerX,
+        [int]$centerY
+      )
+    }
+    [Console]::Out.WriteLine(
+      "PROC_MON_FILTER_RELOAD_MENU_POINTER=geometry:$pointerGeometry;point-match:$pointerMatch;input:$pointerInput"
+    )
+    if ($pointerInput -ne "sent") {
+      throw "Reloaded Process Monitor Filter menu pointer activation was not verified"
+    }
+    $reloadMenuAction = "pointer"
   }
   Set-Stage "observe-reloaded-filter-menu-focus"
   Write-FocusObservation "after-reload-menu-$reloadMenuAction" | Out-Null
