@@ -128,6 +128,13 @@ export function describeWindowsFilterDiagnostics(output) {
     diagnostics.push(`reload-main-foreground-gate=${reloadMainForegroundGate}`);
   }
 
+  const reloadMenuAccessKeyGate = output.match(
+    /^PROC_MON_FILTER_RELOAD_MENU_KEY=gate:(passed|failed)\r?$/m,
+  )?.[1];
+  if (reloadMenuAccessKeyGate) {
+    diagnostics.push(`reload-menu-access-key-gate=${reloadMenuAccessKeyGate}`);
+  }
+
   const filterPathForegroundGates = Array.from(output.matchAll(
     /^PROC_MON_FILTER_PATH_FOREGROUND=gate:(passed|failed)\r?$/gm,
   ), (match) => match[1]);

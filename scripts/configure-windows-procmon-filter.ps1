@@ -879,6 +879,21 @@ function ConvertTo-SendKeysLiteral([string]$Value) {
   return $escaped.ToString()
 }
 
+function ConvertTo-ProcmonMenuAccessKey([string]$AccessKey) {
+  if ([string]::IsNullOrEmpty($AccessKey)) {
+    return $null
+  }
+  $match = [System.Text.RegularExpressions.Regex]::Match(
+    $AccessKey,
+    "\AAlt\+([A-Za-z])\z",
+    [System.Text.RegularExpressions.RegexOptions]::CultureInvariant
+  )
+  if (-not $match.Success) {
+    return $null
+  }
+  "%$($match.Groups[1].Value)"
+}
+
 function Write-ConfigSaveObservation(
   [string]$Phase,
   [System.Collections.IDictionary]$Controls,
@@ -2388,20 +2403,27 @@ try {
     )
   )) 5
   $reloadFilterMenuState = $reloadFilterMenu.Current
-  $reloadFilterInvoke = $null
   if (
     $reloadFilterMenuState.ProcessId -ne $process.Id -or
     -not $reloadFilterMenuState.IsEnabled -or
-    $reloadFilterMenuState.IsOffscreen -or
-    -not $reloadFilterMenu.TryGetCurrentPattern(
-      [System.Windows.Automation.InvokePattern]::Pattern,
-      [ref]$reloadFilterInvoke
-    )
+    $reloadFilterMenuState.IsOffscreen
   ) {
     throw "Reloaded Process Monitor Filter menu is unavailable"
   }
+  Set-Stage "read-reloaded-filter-menu-access-key"
+  $reloadMenuShortcut = ConvertTo-ProcmonMenuAccessKey $reloadFilterMenuState.AccessKey
+  $reloadMenuAccessKeyGate = if ($null -ne $reloadMenuShortcut) { "passed" } else { "failed" }
+  [Console]::Out.WriteLine("PROC_MON_FILTER_RELOAD_MENU_KEY=gate:$reloadMenuAccessKeyGate")
+  if ($reloadMenuAccessKeyGate -ne "passed") {
+    throw "Reloaded Process Monitor Filter menu has no supported access key"
+  }
+  $currentForegroundHandle = [ProcmonNativeMenu]::GetForegroundWindow()
+  if ($currentForegroundHandle -ne $mainWindowHandle -or
+    [ProcmonNativeMenu]::GetWindowProcessId($currentForegroundHandle) -ne $process.Id) {
+    throw "Process Monitor reloaded main window lost the foreground before menu activation"
+  }
   Set-Stage "open-reloaded-filter-menu"
-  $reloadFilterInvoke.Invoke()
+  [System.Windows.Forms.SendKeys]::SendWait($reloadMenuShortcut)
   $reloadMenu = $null
   $reloadMenuDeadline = [DateTime]::UtcNow.AddSeconds(5)
   do {

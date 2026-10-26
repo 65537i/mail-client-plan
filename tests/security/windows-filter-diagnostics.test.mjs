@@ -288,6 +288,14 @@ test("AC-05: configuration save observations expose states, not paths or dialog 
     "",
   );
   assert.equal(
+    describeWindowsFilterDiagnostics("PROC_MON_FILTER_RELOAD_MENU_KEY=gate:passed"),
+    "; reload-menu-access-key-gate=passed",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics("PROC_MON_FILTER_RELOAD_MENU_KEY=gate:C:\\private"),
+    "",
+  );
+  assert.equal(
     describeWindowsFilterDiagnostics(
       "PROC_MON_FILTER_PATH_FOREGROUND=gate:passed\nPROC_MON_FILTER_PATH_FOREGROUND=gate:failed\nPROC_MON_FILTER_PATH=gate:passed\nPROC_MON_FILTER_PATH=gate:passed",
     ),
