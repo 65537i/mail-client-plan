@@ -103,7 +103,8 @@ if ((ConvertTo-SendKeysLiteral "C:\audit\filter +1%~(^).pmc{}") -cne
   "C:\audit\filter {+}1{%}{~}{(}{^}{)}.pmc{{}{}}") {
   throw "Filename keyboard input did not escape SendKeys metacharacters"
 }
-if ((ConvertTo-ProcmonMenuAccessKey "Alt+F") -cne "%F") {
+if ((ConvertTo-ProcmonMenuAccessKey "Alt+F") -cne "%f" -or
+  (ConvertTo-ProcmonMenuAccessKey "Alt+f") -cne "%f") {
   throw "Safe single-letter menu access key was not converted"
 }
 foreach ($unsupportedAccessKey in @("", "F", "Alt+", "Alt+F%{ENTER}", "Alt+é", "C:\private", $null)) {

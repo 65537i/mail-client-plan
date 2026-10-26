@@ -891,7 +891,7 @@ function ConvertTo-ProcmonMenuAccessKey([string]$AccessKey) {
   if (-not $match.Success) {
     return $null
   }
-  "%$($match.Groups[1].Value)"
+  "%$($match.Groups[1].Value.ToLowerInvariant())"
 }
 
 function Write-ConfigSaveObservation(
