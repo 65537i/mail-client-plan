@@ -129,29 +129,12 @@ export function describeWindowsFilterDiagnostics(output) {
   }
 
   const reloadMenuPatterns = output.match(
-    /^PROC_MON_FILTER_RELOAD_MENU_PATTERNS=expand-collapse:(true|false);selection-item:(true|false);invoke:(true|false)\r?$/m,
+    /^PROC_MON_FILTER_RELOAD_MENU_PATTERNS=expand-collapse:(true|false);selection-item:(true|false);legacy-ia:(true|false);invoke:(true|false)\r?$/m,
   );
   if (reloadMenuPatterns) {
     diagnostics.push(
-      `reload-menu-patterns=expand-collapse:${reloadMenuPatterns[1]};selection-item:${reloadMenuPatterns[2]};invoke:${reloadMenuPatterns[3]}`,
+      `reload-menu-patterns=expand-collapse:${reloadMenuPatterns[1]};selection-item:${reloadMenuPatterns[2]};legacy-ia:${reloadMenuPatterns[3]};invoke:${reloadMenuPatterns[4]}`,
     );
-  }
-
-  const reloadMenuMsaa = output.match(
-    /^PROC_MON_FILTER_RELOAD_MENU_MSAA=state:(not-attempted|window-unavailable|process-unavailable|process-mismatch|object-unavailable|count-invalid|count-limit|child-read-failed|not-found|duplicate-match|invoke-failed|invoked);items:(\d{1,2});matches:(\d{1,2})\r?$/m,
-  );
-  if (reloadMenuMsaa) {
-    const items = Number(reloadMenuMsaa[2]);
-    const matches = Number(reloadMenuMsaa[3]);
-    if (
-      items <= 64
-      && matches <= items
-      && (reloadMenuMsaa[1] !== "invoked" || matches === 1)
-    ) {
-      diagnostics.push(
-        `reload-menu-msaa=state:${reloadMenuMsaa[1]};items:${items};matches:${matches}`,
-      );
-    }
   }
 
   const reloadMenuInvokePattern = output.match(

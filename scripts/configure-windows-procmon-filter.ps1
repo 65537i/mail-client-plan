@@ -301,114 +301,6 @@ public static class ProcmonNativeMenu
         }
     }
 
-    public static string InvokeAccessibleFilterMenu(
-        IntPtr window,
-        uint expectedProcessId,
-        out int itemCount,
-        out int matchCount
-    )
-    {
-        itemCount = 0;
-        matchCount = 0;
-        if (window == IntPtr.Zero)
-        {
-            return "window-unavailable";
-        }
-
-        uint windowProcessId;
-        if (GetWindowThreadProcessId(window, out windowProcessId) == 0)
-        {
-            return "process-unavailable";
-        }
-        if (windowProcessId != expectedProcessId)
-        {
-            return "process-mismatch";
-        }
-
-        var interfaceId = new Guid("618736E0-3C3D-11CF-810C-00AA00389B71");
-        Accessibility.IAccessible accessibleObject;
-        var result = AccessibleObjectFromWindow(
-            window,
-            unchecked((uint)-3),
-            ref interfaceId,
-            out accessibleObject
-        );
-        if (result != 0 || accessibleObject == null)
-        {
-            return "object-unavailable";
-        }
-
-        try
-        {
-            itemCount = accessibleObject.accChildCount;
-            if (itemCount < 0)
-            {
-                return "count-invalid";
-            }
-            if (itemCount > MaximumAccessibleMenuItems)
-            {
-                return "count-limit";
-            }
-
-            var matchingChildId = 0;
-            for (var childId = 1; childId <= itemCount; childId++)
-            {
-                var child = (object)childId;
-                var name = accessibleObject.get_accName(child) ?? string.Empty;
-                int role;
-                if (!TryGetInteger(accessibleObject.get_accRole(child), out role))
-                {
-                    return "child-read-failed";
-                }
-                if (role != MenuItemRole)
-                {
-                    continue;
-                }
-
-                var normalizedName = name.Replace("&", "");
-                var acceleratorIndex = normalizedName.IndexOf('\t');
-                if (acceleratorIndex >= 0)
-                {
-                    normalizedName = normalizedName.Substring(0, acceleratorIndex);
-                }
-                if (!string.Equals(
-                    normalizedName.Trim(),
-                    "Filter",
-                    StringComparison.Ordinal
-                ))
-                {
-                    continue;
-                }
-
-                matchCount++;
-                matchingChildId = childId;
-            }
-
-            if (matchCount == 0)
-            {
-                return "not-found";
-            }
-            if (matchCount != 1)
-            {
-                return "duplicate-match";
-            }
-
-            try
-            {
-                accessibleObject.accDoDefaultAction((object)matchingChildId);
-                return "invoked";
-            }
-            catch (COMException)
-            {
-                return "invoke-failed";
-            }
-        }
-        catch (COMException)
-        {
-            return "child-read-failed";
-        }
-    }
-
     public static IntPtr GetMenuOwnerWindow(
         IntPtr menuWindow,
         uint expectedProcessId,
@@ -2623,19 +2515,25 @@ try {
     [System.Windows.Automation.SelectionItemPattern]::Pattern,
     [ref]$reloadMenuSelection
   )
+  $reloadMenuLegacyAccessible = $null
+  $hasReloadMenuLegacyAccessible = $reloadFilterMenu.TryGetCurrentPattern(
+    [System.Windows.Automation.LegacyIAccessiblePattern]::Pattern,
+    [ref]$reloadMenuLegacyAccessible
+  )
   $reloadMenuInvoke = $null
   $hasReloadMenuInvoke = $reloadFilterMenu.TryGetCurrentPattern(
     [System.Windows.Automation.InvokePattern]::Pattern,
     [ref]$reloadMenuInvoke
   )
   [Console]::Out.WriteLine(
-    "PROC_MON_FILTER_RELOAD_MENU_PATTERNS=expand-collapse:$($hasReloadMenuExpand.ToString().ToLowerInvariant());selection-item:$($hasReloadMenuSelection.ToString().ToLowerInvariant());invoke:$($hasReloadMenuInvoke.ToString().ToLowerInvariant())"
+    "PROC_MON_FILTER_RELOAD_MENU_PATTERNS=expand-collapse:$($hasReloadMenuExpand.ToString().ToLowerInvariant());selection-item:$($hasReloadMenuSelection.ToString().ToLowerInvariant());legacy-ia:$($hasReloadMenuLegacyAccessible.ToString().ToLowerInvariant());invoke:$($hasReloadMenuInvoke.ToString().ToLowerInvariant())"
   )
   [Console]::Out.WriteLine(
     "PROC_MON_FILTER_RELOAD_MENU_PATTERN=invoke:$($hasReloadMenuInvoke.ToString().ToLowerInvariant())"
   )
   if (-not $hasReloadMenuExpand -and
     -not $hasReloadMenuSelection -and
+    -not $hasReloadMenuLegacyAccessible -and
     -not $hasReloadMenuInvoke) {
     throw "Reloaded Process Monitor Filter menu exposes no supported open pattern"
   }
@@ -2644,21 +2542,6 @@ try {
     [ProcmonNativeMenu]::GetWindowProcessId($currentForegroundHandle) -ne $process.Id) {
     throw "Process Monitor reloaded main window lost the foreground before menu activation"
   }
-  $reloadMenuMsaaState = "not-attempted"
-  $reloadMenuMsaaItems = 0
-  $reloadMenuMsaaMatches = 0
-  if (-not $hasReloadMenuExpand -and -not $hasReloadMenuSelection -and $hasReloadMenuInvoke) {
-    Set-Stage "activate-reloaded-filter-menu-msaa"
-    $reloadMenuMsaaState = [ProcmonNativeMenu]::InvokeAccessibleFilterMenu(
-      $mainWindowHandle,
-      [uint32]$process.Id,
-      [ref]$reloadMenuMsaaItems,
-      [ref]$reloadMenuMsaaMatches
-    )
-  }
-  [Console]::Out.WriteLine(
-    "PROC_MON_FILTER_RELOAD_MENU_MSAA=state:$reloadMenuMsaaState;items:$([Math]::Min($reloadMenuMsaaItems, 64));matches:$([Math]::Min($reloadMenuMsaaMatches, 64))"
-  )
   Set-Stage "activate-reloaded-filter-menu"
   if ($hasReloadMenuExpand) {
     $reloadMenuExpand.Expand()
@@ -2666,8 +2549,9 @@ try {
   } elseif ($hasReloadMenuSelection) {
     $reloadMenuSelection.Select()
     $reloadMenuAction = "select"
-  } elseif ($reloadMenuMsaaState -eq "invoked") {
-    $reloadMenuAction = "msaa"
+  } elseif ($hasReloadMenuLegacyAccessible) {
+    $reloadMenuLegacyAccessible.DoDefaultAction()
+    $reloadMenuAction = "legacy-ia"
   } else {
     $reloadMenuInvoke.Invoke()
     $reloadMenuAction = "invoke"
