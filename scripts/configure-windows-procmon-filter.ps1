@@ -2351,8 +2351,32 @@ try {
   }
   Set-Stage "find-reloaded-main-window"
   $main = Wait-MainWindow $process
-  Set-Stage "focus-reloaded-main-window"
-  $main.SetFocus()
+  Set-Stage "activate-reloaded-main-window"
+  $mainWindowHandle = [IntPtr]$main.Current.NativeWindowHandle
+  $mainForegroundGate = "failed"
+  if (
+    $main.Current.ProcessId -eq $process.Id -and
+    $mainWindowHandle -ne [IntPtr]::Zero -and
+    [ProcmonNativeMenu]::GetWindowProcessId($mainWindowHandle) -eq $process.Id
+  ) {
+    [ProcmonNativeMenu]::SetForegroundWindow($mainWindowHandle) | Out-Null
+    $mainForegroundDeadline = [DateTime]::UtcNow.AddSeconds(2)
+    do {
+      $foregroundHandle = [ProcmonNativeMenu]::GetForegroundWindow()
+      if (
+        $foregroundHandle -eq $mainWindowHandle -and
+        [ProcmonNativeMenu]::GetWindowProcessId($foregroundHandle) -eq $process.Id
+      ) {
+        $mainForegroundGate = "passed"
+        break
+      }
+      Start-Sleep -Milliseconds 50
+    } while ([DateTime]::UtcNow -lt $mainForegroundDeadline)
+  }
+  [Console]::Out.WriteLine("PROC_MON_FILTER_RELOAD_MAIN_FOREGROUND=gate:$mainForegroundGate")
+  if ($mainForegroundGate -ne "passed") {
+    throw "Process Monitor reloaded main window did not become the foreground window"
+  }
   Set-Stage "find-reloaded-filter-menu"
   $reloadFilterMenu = Wait-Element $main ([System.Windows.Automation.AndCondition]::new(
     [System.Windows.Automation.PropertyCondition]::new(

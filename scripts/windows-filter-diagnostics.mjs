@@ -121,6 +121,13 @@ export function describeWindowsFilterDiagnostics(output) {
     diagnostics.push(`config-save-final-foreground-gate=${saveFinalForegroundGate}`);
   }
 
+  const reloadMainForegroundGate = output.match(
+    /^PROC_MON_FILTER_RELOAD_MAIN_FOREGROUND=gate:(passed|failed)\r?$/m,
+  )?.[1];
+  if (reloadMainForegroundGate) {
+    diagnostics.push(`reload-main-foreground-gate=${reloadMainForegroundGate}`);
+  }
+
   const filterPathForegroundGates = Array.from(output.matchAll(
     /^PROC_MON_FILTER_PATH_FOREGROUND=gate:(passed|failed)\r?$/gm,
   ), (match) => match[1]);
