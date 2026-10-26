@@ -2474,16 +2474,24 @@ try {
     throw "Reloaded Process Monitor Filter menu is unavailable"
   }
   Set-Stage "read-reloaded-filter-menu-pattern"
+  $reloadMenuExpand = $null
+  $hasReloadMenuExpand = $reloadFilterMenu.TryGetCurrentPattern(
+    [System.Windows.Automation.ExpandCollapsePattern]::Pattern,
+    [ref]$reloadMenuExpand
+  )
   $reloadMenuInvoke = $null
   $hasReloadMenuInvoke = $reloadFilterMenu.TryGetCurrentPattern(
     [System.Windows.Automation.InvokePattern]::Pattern,
     [ref]$reloadMenuInvoke
   )
   [Console]::Out.WriteLine(
+    "PROC_MON_FILTER_RELOAD_MENU_PATTERNS=expand-collapse:$($hasReloadMenuExpand.ToString().ToLowerInvariant());invoke:$($hasReloadMenuInvoke.ToString().ToLowerInvariant())"
+  )
+  [Console]::Out.WriteLine(
     "PROC_MON_FILTER_RELOAD_MENU_PATTERN=invoke:$($hasReloadMenuInvoke.ToString().ToLowerInvariant())"
   )
-  if (-not $hasReloadMenuInvoke) {
-    throw "Reloaded Process Monitor Filter menu does not expose InvokePattern"
+  if (-not $hasReloadMenuExpand -and -not $hasReloadMenuInvoke) {
+    throw "Reloaded Process Monitor Filter menu exposes no supported open pattern"
   }
   $currentForegroundHandle = [ProcmonNativeMenu]::GetForegroundWindow()
   if ($currentForegroundHandle -ne $mainWindowHandle -or
@@ -2491,9 +2499,14 @@ try {
     throw "Process Monitor reloaded main window lost the foreground before menu activation"
   }
   Set-Stage "activate-reloaded-filter-menu"
-  $reloadMenuInvoke.Invoke()
+  if ($hasReloadMenuExpand) {
+    $reloadMenuExpand.Expand()
+  } else {
+    $reloadMenuInvoke.Invoke()
+  }
   Set-Stage "observe-reloaded-filter-menu-focus"
-  Write-FocusObservation "after-reload-menu-invoke" | Out-Null
+  $reloadMenuAction = if ($hasReloadMenuExpand) { "expand" } else { "invoke" }
+  Write-FocusObservation "after-reload-menu-$reloadMenuAction" | Out-Null
   Set-Stage "wait-reloaded-filter-menu"
   $reloadMenuScan = Wait-ProcessMenu $process
   $reloadMenu = $reloadMenuScan.Menu

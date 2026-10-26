@@ -128,6 +128,15 @@ export function describeWindowsFilterDiagnostics(output) {
     diagnostics.push(`reload-main-foreground-gate=${reloadMainForegroundGate}`);
   }
 
+  const reloadMenuPatterns = output.match(
+    /^PROC_MON_FILTER_RELOAD_MENU_PATTERNS=expand-collapse:(true|false);invoke:(true|false)\r?$/m,
+  );
+  if (reloadMenuPatterns) {
+    diagnostics.push(
+      `reload-menu-patterns=expand-collapse:${reloadMenuPatterns[1]};invoke:${reloadMenuPatterns[2]}`,
+    );
+  }
+
   const reloadMenuInvokePattern = output.match(
     /^PROC_MON_FILTER_RELOAD_MENU_PATTERN=invoke:(true|false)\r?$/m,
   )?.[1];
@@ -513,7 +522,7 @@ export function describeWindowsFilterDiagnostics(output) {
     }
   }
   for (const match of output.matchAll(
-    /^PROC_MON_FILTER_FOCUSED_CONTROL=(after-open|after-home|filter-command|after-enter|after-invoke|after-click|after-command-invoke|after-reload-menu-invoke);focused:(none|unavailable)\r?$/gm,
+    /^PROC_MON_FILTER_FOCUSED_CONTROL=(after-open|after-home|filter-command|after-enter|after-invoke|after-click|after-command-invoke|after-reload-menu-(?:expand|invoke));focused:(none|unavailable)\r?$/gm,
   )) {
     focusObservations.push({
       index: match.index,
@@ -521,7 +530,7 @@ export function describeWindowsFilterDiagnostics(output) {
     });
   }
   for (const match of output.matchAll(
-    /^PROC_MON_FILTER_FOCUSED_CONTROL=(after-open|after-home|filter-command|after-enter|after-invoke|after-click|after-command-invoke|after-reload-menu-invoke);type:(MenuBar|Menu|MenuItem|Window|Pane|ToolBar|Button|Text|Edit|Other);name:(FileMenu|Filter|FilterCommand|SaveFilterCommand|ExportConfigCommand|MenuBar|ProcessMonitor|Other);offscreen:(true|false);keyboard-focusable:(true|false);tree=([A-Za-z:>]+)\r?$/gm,
+    /^PROC_MON_FILTER_FOCUSED_CONTROL=(after-open|after-home|filter-command|after-enter|after-invoke|after-click|after-command-invoke|after-reload-menu-(?:expand|invoke));type:(MenuBar|Menu|MenuItem|Window|Pane|ToolBar|Button|Text|Edit|Other);name:(FileMenu|Filter|FilterCommand|SaveFilterCommand|ExportConfigCommand|MenuBar|ProcessMonitor|Other);offscreen:(true|false);keyboard-focusable:(true|false);tree=([A-Za-z:>]+)\r?$/gm,
   )) {
     const nodes = match[6].split(">");
     if (
