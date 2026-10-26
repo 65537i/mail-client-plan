@@ -2516,10 +2516,12 @@ try {
     [ref]$reloadMenuSelection
   )
   $reloadMenuLegacyAccessible = $null
-  $hasReloadMenuLegacyAccessible = $reloadFilterMenu.TryGetCurrentPattern(
-    [System.Windows.Automation.LegacyIAccessiblePattern]::Pattern,
-    [ref]$reloadMenuLegacyAccessible
-  )
+  $reloadMenuLegacyAccessiblePattern = [System.Windows.Automation.AutomationPattern]::LookupById(10018)
+  $hasReloadMenuLegacyAccessible = $null -ne $reloadMenuLegacyAccessiblePattern -and
+    $reloadFilterMenu.TryGetCurrentPattern(
+      $reloadMenuLegacyAccessiblePattern,
+      [ref]$reloadMenuLegacyAccessible
+    )
   $reloadMenuInvoke = $null
   $hasReloadMenuInvoke = $reloadFilterMenu.TryGetCurrentPattern(
     [System.Windows.Automation.InvokePattern]::Pattern,
