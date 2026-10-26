@@ -183,10 +183,20 @@ test("AC-05: configuration save observations expose states, not paths or dialog 
     "; config-save-focus-gate=failed",
   );
   assert.equal(
+    describeWindowsFilterDiagnostics("PROC_MON_FILTER_SAVE_FOREGROUND=gate:passed"),
+    "; config-save-foreground-gate=passed",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics("PROC_MON_FILTER_SAVE_FOREGROUND=gate:failed"),
+    "; config-save-foreground-gate=failed",
+  );
+  assert.equal(
     describeWindowsFilterDiagnostics([
       "PROC_MON_FILTER_SAVE_FOCUS=gate:C:\\private\\mail",
+      "PROC_MON_FILTER_SAVE_FOREGROUND=gate:C:\\private\\mail",
       "PROC_MON_FILTER_CONFIG_SAVE=after-invoke;dialog:available;enabled:true;offscreen:false;path:matches;save-enabled:true;save-offscreen:false;save-focusable:true;save-focused:true",
       "PROC_MON_FILTER_CONFIG_SAVE=focus-failed;dialog:available;enabled:true;offscreen:true;path:matches;save-enabled:true;save-offscreen:true;save-focusable:true;save-focused:false",
+      "PROC_MON_FILTER_CONFIG_SAVE=foreground-failed;dialog:available;enabled:true;offscreen:false;path:matches;save-enabled:true;save-offscreen:false;save-focusable:true;save-focused:true",
       "PROC_MON_FILTER_CONFIG_SAVE=verify-failed;dialog:available;enabled:false;offscreen:false;path:different;save-enabled:false;save-offscreen:false;save-focusable:false;save-focused:false",
       "PROC_MON_FILTER_CONFIG_SAVE=verify-failed;dialog:unavailable",
       "PROC_MON_FILTER_CONFIG_SAVE=after-invoke;dialog:other-process",
@@ -197,6 +207,7 @@ test("AC-05: configuration save observations expose states, not paths or dialog 
     ].join("\n")),
     "; config-save-after-invoke=dialog:available;enabled:true;offscreen:false;path:matches;save-enabled:true;save-offscreen:false;save-focusable:true;save-focused:true"
       + "; config-save-focus-failed=dialog:available;enabled:true;offscreen:true;path:matches;save-enabled:true;save-offscreen:true;save-focusable:true;save-focused:false"
+      + "; config-save-foreground-failed=dialog:available;enabled:true;offscreen:false;path:matches;save-enabled:true;save-offscreen:false;save-focusable:true;save-focused:true"
       + "; config-save-verify-failed=dialog:available;enabled:false;offscreen:false;path:different;save-enabled:false;save-offscreen:false;save-focusable:false;save-focused:false"
       + "; config-save-verify-failed=dialog:unavailable"
       + "; config-save-after-invoke=dialog:other-process",

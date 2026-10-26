@@ -100,8 +100,15 @@ export function describeWindowsFilterDiagnostics(output) {
   )?.[1];
   if (saveFocusGate) diagnostics.push(`config-save-focus-gate=${saveFocusGate}`);
 
+  const saveForegroundGate = output.match(
+    /^PROC_MON_FILTER_SAVE_FOREGROUND=gate:(passed|failed)\r?$/m,
+  )?.[1];
+  if (saveForegroundGate) {
+    diagnostics.push(`config-save-foreground-gate=${saveForegroundGate}`);
+  }
+
   for (const match of output.matchAll(
-    /^PROC_MON_FILTER_CONFIG_SAVE=(after-invoke|verify-failed|focus-failed);(dialog:(?:unavailable|other-process)|dialog:available;enabled:(?:true|false);offscreen:(?:true|false);path:(?:matches|different);save-enabled:(?:true|false);save-offscreen:(?:true|false);save-focusable:(?:true|false);save-focused:(?:true|false))\r?$/gm,
+    /^PROC_MON_FILTER_CONFIG_SAVE=(after-invoke|verify-failed|focus-failed|foreground-failed);(dialog:(?:unavailable|other-process)|dialog:available;enabled:(?:true|false);offscreen:(?:true|false);path:(?:matches|different);save-enabled:(?:true|false);save-offscreen:(?:true|false);save-focusable:(?:true|false);save-focused:(?:true|false))\r?$/gm,
   )) {
     diagnostics.push(`config-save-${match[1]}=${match[2]}`);
   }

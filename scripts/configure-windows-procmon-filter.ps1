@@ -132,6 +132,21 @@ public static class ProcmonNativeMenu
     private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
 
     [DllImport("user32.dll", ExactSpelling = true, SetLastError = true)]
+    public static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll", ExactSpelling = true, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool SetForegroundWindow(IntPtr hWnd);
+
+    public static int GetWindowProcessId(IntPtr hWnd)
+    {
+        uint processId;
+        return GetWindowThreadProcessId(hWnd, out processId) == 0
+            ? 0
+            : processId > int.MaxValue ? 0 : (int)processId;
+    }
+
+    [DllImport("user32.dll", ExactSpelling = true, SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool GetGUIThreadInfo(uint threadId, ref GuiThreadInfo info);
 
@@ -1789,6 +1804,32 @@ try {
   }
   if ($fileNamePattern.Current.Value -cne $ConfigPath) {
     throw "Process Monitor configuration file name did not retain the requested path"
+  }
+  Set-Stage "activate-export-config-dialog"
+  $dialogHandle = [IntPtr]$saveControls.Dialog.Current.NativeWindowHandle
+  $foregroundGate = "failed"
+  if (
+    $dialogHandle -ne [IntPtr]::Zero -and
+    [ProcmonNativeMenu]::GetWindowProcessId($dialogHandle) -eq $process.Id
+  ) {
+    [ProcmonNativeMenu]::SetForegroundWindow($dialogHandle) | Out-Null
+    $foregroundDeadline = [DateTime]::UtcNow.AddSeconds(2)
+    do {
+      $foregroundHandle = [ProcmonNativeMenu]::GetForegroundWindow()
+      if (
+        $foregroundHandle -eq $dialogHandle -and
+        [ProcmonNativeMenu]::GetWindowProcessId($foregroundHandle) -eq $process.Id
+      ) {
+        $foregroundGate = "passed"
+        break
+      }
+      Start-Sleep -Milliseconds 50
+    } while ([DateTime]::UtcNow -lt $foregroundDeadline)
+  }
+  [Console]::Out.WriteLine("PROC_MON_FILTER_SAVE_FOREGROUND=gate:$foregroundGate")
+  if ($foregroundGate -ne "passed") {
+    Write-ConfigSaveObservation "foreground-failed" $saveControls $process.Id $ConfigPath
+    throw "Process Monitor configuration save dialog did not become the foreground window"
   }
   Write-ConfigOutputObservation "before-save" $ConfigPath
   Set-Stage "confirm-export-config-enter"
