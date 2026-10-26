@@ -1,5 +1,5 @@
 const allowedTypes = /^(?:MenuBar|Menu|MenuItem|Window|Pane|ToolBar|Button|Text|Edit|Other)$/;
-const allowedNames = /^(?:FileMenu|Filter|FilterCommand|SaveFilterCommand|DropFilteredEvents|HighlightFilteredEvents|MenuBar|ProcessMonitor|Other)$/;
+const allowedNames = /^(?:FileMenu|Filter|FilterCommand|SaveFilterCommand|ExportConfigCommand|DropFilteredEvents|HighlightFilteredEvents|MenuBar|ProcessMonitor|Other)$/;
 export const windowsFilterOutputLimit = 8192;
 const windowsFilterOutputHeadLimit = 3072;
 const windowsFilterOutputTruncationMarker = "\nPROC_MON_FILTER_OUTPUT_TRUNCATED=true\n";
@@ -77,6 +77,15 @@ export function describeWindowsFilterDiagnostics(output) {
   if (dialogScan) {
     diagnostics.push(
       `filter-dialog-scan=process-windows:${dialogScan[1]};non-main-windows:${dialogScan[2]};reset-control:${dialogScan[3]}`,
+    );
+  }
+
+  const saveDialogScan = output.match(
+    /^PROC_MON_FILTER_SAVE_DIALOG_SCAN=windows:(\d{1,4});file-names:(\d{1,4});save-buttons:(\d{1,4})\r?$/m,
+  );
+  if (saveDialogScan) {
+    diagnostics.push(
+      `config-save-dialog-scan=windows:${saveDialogScan[1]};file-names:${saveDialogScan[2]};save-buttons:${saveDialogScan[3]}`,
     );
   }
 
@@ -335,7 +344,7 @@ export function describeWindowsFilterDiagnostics(output) {
     });
   }
   for (const match of output.matchAll(
-    /^PROC_MON_FILTER_FOCUSED_CONTROL=(after-open|after-home|filter-command|after-enter|after-invoke|after-click|after-command-invoke);type:(MenuBar|Menu|MenuItem|Window|Pane|ToolBar|Button|Text|Edit|Other);name:(FileMenu|Filter|FilterCommand|SaveFilterCommand|MenuBar|ProcessMonitor|Other);offscreen:(true|false);keyboard-focusable:(true|false);tree=([A-Za-z:>]+)\r?$/gm,
+    /^PROC_MON_FILTER_FOCUSED_CONTROL=(after-open|after-home|filter-command|after-enter|after-invoke|after-click|after-command-invoke);type:(MenuBar|Menu|MenuItem|Window|Pane|ToolBar|Button|Text|Edit|Other);name:(FileMenu|Filter|FilterCommand|SaveFilterCommand|ExportConfigCommand|MenuBar|ProcessMonitor|Other);offscreen:(true|false);keyboard-focusable:(true|false);tree=([A-Za-z:>]+)\r?$/gm,
   )) {
     const nodes = match[6].split(">");
     if (

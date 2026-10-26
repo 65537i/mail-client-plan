@@ -110,13 +110,31 @@ test("AC-05: Windows save-menu diagnostics retain bounded labels, not arbitrary 
   const output = [
     "PROC_MON_FILTER_MENU_ITEMS=before-save;count:11;truncated:true;items=MenuItem:Other:true:false:true,Other:Other:false:false:false,MenuItem:FilterCommand:true:false:true,MenuItem:Other:true:false:true,MenuItem:Other:true:false:true,MenuItem:SaveFilterCommand:true:false:true,MenuItem:Other:true:false:true,Other:Other:false:false:false",
     "PROC_MON_FILTER_MENU_ITEMS=before-save;count:1;truncated:false;items=MenuItem:C:\\private\\mail:true:false:true",
+    "PROC_MON_FILTER_MENU_ITEMS=before-save;count:1;truncated:false;items=MenuItem:ExportConfigCommand:true:false:true",
     "PROC_MON_FILTER_MENU_ITEMS=before-save;unavailable",
   ].join("\n");
   assert.equal(
     describeWindowsFilterDiagnostics(output),
     "; menu-items-before-save=count:11;truncated:true;items=MenuItem:Other:true:false:true,Other:Other:false:false:false,MenuItem:FilterCommand:true:false:true,MenuItem:Other:true:false:true,MenuItem:Other:true:false:true,MenuItem:SaveFilterCommand:true:false:true,MenuItem:Other:true:false:true,Other:Other:false:false:false"
+      + "; menu-items-before-save=count:1;truncated:false;items=MenuItem:ExportConfigCommand:true:false:true"
       + "; menu-items-before-save=unavailable",
   );
+});
+
+test("AC-05: configuration save diagnostics expose only bounded control counts", () => {
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_SAVE_DIALOG_SCAN=windows:2;file-names:0;save-buttons:1",
+    ),
+    "; config-save-dialog-scan=windows:2;file-names:0;save-buttons:1",
+  );
+  for (const line of [
+    "PROC_MON_FILTER_SAVE_DIALOG_SCAN=windows:20000;file-names:0;save-buttons:1",
+    "PROC_MON_FILTER_SAVE_DIALOG_SCAN=windows:2;file-names:C:\\private\\mail;save-buttons:1",
+    "PROC_MON_FILTER_SAVE_DIALOG_SCAN=windows:2;file-names:0;save-buttons:1;title:private",
+  ]) {
+    assert.equal(describeWindowsFilterDiagnostics(line), "");
+  }
 });
 
 test("AC-05: Windows filter diagnostics retain only snapshot handoff state", () => {

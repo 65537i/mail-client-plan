@@ -19,7 +19,7 @@ Windows: MSVC toolchain、WebView2、必要SDK。WebDriverを外部利用する�
 
 ### nativeの短い検証ループ
 
-最新Windows診断（Run 234、`8720bc8`）では、初期Filter menuのbounded summaryに`SaveFilterCommand`が見えた。Save FilterをFile menu内で探していたことが失敗原因であり、Alt+Fのfocus取得自体の失敗ではなかった。保存処理はDrop Filtered Eventsの`checked:on`を検証したFilter popupをそのまま利用し、menuと保存項目のprocess / enabled / visible、exact unique名、InvokePatternを確認して実行する。保存前summaryは`before-save`として区別する。22件のlocal Windows関連tests、JS syntax、diff check成功。以下のRun232までの診断履歴は過去の状況であり、この修正後のWindows runtimeと`.PMC`保存以降は未確認。
+最新Windows診断（Run 236、`97caac1`）はSave Filter commandのInvokeを通過したが、保存dialog待機で失敗した。[Microsoft公式配布版](https://learn.microsoft.com/en-us/sysinternals/downloads/procmon)のProcmon64メニュー・dialog resourcesを確認し、`Save Filter...`は名前付きfilter用、`.PMC`保存はFile → `Export Configuration...`と判明した。`ProcmonConfiguration.pmc`と`Procmon Configuration (*.PMC)`も同resourcesに存在する。Run234後のFilter menu routeでは目的のfile exportにならないため、現在はFile menu内のexact uniqueなExport ConfigurationをInvokeし、same-processのtop-level / embedded Windowに一意の`File name:` Edit / `Save` Buttonがあることを検証する。任意の最初のEditや別processのSave dialogには書き込まない。保存前summaryは`before-save`、失敗時のdialog診断は上限付きcontrol件数のみ。以下の過去runのmenu推測はこの調査で訂正され、変更後Windows runtimeと`.PMC`保存以降は未確認。
 
 Actions → native → Run workflowで最新のmainを選び、以下を指定する。旧runのRe-run jobsは旧commitを使うため、修正確認には新規実行を使う。
 
@@ -190,6 +190,8 @@ Run 230（`9c54fef`、manual Windows 2025 x64 / webview）はplan、security-tes
 Run 232（`a47df87`、manual Windows 2025 x64 / webview）はplan、security-test build、Windows audit setup / worker / filter diagnostics regression tests成功。MSAAは初期`checked:off`からInvoke後`checked:on`となったが、`find-save-filter-command`でtimeoutし、`.PMC`保存 / WDIO / capture / controls未到達、AC-05未達。Alt+F後のFocusedElementはsame-process `MenuItem`で、親Menuも取得できていた。次の修正でfocused MenuItemの場合も親Menu内の子要素をbounded summary出力する。FileとSave Filter commandは固定safe labelのみにして、任意UI textはログへ出さない。
 
 Run 234（`8720bc8`、manual Windows 2025 x64 / webview）はWindows関連regression tests成功後、初期MSAA `checked:off`とInvoke後`checked:on`を確認したが、`find-save-filter-command`でRuntimeExceptionとなった。初期Filter menuには`FilterCommand`と`SaveFilterCommand`が共存し、後続File menuの先頭8件には保存項目がなかった。従来の「timeout」という記述とは異なり、このrunはexact unique項目の欠落を明示して停止している。`.PMC`保存 / WDIO / capture / controls未到達、AC-05未達。File menuへ切り替える経路を除去し、既存Filter popup内の保存項目をInvokeする修正を加えた。任意UI textの非出力、8192文字上限、fail-closedおよび256 MiB gateは維持する。
+
+Run 236（`97caac1`、manual Windows 2025 x64 / webview）はplanとWindows関連regression tests成功。MSAA `checked:on`、保存前Filter menu内の`SaveFilterCommand`を確認し、same-process / enabled / visible / exact unique / InvokePattern gateも通過した。その後`wait-save-filter-dialog`でRuntimeException。`.PMC`保存 / WDIO / capture / controls未到達で、AC-05未達。公式binary resourcesの調査でnamed filter保存とconfiguration exportを混同していたことを確認した。正しいFile → Export Configuration routeへ変更し、titleだけのdesktop検索を廃止。別process、main window自身、重複dialog、重複control、非表示・無効・read-only controlを成功扱いにしない。実際のexport dialogのUIA構造とcaptureへの到達は次runで検証する。
 
 Rustのregistry / git依存と`target`をキャッシュし、OS・arch・runner・固定Rust版・lockfile / manifests / Cargo設定hashを区別する。同一モードを優先し、同じ依存条件の別モードからも復元可能。キャッシュhitでもbuild / testは省略しない。キャッシュは依存・ビルド出力のみで、資格情報ストア、監査trace、メールデータは含めない。初回はcold buildとなり、短縮量はrunnerで実測する。
 

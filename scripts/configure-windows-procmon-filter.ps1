@@ -448,23 +448,80 @@ function Wait-Element([System.Windows.Automation.AutomationElement]$Root, [Syste
   throw "Timed out waiting for a Process Monitor UI control"
 }
 
-function Wait-TopLevelWindow([string]$NamePattern, [int]$TimeoutSeconds = 10) {
+function Wait-ConfigSaveDialog(
+  [System.Diagnostics.Process]$Process,
+  [System.Windows.Automation.AutomationElement]$MainWindow,
+  [int]$TimeoutSeconds = 10
+) {
   $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
   $windowCondition = [System.Windows.Automation.PropertyCondition]::new(
     [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
     [System.Windows.Automation.ControlType]::Window
+  )
+  $fileNameCondition = [System.Windows.Automation.AndCondition]::new(
+    [System.Windows.Automation.PropertyCondition]::new(
+      [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+      [System.Windows.Automation.ControlType]::Edit
+    ),
+    [System.Windows.Automation.PropertyCondition]::new(
+      [System.Windows.Automation.AutomationElement]::NameProperty, "File name:"
+    )
+  )
+  $saveCondition = [System.Windows.Automation.AndCondition]::new(
+    [System.Windows.Automation.PropertyCondition]::new(
+      [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+      [System.Windows.Automation.ControlType]::Button
+    ),
+    [System.Windows.Automation.PropertyCondition]::new(
+      [System.Windows.Automation.AutomationElement]::NameProperty, "Save"
+    )
   )
   do {
     $windows = [System.Windows.Automation.AutomationElement]::RootElement.FindAll(
       [System.Windows.Automation.TreeScope]::Children,
       $windowCondition
     )
-    foreach ($window in $windows) {
-      if ($window.Current.Name -match $NamePattern) { return $window }
+    $embeddedWindows = $MainWindow.FindAll(
+      [System.Windows.Automation.TreeScope]::Descendants,
+      $windowCondition
+    )
+    $seenHandles = [System.Collections.Generic.HashSet[int]]::new()
+    $matches = [System.Collections.Generic.List[object]]::new()
+    $fileNameCount = 0
+    $saveCount = 0
+    foreach ($window in @($windows) + @($embeddedWindows)) {
+      $state = $window.Current
+      if ($state.ProcessId -ne $Process.Id -or
+        $state.NativeWindowHandle -eq 0 -or
+        $state.NativeWindowHandle -eq $MainWindow.Current.NativeWindowHandle -or
+        -not $state.IsEnabled -or $state.IsOffscreen -or
+        -not $seenHandles.Add($state.NativeWindowHandle)) {
+        continue
+      }
+      $fileNames = $window.FindAll(
+        [System.Windows.Automation.TreeScope]::Descendants, $fileNameCondition
+      )
+      $saveButtons = $window.FindAll(
+        [System.Windows.Automation.TreeScope]::Descendants, $saveCondition
+      )
+      $fileNameCount += $fileNames.Count
+      $saveCount += $saveButtons.Count
+      if ($fileNames.Count -eq 1 -and $saveButtons.Count -eq 1) {
+        $matches.Add(@{ Dialog = $window; FileName = $fileNames[0]; Save = $saveButtons[0] })
+      }
+    }
+    if ($matches.Count -gt 1) {
+      throw "Process Monitor exposed multiple configuration save dialogs"
+    }
+    if ($matches.Count -eq 1) {
+      return $matches[0]
     }
     Start-Sleep -Milliseconds 100
   } while ([DateTime]::UtcNow -lt $deadline)
-  throw "Timed out waiting for Process Monitor window $NamePattern"
+  [Console]::Out.WriteLine(
+    "PROC_MON_FILTER_SAVE_DIALOG_SCAN=windows:$([Math]::Min($seenHandles.Count, 9999));file-names:$([Math]::Min($fileNameCount, 9999));save-buttons:$([Math]::Min($saveCount, 9999))"
+  )
+  throw "Process Monitor configuration save dialog did not expose unique file controls"
 }
 
 function Wait-MainWindow([System.Diagnostics.Process]$Process, [int]$TimeoutSeconds = 15) {
@@ -944,6 +1001,7 @@ function Get-ControlNameLabel([System.Windows.Automation.AutomationElement]$Elem
     "Filter" { return "Filter" }
     "Filter..." { return "FilterCommand" }
     "Save Filter..." { return "SaveFilterCommand" }
+    "Export Configuration..." { return "ExportConfigCommand" }
     "Drop Filtered Events" { return "DropFilteredEvents" }
     "Highlight Filtered Events" { return "HighlightFilteredEvents" }
     "Menu Bar" { return "MenuBar" }
@@ -1496,55 +1554,84 @@ try {
   Set-Stage "drop-filtered-events-verified"
 
   Set-Stage "save-filter"
-  $saveMenuState = $dropMenu.Current
+  [System.Windows.Forms.SendKeys]::SendWait("{ESC}")
+  $main.SetFocus()
+  Set-Stage "open-file-menu-for-export"
+  [System.Windows.Forms.SendKeys]::SendWait("%f")
+  Set-Stage "resolve-file-menu-for-export"
+  $saveMenu = $null
+  $saveMenuDeadline = [DateTime]::UtcNow.AddSeconds(5)
+  do {
+    $focused = [System.Windows.Automation.AutomationElement]::FocusedElement
+    for ($level = 0; $null -ne $focused -and $level -lt 5; $level++) {
+      if ($focused.Current.ControlType -eq [System.Windows.Automation.ControlType]::Menu) {
+        $saveMenu = $focused
+        break
+      }
+      $focused = $treeWalker.GetParent($focused)
+    }
+    if ($null -ne $saveMenu) { break }
+    Start-Sleep -Milliseconds 100
+  } while ([DateTime]::UtcNow -lt $saveMenuDeadline)
+  if ($null -eq $saveMenu) {
+    throw "Process Monitor did not expose its File menu for configuration export"
+  }
+  $saveMenuState = $saveMenu.Current
   if ($saveMenuState.ProcessId -ne $process.Id -or
     -not $saveMenuState.IsEnabled -or
     $saveMenuState.IsOffscreen) {
-    throw "Process Monitor Filter menu is not available for saving in its own process"
+    throw "Process Monitor File menu is not available for export in its own process"
   }
-  Write-MenuItemsObservation "before-save" $dropMenu
-  Set-Stage "find-save-filter-command"
-  $saveCommands = $dropMenu.FindAll(
+  Write-MenuItemsObservation "before-save" $saveMenu
+  Set-Stage "find-export-config-command"
+  $saveCommands = $saveMenu.FindAll(
     [System.Windows.Automation.TreeScope]::Descendants,
     [System.Windows.Automation.Condition]::TrueCondition
   )
   $saveMatches = [System.Collections.Generic.List[System.Windows.Automation.AutomationElement]]::new()
   foreach ($item in $saveCommands) {
     $itemState = $item.Current
-    if ($itemState.Name -eq "Save Filter..." -and
+    if ($itemState.Name -eq "Export Configuration..." -and
       $itemState.ControlType.ProgrammaticName -eq "ControlType.MenuItem") {
       $saveMatches.Add($item)
     }
   }
   if ($saveMatches.Count -ne 1) {
-    throw "Process Monitor Filter menu did not expose one Save Filter command"
+    throw "Process Monitor File menu did not expose one Export Configuration command"
   }
   $saveFilter = $saveMatches[0]
   $saveFilterState = $saveFilter.Current
   if ($saveFilterState.ProcessId -ne $process.Id -or
     -not $saveFilterState.IsEnabled -or $saveFilterState.IsOffscreen) {
-    throw "Process Monitor Save Filter command is unavailable"
+    throw "Process Monitor Export Configuration command is unavailable"
   }
-  Set-Stage "probe-save-filter-command"
+  Set-Stage "probe-export-config-command"
   $saveInvokePattern = $null
   if (-not $saveFilter.TryGetCurrentPattern(
       [System.Windows.Automation.InvokePattern]::Pattern,
       [ref]$saveInvokePattern
     )) {
-    throw "Process Monitor Save Filter command does not expose InvokePattern"
+    throw "Process Monitor Export Configuration command does not expose InvokePattern"
   }
-  Set-Stage "invoke-save-filter-command"
+  Set-Stage "invoke-export-config-command"
   $saveInvokePattern.Invoke()
-  Set-Stage "wait-save-filter-dialog"
-  $saveDialog = Wait-TopLevelWindow "Save" 10
-  $fileName = Wait-Element $saveDialog ([System.Windows.Automation.PropertyCondition]::new(
-    [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
-    [System.Windows.Automation.ControlType]::Edit
-  )) 5
-  $fileName.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).SetValue($ConfigPath)
-  $save = Wait-Element $saveDialog ([System.Windows.Automation.PropertyCondition]::new(
-    [System.Windows.Automation.AutomationElement]::NameProperty, "Save"
-  )) 5
+  Set-Stage "wait-export-config-dialog"
+  $saveControls = Wait-ConfigSaveDialog $process $main
+  $fileName = $saveControls.FileName
+  $save = $saveControls.Save
+  if ($fileName.Current.ProcessId -ne $process.Id -or
+    $save.Current.ProcessId -ne $process.Id -or
+    -not $fileName.Current.IsEnabled -or $fileName.Current.IsOffscreen -or
+    -not $save.Current.IsEnabled -or $save.Current.IsOffscreen) {
+    throw "Process Monitor configuration save controls are unavailable"
+  }
+  Set-Stage "set-export-config-path"
+  $fileNamePattern = $fileName.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern)
+  if ($fileNamePattern.Current.IsReadOnly) {
+    throw "Process Monitor configuration file name is read-only"
+  }
+  $fileNamePattern.SetValue($ConfigPath)
+  Set-Stage "confirm-export-config"
   $save.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
   Set-Stage "verify-filter-file"
   if (-not (Test-Path -LiteralPath $ConfigPath) -or (Get-Item -LiteralPath $ConfigPath).Length -lt 100) {
