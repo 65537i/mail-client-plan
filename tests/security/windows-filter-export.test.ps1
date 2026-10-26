@@ -78,28 +78,35 @@ $inventoryDirectory = Join-Path $directory "inventory"
 $evidencePath = Join-Path $directory "filter-evidence.pmc"
 $writer = $null
 try {
-  [IO.File]::WriteAllText(
-    $evidencePath,
-    '<?xml version="1.0"?><config><filter><path>C:\audit\canary.png</path><path>C:\audit\control.png</path></filter></config>'
-  )
-  $previousOutput = [Console]::Out
-  $capturedOutput = [IO.StringWriter]::new()
-  try {
-    [Console]::SetOut($capturedOutput)
-    $evidence = Get-ConfigFilterPathEvidence $evidencePath "C:\audit\canary.png" "C:\audit\control.png"
-  } finally {
-    [Console]::SetOut($previousOutput)
+  foreach ($encoding in @(
+      [System.Text.Encoding]::UTF8,
+      [System.Text.Encoding]::Unicode,
+      [System.Text.Encoding]::BigEndianUnicode
+    )) {
+    $fixture = "opaque configuration C:\audit\canary.png C:\audit\control.png"
+    [IO.File]::WriteAllBytes($evidencePath, $encoding.GetBytes($fixture))
+    if ((Get-ConfigHeaderClass $evidencePath) -ne "other") {
+      throw "Opaque configuration fixture unexpectedly looked like XML or an executable"
+    }
+    $previousOutput = [Console]::Out
+    $capturedOutput = [IO.StringWriter]::new()
+    try {
+      [Console]::SetOut($capturedOutput)
+      $evidence = Get-ConfigFilterPathEvidence $evidencePath "C:\audit\canary.png" "C:\audit\control.png"
+    } finally {
+      [Console]::SetOut($previousOutput)
+    }
+    if (
+      $evidence.CanaryMatches -ne 1 -or
+      $evidence.ControlMatches -ne 1 -or
+      $capturedOutput.ToString().Trim() -cne
+      "PROC_MON_FILTER_CONFIG_PATHS=canary:1;control:1" -or
+      $capturedOutput.ToString().Contains("C:\audit")
+    ) {
+      throw "Exported filter path evidence was not bounded and sanitized"
+    }
   }
-  if (
-    $evidence.CanaryMatches -ne 1 -or
-    $evidence.ControlMatches -ne 1 -or
-    $capturedOutput.ToString().Trim() -cne
-    "PROC_MON_FILTER_CONFIG_PATHS=canary:1;control:1" -or
-    $capturedOutput.ToString().Contains("C:\audit")
-  ) {
-    throw "Exported filter path evidence was not bounded and sanitized"
-  }
-  Write-Host "PASS AC-05: exported filter evidence reports exact-path presence without values"
+  Write-Host "PASS AC-05: opaque exported config evidence supports UTF-8 and UTF-16 paths"
 
   [IO.File]::WriteAllText(
     $evidencePath,
@@ -131,6 +138,22 @@ try {
     throw "Missing exported filter path was not rejected with safe evidence"
   }
   Write-Host "PASS AC-05: missing exported filter paths fail closed"
+
+  [IO.File]::WriteAllBytes($evidencePath, [byte[]]::new(1048577))
+  $oversizedRejected = $false
+  try {
+    Get-ConfigFilterPathEvidence $evidencePath "C:\audit\canary.png" "C:\audit\control.png" | Out-Null
+  } catch {
+    if ($_.Exception.Message -ne
+      "Process Monitor configuration file is not a bounded file") {
+      throw
+    }
+    $oversizedRejected = $true
+  }
+  if (-not $oversizedRejected) {
+    throw "Oversized exported filter configuration was not rejected"
+  }
+  Write-Host "PASS AC-05: opaque exported configuration reads remain bounded"
 
   Assert-Timeout $path
   [IO.File]::WriteAllBytes($path, [byte[]]::new(99))

@@ -558,40 +558,58 @@ function Wait-FilterConfigFile([string]$Path, [int]$TimeoutMilliseconds = 5000) 
 
 function Get-ConfigFilterPathEvidence([string]$Path, [string]$CanaryPath, [string]$ControlPath) {
   $file = Get-Item -LiteralPath $Path
-  if ($file.PSIsContainer -or $file.Length -gt 1MB) {
+  if ($file.PSIsContainer) {
     throw "Process Monitor configuration file is not a bounded file"
   }
-  $settings = [System.Xml.XmlReaderSettings]::new()
-  $settings.DtdProcessing = [System.Xml.DtdProcessing]::Prohibit
-  $settings.XmlResolver = $null
-  $settings.MaxCharactersInDocument = 1MB
-  $reader = [System.Xml.XmlReader]::Create($Path, $settings)
+  $stream = [System.IO.File]::OpenRead($Path)
   try {
-    $document = [System.Xml.XmlDocument]::new()
-    $document.Load($reader)
+    if ($stream.Length -gt 1MB) {
+      throw "Process Monitor configuration file is not a bounded file"
+    }
+    $bytes = [byte[]]::new([int]$stream.Length)
+    $offset = 0
+    while ($offset -lt $bytes.Length) {
+      $read = $stream.Read($bytes, $offset, $bytes.Length - $offset)
+      if ($read -le 0) {
+        throw "Process Monitor configuration file changed while being read"
+      }
+      $offset += $read
+    }
+    if ($stream.ReadByte() -ne -1) {
+      throw "Process Monitor configuration file is not a bounded file"
+    }
   } finally {
-    $reader.Dispose()
+    $stream.Dispose()
   }
-  $canaryMatches = 0
-  $controlMatches = 0
-  foreach ($node in $document.SelectNodes("//text() | //@*")) {
-    if ([string]::Equals(
-        $node.Value,
-        $CanaryPath,
+  $decoded = @(
+    [System.Text.Encoding]::UTF8.GetString($bytes)
+    [System.Text.Encoding]::Unicode.GetString($bytes)
+    [System.Text.Encoding]::BigEndianUnicode.GetString($bytes)
+  )
+  $countMatches = {
+    param([string]$Content, [string]$Value)
+    $count = 0
+    $offset = 0
+    while ($count -lt 999) {
+      $match = $Content.IndexOf(
+        $Value,
+        $offset,
         [System.StringComparison]::OrdinalIgnoreCase
-      )) {
-      $canaryMatches++
+      )
+      if ($match -lt 0) { break }
+      $count++
+      $offset = $match + $Value.Length
     }
-    if ([string]::Equals(
-        $node.Value,
-        $ControlPath,
-        [System.StringComparison]::OrdinalIgnoreCase
-      )) {
-      $controlMatches++
-    }
+    return $count
   }
-  $canaryMatches = [Math]::Min($canaryMatches, 999)
-  $controlMatches = [Math]::Min($controlMatches, 999)
+  $canaryCounts = @()
+  $controlCounts = @()
+  foreach ($content in $decoded) {
+    $canaryCounts += (& $countMatches $content $CanaryPath)
+    $controlCounts += (& $countMatches $content $ControlPath)
+  }
+  $canaryMatches = ($canaryCounts | Measure-Object -Maximum).Maximum
+  $controlMatches = ($controlCounts | Measure-Object -Maximum).Maximum
   [Console]::Out.WriteLine(
     "PROC_MON_FILTER_CONFIG_PATHS=canary:$canaryMatches;control:$controlMatches"
   )
