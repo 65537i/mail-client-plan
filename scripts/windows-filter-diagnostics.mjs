@@ -148,6 +148,52 @@ export function describeWindowsFilterDiagnostics(output) {
     );
   }
 
+  const reloadedFilterRules = output.match(
+    /^PROC_MON_FILTER_RELOADED_RULES=rows:(\d{1,2});canary:(\d{1,2});control:(\d{1,2});path:(\d{1,2});is:(\d{1,2});include:(\d{1,2});unclassified:(\d{1,2})\r?$/m,
+  );
+  if (reloadedFilterRules) {
+    const counts = reloadedFilterRules.slice(1).map(Number);
+    const [rows, canary, control, path, relation, include, unclassified] = counts;
+    if (
+      rows <= 64
+      && counts.every((count) => count <= 64)
+      && canary <= rows
+      && control <= rows
+      && path <= rows
+      && relation <= rows
+      && include <= rows
+      && unclassified <= rows
+    ) {
+      diagnostics.push(
+        `reloaded-filter-rules=rows:${rows};canary:${canary};control:${control};path:${path};is:${relation};include:${include};unclassified:${unclassified}`,
+      );
+    }
+  }
+
+  const reloadedFilterUi = output.match(
+    /^PROC_MON_FILTER_RELOADED_UI=items:(\d{1,4});lists:(\d{1,4});data-grids:(\d{1,4});tables:(\d{1,4});list-items:(\d{1,4});data-items:(\d{1,4});rows:(\d{1,2});truncated:(true|false)\r?$/m,
+  );
+  if (reloadedFilterUi) {
+    const counts = reloadedFilterUi.slice(1, 8).map(Number);
+    const [items, lists, dataGrids, tables, listItems, dataItems, rows] = counts;
+    if (
+      items <= 1024
+      && [lists, dataGrids, tables, listItems, dataItems].every((count) => count <= items)
+      && rows <= 64
+    ) {
+      diagnostics.push(
+        `reloaded-filter-ui=items:${items};lists:${lists};data-grids:${dataGrids};tables:${tables};list-items:${listItems};data-items:${dataItems};rows:${rows};truncated:${reloadedFilterUi[8]}`,
+      );
+    }
+  }
+
+  const reloadedDrop = output.match(
+    /^PROC_MON_FILTER_RELOADED_DROP=checked:(on|off|unavailable)\r?$/m,
+  )?.[1];
+  if (reloadedDrop) {
+    diagnostics.push(`reloaded-drop-filtered-events=${reloadedDrop}`);
+  }
+
   for (const match of output.matchAll(
     /^PROC_MON_FILTER_SAVE_RESULT=phase:(after-enter|after-wait);foreground:(procmon-main|procmon-other|other-process|unavailable);same-process-dialogs:(\d{1,2});other-process-windows:(\d{1,2});buttons:save:(\d{1,2});cancel:(\d{1,2});yes:(\d{1,2});no:(\d{1,2});ok:(\d{1,2});retry:(\d{1,2});close:(\d{1,2});truncated:(true|false)\r?$/gm,
   )) {
@@ -236,7 +282,7 @@ export function describeWindowsFilterDiagnostics(output) {
   }
 
   for (const match of output.matchAll(
-    /^PROC_MON_FILTER_NATIVE_MENU_STATE=observation:(before|after-invoke);source:(main|menu-window|menu-owner|unavailable);menu-window-process:(same|other|unavailable);gui-thread-info:(available|unavailable);owner-window:(available|unavailable);handle:(available|unavailable);items:(\d{1,3});matches:(\d{1,3});read-failure:(none|depth-limit|total-limit|menu-count-invalid|menu-count-failed|menu-count-limit|invalid-menu-handle|owner-drawn|item-read-failed);readable:(true|false);checked:(on|off|unavailable)\r?$/gm,
+    /^PROC_MON_FILTER_NATIVE_MENU_STATE=observation:(before|after-invoke|after-reload);source:(main|menu-window|menu-owner|unavailable);menu-window-process:(same|other|unavailable);gui-thread-info:(available|unavailable);owner-window:(available|unavailable);handle:(available|unavailable);items:(\d{1,3});matches:(\d{1,3});read-failure:(none|depth-limit|total-limit|menu-count-invalid|menu-count-failed|menu-count-limit|invalid-menu-handle|owner-drawn|item-read-failed);readable:(true|false);checked:(on|off|unavailable)\r?$/gm,
   )) {
     const [
       ,
@@ -309,7 +355,7 @@ export function describeWindowsFilterDiagnostics(output) {
   }
 
   for (const match of output.matchAll(
-    /^PROC_MON_FILTER_MSAA_MENU_STATE=observation:(before|after-invoke);process:(same|other|unavailable);object:(available|unavailable);items:(\d{1,2});matches:(\d{1,2});read-failure:(none|window-unavailable|process-mismatch|object-unavailable|count-invalid|count-limit|child-read-failed|state-invalid|no-match|duplicate-match);checked:(on|off|unavailable)\r?$/gm,
+    /^PROC_MON_FILTER_MSAA_MENU_STATE=observation:(before|after-invoke|after-reload);process:(same|other|unavailable);object:(available|unavailable);items:(\d{1,2});matches:(\d{1,2});read-failure:(none|window-unavailable|process-mismatch|object-unavailable|count-invalid|count-limit|child-read-failed|state-invalid|no-match|duplicate-match);checked:(on|off|unavailable)\r?$/gm,
   )) {
     const [
       ,

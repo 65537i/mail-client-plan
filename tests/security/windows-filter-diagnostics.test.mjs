@@ -66,6 +66,57 @@ test("AC-05: Windows filter diagnostics omit arbitrary names and exception detai
   assert.equal(describeWindowsFilterDiagnostics(output), "");
 });
 
+test("AC-05: reloaded Windows filter rule summaries retain bounded counts only", () => {
+  const summary = "PROC_MON_FILTER_RELOADED_RULES="
+    + "rows:2;canary:1;control:1;path:2;is:2;include:2;unclassified:0";
+  assert.equal(
+    describeWindowsFilterDiagnostics(summary),
+    "; reloaded-filter-rules=rows:2;canary:1;control:1;path:2;is:2;include:2;unclassified:0",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics([
+      "PROC_MON_FILTER_RELOADED_RULES=rows:65;canary:1;control:1;path:2;is:2;include:2;unclassified:0",
+      "PROC_MON_FILTER_RELOADED_RULES=rows:2;canary:1;control:1;path:3;is:2;include:2;unclassified:0",
+      "PROC_MON_FILTER_RELOADED_RULES=rows:2;canary:1;control:1;path:2;is:2;include:2;unclassified:0;path=C:\\private\\mail",
+    ].join("\n")),
+    "",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(`${summary}\r`),
+    "; reloaded-filter-rules=rows:2;canary:1;control:1;path:2;is:2;include:2;unclassified:0",
+  );
+});
+
+test("AC-05: reloaded filter UI diagnostics retain only bounded control counts", () => {
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_RELOADED_UI=items:34;lists:1;data-grids:0;tables:0;list-items:2;data-items:0;rows:2;truncated:false",
+    ),
+    "; reloaded-filter-ui=items:34;lists:1;data-grids:0;tables:0;list-items:2;data-items:0;rows:2;truncated:false",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics([
+      "PROC_MON_FILTER_RELOADED_UI=items:1025;lists:1;data-grids:0;tables:0;list-items:2;data-items:0;rows:2;truncated:false",
+      "PROC_MON_FILTER_RELOADED_UI=items:34;lists:35;data-grids:0;tables:0;list-items:2;data-items:0;rows:2;truncated:false",
+      "PROC_MON_FILTER_RELOADED_UI=items:34;lists:1;data-grids:0;tables:0;list-items:2;data-items:0;rows:65;truncated:false",
+      "PROC_MON_FILTER_RELOADED_UI=items:34;lists:1;data-grids:0;tables:0;list-items:2;data-items:0;rows:2;truncated:false;name=C:\\private\\mail",
+    ].join("\n")),
+    "",
+  );
+});
+
+test("AC-05: reloaded Drop Filtered Events state accepts only a safe enum", () => {
+  assert.equal(
+    describeWindowsFilterDiagnostics([
+      "PROC_MON_FILTER_RELOADED_DROP=checked:on",
+      "PROC_MON_FILTER_RELOADED_DROP=checked:off",
+      "PROC_MON_FILTER_RELOADED_DROP=checked:unavailable",
+      "PROC_MON_FILTER_RELOADED_DROP=checked:C:\\private\\mail",
+    ].join("\n")),
+    "; reloaded-drop-filtered-events=on",
+  );
+});
+
 test("AC-05: Windows filter diagnostics retain the non-focusable menu route", () => {
   const output = [
     "PROC_MON_FILTER_MENU_STATE=enabled:true;offscreen:false;keyboard-focusable:false",
@@ -404,6 +455,7 @@ test("AC-05: Windows native menu diagnostics retain safe owner fallback and unav
       "PROC_MON_FILTER_NATIVE_MENU_STATE=observation:before;source:menu-owner;menu-window-process:same;gui-thread-info:available;owner-window:available;handle:available;items:0;matches:0;read-failure:invalid-menu-handle;readable:false;checked:unavailable",
       "PROC_MON_FILTER_NATIVE_MENU_STATE=observation:before;source:menu-owner;menu-window-process:same;gui-thread-info:available;owner-window:available;handle:available;items:0;matches:0;read-failure:menu-count-invalid;readable:false;checked:unavailable",
       "PROC_MON_FILTER_NATIVE_MENU_STATE=observation:before;source:menu-owner;menu-window-process:same;gui-thread-info:available;owner-window:available;handle:available;items:0;matches:0;read-failure:menu-count-failed;readable:false;checked:unavailable",
+      "PROC_MON_FILTER_NATIVE_MENU_STATE=observation:after-reload;source:menu-owner;menu-window-process:same;gui-thread-info:available;owner-window:available;handle:available;items:11;matches:1;read-failure:none;readable:true;checked:on",
     ].join("\n")),
     "; drop-native-menu-state=observation:before;source:unavailable;menu-window-process:same;gui-thread-info:unavailable;owner-window:unavailable;handle:unavailable;items:0;matches:0;read-failure:none;readable:false;checked:unavailable"
       + "; drop-native-menu-state=observation:before;source:menu-owner;menu-window-process:same;gui-thread-info:available;owner-window:available;handle:available;items:11;matches:1;read-failure:none;readable:true;checked:off"
@@ -413,7 +465,8 @@ test("AC-05: Windows native menu diagnostics retain safe owner fallback and unav
       + "; drop-native-menu-state=observation:before;source:menu-owner;menu-window-process:same;gui-thread-info:available;owner-window:available;handle:available;items:0;matches:0;read-failure:owner-drawn;readable:false;checked:unavailable"
       + "; drop-native-menu-state=observation:before;source:menu-owner;menu-window-process:same;gui-thread-info:available;owner-window:available;handle:available;items:0;matches:0;read-failure:invalid-menu-handle;readable:false;checked:unavailable"
       + "; drop-native-menu-state=observation:before;source:menu-owner;menu-window-process:same;gui-thread-info:available;owner-window:available;handle:available;items:0;matches:0;read-failure:menu-count-invalid;readable:false;checked:unavailable"
-      + "; drop-native-menu-state=observation:before;source:menu-owner;menu-window-process:same;gui-thread-info:available;owner-window:available;handle:available;items:0;matches:0;read-failure:menu-count-failed;readable:false;checked:unavailable",
+      + "; drop-native-menu-state=observation:before;source:menu-owner;menu-window-process:same;gui-thread-info:available;owner-window:available;handle:available;items:0;matches:0;read-failure:menu-count-failed;readable:false;checked:unavailable"
+      + "; drop-native-menu-state=observation:after-reload;source:menu-owner;menu-window-process:same;gui-thread-info:available;owner-window:available;handle:available;items:11;matches:1;read-failure:none;readable:true;checked:on",
   );
 });
 
@@ -425,12 +478,14 @@ test("AC-05: Windows MSAA diagnostics retain only exact, same-process menu state
       "PROC_MON_FILTER_MSAA_MENU_STATE=observation:before;process:same;object:available;items:11;matches:0;read-failure:no-match;checked:unavailable",
       "PROC_MON_FILTER_MSAA_MENU_STATE=observation:before;process:unavailable;object:unavailable;items:0;matches:0;read-failure:window-unavailable;checked:unavailable",
       "PROC_MON_FILTER_MSAA_MENU_STATE=observation:after-invoke;process:unavailable;object:unavailable;items:0;matches:0;read-failure:window-unavailable;checked:unavailable",
+      "PROC_MON_FILTER_MSAA_MENU_STATE=observation:after-reload;process:same;object:available;items:11;matches:1;read-failure:none;checked:on",
     ].join("\n")),
     "; drop-msaa-menu-state=observation:before;process:same;object:available;items:11;matches:1;read-failure:none;checked:off"
       + "; drop-msaa-menu-state=observation:after-invoke;process:same;object:available;items:11;matches:1;read-failure:none;checked:on"
       + "; drop-msaa-menu-state=observation:before;process:same;object:available;items:11;matches:0;read-failure:no-match;checked:unavailable"
       + "; drop-msaa-menu-state=observation:before;process:unavailable;object:unavailable;items:0;matches:0;read-failure:window-unavailable;checked:unavailable"
-      + "; drop-msaa-menu-state=observation:after-invoke;process:unavailable;object:unavailable;items:0;matches:0;read-failure:window-unavailable;checked:unavailable",
+      + "; drop-msaa-menu-state=observation:after-invoke;process:unavailable;object:unavailable;items:0;matches:0;read-failure:window-unavailable;checked:unavailable"
+      + "; drop-msaa-menu-state=observation:after-reload;process:same;object:available;items:11;matches:1;read-failure:none;checked:on",
   );
 });
 

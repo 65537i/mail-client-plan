@@ -148,6 +148,33 @@ async function captureScenario(scenario) {
       "Process Monitor exported filter path evidence was not captured",
     );
     console.log(`Windows audit ${scenario}: ${filterPathEvidence}`);
+    const reloadedFilterRuleEvidence = describeWindowsFilterDiagnostics(filterSetupOutput)
+      .split("; ")
+      .find((diagnostic) => diagnostic.startsWith("reloaded-filter-rules="));
+    assert.equal(
+      reloadedFilterRuleEvidence,
+      "reloaded-filter-rules=rows:2;canary:1;control:1;path:2;is:2;include:2;unclassified:0",
+      "Process Monitor did not verify the two exact Include rules after reloading the exported configuration",
+    );
+    console.log(`Windows audit ${scenario}: ${reloadedFilterRuleEvidence}`);
+    const reloadedFilterUiEvidence = describeWindowsFilterDiagnostics(filterSetupOutput)
+      .split("; ")
+      .find((diagnostic) => diagnostic.startsWith("reloaded-filter-ui="));
+    assert.match(
+      reloadedFilterUiEvidence ?? "",
+      /^reloaded-filter-ui=items:\d+;lists:\d+;data-grids:\d+;tables:\d+;list-items:\d+;data-items:\d+;rows:2;truncated:false$/,
+      "Process Monitor did not provide a complete bounded UI snapshot for the reloaded rules",
+    );
+    console.log(`Windows audit ${scenario}: ${reloadedFilterUiEvidence}`);
+    const reloadedDropEvidence = describeWindowsFilterDiagnostics(filterSetupOutput)
+      .split("; ")
+      .find((diagnostic) => diagnostic.startsWith("reloaded-drop-filtered-events="));
+    assert.equal(
+      reloadedDropEvidence,
+      "reloaded-drop-filtered-events=on",
+      "Process Monitor did not verify Drop Filtered Events as enabled after reloading the exported configuration",
+    );
+    console.log(`Windows audit ${scenario}: ${reloadedDropEvidence}`);
     command = fork(
       path.join(root, "scripts", "windows-audit-wdio.mjs"),
       [path.join(root, scenario === "baseline"

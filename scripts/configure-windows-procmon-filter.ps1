@@ -622,6 +622,176 @@ function Get-ConfigFilterPathEvidence([string]$Path, [string]$CanaryPath, [strin
   }
 }
 
+function Get-LoadedFilterRuleEvidence(
+  [string[]]$Rows,
+  [string]$CanaryPath,
+  [string]$ControlPath
+) {
+  $canaryRows = 0
+  $controlRows = 0
+  $pathRows = 0
+  $operatorRows = 0
+  $includeRows = 0
+  $exactRows = 0
+  foreach ($row in $Rows) {
+    $hasCanary = $row.IndexOf(
+      $CanaryPath,
+      [System.StringComparison]::OrdinalIgnoreCase
+    ) -ge 0
+    $hasControl = $row.IndexOf(
+      $ControlPath,
+      [System.StringComparison]::OrdinalIgnoreCase
+    ) -ge 0
+    if ($hasCanary) { $canaryRows++ }
+    if ($hasControl) { $controlRows++ }
+    $canaryPattern = [regex]::Escape($CanaryPath)
+    $controlPattern = [regex]::Escape($ControlPath)
+    $hasCanaryPathRule = [regex]::IsMatch(
+      $row,
+      "(?i)(?<!\w)Path\s+is\s+$canaryPattern(?=\s|$)"
+    )
+    $hasControlPathRule = [regex]::IsMatch(
+      $row,
+      "(?i)(?<!\w)Path\s+is\s+$controlPattern(?=\s|$)"
+    )
+    $hasCanaryInclude = [regex]::IsMatch(
+      $row,
+      "(?i)$canaryPattern\s+Include\s*$"
+    )
+    $hasControlInclude = [regex]::IsMatch(
+      $row,
+      "(?i)$controlPattern\s+Include\s*$"
+    )
+    $hasPathRule = $hasCanaryPathRule -or $hasControlPathRule
+    $hasIncludeRule = (
+      ($hasCanaryPathRule -and $hasCanaryInclude) -or
+      ($hasControlPathRule -and $hasControlInclude)
+    )
+    if ($hasPathRule) { $pathRows++ }
+    if ($hasPathRule) { $operatorRows++ }
+    if ($hasIncludeRule) { $includeRows++ }
+    if (
+      ($hasCanaryPathRule -and $hasCanaryInclude -and $hasCanary -and -not $hasControl) -or
+      ($hasControlPathRule -and $hasControlInclude -and $hasControl -and -not $hasCanary)
+    ) {
+      $exactRows++
+    }
+  }
+  $unclassifiedRows = $Rows.Count - $exactRows
+  [Console]::Out.WriteLine(
+    "PROC_MON_FILTER_RELOADED_RULES=rows:$($Rows.Count);canary:$canaryRows;control:$controlRows;path:$pathRows;is:$operatorRows;include:$includeRows;unclassified:$unclassifiedRows"
+  )
+  if (
+    $Rows.Count -ne 2 -or
+    $canaryRows -ne 1 -or
+    $controlRows -ne 1 -or
+    $pathRows -ne 2 -or
+    $operatorRows -ne 2 -or
+    $includeRows -ne 2 -or
+    $exactRows -ne 2
+  ) {
+    throw "Process Monitor did not reload exactly the two required Path Include rules"
+  }
+  return [pscustomobject]@{
+    Rows = $Rows.Count
+    CanaryRows = $canaryRows
+    ControlRows = $controlRows
+    ExactRows = $exactRows
+    UnclassifiedRows = $unclassifiedRows
+  }
+}
+
+function Get-LoadedFilterRuleRows(
+  [System.Windows.Automation.AutomationElement]$Dialog,
+  [int]$OwnerProcessId
+) {
+  $items = $Dialog.FindAll(
+    [System.Windows.Automation.TreeScope]::Descendants,
+    [System.Windows.Automation.Condition]::TrueCondition
+  )
+  $treeWalker = [System.Windows.Automation.TreeWalker]::ControlViewWalker
+  $rowKinds = @("ControlType.ListItem", "ControlType.DataItem")
+  $containerKinds = @(
+    "ControlType.List",
+    "ControlType.DataGrid",
+    "ControlType.Table"
+  )
+  $rows = [System.Collections.Generic.List[string]]::new()
+  $listCount = 0
+  $dataGridCount = 0
+  $tableCount = 0
+  $listItemCount = 0
+  $dataItemCount = 0
+  $rowTruncated = $false
+  $itemScanCount = [Math]::Min($items.Count, 1024)
+  for ($itemIndex = 0; $itemIndex -lt $itemScanCount; $itemIndex++) {
+    $item = $items[$itemIndex]
+    $state = $item.Current
+    switch ($state.ControlType.ProgrammaticName) {
+      "ControlType.List" { $listCount++ }
+      "ControlType.DataGrid" { $dataGridCount++ }
+      "ControlType.Table" { $tableCount++ }
+      "ControlType.ListItem" { $listItemCount++ }
+      "ControlType.DataItem" { $dataItemCount++ }
+    }
+    if ($state.ProcessId -ne $OwnerProcessId -or
+      $state.ControlType.ProgrammaticName -notin $rowKinds) {
+      continue
+    }
+    $parent = $treeWalker.GetParent($item)
+    $insideRow = $false
+    $insideContainer = $false
+    for ($level = 0; $null -ne $parent -and $level -lt 6; $level++) {
+      $parentType = $parent.Current.ControlType.ProgrammaticName
+      if ($parentType -in $rowKinds) {
+        $insideRow = $true
+        break
+      }
+      if ($parentType -in $containerKinds) {
+        $insideContainer = $true
+        break
+      }
+      $parent = $treeWalker.GetParent($parent)
+    }
+    if ($insideRow -or -not $insideContainer) {
+      continue
+    }
+    if ($rows.Count -ge 64) {
+      $rowTruncated = $true
+      continue
+    }
+    $parts = [System.Collections.Generic.List[string]]::new()
+    $parts.Add($state.Name)
+    $cells = $item.FindAll(
+      [System.Windows.Automation.TreeScope]::Descendants,
+      [System.Windows.Automation.Condition]::TrueCondition
+    )
+    if ($cells.Count -gt 64) {
+      throw "Process Monitor filter rule exceeded the cell limit"
+    }
+    foreach ($cell in $cells) {
+      $cellState = $cell.Current
+      if ($cellState.ProcessId -ne $OwnerProcessId) {
+        throw "Process Monitor filter rule crossed a process boundary"
+      }
+      if (-not [string]::IsNullOrEmpty($cellState.Name)) {
+        $parts.Add($cellState.Name)
+      }
+    }
+    $rows.Add(($parts -join " "))
+  }
+  [Console]::Out.WriteLine(
+    "PROC_MON_FILTER_RELOADED_UI=items:$itemScanCount;lists:$listCount;data-grids:$dataGridCount;tables:$tableCount;list-items:$listItemCount;data-items:$dataItemCount;rows:$($rows.Count);truncated:$((($items.Count -gt 1024) -or $rowTruncated).ToString().ToLowerInvariant())"
+  )
+  if ($items.Count -gt 1024 -or $rowTruncated) {
+    throw "Process Monitor filter dialog exceeded the bounded UI item limit"
+  }
+  if ($rows.Count -eq 0) {
+    throw "Process Monitor filter dialog did not expose readable rule rows"
+  }
+  return ,$rows.ToArray()
+}
+
 function Wait-KeyboardFocus($Control, [int]$TimeoutMilliseconds = 2000) {
   $deadline = [DateTime]::UtcNow.AddMilliseconds($TimeoutMilliseconds)
   do {
@@ -2117,6 +2287,190 @@ try {
   Get-ConfigFilterPathEvidence $ConfigPath $CanaryPath $ControlPath | Out-Null
   Write-ConfigOutputObservation "after-wait" $ConfigPath
   Write-ConfigSaveResultObservation "after-wait" $process $main
+
+  Set-Stage "close-procmon-before-config-reload"
+  if (-not $process.CloseMainWindow() -or -not $process.WaitForExit(5000)) {
+    throw "Process Monitor did not close before configuration reload"
+  }
+  Set-Stage "reload-exported-config"
+  $process = Start-Process `
+    -FilePath $ProcmonPath `
+    -ArgumentList @("/AcceptEula", "/LoadConfig", ('"{0}"' -f $ConfigPath)) `
+    -PassThru
+  if (-not $process.WaitForInputIdle(10000)) {
+    throw "Process Monitor configuration reload did not become idle"
+  }
+  Set-Stage "find-reloaded-main-window"
+  $main = Wait-MainWindow $process
+  $main.SetFocus()
+  Set-Stage "find-reloaded-filter-menu"
+  $reloadFilterMenu = Wait-Element $main ([System.Windows.Automation.AndCondition]::new(
+    [System.Windows.Automation.PropertyCondition]::new(
+      [System.Windows.Automation.AutomationElement]::NameProperty, "Filter"
+    ),
+    [System.Windows.Automation.PropertyCondition]::new(
+      [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+      [System.Windows.Automation.ControlType]::MenuItem
+    )
+  )) 5
+  $reloadFilterMenuState = $reloadFilterMenu.Current
+  $reloadFilterInvoke = $null
+  if (
+    $reloadFilterMenuState.ProcessId -ne $process.Id -or
+    -not $reloadFilterMenuState.IsEnabled -or
+    $reloadFilterMenuState.IsOffscreen -or
+    -not $reloadFilterMenu.TryGetCurrentPattern(
+      [System.Windows.Automation.InvokePattern]::Pattern,
+      [ref]$reloadFilterInvoke
+    )
+  ) {
+    throw "Reloaded Process Monitor Filter menu is unavailable"
+  }
+  Set-Stage "open-reloaded-filter-menu"
+  $reloadFilterInvoke.Invoke()
+  $reloadMenu = $null
+  $reloadMenuDeadline = [DateTime]::UtcNow.AddSeconds(5)
+  do {
+    $focused = [System.Windows.Automation.AutomationElement]::FocusedElement
+    $treeWalker = [System.Windows.Automation.TreeWalker]::ControlViewWalker
+    for ($level = 0; $null -ne $focused -and $level -lt 5; $level++) {
+      if ($focused.Current.ControlType -eq [System.Windows.Automation.ControlType]::Menu) {
+        $reloadMenu = $focused
+        break
+      }
+      $focused = $treeWalker.GetParent($focused)
+    }
+    if ($null -ne $reloadMenu) { break }
+    Start-Sleep -Milliseconds 100
+  } while ([DateTime]::UtcNow -lt $reloadMenuDeadline)
+  if ($null -eq $reloadMenu -or
+    $reloadMenu.Current.ProcessId -ne $process.Id) {
+    throw "Reloaded Process Monitor did not expose its own Filter menu"
+  }
+  Set-Stage "find-reloaded-filter-command"
+  $reloadFilterCommands = $reloadMenu.FindAll(
+    [System.Windows.Automation.TreeScope]::Children,
+    [System.Windows.Automation.Condition]::TrueCondition
+  )
+  $reloadFilterMatches = [System.Collections.Generic.List[System.Windows.Automation.AutomationElement]]::new()
+  foreach ($item in $reloadFilterCommands) {
+    $itemState = $item.Current
+    if ($itemState.Name -eq "Filter..." -and
+      $itemState.ControlType.ProgrammaticName -eq "ControlType.MenuItem" -and
+      $itemState.ProcessId -eq $process.Id) {
+      $reloadFilterMatches.Add($item)
+    }
+  }
+  if ($reloadFilterMatches.Count -ne 1) {
+    throw "Reloaded Process Monitor did not expose one Filter command"
+  }
+  $reloadFilterCommand = $reloadFilterMatches[0]
+  $reloadFilterCommandState = $reloadFilterCommand.Current
+  $reloadFilterCommandInvoke = $null
+  if (
+    -not $reloadFilterCommandState.IsEnabled -or
+    $reloadFilterCommandState.IsOffscreen -or
+    -not $reloadFilterCommand.TryGetCurrentPattern(
+      [System.Windows.Automation.InvokePattern]::Pattern,
+      [ref]$reloadFilterCommandInvoke
+    )
+  ) {
+    throw "Reloaded Process Monitor Filter command is unavailable"
+  }
+  Set-Stage "open-reloaded-filter-dialog"
+  $reloadFilterCommandInvoke.Invoke()
+  $reloadFilterDialog = Wait-FilterDialog $process $main
+  Set-Stage "read-reloaded-filter-rules"
+  $reloadFilterRows = Get-LoadedFilterRuleRows $reloadFilterDialog $process.Id
+  Set-Stage "verify-reloaded-filter-rules"
+  Get-LoadedFilterRuleEvidence $reloadFilterRows $CanaryPath $ControlPath | Out-Null
+  [System.Windows.Forms.SendKeys]::SendWait("{ESC}")
+  $main.SetFocus()
+  Set-Stage "find-reloaded-drop-filtered-events-menu"
+  $reloadFilterMenu = Wait-Element $main ([System.Windows.Automation.AndCondition]::new(
+    [System.Windows.Automation.PropertyCondition]::new(
+      [System.Windows.Automation.AutomationElement]::NameProperty, "Filter"
+    ),
+    [System.Windows.Automation.PropertyCondition]::new(
+      [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+      [System.Windows.Automation.ControlType]::MenuItem
+    )
+  )) 5
+  $reloadFilterMenuState = $reloadFilterMenu.Current
+  $reloadFilterMenuInvoke = $null
+  if (
+    $reloadFilterMenuState.ProcessId -ne $process.Id -or
+    -not $reloadFilterMenuState.IsEnabled -or
+    $reloadFilterMenuState.IsOffscreen -or
+    -not $reloadFilterMenu.TryGetCurrentPattern(
+      [System.Windows.Automation.InvokePattern]::Pattern,
+      [ref]$reloadFilterMenuInvoke
+    )
+  ) {
+    throw "Reloaded Process Monitor Filter menu is unavailable"
+  }
+  Set-Stage "open-reloaded-drop-filtered-events-menu"
+  $reloadFilterMenuInvoke.Invoke()
+  $reloadDropMenu = $null
+  $reloadDropDeadline = [DateTime]::UtcNow.AddSeconds(5)
+  do {
+    $focused = [System.Windows.Automation.AutomationElement]::FocusedElement
+    $treeWalker = [System.Windows.Automation.TreeWalker]::ControlViewWalker
+    for ($level = 0; $null -ne $focused -and $level -lt 5; $level++) {
+      if ($focused.Current.ControlType -eq [System.Windows.Automation.ControlType]::Menu) {
+        $reloadDropMenu = $focused
+        break
+      }
+      $focused = $treeWalker.GetParent($focused)
+    }
+    if ($null -ne $reloadDropMenu) { break }
+    Start-Sleep -Milliseconds 100
+  } while ([DateTime]::UtcNow -lt $reloadDropDeadline)
+  if ($null -eq $reloadDropMenu -or
+    $reloadDropMenu.Current.ProcessId -ne $process.Id) {
+    throw "Reloaded Process Monitor did not expose its own Filter menu"
+  }
+  Set-Stage "read-reloaded-drop-filtered-events-state"
+  $reloadDropItems = $reloadDropMenu.FindAll(
+    [System.Windows.Automation.TreeScope]::Children,
+    [System.Windows.Automation.Condition]::TrueCondition
+  )
+  $reloadDropMatches = [System.Collections.Generic.List[System.Windows.Automation.AutomationElement]]::new()
+  foreach ($item in $reloadDropItems) {
+    $itemState = $item.Current
+    if ($itemState.Name -eq "Drop Filtered Events" -and
+      $itemState.ControlType.ProgrammaticName -eq "ControlType.MenuItem" -and
+      $itemState.ProcessId -eq $process.Id) {
+      $reloadDropMatches.Add($item)
+    }
+  }
+  if ($reloadDropMatches.Count -ne 1) {
+    throw "Reloaded Process Monitor did not expose one Drop Filtered Events item"
+  }
+  $reloadDropItemState = $reloadDropMatches[0].Current
+  if (-not $reloadDropItemState.IsEnabled -or $reloadDropItemState.IsOffscreen) {
+    throw "Reloaded Process Monitor Drop Filtered Events item is unavailable"
+  }
+  $reloadMainHandle = [IntPtr]$main.Current.NativeWindowHandle
+  $reloadDropMenuHandle = [IntPtr]$reloadDropMenu.Current.NativeWindowHandle
+  $reloadNativeDropState = Get-NativeDropMenuSnapshot `
+    $reloadMainHandle $reloadDropMenuHandle $process.Id
+  Write-NativeDropMenuSnapshot $reloadNativeDropState "after-reload"
+  $reloadAccessibleDropState = $null
+  if ($reloadNativeDropState.CheckState -eq "unavailable") {
+    $reloadAccessibleDropState = Get-AccessibleDropMenuSnapshot `
+      $reloadDropMenuHandle $process.Id "after-reload"
+  }
+  $reloadDropCheckState = Get-VerifiedDropMenuCheckState `
+    $reloadNativeDropState $reloadAccessibleDropState
+  [Console]::Out.WriteLine(
+    "PROC_MON_FILTER_RELOADED_DROP=checked:$reloadDropCheckState"
+  )
+  if ($reloadDropCheckState -ne "on") {
+    throw "Process Monitor did not reload Drop Filtered Events as enabled"
+  }
+  [System.Windows.Forms.SendKeys]::SendWait("{ESC}")
+  Set-Stage "reloaded-filter-rules-verified"
 } catch {
   [Console]::Out.WriteLine("PROC_MON_FILTER_FAILED_STAGE=$stage")
   $failureException = $_.Exception

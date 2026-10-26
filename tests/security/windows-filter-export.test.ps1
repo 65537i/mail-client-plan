@@ -17,16 +17,67 @@ $functions = $ast.FindAll({
       "Write-ConfigOutputObservation",
       "Wait-FilterConfigFile",
       "Get-ConfigFilterPathEvidence",
+      "Get-LoadedFilterRuleEvidence",
       "Wait-KeyboardFocus",
       "ConvertTo-SendKeysLiteral"
     )
 }, $true)
-if ($functions.Count -ne 6) {
+if ($functions.Count -ne 7) {
   throw "Expected the configuration file observation functions"
 }
 foreach ($function in $functions) {
   . ([scriptblock]::Create($function.Extent.Text))
 }
+
+$previousOutput = [Console]::Out
+$capturedOutput = [IO.StringWriter]::new()
+try {
+  [Console]::SetOut($capturedOutput)
+  $loadedRules = Get-LoadedFilterRuleEvidence @(
+    "Path is C:\audit\canary.png Include",
+    "Path is C:\audit\control.png Include"
+  ) "C:\audit\canary.png" "C:\audit\control.png"
+} finally {
+  [Console]::SetOut($previousOutput)
+}
+if (
+  $loadedRules.Rows -ne 2 -or
+  $loadedRules.ExactRows -ne 2 -or
+  $capturedOutput.ToString().Trim() -cne
+  "PROC_MON_FILTER_RELOADED_RULES=rows:2;canary:1;control:1;path:2;is:2;include:2;unclassified:0" -or
+  $capturedOutput.ToString().Contains("C:\audit")
+) {
+  throw "Exact reloaded filter rules were not verified with bounded evidence"
+}
+Write-Host "PASS AC-05: reloaded exact Path/is/Include rules are confirmed without exposing paths"
+
+foreach ($invalidRows in @(
+    ,@("Path is C:\audit\canary.png Exclude", "Path is C:\audit\control.png Include")
+    ,@("Path is C:\audit\canary.png Include", "Path is C:\audit\control.png Include", "Operation is ReadFile Include")
+    ,@("Path contains C:\audit\canary.png Include", "Path is C:\audit\control.png Include")
+    ,@("Path is not C:\audit\canary.png Include", "Path is C:\audit\control.png Include")
+  )) {
+  $capturedOutput = [IO.StringWriter]::new()
+  $rejectedRules = $false
+  try {
+    [Console]::SetOut($capturedOutput)
+    try {
+      Get-LoadedFilterRuleEvidence $invalidRows "C:\audit\canary.png" "C:\audit\control.png" | Out-Null
+    } catch {
+      if ($_.Exception.Message -ne
+        "Process Monitor did not reload exactly the two required Path Include rules") {
+        throw
+      }
+      $rejectedRules = $true
+    }
+  } finally {
+    [Console]::SetOut($previousOutput)
+  }
+  if (-not $rejectedRules -or $capturedOutput.ToString().Contains("C:\audit")) {
+    throw "Invalid reloaded filter rule state was not rejected without exposing paths"
+  }
+}
+Write-Host "PASS AC-05: extra, excluded, and non-exact reloaded rules fail closed"
 
 $focusState = [pscustomobject]@{}
 $focusState | Add-Member -MemberType ScriptProperty -Name HasKeyboardFocus -Value {
