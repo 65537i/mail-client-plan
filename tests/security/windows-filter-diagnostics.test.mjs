@@ -87,6 +87,25 @@ test("AC-05: reloaded Windows filter rule summaries retain bounded counts only",
   );
 });
 
+test("AC-05: reload window diagnostics retain only bounded process state", () => {
+  const summary = "PROC_MON_FILTER_WINDOW_SCAN="
+    + "stage:reload;process-exited:false;root-windows:2;uia-owned-windows:0;"
+    + "main-handle:unavailable;foreground-owner:other";
+  assert.equal(
+    describeWindowsFilterDiagnostics(summary),
+    "; reload-window-scan=process-exited:false;root-windows:2;uia-owned-windows:0;"
+      + "main-handle:unavailable;foreground-owner:other",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics([
+      "PROC_MON_FILTER_WINDOW_SCAN=stage:reload;process-exited:false;root-windows:2;uia-owned-windows:3;main-handle:unavailable;foreground-owner:other",
+      "PROC_MON_FILTER_WINDOW_SCAN=stage:reload;process-exited:false;root-windows:10000;uia-owned-windows:0;main-handle:unavailable;foreground-owner:other",
+      "PROC_MON_FILTER_WINDOW_SCAN=stage:reload;process-exited:false;root-windows:2;uia-owned-windows:0;main-handle:unavailable;foreground-owner:other;handle=0x1234",
+    ].join("\n")),
+    "",
+  );
+});
+
 test("AC-05: reloaded filter UI diagnostics retain only bounded control counts", () => {
   assert.equal(
     describeWindowsFilterDiagnostics(

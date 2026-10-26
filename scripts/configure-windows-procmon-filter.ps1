@@ -1086,23 +1086,55 @@ function Wait-MainWindow([System.Diagnostics.Process]$Process, [int]$TimeoutSeco
     [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
     [System.Windows.Automation.ControlType]::Window
   )
+  $rootWindowCount = 0
+  $ownedWindowCount = 0
+  $mainHandleAvailable = $false
+  $processExited = $false
   do {
     $Process.Refresh()
     if ($Process.HasExited) {
-      throw "Process Monitor exited before its configuration window became available"
+      $processExited = $true
+      break
     }
     $windows = [System.Windows.Automation.AutomationElement]::RootElement.FindAll(
       [System.Windows.Automation.TreeScope]::Children,
       $windowCondition
     )
+    $rootWindowCount = $windows.Count
     foreach ($window in $windows) {
-      if ($window.Current.ProcessId -eq $Process.Id) { return $window }
+      if ($window.Current.ProcessId -eq $Process.Id) {
+        $ownedWindowCount++
+        return $window
+      }
     }
-    if ($Process.MainWindowHandle -ne [IntPtr]::Zero) {
-      return [System.Windows.Automation.AutomationElement]::FromHandle($Process.MainWindowHandle)
+    $mainHandle = $Process.MainWindowHandle
+    $mainHandleAvailable = $mainHandle -ne [IntPtr]::Zero
+    if ($mainHandleAvailable) {
+      $mainWindow = [System.Windows.Automation.AutomationElement]::FromHandle($mainHandle)
+      if ($mainWindow.Current.ProcessId -eq $Process.Id) {
+        return $mainWindow
+      }
     }
     Start-Sleep -Milliseconds 100
   } while ([DateTime]::UtcNow -lt $deadline)
+  $foregroundOwner = "unavailable"
+  $foregroundHandle = [ProcmonNativeMenu]::GetForegroundWindow()
+  if ($foregroundHandle -ne [IntPtr]::Zero) {
+    $foregroundOwner = if (
+      [ProcmonNativeMenu]::GetWindowProcessId($foregroundHandle) -eq $Process.Id
+    ) { "same" } else { "other" }
+  }
+  $stageClass = if ($script:stage -eq "find-reloaded-main-window") {
+    "reload"
+  } else {
+    "initial"
+  }
+  [Console]::Out.WriteLine(
+    "PROC_MON_FILTER_WINDOW_SCAN=stage:$stageClass;process-exited:$($processExited.ToString().ToLowerInvariant());root-windows:$([Math]::Min($rootWindowCount, 9999));uia-owned-windows:$([Math]::Min($ownedWindowCount, 9999));main-handle:$(if ($mainHandleAvailable) { 'available' } else { 'unavailable' });foreground-owner:$foregroundOwner"
+  )
+  if ($processExited) {
+    throw "Process Monitor exited before its configuration window became available"
+  }
   throw "Process Monitor did not expose its configuration window"
 }
 

@@ -170,6 +170,18 @@ export function describeWindowsFilterDiagnostics(output) {
     }
   }
 
+  const windowScan = output.match(
+    /^PROC_MON_FILTER_WINDOW_SCAN=stage:(initial|reload);process-exited:(true|false);root-windows:(\d{1,4});uia-owned-windows:(\d{1,4});main-handle:(available|unavailable);foreground-owner:(same|other|unavailable)\r?$/m,
+  );
+  if (windowScan) {
+    const [rootWindows, ownedWindows] = windowScan.slice(3, 5).map(Number);
+    if (rootWindows <= 9999 && ownedWindows <= rootWindows) {
+      diagnostics.push(
+        `${windowScan[1]}-window-scan=process-exited:${windowScan[2]};root-windows:${rootWindows};uia-owned-windows:${ownedWindows};main-handle:${windowScan[5]};foreground-owner:${windowScan[6]}`,
+      );
+    }
+  }
+
   const reloadedFilterUi = output.match(
     /^PROC_MON_FILTER_RELOADED_UI=items:(\d{1,4});lists:(\d{1,4});data-grids:(\d{1,4});tables:(\d{1,4});list-items:(\d{1,4});data-items:(\d{1,4});rows:(\d{1,2});truncated:(true|false)\r?$/m,
   );
