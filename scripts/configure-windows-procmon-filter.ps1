@@ -2351,6 +2351,7 @@ try {
   }
   Set-Stage "find-reloaded-main-window"
   $main = Wait-MainWindow $process
+  Set-Stage "focus-reloaded-main-window"
   $main.SetFocus()
   Set-Stage "find-reloaded-filter-menu"
   $reloadFilterMenu = Wait-Element $main ([System.Windows.Automation.AndCondition]::new(
