@@ -940,8 +940,10 @@ function Get-ControlTypeLabel([System.Windows.Automation.AutomationElement]$Elem
 
 function Get-ControlNameLabel([System.Windows.Automation.AutomationElement]$Element) {
   switch ($Element.Current.Name) {
+    "File" { return "FileMenu" }
     "Filter" { return "Filter" }
     "Filter..." { return "FilterCommand" }
+    "Save Filter..." { return "SaveFilterCommand" }
     "Drop Filtered Events" { return "DropFilteredEvents" }
     "Highlight Filtered Events" { return "HighlightFilteredEvents" }
     "Menu Bar" { return "MenuBar" }
@@ -1530,6 +1532,7 @@ try {
     $fileMenuState.IsOffscreen) {
     throw "Process Monitor File menu is not available in its own process"
   }
+  Write-MenuItemsObservation "after-open" $fileMenu
   Set-Stage "find-save-filter-command"
   $saveCommands = $fileMenu.FindAll(
     [System.Windows.Automation.TreeScope]::Descendants,

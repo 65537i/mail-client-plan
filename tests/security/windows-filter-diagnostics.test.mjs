@@ -84,6 +84,8 @@ test("AC-05: Windows filter diagnostics retain safe focused-control observations
   const output = [
     "PROC_MON_FILTER_FOCUSED_CONTROL=after-open;type:MenuItem;name:FilterCommand;offscreen:false;keyboard-focusable:true;tree=MenuItem:FilterCommand>Menu:Other>Window:ProcessMonitor",
     "PROC_MON_FILTER_MENU_ITEMS=after-open;count:2;truncated:false;items=MenuItem:FilterCommand:true:false:false,MenuItem:DropFilteredEvents:true:false:false",
+    "PROC_MON_FILTER_FOCUSED_CONTROL=after-open;type:MenuItem;name:FileMenu;offscreen:false;keyboard-focusable:true;tree=MenuItem:FileMenu>Menu:Other>Pane:Other",
+    "PROC_MON_FILTER_MENU_ITEMS=after-open;count:2;truncated:false;items=MenuItem:SaveFilterCommand:true:false:true,MenuItem:Other:true:false:true",
     "PROC_MON_FILTER_MENU_ITEMS=after-home;count:1;truncated:false;items=MenuItem:C:\\private\\mail:true:false:true",
     "PROC_MON_FILTER_FOCUSED_CONTROL=after-home;type:Text;name:C:\\private\\mail;offscreen:false;keyboard-focusable:true;tree=Text:Other",
     "PROC_MON_FILTER_FOCUSED_CONTROL=filter-command;type:MenuItem;name:FilterCommand;offscreen:false;keyboard-focusable:true;tree=MenuItem:FilterCommand>Menu:Other",
@@ -95,6 +97,8 @@ test("AC-05: Windows filter diagnostics retain safe focused-control observations
     describeWindowsFilterDiagnostics(output),
     "; focus-after-open=MenuItem:FilterCommand;offscreen:false;keyboard-focusable:true;tree=MenuItem:FilterCommand>Menu:Other>Window:ProcessMonitor"
       + "; menu-items-after-open=count:2;truncated:false;items=MenuItem:FilterCommand:true:false:false,MenuItem:DropFilteredEvents:true:false:false"
+      + "; focus-after-open=MenuItem:FileMenu;offscreen:false;keyboard-focusable:true;tree=MenuItem:FileMenu>Menu:Other>Pane:Other"
+      + "; menu-items-after-open=count:2;truncated:false;items=MenuItem:SaveFilterCommand:true:false:true,MenuItem:Other:true:false:true"
       + "; focus-filter-command=MenuItem:FilterCommand;offscreen:false;keyboard-focusable:true;tree=MenuItem:FilterCommand>Menu:Other"
       + "; focus-after-enter=none"
       + "; focus-after-invoke=Window:ProcessMonitor;offscreen:false;keyboard-focusable:false;tree=Window:ProcessMonitor"
