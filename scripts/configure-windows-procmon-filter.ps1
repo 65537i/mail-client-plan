@@ -1155,6 +1155,82 @@ function Wait-MainWindow([System.Diagnostics.Process]$Process, [int]$TimeoutSeco
   throw "Process Monitor did not expose its configuration window"
 }
 
+function Wait-ProcessMenu(
+  [System.Diagnostics.Process]$Process,
+  [int]$TimeoutSeconds = 5
+) {
+  $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
+  $windowCondition = [System.Windows.Automation.PropertyCondition]::new(
+    [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+    [System.Windows.Automation.ControlType]::Window
+  )
+  $menuCondition = [System.Windows.Automation.PropertyCondition]::new(
+    [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+    [System.Windows.Automation.ControlType]::Menu
+  )
+  $ownedWindowCount = 0
+  $menuCount = 0
+  $visibleMenuCount = 0
+  $menus = [System.Collections.Generic.List[System.Windows.Automation.AutomationElement]]::new()
+  do {
+    $windows = [System.Windows.Automation.AutomationElement]::RootElement.FindAll(
+      [System.Windows.Automation.TreeScope]::Children,
+      $windowCondition
+    )
+    if ($windows.Count -gt 128) {
+      throw "Process Monitor menu scan exceeded the bounded window limit"
+    }
+    $seenHandles = [System.Collections.Generic.HashSet[int]]::new()
+    $menus.Clear()
+    $ownedWindowCount = 0
+    $menuCount = 0
+    $visibleMenuCount = 0
+    foreach ($window in $windows) {
+      $windowState = $window.Current
+      if (
+        $windowState.ProcessId -ne $Process.Id -or
+        $windowState.NativeWindowHandle -eq 0 -or
+        -not $seenHandles.Add($windowState.NativeWindowHandle)
+      ) {
+        continue
+      }
+      $ownedWindowCount++
+      $windowMenus = $window.FindAll(
+        [System.Windows.Automation.TreeScope]::Descendants,
+        $menuCondition
+      )
+      $menuCount += $windowMenus.Count
+      if ($menuCount -gt 256) {
+        throw "Process Monitor menu scan exceeded the bounded menu limit"
+      }
+      foreach ($menu in $windowMenus) {
+        $menuState = $menu.Current
+        if (
+          $menuState.ProcessId -eq $Process.Id -and
+          $menuState.IsEnabled -and
+          -not $menuState.IsOffscreen
+        ) {
+          $menus.Add($menu)
+          $visibleMenuCount++
+        }
+      }
+    }
+    if ($menus.Count -eq 1) {
+      return [pscustomobject]@{
+        Menu = $menus[0]
+        Windows = [Math]::Min($ownedWindowCount, 9999)
+        Menus = [Math]::Min($menuCount, 9999)
+        VisibleMenus = [Math]::Min($visibleMenuCount, 9999)
+      }
+    }
+    Start-Sleep -Milliseconds 100
+  } while ([DateTime]::UtcNow -lt $deadline)
+  [Console]::Out.WriteLine(
+    "PROC_MON_FILTER_RELOAD_MENU_SCAN=windows:$([Math]::Min($ownedWindowCount, 9999));menus:$([Math]::Min($menuCount, 9999));visible:$([Math]::Min($visibleMenuCount, 9999))"
+  )
+  throw "Process Monitor did not expose one visible menu in its own windows"
+}
+
 function Wait-FilterDialog([System.Diagnostics.Process]$Process, [System.Windows.Automation.AutomationElement]$MainWindow, [int]$TimeoutSeconds = 10) {
   $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
   $processWindowCount = 0
@@ -2419,25 +2495,11 @@ try {
   Set-Stage "observe-reloaded-filter-menu-focus"
   Write-FocusObservation "after-reload-menu-invoke" | Out-Null
   Set-Stage "wait-reloaded-filter-menu"
-  $reloadMenu = $null
-  $reloadMenuDeadline = [DateTime]::UtcNow.AddSeconds(5)
-  do {
-    $focused = [System.Windows.Automation.AutomationElement]::FocusedElement
-    $treeWalker = [System.Windows.Automation.TreeWalker]::ControlViewWalker
-    for ($level = 0; $null -ne $focused -and $level -lt 5; $level++) {
-      if ($focused.Current.ControlType -eq [System.Windows.Automation.ControlType]::Menu) {
-        $reloadMenu = $focused
-        break
-      }
-      $focused = $treeWalker.GetParent($focused)
-    }
-    if ($null -ne $reloadMenu) { break }
-    Start-Sleep -Milliseconds 100
-  } while ([DateTime]::UtcNow -lt $reloadMenuDeadline)
-  if ($null -eq $reloadMenu -or
-    $reloadMenu.Current.ProcessId -ne $process.Id) {
-    throw "Reloaded Process Monitor did not expose its own Filter menu"
-  }
+  $reloadMenuScan = Wait-ProcessMenu $process
+  $reloadMenu = $reloadMenuScan.Menu
+  [Console]::Out.WriteLine(
+    "PROC_MON_FILTER_RELOAD_MENU_SCAN=windows:$($reloadMenuScan.Windows);menus:$($reloadMenuScan.Menus);visible:$($reloadMenuScan.VisibleMenus)"
+  )
   Set-Stage "find-reloaded-filter-command"
   $reloadFilterCommands = $reloadMenu.FindAll(
     [System.Windows.Automation.TreeScope]::Children,

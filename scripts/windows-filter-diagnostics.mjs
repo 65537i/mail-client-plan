@@ -135,6 +135,18 @@ export function describeWindowsFilterDiagnostics(output) {
     diagnostics.push(`reload-menu-invoke-pattern=${reloadMenuInvokePattern}`);
   }
 
+  const reloadMenuScan = output.match(
+    /^PROC_MON_FILTER_RELOAD_MENU_SCAN=windows:(\d{1,4});menus:(\d{1,4});visible:(\d{1,4})\r?$/m,
+  );
+  if (reloadMenuScan) {
+    const [windows, menus, visibleMenus] = reloadMenuScan.slice(1).map(Number);
+    if (windows <= 9999 && menus <= 9999 && visibleMenus <= menus) {
+      diagnostics.push(
+        `reload-menu-scan=windows:${windows};menus:${menus};visible:${visibleMenus}`,
+      );
+    }
+  }
+
   const filterPathForegroundGates = Array.from(output.matchAll(
     /^PROC_MON_FILTER_PATH_FOREGROUND=gate:(passed|failed)\r?$/gm,
   ), (match) => match[1]);

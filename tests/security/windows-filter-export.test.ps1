@@ -18,11 +18,12 @@ $functions = $ast.FindAll({
       "Wait-FilterConfigFile",
       "Get-ConfigFilterPathEvidence",
       "Get-LoadedFilterRuleEvidence",
+      "Wait-ProcessMenu",
       "Wait-KeyboardFocus",
       "ConvertTo-SendKeysLiteral"
     )
 }, $true)
-if ($functions.Count -ne 7) {
+if ($functions.Count -ne 8) {
   throw "Expected the configuration file observation functions"
 }
 foreach ($function in $functions) {

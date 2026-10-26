@@ -305,6 +305,20 @@ test("AC-05: configuration save observations expose states, not paths or dialog 
   );
   assert.equal(
     describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_RELOAD_MENU_SCAN=windows:2;menus:1;visible:1",
+    ),
+    "; reload-menu-scan=windows:2;menus:1;visible:1",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics([
+      "PROC_MON_FILTER_RELOAD_MENU_SCAN=windows:10000;menus:1;visible:1",
+      "PROC_MON_FILTER_RELOAD_MENU_SCAN=windows:2;menus:1;visible:2",
+      "PROC_MON_FILTER_RELOAD_MENU_SCAN=windows:2;menus:1;visible:1;name=C:\\private",
+    ].join("\n")),
+    "",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(
       "PROC_MON_FILTER_PATH_FOREGROUND=gate:passed\nPROC_MON_FILTER_PATH_FOREGROUND=gate:failed\nPROC_MON_FILTER_PATH=gate:passed\nPROC_MON_FILTER_PATH=gate:passed",
     ),
     "; filter-path-foreground-gates=passed:1,failed:1; filter-path-input-gates=passed:2,failed:0",
