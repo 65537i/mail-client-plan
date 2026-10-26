@@ -305,6 +305,21 @@ test("AC-05: configuration save observations expose states, not paths or dialog 
     "; reload-menu-patterns=expand-collapse:true;selection-item:false;invoke:true",
   );
   assert.equal(
+    describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_RELOAD_MENU_MSAA=state:invoked;items:4;matches:1",
+    ),
+    "; reload-menu-msaa=state:invoked;items:4;matches:1",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics([
+      "PROC_MON_FILTER_RELOAD_MENU_MSAA=state:object-unavailable;items:0;matches:0",
+      "PROC_MON_FILTER_RELOAD_MENU_MSAA=state:invoked;items:4;matches:2",
+      "PROC_MON_FILTER_RELOAD_MENU_MSAA=state:invoked;items:65;matches:1",
+      "PROC_MON_FILTER_RELOAD_MENU_MSAA=state:invoked;items:4;matches:1;name=C:\\private",
+    ].join("\n")),
+    "; reload-menu-msaa=state:object-unavailable;items:0;matches:0",
+  );
+  assert.equal(
     describeWindowsFilterDiagnostics([
       "PROC_MON_FILTER_RELOAD_MENU_PATTERNS=expand-collapse:unknown;selection-item:false;invoke:true",
       "PROC_MON_FILTER_RELOAD_MENU_PATTERNS=expand-collapse:true;selection-item:false;invoke:true;name=C:\\private",
