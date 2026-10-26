@@ -167,8 +167,8 @@ test("AC-05: Windows filter diagnostics retain safe focused-control observations
     "PROC_MON_FILTER_FOCUSED_CONTROL=after-invoke;type:Button;name:Other;offscreen:false;keyboard-focusable:true;tree=Button:Other>Window:ProcessMonitor",
     "PROC_MON_FILTER_FOCUSED_CONTROL=after-invoke;type:Text;name:C:\\private\\mail;offscreen:false;keyboard-focusable:true;tree=Text:Other",
     "PROC_MON_FILTER_FOCUSED_CONTROL=after-command-invoke;type:Window;name:ProcessMonitor;offscreen:false;keyboard-focusable:false;tree=Window:ProcessMonitor",
-    "PROC_MON_FILTER_FOCUSED_CONTROL=after-reload-access-key;type:MenuItem;name:Filter;offscreen:false;keyboard-focusable:true;tree=MenuItem:Filter>Menu:Other",
-    "PROC_MON_FILTER_FOCUSED_CONTROL=after-reload-access-key;type:Button;name:C:\\private\\mail;offscreen:false;keyboard-focusable:true;tree=Button:Other",
+    "PROC_MON_FILTER_FOCUSED_CONTROL=after-reload-menu-invoke;type:MenuItem;name:Filter;offscreen:false;keyboard-focusable:true;tree=MenuItem:Filter>Menu:Other",
+    "PROC_MON_FILTER_FOCUSED_CONTROL=after-reload-menu-invoke;type:Button;name:C:\\private\\mail;offscreen:false;keyboard-focusable:true;tree=Button:Other",
   ].join("\n");
   assert.equal(
     describeWindowsFilterDiagnostics(output),
@@ -181,7 +181,7 @@ test("AC-05: Windows filter diagnostics retain safe focused-control observations
       + "; focus-after-invoke=Window:ProcessMonitor;offscreen:false;keyboard-focusable:false;tree=Window:ProcessMonitor"
       + "; focus-after-invoke=Button:Other;offscreen:false;keyboard-focusable:true;tree=Button:Other>Window:ProcessMonitor"
       + "; focus-after-command-invoke=Window:ProcessMonitor;offscreen:false;keyboard-focusable:false;tree=Window:ProcessMonitor"
-      + "; focus-after-reload-access-key=MenuItem:Filter;offscreen:false;keyboard-focusable:true;tree=MenuItem:Filter>Menu:Other",
+      + "; focus-after-reload-menu-invoke=MenuItem:Filter;offscreen:false;keyboard-focusable:true;tree=MenuItem:Filter>Menu:Other",
   );
 });
 
@@ -291,12 +291,17 @@ test("AC-05: configuration save observations expose states, not paths or dialog 
     "",
   );
   assert.equal(
-    describeWindowsFilterDiagnostics("PROC_MON_FILTER_RELOAD_MENU_KEY=gate:passed"),
-    "; reload-menu-access-key-gate=passed",
+    describeWindowsFilterDiagnostics("PROC_MON_FILTER_RELOAD_MENU_PATTERN=invoke:true"),
+    "; reload-menu-invoke-pattern=true",
   );
   assert.equal(
-    describeWindowsFilterDiagnostics("PROC_MON_FILTER_RELOAD_MENU_KEY=gate:C:\\private"),
-    "",
+    describeWindowsFilterDiagnostics([
+      "PROC_MON_FILTER_RELOAD_MENU_PATTERN=invoke:false",
+      "PROC_MON_FILTER_RELOAD_MENU_PATTERN=invoke:unknown",
+      "PROC_MON_FILTER_RELOAD_MENU_PATTERN=invoke:true;name=C:\\private",
+      "PROC_MON_FILTER_RELOAD_MENU_KEY=gate:passed",
+    ].join("\n")),
+    "; reload-menu-invoke-pattern=false",
   );
   assert.equal(
     describeWindowsFilterDiagnostics(

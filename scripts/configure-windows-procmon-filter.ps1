@@ -879,21 +879,6 @@ function ConvertTo-SendKeysLiteral([string]$Value) {
   return $escaped.ToString()
 }
 
-function ConvertTo-ProcmonMenuAccessKey([string]$AccessKey) {
-  if ([string]::IsNullOrEmpty($AccessKey)) {
-    return $null
-  }
-  $match = [System.Text.RegularExpressions.Regex]::Match(
-    $AccessKey,
-    "\AAlt\+([A-Za-z])\z",
-    [System.Text.RegularExpressions.RegexOptions]::CultureInvariant
-  )
-  if (-not $match.Success) {
-    return $null
-  }
-  "%$($match.Groups[1].Value.ToLowerInvariant())"
-}
-
 function Write-ConfigSaveObservation(
   [string]$Phase,
   [System.Collections.IDictionary]$Controls,
@@ -2410,12 +2395,17 @@ try {
   ) {
     throw "Reloaded Process Monitor Filter menu is unavailable"
   }
-  Set-Stage "read-reloaded-filter-menu-access-key"
-  $reloadMenuShortcut = ConvertTo-ProcmonMenuAccessKey $reloadFilterMenuState.AccessKey
-  $reloadMenuAccessKeyGate = if ($null -ne $reloadMenuShortcut) { "passed" } else { "failed" }
-  [Console]::Out.WriteLine("PROC_MON_FILTER_RELOAD_MENU_KEY=gate:$reloadMenuAccessKeyGate")
-  if ($reloadMenuAccessKeyGate -ne "passed") {
-    throw "Reloaded Process Monitor Filter menu has no supported access key"
+  Set-Stage "read-reloaded-filter-menu-pattern"
+  $reloadMenuInvoke = $null
+  $hasReloadMenuInvoke = $reloadFilterMenu.TryGetCurrentPattern(
+    [System.Windows.Automation.InvokePattern]::Pattern,
+    [ref]$reloadMenuInvoke
+  )
+  [Console]::Out.WriteLine(
+    "PROC_MON_FILTER_RELOAD_MENU_PATTERN=invoke:$($hasReloadMenuInvoke.ToString().ToLowerInvariant())"
+  )
+  if (-not $hasReloadMenuInvoke) {
+    throw "Reloaded Process Monitor Filter menu does not expose InvokePattern"
   }
   $currentForegroundHandle = [ProcmonNativeMenu]::GetForegroundWindow()
   if ($currentForegroundHandle -ne $mainWindowHandle -or
@@ -2423,9 +2413,9 @@ try {
     throw "Process Monitor reloaded main window lost the foreground before menu activation"
   }
   Set-Stage "activate-reloaded-filter-menu"
-  [System.Windows.Forms.SendKeys]::SendWait($reloadMenuShortcut)
+  $reloadMenuInvoke.Invoke()
   Set-Stage "observe-reloaded-filter-menu-focus"
-  Write-FocusObservation "after-reload-access-key" | Out-Null
+  Write-FocusObservation "after-reload-menu-invoke" | Out-Null
   Set-Stage "wait-reloaded-filter-menu"
   $reloadMenu = $null
   $reloadMenuDeadline = [DateTime]::UtcNow.AddSeconds(5)

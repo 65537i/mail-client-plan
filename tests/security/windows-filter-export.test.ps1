@@ -19,11 +19,10 @@ $functions = $ast.FindAll({
       "Get-ConfigFilterPathEvidence",
       "Get-LoadedFilterRuleEvidence",
       "Wait-KeyboardFocus",
-      "ConvertTo-SendKeysLiteral",
-      "ConvertTo-ProcmonMenuAccessKey"
+      "ConvertTo-SendKeysLiteral"
     )
 }, $true)
-if ($functions.Count -ne 8) {
+if ($functions.Count -ne 7) {
   throw "Expected the configuration file observation functions"
 }
 foreach ($function in $functions) {
@@ -103,16 +102,7 @@ if ((ConvertTo-SendKeysLiteral "C:\audit\filter +1%~(^).pmc{}") -cne
   "C:\audit\filter {+}1{%}{~}{(}{^}{)}.pmc{{}{}}") {
   throw "Filename keyboard input did not escape SendKeys metacharacters"
 }
-if ((ConvertTo-ProcmonMenuAccessKey "Alt+F") -cne "%f" -or
-  (ConvertTo-ProcmonMenuAccessKey "Alt+f") -cne "%f") {
-  throw "Safe single-letter menu access key was not converted"
-}
-foreach ($unsupportedAccessKey in @("", "F", "Alt+", "Alt+F%{ENTER}", "Alt+é", "C:\private", $null)) {
-  if ($null -ne (ConvertTo-ProcmonMenuAccessKey $unsupportedAccessKey)) {
-    throw "Unsupported menu access key passed the safe-key gate"
-  }
-}
-Write-Host "PASS AC-05: transient Save focus and bounded menu access keys are verified"
+Write-Host "PASS AC-05: transient Save focus is verified"
 
 function Assert-Timeout([string]$Path) {
   $timer = [System.Diagnostics.Stopwatch]::StartNew()
