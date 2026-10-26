@@ -207,12 +207,18 @@ test("AC-05: Windows native menu diagnostics retain safe owner fallback and unav
       "PROC_MON_FILTER_NATIVE_MENU_STATE=observation:before;source:menu-owner;menu-window-process:same;gui-thread-info:available;owner-window:available;handle:available;items:11;matches:1;read-failure:item-read-failed;readable:false;checked:unavailable",
       "PROC_MON_FILTER_NATIVE_MENU_STATE=observation:before;source:menu-owner;menu-window-process:same;gui-thread-info:available;owner-window:available;handle:available;items:2;matches:0;read-failure:none;readable:true;checked:unavailable",
       "PROC_MON_FILTER_NATIVE_MENU_STATE=observation:before;source:menu-owner;menu-window-process:same;gui-thread-info:available;owner-window:available;handle:available;items:0;matches:0;read-failure:owner-drawn;readable:false;checked:unavailable",
+      "PROC_MON_FILTER_NATIVE_MENU_STATE=observation:before;source:menu-owner;menu-window-process:same;gui-thread-info:available;owner-window:available;handle:available;items:0;matches:0;read-failure:invalid-menu-handle;readable:false;checked:unavailable",
+      "PROC_MON_FILTER_NATIVE_MENU_STATE=observation:before;source:menu-owner;menu-window-process:same;gui-thread-info:available;owner-window:available;handle:available;items:0;matches:0;read-failure:menu-count-invalid;readable:false;checked:unavailable",
+      "PROC_MON_FILTER_NATIVE_MENU_STATE=observation:before;source:menu-owner;menu-window-process:same;gui-thread-info:available;owner-window:available;handle:available;items:0;matches:0;read-failure:menu-count-failed;readable:false;checked:unavailable",
     ].join("\n")),
     "; drop-native-menu-state=observation:before;source:unavailable;menu-window-process:same;gui-thread-info:unavailable;owner-window:unavailable;handle:unavailable;items:0;matches:0;read-failure:none;readable:false;checked:unavailable"
       + "; drop-native-menu-state=observation:before;source:menu-owner;menu-window-process:same;gui-thread-info:available;owner-window:available;handle:available;items:11;matches:1;read-failure:none;readable:true;checked:off"
       + "; drop-native-menu-state=observation:before;source:menu-owner;menu-window-process:same;gui-thread-info:available;owner-window:available;handle:available;items:11;matches:1;read-failure:item-read-failed;readable:false;checked:unavailable"
       + "; drop-native-menu-state=observation:before;source:menu-owner;menu-window-process:same;gui-thread-info:available;owner-window:available;handle:available;items:2;matches:0;read-failure:none;readable:true;checked:unavailable"
-      + "; drop-native-menu-state=observation:before;source:menu-owner;menu-window-process:same;gui-thread-info:available;owner-window:available;handle:available;items:0;matches:0;read-failure:owner-drawn;readable:false;checked:unavailable",
+      + "; drop-native-menu-state=observation:before;source:menu-owner;menu-window-process:same;gui-thread-info:available;owner-window:available;handle:available;items:0;matches:0;read-failure:owner-drawn;readable:false;checked:unavailable"
+      + "; drop-native-menu-state=observation:before;source:menu-owner;menu-window-process:same;gui-thread-info:available;owner-window:available;handle:available;items:0;matches:0;read-failure:invalid-menu-handle;readable:false;checked:unavailable"
+      + "; drop-native-menu-state=observation:before;source:menu-owner;menu-window-process:same;gui-thread-info:available;owner-window:available;handle:available;items:0;matches:0;read-failure:menu-count-invalid;readable:false;checked:unavailable"
+      + "; drop-native-menu-state=observation:before;source:menu-owner;menu-window-process:same;gui-thread-info:available;owner-window:available;handle:available;items:0;matches:0;read-failure:menu-count-failed;readable:false;checked:unavailable",
   );
 });
 

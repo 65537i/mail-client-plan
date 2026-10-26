@@ -130,7 +130,14 @@ public static class ProcmonNativeMenu
     }
 
     [DllImport("user32.dll", ExactSpelling = true, SetLastError = true)]
-    public static extern int GetMenuItemCount(IntPtr hMenu);
+    private static extern int GetMenuItemCountNative(IntPtr hMenu);
+
+    public static int GetMenuItemCount(IntPtr hMenu, out int lastError)
+    {
+        var itemCount = GetMenuItemCountNative(hMenu);
+        lastError = itemCount < 0 ? Marshal.GetLastWin32Error() : 0;
+        return itemCount;
+    }
 
     [DllImport(
         "user32.dll",
@@ -387,11 +394,18 @@ function Find-NativeDropMenuItem([System.IntPtr]$MenuHandle, [int]$Depth) {
     }
     return
   }
-  $itemCount = [ProcmonNativeMenu]::GetMenuItemCount($MenuHandle)
+  $menuCountError = 0
+  $itemCount = [ProcmonNativeMenu]::GetMenuItemCount($MenuHandle, [ref]$menuCountError)
   if ($itemCount -lt 0) {
     $script:nativeMenuReadable = $false
     if ($script:nativeMenuFailure -eq "none") {
-      $script:nativeMenuFailure = "menu-count-invalid"
+      $script:nativeMenuFailure = if ($menuCountError -eq 1401) {
+        "invalid-menu-handle"
+      } elseif ($menuCountError -eq 0) {
+        "menu-count-invalid"
+      } else {
+        "menu-count-failed"
+      }
     }
     return
   }
