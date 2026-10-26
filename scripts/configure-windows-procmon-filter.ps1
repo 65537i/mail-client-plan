@@ -1090,48 +1090,65 @@ function Wait-MainWindow([System.Diagnostics.Process]$Process, [int]$TimeoutSeco
   $ownedWindowCount = 0
   $mainHandleAvailable = $false
   $processExited = $false
-  do {
-    $Process.Refresh()
-    if ($Process.HasExited) {
-      $processExited = $true
-      break
-    }
-    $windows = [System.Windows.Automation.AutomationElement]::RootElement.FindAll(
-      [System.Windows.Automation.TreeScope]::Children,
-      $windowCondition
-    )
-    $rootWindowCount = $windows.Count
-    foreach ($window in $windows) {
-      if ($window.Current.ProcessId -eq $Process.Id) {
-        $ownedWindowCount++
-        return $window
-      }
-    }
-    $mainHandle = $Process.MainWindowHandle
-    $mainHandleAvailable = $mainHandle -ne [IntPtr]::Zero
-    if ($mainHandleAvailable) {
-      $mainWindow = [System.Windows.Automation.AutomationElement]::FromHandle($mainHandle)
-      if ($mainWindow.Current.ProcessId -eq $Process.Id) {
-        return $mainWindow
-      }
-    }
-    Start-Sleep -Milliseconds 100
-  } while ([DateTime]::UtcNow -lt $deadline)
+  $windowFound = $false
+  $scanPhase = "refresh-process"
   $foregroundOwner = "unavailable"
-  $foregroundHandle = [ProcmonNativeMenu]::GetForegroundWindow()
-  if ($foregroundHandle -ne [IntPtr]::Zero) {
-    $foregroundOwner = if (
-      [ProcmonNativeMenu]::GetWindowProcessId($foregroundHandle) -eq $Process.Id
-    ) { "same" } else { "other" }
+  try {
+    do {
+      $scanPhase = "refresh-process"
+      $Process.Refresh()
+      $scanPhase = "check-process"
+      if ($Process.HasExited) {
+        $processExited = $true
+        break
+      }
+      $scanPhase = "enumerate-uia-windows"
+      $windows = [System.Windows.Automation.AutomationElement]::RootElement.FindAll(
+        [System.Windows.Automation.TreeScope]::Children,
+        $windowCondition
+      )
+      $rootWindowCount = $windows.Count
+      foreach ($window in $windows) {
+        $scanPhase = "read-uia-window-owner"
+        if ($window.Current.ProcessId -eq $Process.Id) {
+          $ownedWindowCount++
+          $windowFound = $true
+          return $window
+        }
+      }
+      $scanPhase = "read-main-window-handle"
+      $mainHandle = $Process.MainWindowHandle
+      $mainHandleAvailable = $mainHandle -ne [IntPtr]::Zero
+      if ($mainHandleAvailable) {
+        $scanPhase = "read-main-window-owner"
+        $mainWindow = [System.Windows.Automation.AutomationElement]::FromHandle($mainHandle)
+        if ($mainWindow.Current.ProcessId -eq $Process.Id) {
+          $windowFound = $true
+          return $mainWindow
+        }
+      }
+      $scanPhase = "wait"
+      Start-Sleep -Milliseconds 100
+    } while ([DateTime]::UtcNow -lt $deadline)
+    $scanPhase = "foreground-owner"
+    $foregroundHandle = [ProcmonNativeMenu]::GetForegroundWindow()
+    if ($foregroundHandle -ne [IntPtr]::Zero) {
+      $foregroundOwner = if (
+        [ProcmonNativeMenu]::GetWindowProcessId($foregroundHandle) -eq $Process.Id
+      ) { "same" } else { "other" }
+    }
+  } finally {
+    if (-not $windowFound) {
+      $stageClass = if ($script:stage -eq "find-reloaded-main-window") {
+        "reload"
+      } else {
+        "initial"
+      }
+      [Console]::Out.WriteLine(
+        "PROC_MON_FILTER_WINDOW_SCAN=stage:$stageClass;phase:$scanPhase;process-exited:$($processExited.ToString().ToLowerInvariant());root-windows:$([Math]::Min($rootWindowCount, 9999));uia-owned-windows:$([Math]::Min($ownedWindowCount, 9999));main-handle:$(if ($mainHandleAvailable) { 'available' } else { 'unavailable' });foreground-owner:$foregroundOwner"
+      )
+    }
   }
-  $stageClass = if ($script:stage -eq "find-reloaded-main-window") {
-    "reload"
-  } else {
-    "initial"
-  }
-  [Console]::Out.WriteLine(
-    "PROC_MON_FILTER_WINDOW_SCAN=stage:$stageClass;process-exited:$($processExited.ToString().ToLowerInvariant());root-windows:$([Math]::Min($rootWindowCount, 9999));uia-owned-windows:$([Math]::Min($ownedWindowCount, 9999));main-handle:$(if ($mainHandleAvailable) { 'available' } else { 'unavailable' });foreground-owner:$foregroundOwner"
-  )
   if ($processExited) {
     throw "Process Monitor exited before its configuration window became available"
   }

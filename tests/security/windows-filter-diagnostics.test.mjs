@@ -89,18 +89,21 @@ test("AC-05: reloaded Windows filter rule summaries retain bounded counts only",
 
 test("AC-05: reload window diagnostics retain only bounded process state", () => {
   const summary = "PROC_MON_FILTER_WINDOW_SCAN="
-    + "stage:reload;process-exited:false;root-windows:2;uia-owned-windows:0;"
+    + "stage:reload;phase:enumerate-uia-windows;process-exited:false;"
+    + "root-windows:2;uia-owned-windows:0;"
     + "main-handle:unavailable;foreground-owner:other";
   assert.equal(
     describeWindowsFilterDiagnostics(summary),
-    "; reload-window-scan=process-exited:false;root-windows:2;uia-owned-windows:0;"
+    "; reload-window-scan=phase:enumerate-uia-windows;process-exited:false;"
+      + "root-windows:2;uia-owned-windows:0;"
       + "main-handle:unavailable;foreground-owner:other",
   );
   assert.equal(
     describeWindowsFilterDiagnostics([
-      "PROC_MON_FILTER_WINDOW_SCAN=stage:reload;process-exited:false;root-windows:2;uia-owned-windows:3;main-handle:unavailable;foreground-owner:other",
-      "PROC_MON_FILTER_WINDOW_SCAN=stage:reload;process-exited:false;root-windows:10000;uia-owned-windows:0;main-handle:unavailable;foreground-owner:other",
-      "PROC_MON_FILTER_WINDOW_SCAN=stage:reload;process-exited:false;root-windows:2;uia-owned-windows:0;main-handle:unavailable;foreground-owner:other;handle=0x1234",
+      "PROC_MON_FILTER_WINDOW_SCAN=stage:reload;phase:wait;process-exited:false;root-windows:2;uia-owned-windows:3;main-handle:unavailable;foreground-owner:other",
+      "PROC_MON_FILTER_WINDOW_SCAN=stage:reload;phase:wait;process-exited:false;root-windows:10000;uia-owned-windows:0;main-handle:unavailable;foreground-owner:other",
+      "PROC_MON_FILTER_WINDOW_SCAN=stage:reload;phase:private;process-exited:false;root-windows:2;uia-owned-windows:0;main-handle:unavailable;foreground-owner:other",
+      "PROC_MON_FILTER_WINDOW_SCAN=stage:reload;phase:wait;process-exited:false;root-windows:2;uia-owned-windows:0;main-handle:unavailable;foreground-owner:other;handle=0x1234",
     ].join("\n")),
     "",
   );

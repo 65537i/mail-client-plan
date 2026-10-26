@@ -171,13 +171,13 @@ export function describeWindowsFilterDiagnostics(output) {
   }
 
   const windowScan = output.match(
-    /^PROC_MON_FILTER_WINDOW_SCAN=stage:(initial|reload);process-exited:(true|false);root-windows:(\d{1,4});uia-owned-windows:(\d{1,4});main-handle:(available|unavailable);foreground-owner:(same|other|unavailable)\r?$/m,
+    /^PROC_MON_FILTER_WINDOW_SCAN=stage:(initial|reload);phase:(refresh-process|check-process|enumerate-uia-windows|read-uia-window-owner|read-main-window-handle|read-main-window-owner|wait|foreground-owner);process-exited:(true|false);root-windows:(\d{1,4});uia-owned-windows:(\d{1,4});main-handle:(available|unavailable);foreground-owner:(same|other|unavailable)\r?$/m,
   );
   if (windowScan) {
-    const [rootWindows, ownedWindows] = windowScan.slice(3, 5).map(Number);
+    const [rootWindows, ownedWindows] = windowScan.slice(4, 6).map(Number);
     if (rootWindows <= 9999 && ownedWindows <= rootWindows) {
       diagnostics.push(
-        `${windowScan[1]}-window-scan=process-exited:${windowScan[2]};root-windows:${rootWindows};uia-owned-windows:${ownedWindows};main-handle:${windowScan[5]};foreground-owner:${windowScan[6]}`,
+        `${windowScan[1]}-window-scan=phase:${windowScan[2]};process-exited:${windowScan[3]};root-windows:${rootWindows};uia-owned-windows:${ownedWindows};main-handle:${windowScan[6]};foreground-owner:${windowScan[7]}`,
       );
     }
   }
