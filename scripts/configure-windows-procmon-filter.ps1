@@ -6,11 +6,41 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-Add-Type -AssemblyName UIAutomationClient
-Add-Type -AssemblyName UIAutomationTypes
-Add-Type -AssemblyName System.Windows.Forms
-Add-Type -AssemblyName Accessibility
-Add-Type -TypeDefinition @"
+function Write-StartupFailure([string]$FailedStage, $Failure) {
+  [Console]::Out.WriteLine("PROC_MON_FILTER_FAILED_STAGE=$FailedStage")
+  $failureType = $Failure.Exception.GetType().Name
+  if ($failureType -notin @(
+      "ArgumentException",
+      "BadImageFormatException",
+      "FileLoadException",
+      "FileNotFoundException",
+      "InvalidOperationException",
+      "MethodInvocationException",
+      "TypeInitializationException"
+    )) {
+    $failureType = "Other"
+  }
+  [Console]::Out.WriteLine("PROC_MON_FILTER_FAILURE=$failureType")
+}
+
+try {
+  Add-Type -AssemblyName UIAutomationClient
+  Add-Type -AssemblyName UIAutomationTypes
+  Add-Type -AssemblyName System.Windows.Forms
+} catch {
+  Write-StartupFailure "load-automation-assemblies" $_
+  exit 1
+}
+
+try {
+  Add-Type -AssemblyName Accessibility
+} catch {
+  Write-StartupFailure "load-msaa-assembly" $_
+  exit 1
+}
+
+try {
+  Add-Type -TypeDefinition @"
 using System;
 using System.Runtime.InteropServices;
 
@@ -380,8 +410,17 @@ public static class ProcmonNativeMenu
     }
 }
 "@
+} catch {
+  Write-StartupFailure "compile-native-menu-helper" $_
+  exit 1
+}
 
-$process = Start-Process -FilePath $ProcmonPath -ArgumentList "/AcceptEula" -PassThru
+try {
+  $process = Start-Process -FilePath $ProcmonPath -ArgumentList "/AcceptEula" -PassThru
+} catch {
+  Write-StartupFailure "start-procmon" $_
+  exit 1
+}
 
 function Set-Stage([string]$Name) {
   $script:stage = $Name
