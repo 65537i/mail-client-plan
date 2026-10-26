@@ -2510,18 +2510,25 @@ try {
     [System.Windows.Automation.ExpandCollapsePattern]::Pattern,
     [ref]$reloadMenuExpand
   )
+  $reloadMenuSelection = $null
+  $hasReloadMenuSelection = $reloadFilterMenu.TryGetCurrentPattern(
+    [System.Windows.Automation.SelectionItemPattern]::Pattern,
+    [ref]$reloadMenuSelection
+  )
   $reloadMenuInvoke = $null
   $hasReloadMenuInvoke = $reloadFilterMenu.TryGetCurrentPattern(
     [System.Windows.Automation.InvokePattern]::Pattern,
     [ref]$reloadMenuInvoke
   )
   [Console]::Out.WriteLine(
-    "PROC_MON_FILTER_RELOAD_MENU_PATTERNS=expand-collapse:$($hasReloadMenuExpand.ToString().ToLowerInvariant());invoke:$($hasReloadMenuInvoke.ToString().ToLowerInvariant())"
+    "PROC_MON_FILTER_RELOAD_MENU_PATTERNS=expand-collapse:$($hasReloadMenuExpand.ToString().ToLowerInvariant());selection-item:$($hasReloadMenuSelection.ToString().ToLowerInvariant());invoke:$($hasReloadMenuInvoke.ToString().ToLowerInvariant())"
   )
   [Console]::Out.WriteLine(
     "PROC_MON_FILTER_RELOAD_MENU_PATTERN=invoke:$($hasReloadMenuInvoke.ToString().ToLowerInvariant())"
   )
-  if (-not $hasReloadMenuExpand -and -not $hasReloadMenuInvoke) {
+  if (-not $hasReloadMenuExpand -and
+    -not $hasReloadMenuSelection -and
+    -not $hasReloadMenuInvoke) {
     throw "Reloaded Process Monitor Filter menu exposes no supported open pattern"
   }
   $currentForegroundHandle = [ProcmonNativeMenu]::GetForegroundWindow()
@@ -2532,11 +2539,15 @@ try {
   Set-Stage "activate-reloaded-filter-menu"
   if ($hasReloadMenuExpand) {
     $reloadMenuExpand.Expand()
+    $reloadMenuAction = "expand"
+  } elseif ($hasReloadMenuSelection) {
+    $reloadMenuSelection.Select()
+    $reloadMenuAction = "select"
   } else {
     $reloadMenuInvoke.Invoke()
+    $reloadMenuAction = "invoke"
   }
   Set-Stage "observe-reloaded-filter-menu-focus"
-  $reloadMenuAction = if ($hasReloadMenuExpand) { "expand" } else { "invoke" }
   Write-FocusObservation "after-reload-menu-$reloadMenuAction" | Out-Null
   Set-Stage "wait-reloaded-filter-menu"
   $reloadMenuScan = Wait-ProcessMenu $process

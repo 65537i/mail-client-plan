@@ -65,7 +65,7 @@ Run 290（`acb1203`、manual Windows 2025 / webview）はsecurity-test build、W
 
 Run 289（`acb1203`、Ubuntu 24.04 / basic）は長時間のLinux system dependencies install後、Rust format / test / clippy、frontend type-check/buildまで成功した。native buildとWebView関連stepはbasic modeのためskip。Windows Procmonの再読込・filter条件を証明するものではない。
 
-Run 290の観測を受け、再読込後Filter menuを開く処理をSendKeys AccessKeyからUIA patternへ切り替えた。Run 294でInvoke後のfocused-element ancestryからMenuを得られず、Run 296ではProcess Monitor所有window subtreeの走査でもMenu 0件だった。Run 298ではExpandCollapsePatternがなくInvokePatternへfallbackしたが、同じくMenu 0件だった。次runではtop-level window subtreeに加えてdesktop rootのdirect-child Menuを走査する。Windows audit関連Node regressionはRun 298で成功し、PowerShell configuration-export regressionも成功。ローカルにpwshがなく、PowerShell regressionの独立したlocal実行は未実施。reloaded exact rules、positive-control capture、canary exclusion、attack scenarioが全て確認できるまではAC-05未達。
+Run 290の観測を受け、再読込後Filter menuを開く処理をSendKeys AccessKeyからUIA patternへ切り替えた。Run 294でInvoke後のfocused-element ancestryからMenuを得られず、Run 296でProcess Monitor所有window subtreeの走査もMenu 0件。Run 298ではExpandCollapsePatternがなくInvokePatternへfallbackしたがMenu 0件で、Run 300ではdesktop root direct-child Menuも合わせて走査してなおMenu 0件だった。次runではSelectionItemPattern有無を記録し、対応する場合のみSelectを試す。Windows audit関連Node regressionとPowerShell configuration-export regressionはRun 300で成功。ローカルにpwshがなく、PowerShell regressionの独立したlocal実行は未実施。reloaded exact rules、positive-control capture、canary exclusion、attack scenarioが全て確認できるまではAC-05未達。
 
 Run 292（`1bdb53d`、manual Windows 2025 / webview）はsecurity-test build、WebView security tests、Windows audit setup / worker、configuration export wait regressionを通過したが、Procmon監査で`walk-to-open-filter-menu`に失敗した。初回Filter menuは同一process / enabled / onscreenでInvokePatternを公開し、Invokeも実行されたが、直後のFocusedElementはToolbarで、UIA親treeからopen Menuを確認できなかった。今回のreload後menu InvokePattern経路には未到達。即時focused-control観測を最大5秒のbounded pollへ変更し、same-process Menuだけを受理する。期限内に見つからない場合はfail-closed。reloaded exact rules、positive-control capture、canary判定、attack scenarioは未実施でAC-05未達。
 
@@ -75,7 +75,13 @@ Run 296（`5d7e5e3`、manual Windows 2025 / webview）はsecurity-test app build
 
 Run 298（`772df8b`、manual Windows 2025 / webview）はRun 296と同じくsecurity-test app build、WebView security test、Windows audit setup / worker、configuration export regressionを通過した後、`wait-reloaded-filter-menu`で停止した。reload Filter controlはExpandCollapsePatternを公開せずInvokePatternだけを公開し、Invoke後のbounded scanはProcess Monitor window 1件、Menu 0件、visible Menu 0件と報告した。reloaded rulesやcaptureには到達していない。次runではUIA desktop root直下のMenu候補もsame-process / enabled / onscreenで走査し、window subtreeの候補とruntime IDでdeduplicateする。件数上限と唯一候補条件を維持し、未確認時はfail-closed。
 
+Run 300（`f684eff`、manual Windows 2025 / webview）はsecurity-test app build、WebView security test、Windows audit setup / worker、configuration export regressionを通過した後、`wait-reloaded-filter-menu`で停止した。UIA direct-child MenuとProcess Monitor window subtreeの両方を走査したがMenu候補は0件、Invoke後focusはButtonだった。exact reloaded rules、positive-control capture、canary result、attack scenariosには到達せずAC-05未達。次runはReload Filter MenuItemのSelectionItemPattern対応を記録し、存在する場合のみSelectで開くことを試す。process、enabled / onscreen、unique Menu gateは維持する。
+
 Run 295（`5d7e5e3`、push Ubuntu 24.04 / basic）はsuccess。CI planningとUbuntu basic validationは通過したが、Windows / WebView / Procmon監査の証拠にはならない。
+
+Run 299（`f684eff`、push Ubuntu 24.04 / basic）は確認時点で実行中。push時のbasic scopeであり、Windows Procmon gateとは独立している。
+
+Run 297（`772df8b`、push Ubuntu 24.04 / basic）はsuccess。Windows UIA / Procmon audit evidenceではない。
 
 Run 291（`1bdb53d`、Ubuntu 24.04 / basic）は成功し、Linux system dependencies install、Rust format / test / clippy、frontend type-check/buildを通過した。native buildとWebView関連stepはbasic modeのためskip。
 
