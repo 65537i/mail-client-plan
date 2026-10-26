@@ -599,6 +599,102 @@ function Write-ConfigSaveObservation(
   }
 }
 
+function Write-ConfigSaveResultObservation(
+  [string]$Phase,
+  [System.Diagnostics.Process]$Process,
+  [System.Windows.Automation.AutomationElement]$MainWindow
+) {
+  try {
+    $windowCondition = [System.Windows.Automation.PropertyCondition]::new(
+      [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+      [System.Windows.Automation.ControlType]::Window
+    )
+    $buttonCondition = [System.Windows.Automation.PropertyCondition]::new(
+      [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+      [System.Windows.Automation.ControlType]::Button
+    )
+    $rootWindows = [System.Windows.Automation.AutomationElement]::RootElement.FindAll(
+      [System.Windows.Automation.TreeScope]::Children,
+      $windowCondition
+    )
+    $embeddedWindows = $MainWindow.FindAll(
+      [System.Windows.Automation.TreeScope]::Descendants,
+      $windowCondition
+    )
+    $seenHandles = [System.Collections.Generic.HashSet[int]]::new()
+    $sameProcessDialogs = 0
+    $otherProcessWindows = 0
+    $buttonCounts = @{
+      save = 0
+      cancel = 0
+      yes = 0
+      no = 0
+      ok = 0
+      retry = 0
+      close = 0
+    }
+    $truncated = $false
+    foreach ($window in @($rootWindows) + @($embeddedWindows)) {
+      $state = $window.Current
+      if (
+        $state.NativeWindowHandle -eq 0 -or
+        -not $seenHandles.Add($state.NativeWindowHandle)
+      ) {
+        continue
+      }
+      if ($seenHandles.Count -gt 32) {
+        $truncated = $true
+        break
+      }
+      if ($state.ProcessId -ne $Process.Id) {
+        $otherProcessWindows++
+        continue
+      }
+      if ($state.NativeWindowHandle -eq $MainWindow.Current.NativeWindowHandle) {
+        continue
+      }
+      $sameProcessDialogs++
+      $buttons = $window.FindAll(
+        [System.Windows.Automation.TreeScope]::Descendants,
+        $buttonCondition
+      )
+      foreach ($button in $buttons) {
+        $buttonName = $button.Current.Name
+        if ($buttonName -ceq "Save") { $buttonCounts.save++ }
+        elseif ($buttonName -ceq "Cancel") { $buttonCounts.cancel++ }
+        elseif ($buttonName -ceq "Yes") { $buttonCounts.yes++ }
+        elseif ($buttonName -ceq "No") { $buttonCounts.no++ }
+        elseif ($buttonName -ceq "OK") { $buttonCounts.ok++ }
+        elseif ($buttonName -ceq "Retry") { $buttonCounts.retry++ }
+        elseif ($buttonName -ceq "Close") { $buttonCounts.close++ }
+      }
+    }
+    if ($buttonCounts.Values | Where-Object { $_ -gt 32 } | Select-Object -First 1) {
+      $truncated = $true
+    }
+    $foreground = "unavailable"
+    $foregroundHandle = [ProcmonNativeMenu]::GetForegroundWindow()
+    if ($foregroundHandle -ne [IntPtr]::Zero) {
+      $foregroundProcessId = [ProcmonNativeMenu]::GetWindowProcessId($foregroundHandle)
+      if ($foregroundProcessId -eq $Process.Id) {
+        $foreground = if (
+          $foregroundHandle -eq $MainWindow.Current.NativeWindowHandle
+        ) { "procmon-main" } else { "procmon-other" }
+      } elseif ($foregroundProcessId -gt 0) {
+        $foreground = "other-process"
+      }
+    }
+    $buttonSummary = "save:$([Math]::Min($buttonCounts.save, 32));cancel:$([Math]::Min($buttonCounts.cancel, 32));yes:$([Math]::Min($buttonCounts.yes, 32));no:$([Math]::Min($buttonCounts.no, 32));ok:$([Math]::Min($buttonCounts.ok, 32));retry:$([Math]::Min($buttonCounts.retry, 32));close:$([Math]::Min($buttonCounts.close, 32))"
+    [Console]::Out.WriteLine(
+      "PROC_MON_FILTER_SAVE_RESULT=phase:$Phase;foreground:$foreground;same-process-dialogs:$([Math]::Min($sameProcessDialogs, 32));other-process-windows:$([Math]::Min($otherProcessWindows, 32));buttons:$buttonSummary;truncated:$($truncated.ToString().ToLowerInvariant())"
+    )
+  } catch {
+    [Console]::Out.WriteLine(
+      "PROC_MON_FILTER_SAVE_RESULT=phase:$Phase;foreground:unavailable;same-process-dialogs:0;other-process-windows:0;buttons:save:0;cancel:0;yes:0;no:0;ok:0;retry:0;close:0;truncated:false"
+    )
+  }
+}
+
 function Wait-ConfigSaveDialog(
   [System.Diagnostics.Process]$Process,
   [System.Windows.Automation.AutomationElement]$MainWindow,
@@ -1834,6 +1930,7 @@ try {
   Write-ConfigOutputObservation "before-save" $ConfigPath
   Set-Stage "confirm-export-config-enter"
   [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
+  Write-ConfigSaveResultObservation "after-enter" $process $main
   Write-FocusObservation "after-invoke"
   Write-FocusOwnerObservation "after-save-enter" $process $main
   Write-ConfigSaveObservation "after-invoke" $saveControls $process.Id $ConfigPath
@@ -1844,9 +1941,11 @@ try {
   } catch {
     Write-ConfigSaveObservation "verify-failed" $saveControls $process.Id $ConfigPath
     Write-ConfigOutputObservation "after-wait" $ConfigPath
+    Write-ConfigSaveResultObservation "after-wait" $process $main
     throw
   }
   Write-ConfigOutputObservation "after-wait" $ConfigPath
+  Write-ConfigSaveResultObservation "after-wait" $process $main
 } catch {
   [Console]::Out.WriteLine("PROC_MON_FILTER_FAILED_STAGE=$stage")
   $failureException = $_.Exception

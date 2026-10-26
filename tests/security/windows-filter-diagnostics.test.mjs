@@ -191,6 +191,24 @@ test("AC-05: configuration save observations expose states, not paths or dialog 
     "; config-save-foreground-gate=failed",
   );
   assert.equal(
+    describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_SAVE_RESULT=phase:after-enter;foreground:procmon-main;same-process-dialogs:0;other-process-windows:0;buttons:save:0;cancel:0;yes:0;no:0;ok:0;retry:0;close:0;truncated:false",
+    ),
+    "; config-save-result-after-enter=foreground:procmon-main;same-process-dialogs:0;other-process-windows:0;buttons:save:0;cancel:0;yes:0;no:0;ok:0;retry:0;close:0;truncated:false",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_SAVE_RESULT=phase:after-wait;foreground:other-process;same-process-dialogs:1;other-process-windows:0;buttons:save:0;cancel:1;yes:1;no:1;ok:0;retry:0;close:0;truncated:false",
+    ),
+    "; config-save-result-after-wait=foreground:other-process;same-process-dialogs:1;other-process-windows:0;buttons:save:0;cancel:1;yes:1;no:1;ok:0;retry:0;close:0;truncated:false",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_SAVE_RESULT=phase:after-wait;foreground:C:\\private;same-process-dialogs:0;other-process-windows:0;buttons:save:0;cancel:0;yes:0;no:0;ok:0;retry:0;close:0;truncated:false",
+    ),
+    "",
+  );
+  assert.equal(
     describeWindowsFilterDiagnostics([
       "PROC_MON_FILTER_SAVE_FOCUS=gate:C:\\private\\mail",
       "PROC_MON_FILTER_SAVE_FOREGROUND=gate:C:\\private\\mail",

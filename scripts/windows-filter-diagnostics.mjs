@@ -108,6 +108,17 @@ export function describeWindowsFilterDiagnostics(output) {
   }
 
   for (const match of output.matchAll(
+    /^PROC_MON_FILTER_SAVE_RESULT=phase:(after-enter|after-wait);foreground:(procmon-main|procmon-other|other-process|unavailable);same-process-dialogs:(\d{1,2});other-process-windows:(\d{1,2});buttons:save:(\d{1,2});cancel:(\d{1,2});yes:(\d{1,2});no:(\d{1,2});ok:(\d{1,2});retry:(\d{1,2});close:(\d{1,2});truncated:(true|false)\r?$/gm,
+  )) {
+    const counts = match.slice(3, 12).map(Number);
+    if (counts.every((count) => count <= 32)) {
+      diagnostics.push(
+        `config-save-result-${match[1]}=foreground:${match[2]};same-process-dialogs:${match[3]};other-process-windows:${match[4]};buttons:save:${match[5]};cancel:${match[6]};yes:${match[7]};no:${match[8]};ok:${match[9]};retry:${match[10]};close:${match[11]};truncated:${match[12]}`,
+      );
+    }
+  }
+
+  for (const match of output.matchAll(
     /^PROC_MON_FILTER_CONFIG_SAVE=(after-invoke|verify-failed|focus-failed|foreground-failed);(dialog:(?:unavailable|other-process)|dialog:available;enabled:(?:true|false);offscreen:(?:true|false);path:(?:matches|different);save-enabled:(?:true|false);save-offscreen:(?:true|false);save-focusable:(?:true|false);save-focused:(?:true|false))\r?$/gm,
   )) {
     diagnostics.push(`config-save-${match[1]}=${match[2]}`);
