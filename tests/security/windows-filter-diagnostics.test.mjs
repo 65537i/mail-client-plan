@@ -172,6 +172,9 @@ test("AC-05: Windows filter diagnostics retain safe focused-control observations
     "PROC_MON_FILTER_FOCUSED_CONTROL=after-reload-menu-expand;type:Button;name:Other;offscreen:false;keyboard-focusable:true;tree=Button:Other>Window:ProcessMonitor",
     "PROC_MON_FILTER_FOCUSED_CONTROL=after-reload-menu-select;type:Button;name:Other;offscreen:false;keyboard-focusable:true;tree=Button:Other>Window:ProcessMonitor",
     "PROC_MON_FILTER_FOCUSED_CONTROL=after-reload-menu-pointer;type:Menu;name:Filter;offscreen:false;keyboard-focusable:true;tree=Menu:Filter>Window:ProcessMonitor",
+    "PROC_MON_FILTER_FOCUSED_CONTROL=after-reload-filter-dialog-shortcut;type:Window;name:ProcessMonitor;offscreen:false;keyboard-focusable:false;tree=Window:ProcessMonitor",
+    "PROC_MON_FILTER_FOCUSED_CONTROL=after-reload-menu-keyboard-event;type:Menu;name:Other;offscreen:false;keyboard-focusable:false;tree=Menu:Other>Window:ProcessMonitor",
+    "PROC_MON_FILTER_FOCUSED_CONTROL=after-reload-menu-keyboard-filter;type:Menu;name:Other;offscreen:false;keyboard-focusable:false;tree=Menu:Other>Window:ProcessMonitor",
   ].join("\n");
   assert.equal(
     describeWindowsFilterDiagnostics(output),
@@ -187,7 +190,33 @@ test("AC-05: Windows filter diagnostics retain safe focused-control observations
       + "; focus-after-reload-menu-invoke=MenuItem:Filter;offscreen:false;keyboard-focusable:true;tree=MenuItem:Filter>Menu:Other"
       + "; focus-after-reload-menu-expand=Button:Other;offscreen:false;keyboard-focusable:true;tree=Button:Other>Window:ProcessMonitor"
       + "; focus-after-reload-menu-select=Button:Other;offscreen:false;keyboard-focusable:true;tree=Button:Other>Window:ProcessMonitor"
-      + "; focus-after-reload-menu-pointer=Menu:Filter;offscreen:false;keyboard-focusable:true;tree=Menu:Filter>Window:ProcessMonitor",
+      + "; focus-after-reload-menu-pointer=Menu:Filter;offscreen:false;keyboard-focusable:true;tree=Menu:Filter>Window:ProcessMonitor"
+      + "; focus-after-reload-filter-dialog-shortcut=Window:ProcessMonitor;offscreen:false;keyboard-focusable:false;tree=Window:ProcessMonitor"
+      + "; focus-after-reload-menu-keyboard-event=Menu:Other;offscreen:false;keyboard-focusable:false;tree=Menu:Other>Window:ProcessMonitor"
+      + "; focus-after-reload-menu-keyboard-filter=Menu:Other;offscreen:false;keyboard-focusable:false;tree=Menu:Other>Window:ProcessMonitor",
+  );
+});
+
+test("AC-05: reload keyboard diagnostics retain only known Procmon commands and menu states", () => {
+  const output = [
+    "PROC_MON_FILTER_RELOAD_DROP_MAIN_FOREGROUND=gate:passed",
+    "PROC_MON_FILTER_RELOAD_DROP_MAIN_FOREGROUND=gate:C:\\private",
+    "PROC_MON_FILTER_RELOAD_SHORTCUT=command:filter-dialog;state:sent",
+    "PROC_MON_FILTER_RELOAD_SHORTCUT=command:C:\\private;state:sent",
+    "PROC_MON_FILTER_RELOAD_EVENT_MENU=opened",
+    "PROC_MON_FILTER_RELOAD_EVENT_MENU=name:C:\\private",
+    "PROC_MON_FILTER_RELOAD_EVENT_FILTER_PATTERNS=expand-collapse:false;invoke:true",
+    "PROC_MON_FILTER_RELOAD_EVENT_FILTER_PATTERNS=expand-collapse:true;invoke:unknown",
+    "PROC_MON_FILTER_RELOAD_MENU_KEYBOARD=route:event-filter;state:activated",
+    "PROC_MON_FILTER_RELOAD_MENU_KEYBOARD=route:C:\\private;state:activated",
+  ].join("\n");
+  assert.equal(
+    describeWindowsFilterDiagnostics(output),
+    "; reload-drop-main-foreground-gate=passed"
+      + "; reload-filter-dialog-shortcut=sent"
+      + "; reload-event-menu=opened"
+      + "; reload-event-filter-patterns=expand-collapse:false;invoke:true"
+      + "; reload-menu-keyboard=route:event-filter;state:activated",
   );
 });
 

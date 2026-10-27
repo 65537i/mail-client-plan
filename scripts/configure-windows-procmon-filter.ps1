@@ -66,9 +66,6 @@ public static class ProcmonNativeMenu
     private const int MenuItemRole = 12;
     private const int CheckedState = 0x10;
     private const int MixedState = 0x20;
-    private const uint InputMouse = 0;
-    private const uint MouseLeftDown = 0x0002;
-    private const uint MouseLeftUp = 0x0004;
 
     [StructLayout(LayoutKind.Sequential)]
     private struct MenuItemInfo
@@ -110,31 +107,6 @@ public static class ProcmonNativeMenu
         public Rect rcCaret;
     }
 
-    [StructLayout(LayoutKind.Sequential)]
-    private struct MouseInput
-    {
-        public int Dx;
-        public int Dy;
-        public uint MouseData;
-        public uint Flags;
-        public uint Time;
-        public IntPtr ExtraInfo;
-    }
-
-    [StructLayout(LayoutKind.Explicit)]
-    private struct InputUnion
-    {
-        [FieldOffset(0)]
-        public MouseInput Mouse;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct Input
-    {
-        public uint Type;
-        public InputUnion Data;
-    }
-
     public sealed class ItemSnapshot
     {
         public string Text { get; set; }
@@ -166,72 +138,12 @@ public static class ProcmonNativeMenu
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool SetForegroundWindow(IntPtr hWnd);
 
-    [DllImport("user32.dll", ExactSpelling = true, SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool SetCursorPos(int x, int y);
-
-    [DllImport("user32.dll", ExactSpelling = true, SetLastError = true)]
-    private static extern uint SendInput(uint count, [In] Input[] inputs, int size);
-
     public static int GetWindowProcessId(IntPtr hWnd)
     {
         uint processId;
         return GetWindowThreadProcessId(hWnd, out processId) == 0
             ? 0
             : processId > int.MaxValue ? 0 : (int)processId;
-    }
-
-    public static string ClickAtScreenPoint(
-        IntPtr expectedForegroundWindow,
-        uint expectedProcessId,
-        int x,
-        int y
-    )
-    {
-        if (
-            expectedForegroundWindow == IntPtr.Zero ||
-            GetForegroundWindow() != expectedForegroundWindow ||
-            GetWindowProcessId(expectedForegroundWindow) != expectedProcessId
-        )
-        {
-            return "foreground-mismatch";
-        }
-        if (!SetCursorPos(x, y))
-        {
-            return "position-failed";
-        }
-        if (
-            GetForegroundWindow() != expectedForegroundWindow ||
-            GetWindowProcessId(expectedForegroundWindow) != expectedProcessId
-        )
-        {
-            return "foreground-mismatch";
-        }
-
-        var down = new Input
-        {
-            Type = InputMouse,
-            Data = new InputUnion
-            {
-                Mouse = new MouseInput { Flags = MouseLeftDown }
-            }
-        };
-        var up = new Input
-        {
-            Type = InputMouse,
-            Data = new InputUnion
-            {
-                Mouse = new MouseInput { Flags = MouseLeftUp }
-            }
-        };
-        var size = Marshal.SizeOf(typeof(Input));
-        var downSent = SendInput(1, new[] { down }, size);
-        var upSent = SendInput(1, new[] { up }, size);
-        if (downSent != 1)
-        {
-            return "down-failed";
-        }
-        return upSent == 1 ? "sent" : "up-failed";
     }
 
     [DllImport("user32.dll", ExactSpelling = true, SetLastError = true)]
@@ -2574,193 +2486,17 @@ try {
   if ($mainForegroundGate -ne "passed") {
     throw "Process Monitor reloaded main window did not become the foreground window"
   }
-  Set-Stage "find-reloaded-filter-menu"
-  $reloadFilterMenuCondition = [System.Windows.Automation.AndCondition]::new(
-    [System.Windows.Automation.PropertyCondition]::new(
-      [System.Windows.Automation.AutomationElement]::NameProperty, "Filter"
-    ),
-    [System.Windows.Automation.PropertyCondition]::new(
-      [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
-      [System.Windows.Automation.ControlType]::MenuItem
-    )
-  )
-  $reloadFilterMenu = Wait-Element $main $reloadFilterMenuCondition 5
-  $reloadFilterMenuMatches = $main.FindAll(
-    [System.Windows.Automation.TreeScope]::Descendants,
-    $reloadFilterMenuCondition
-  )
-  if ($reloadFilterMenuMatches.Count -ne 1) {
-    throw "Reloaded Process Monitor did not expose one Filter menu item"
-  }
-  $reloadFilterMenu = $reloadFilterMenuMatches[0]
-  $reloadFilterMenuState = $reloadFilterMenu.Current
-  if (
-    $reloadFilterMenuState.ProcessId -ne $process.Id -or
-    -not $reloadFilterMenuState.IsEnabled -or
-    $reloadFilterMenuState.IsOffscreen
-  ) {
-    throw "Reloaded Process Monitor Filter menu is unavailable"
-  }
-  Set-Stage "read-reloaded-filter-menu-pattern"
-  $reloadMenuExpand = $null
-  $hasReloadMenuExpand = $reloadFilterMenu.TryGetCurrentPattern(
-    [System.Windows.Automation.ExpandCollapsePattern]::Pattern,
-    [ref]$reloadMenuExpand
-  )
-  $reloadMenuSelection = $null
-  $hasReloadMenuSelection = $reloadFilterMenu.TryGetCurrentPattern(
-    [System.Windows.Automation.SelectionItemPattern]::Pattern,
-    [ref]$reloadMenuSelection
-  )
-  $reloadMenuLegacyAccessible = $null
-  $reloadMenuLegacyAccessiblePattern = [System.Windows.Automation.AutomationPattern]::LookupById(10018)
-  $hasReloadMenuLegacyAccessible = $null -ne $reloadMenuLegacyAccessiblePattern -and
-    $reloadFilterMenu.TryGetCurrentPattern(
-      $reloadMenuLegacyAccessiblePattern,
-      [ref]$reloadMenuLegacyAccessible
-    )
-  $reloadMenuInvoke = $null
-  $hasReloadMenuInvoke = $reloadFilterMenu.TryGetCurrentPattern(
-    [System.Windows.Automation.InvokePattern]::Pattern,
-    [ref]$reloadMenuInvoke
-  )
-  [Console]::Out.WriteLine(
-    "PROC_MON_FILTER_RELOAD_MENU_PATTERNS=expand-collapse:$($hasReloadMenuExpand.ToString().ToLowerInvariant());selection-item:$($hasReloadMenuSelection.ToString().ToLowerInvariant());legacy-ia:$($hasReloadMenuLegacyAccessible.ToString().ToLowerInvariant());invoke:$($hasReloadMenuInvoke.ToString().ToLowerInvariant())"
-  )
-  [Console]::Out.WriteLine(
-    "PROC_MON_FILTER_RELOAD_MENU_PATTERN=invoke:$($hasReloadMenuInvoke.ToString().ToLowerInvariant())"
-  )
+  Set-Stage "verify-reloaded-filter-dialog-shortcut-foreground"
   $currentForegroundHandle = [ProcmonNativeMenu]::GetForegroundWindow()
   if ($currentForegroundHandle -ne $mainWindowHandle -or
     [ProcmonNativeMenu]::GetWindowProcessId($currentForegroundHandle) -ne $process.Id) {
-    throw "Process Monitor reloaded main window lost the foreground before menu activation"
+    throw "Process Monitor reloaded main window lost the foreground before the Filter shortcut"
   }
-  Set-Stage "activate-reloaded-filter-menu"
-  if ($hasReloadMenuExpand) {
-    $reloadMenuExpand.Expand()
-    $reloadMenuAction = "expand"
-  } elseif ($hasReloadMenuSelection) {
-    $reloadMenuSelection.Select()
-    $reloadMenuAction = "select"
-  } elseif ($hasReloadMenuLegacyAccessible) {
-    $reloadMenuLegacyAccessible.DoDefaultAction()
-    $reloadMenuAction = "legacy-ia"
-  } else {
-    Set-Stage "verify-reloaded-filter-menu-pointer-target"
-    $pointerGeometry = "invalid"
-    $pointerMatch = "false"
-    $pointerInput = "not-attempted"
-    $bounds = $reloadFilterMenuState.BoundingRectangle
-    $boundsValid = (
-      -not $bounds.IsEmpty -and
-      $bounds.Width -gt 0 -and
-      $bounds.Height -gt 0 -and
-      -not [double]::IsNaN($bounds.Left) -and
-      -not [double]::IsNaN($bounds.Top) -and
-      -not [double]::IsInfinity($bounds.Left) -and
-      -not [double]::IsInfinity($bounds.Top)
-    )
-    $centerX = 0.0
-    $centerY = 0.0
-    if ($boundsValid) {
-      $centerX = [Math]::Floor($bounds.Left + ($bounds.Width / 2))
-      $centerY = [Math]::Floor($bounds.Top + ($bounds.Height / 2))
-      $boundsValid = (
-        $centerX -ge [int]::MinValue -and
-        $centerX -le [int]::MaxValue -and
-        $centerY -ge [int]::MinValue -and
-        $centerY -le [int]::MaxValue
-      )
-    }
-    if ($boundsValid) {
-      $pointerGeometry = "valid"
-      $targetRuntimeId = $reloadFilterMenu.GetRuntimeId() -join ","
-      if (-not [string]::IsNullOrWhiteSpace($targetRuntimeId)) {
-        $pointElement = [System.Windows.Automation.AutomationElement]::FromPoint(
-          [System.Windows.Point]::new($centerX, $centerY)
-        )
-        $treeWalker = [System.Windows.Automation.TreeWalker]::ControlViewWalker
-        for (
-          $pointLevel = 0;
-          $null -ne $pointElement -and $pointLevel -lt 4;
-          $pointLevel++
-        ) {
-          $pointState = $pointElement.Current
-          if ($pointState.ProcessId -ne $process.Id) {
-            break
-          }
-          $pointRuntimeId = $pointElement.GetRuntimeId() -join ","
-          if (
-            $pointRuntimeId -ceq $targetRuntimeId -and
-            $pointState.ControlType -eq [System.Windows.Automation.ControlType]::MenuItem -and
-            $pointState.Name -ceq "Filter" -and
-            $pointState.IsEnabled -and
-            -not $pointState.IsOffscreen
-          ) {
-            $pointerMatch = "true"
-            break
-          }
-          $pointElement = $treeWalker.GetParent($pointElement)
-        }
-      }
-    }
-    if ($pointerMatch -eq "true") {
-      Set-Stage "click-reloaded-filter-menu"
-      $pointerInput = [ProcmonNativeMenu]::ClickAtScreenPoint(
-        $mainWindowHandle,
-        [uint32]$process.Id,
-        [int]$centerX,
-        [int]$centerY
-      )
-    }
-    [Console]::Out.WriteLine(
-      "PROC_MON_FILTER_RELOAD_MENU_POINTER=geometry:$pointerGeometry;point-match:$pointerMatch;input:$pointerInput"
-    )
-    if ($pointerInput -ne "sent") {
-      throw "Reloaded Process Monitor Filter menu pointer activation was not verified"
-    }
-    $reloadMenuAction = "pointer"
-  }
-  Set-Stage "observe-reloaded-filter-menu-focus"
-  Write-FocusObservation "after-reload-menu-$reloadMenuAction" | Out-Null
-  Set-Stage "wait-reloaded-filter-menu"
-  $reloadMenuScan = Wait-ProcessMenu $process
-  $reloadMenu = $reloadMenuScan.Menu
-  [Console]::Out.WriteLine(
-    "PROC_MON_FILTER_RELOAD_MENU_SCAN=windows:$($reloadMenuScan.Windows);menus:$($reloadMenuScan.Menus);visible:$($reloadMenuScan.VisibleMenus)"
-  )
-  Set-Stage "find-reloaded-filter-command"
-  $reloadFilterCommands = $reloadMenu.FindAll(
-    [System.Windows.Automation.TreeScope]::Children,
-    [System.Windows.Automation.Condition]::TrueCondition
-  )
-  $reloadFilterMatches = [System.Collections.Generic.List[System.Windows.Automation.AutomationElement]]::new()
-  foreach ($item in $reloadFilterCommands) {
-    $itemState = $item.Current
-    if ($itemState.Name -eq "Filter..." -and
-      $itemState.ControlType.ProgrammaticName -eq "ControlType.MenuItem" -and
-      $itemState.ProcessId -eq $process.Id) {
-      $reloadFilterMatches.Add($item)
-    }
-  }
-  if ($reloadFilterMatches.Count -ne 1) {
-    throw "Reloaded Process Monitor did not expose one Filter command"
-  }
-  $reloadFilterCommand = $reloadFilterMatches[0]
-  $reloadFilterCommandState = $reloadFilterCommand.Current
-  $reloadFilterCommandInvoke = $null
-  if (
-    -not $reloadFilterCommandState.IsEnabled -or
-    $reloadFilterCommandState.IsOffscreen -or
-    -not $reloadFilterCommand.TryGetCurrentPattern(
-      [System.Windows.Automation.InvokePattern]::Pattern,
-      [ref]$reloadFilterCommandInvoke
-    )
-  ) {
-    throw "Reloaded Process Monitor Filter command is unavailable"
-  }
-  Set-Stage "open-reloaded-filter-dialog"
-  $reloadFilterCommandInvoke.Invoke()
+  Set-Stage "open-reloaded-filter-dialog-shortcut"
+  [System.Windows.Forms.SendKeys]::SendWait("^l")
+  [Console]::Out.WriteLine("PROC_MON_FILTER_RELOAD_SHORTCUT=command:filter-dialog;state:sent")
+  Write-FocusObservation "after-reload-filter-dialog-shortcut" | Out-Null
+  Set-Stage "wait-reloaded-filter-dialog"
   $reloadFilterDialog = Wait-FilterDialog $process $main
   Set-Stage "read-reloaded-filter-rules"
   $reloadFilterRows = Get-LoadedFilterRuleRows $reloadFilterDialog $process.Id
@@ -2768,50 +2504,89 @@ try {
   Get-LoadedFilterRuleEvidence $reloadFilterRows $CanaryPath $ControlPath | Out-Null
   [System.Windows.Forms.SendKeys]::SendWait("{ESC}")
   $main.SetFocus()
-  Set-Stage "find-reloaded-drop-filtered-events-menu"
-  $reloadFilterMenu = Wait-Element $main ([System.Windows.Automation.AndCondition]::new(
-    [System.Windows.Automation.PropertyCondition]::new(
-      [System.Windows.Automation.AutomationElement]::NameProperty, "Filter"
-    ),
-    [System.Windows.Automation.PropertyCondition]::new(
-      [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
-      [System.Windows.Automation.ControlType]::MenuItem
-    )
-  )) 5
-  $reloadFilterMenuState = $reloadFilterMenu.Current
-  $reloadFilterMenuInvoke = $null
-  if (
-    $reloadFilterMenuState.ProcessId -ne $process.Id -or
-    -not $reloadFilterMenuState.IsEnabled -or
-    $reloadFilterMenuState.IsOffscreen -or
-    -not $reloadFilterMenu.TryGetCurrentPattern(
-      [System.Windows.Automation.InvokePattern]::Pattern,
-      [ref]$reloadFilterMenuInvoke
-    )
-  ) {
-    throw "Reloaded Process Monitor Filter menu is unavailable"
-  }
-  Set-Stage "open-reloaded-drop-filtered-events-menu"
-  $reloadFilterMenuInvoke.Invoke()
-  $reloadDropMenu = $null
-  $reloadDropDeadline = [DateTime]::UtcNow.AddSeconds(5)
+  Set-Stage "activate-reloaded-main-window-for-drop-menu"
+  [ProcmonNativeMenu]::SetForegroundWindow($mainWindowHandle) | Out-Null
+  $reloadDropMainForegroundGate = "failed"
+  $reloadDropMainForegroundDeadline = [DateTime]::UtcNow.AddSeconds(2)
   do {
-    $focused = [System.Windows.Automation.AutomationElement]::FocusedElement
-    $treeWalker = [System.Windows.Automation.TreeWalker]::ControlViewWalker
-    for ($level = 0; $null -ne $focused -and $level -lt 5; $level++) {
-      if ($focused.Current.ControlType -eq [System.Windows.Automation.ControlType]::Menu) {
-        $reloadDropMenu = $focused
-        break
-      }
-      $focused = $treeWalker.GetParent($focused)
+    $currentForegroundHandle = [ProcmonNativeMenu]::GetForegroundWindow()
+    if ($currentForegroundHandle -eq $mainWindowHandle -and
+      [ProcmonNativeMenu]::GetWindowProcessId($currentForegroundHandle) -eq $process.Id) {
+      $reloadDropMainForegroundGate = "passed"
+      break
     }
-    if ($null -ne $reloadDropMenu) { break }
-    Start-Sleep -Milliseconds 100
-  } while ([DateTime]::UtcNow -lt $reloadDropDeadline)
-  if ($null -eq $reloadDropMenu -or
-    $reloadDropMenu.Current.ProcessId -ne $process.Id) {
-    throw "Reloaded Process Monitor did not expose its own Filter menu"
+    Start-Sleep -Milliseconds 50
+  } while ([DateTime]::UtcNow -lt $reloadDropMainForegroundDeadline)
+  [Console]::Out.WriteLine(
+    "PROC_MON_FILTER_RELOAD_DROP_MAIN_FOREGROUND=gate:$reloadDropMainForegroundGate"
+  )
+  if ($reloadDropMainForegroundGate -ne "passed") {
+    throw "Process Monitor reloaded main window lost the foreground before Event menu activation"
   }
+  Set-Stage "open-reloaded-event-menu"
+  [System.Windows.Forms.SendKeys]::SendWait("%v")
+  Write-FocusObservation "after-reload-menu-keyboard-event" | Out-Null
+  Set-Stage "wait-reloaded-event-menu"
+  $reloadEventMenuScan = Wait-ProcessMenu $process
+  $reloadEventMenu = $reloadEventMenuScan.Menu
+  [Console]::Out.WriteLine("PROC_MON_FILTER_RELOAD_EVENT_MENU=opened")
+  Set-Stage "find-reloaded-filter-submenu"
+  $reloadEventItems = $reloadEventMenu.FindAll(
+    [System.Windows.Automation.TreeScope]::Children,
+    [System.Windows.Automation.Condition]::TrueCondition
+  )
+  $reloadEventFilterMatches = [System.Collections.Generic.List[System.Windows.Automation.AutomationElement]]::new()
+  foreach ($item in $reloadEventItems) {
+    $itemState = $item.Current
+    if ($itemState.Name -eq "Filter" -and
+      $itemState.ControlType.ProgrammaticName -eq "ControlType.MenuItem" -and
+      $itemState.ProcessId -eq $process.Id -and
+      $itemState.IsEnabled -and
+      -not $itemState.IsOffscreen) {
+      $reloadEventFilterMatches.Add($item)
+    }
+  }
+  if ($reloadEventFilterMatches.Count -ne 1) {
+    throw "Process Monitor Event menu did not expose one enabled Filter submenu"
+  }
+  $reloadEventFilter = $reloadEventFilterMatches[0]
+  $reloadEventFilterExpand = $null
+  $hasReloadEventFilterExpand = $reloadEventFilter.TryGetCurrentPattern(
+    [System.Windows.Automation.ExpandCollapsePattern]::Pattern,
+    [ref]$reloadEventFilterExpand
+  )
+  $reloadEventFilterInvoke = $null
+  $hasReloadEventFilterInvoke = $reloadEventFilter.TryGetCurrentPattern(
+    [System.Windows.Automation.InvokePattern]::Pattern,
+    [ref]$reloadEventFilterInvoke
+  )
+  [Console]::Out.WriteLine(
+    "PROC_MON_FILTER_RELOAD_EVENT_FILTER_PATTERNS=expand-collapse:$($hasReloadEventFilterExpand.ToString().ToLowerInvariant());invoke:$($hasReloadEventFilterInvoke.ToString().ToLowerInvariant())"
+  )
+  if (-not $hasReloadEventFilterExpand -and -not $hasReloadEventFilterInvoke) {
+    throw "Process Monitor Event menu Filter submenu exposes no supported open pattern"
+  }
+  $currentForegroundHandle = [ProcmonNativeMenu]::GetForegroundWindow()
+  if ($currentForegroundHandle -ne $mainWindowHandle -or
+    [ProcmonNativeMenu]::GetWindowProcessId($currentForegroundHandle) -ne $process.Id) {
+    throw "Process Monitor Event menu lost the foreground before Filter submenu activation"
+  }
+  Set-Stage "open-reloaded-filter-submenu"
+  if ($hasReloadEventFilterExpand) {
+    $reloadEventFilterExpand.Expand()
+  } else {
+    $reloadEventFilterInvoke.Invoke()
+  }
+  Write-FocusObservation "after-reload-menu-keyboard-filter" | Out-Null
+  [Console]::Out.WriteLine(
+    "PROC_MON_FILTER_RELOAD_MENU_KEYBOARD=route:event-filter;state:activated"
+  )
+  Set-Stage "wait-reloaded-filter-submenu"
+  $reloadFilterMenuScan = Wait-ProcessMenu $process
+  $reloadDropMenu = $reloadFilterMenuScan.Menu
+  [Console]::Out.WriteLine(
+    "PROC_MON_FILTER_RELOAD_MENU_SCAN=windows:$($reloadFilterMenuScan.Windows);menus:$($reloadFilterMenuScan.Menus);visible:$($reloadFilterMenuScan.VisibleMenus)"
+  )
   Set-Stage "read-reloaded-drop-filtered-events-state"
   $reloadDropItems = $reloadDropMenu.FindAll(
     [System.Windows.Automation.TreeScope]::Children,

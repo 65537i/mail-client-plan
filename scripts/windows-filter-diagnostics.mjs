@@ -128,6 +128,45 @@ export function describeWindowsFilterDiagnostics(output) {
     diagnostics.push(`reload-main-foreground-gate=${reloadMainForegroundGate}`);
   }
 
+  const reloadDropMainForegroundGate = output.match(
+    /^PROC_MON_FILTER_RELOAD_DROP_MAIN_FOREGROUND=gate:(passed|failed)\r?$/m,
+  )?.[1];
+  if (reloadDropMainForegroundGate) {
+    diagnostics.push(
+      `reload-drop-main-foreground-gate=${reloadDropMainForegroundGate}`,
+    );
+  }
+
+  const reloadShortcut = output.match(
+    /^PROC_MON_FILTER_RELOAD_SHORTCUT=command:filter-dialog;state:sent\r?$/m,
+  );
+  if (reloadShortcut) {
+    diagnostics.push("reload-filter-dialog-shortcut=sent");
+  }
+
+  const reloadEventMenu = output.match(
+    /^PROC_MON_FILTER_RELOAD_EVENT_MENU=opened\r?$/m,
+  );
+  if (reloadEventMenu) {
+    diagnostics.push("reload-event-menu=opened");
+  }
+
+  const reloadEventFilterPatterns = output.match(
+    /^PROC_MON_FILTER_RELOAD_EVENT_FILTER_PATTERNS=expand-collapse:(true|false);invoke:(true|false)\r?$/m,
+  );
+  if (reloadEventFilterPatterns) {
+    diagnostics.push(
+      `reload-event-filter-patterns=expand-collapse:${reloadEventFilterPatterns[1]};invoke:${reloadEventFilterPatterns[2]}`,
+    );
+  }
+
+  const reloadMenuKeyboard = output.match(
+    /^PROC_MON_FILTER_RELOAD_MENU_KEYBOARD=route:event-filter;state:activated\r?$/m,
+  );
+  if (reloadMenuKeyboard) {
+    diagnostics.push("reload-menu-keyboard=route:event-filter;state:activated");
+  }
+
   const reloadMenuPatterns = output.match(
     /^PROC_MON_FILTER_RELOAD_MENU_PATTERNS=expand-collapse:(true|false);selection-item:(true|false);legacy-ia:(true|false);invoke:(true|false)\r?$/m,
   );
@@ -534,7 +573,7 @@ export function describeWindowsFilterDiagnostics(output) {
     }
   }
   for (const match of output.matchAll(
-    /^PROC_MON_FILTER_FOCUSED_CONTROL=(after-open|after-home|filter-command|after-enter|after-invoke|after-click|after-command-invoke|after-reload-menu-(?:expand|select|legacy-ia|pointer|invoke));focused:(none|unavailable)\r?$/gm,
+    /^PROC_MON_FILTER_FOCUSED_CONTROL=(after-open|after-home|filter-command|after-enter|after-invoke|after-click|after-command-invoke|after-reload-filter-dialog-shortcut|after-reload-menu-(?:expand|select|legacy-ia|pointer|invoke|keyboard-event|keyboard-filter));focused:(none|unavailable)\r?$/gm,
   )) {
     focusObservations.push({
       index: match.index,
@@ -542,7 +581,7 @@ export function describeWindowsFilterDiagnostics(output) {
     });
   }
   for (const match of output.matchAll(
-    /^PROC_MON_FILTER_FOCUSED_CONTROL=(after-open|after-home|filter-command|after-enter|after-invoke|after-click|after-command-invoke|after-reload-menu-(?:expand|select|legacy-ia|pointer|invoke));type:(MenuBar|Menu|MenuItem|Window|Pane|ToolBar|Button|Text|Edit|Other);name:(FileMenu|Filter|FilterCommand|SaveFilterCommand|ExportConfigCommand|MenuBar|ProcessMonitor|Other);offscreen:(true|false);keyboard-focusable:(true|false);tree=([A-Za-z:>]+)\r?$/gm,
+    /^PROC_MON_FILTER_FOCUSED_CONTROL=(after-open|after-home|filter-command|after-enter|after-invoke|after-click|after-command-invoke|after-reload-filter-dialog-shortcut|after-reload-menu-(?:expand|select|legacy-ia|pointer|invoke|keyboard-event|keyboard-filter));type:(MenuBar|Menu|MenuItem|Window|Pane|ToolBar|Button|Text|Edit|Other);name:(FileMenu|Filter|FilterCommand|SaveFilterCommand|ExportConfigCommand|MenuBar|ProcessMonitor|Other);offscreen:(true|false);keyboard-focusable:(true|false);tree=([A-Za-z:>]+)\r?$/gm,
   )) {
     const nodes = match[6].split(">");
     if (
