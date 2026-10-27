@@ -2828,8 +2828,54 @@ try {
   if ($reloadDropMainForegroundGate -ne "passed") {
     throw "Process Monitor reloaded main window lost the foreground before Event menu activation"
   }
+  Set-Stage "find-reloaded-event-menu-item"
+  $reloadEventMenuCondition = [System.Windows.Automation.AndCondition]::new(
+    [System.Windows.Automation.PropertyCondition]::new(
+      [System.Windows.Automation.AutomationElement]::NameProperty, "Event"
+    ),
+    [System.Windows.Automation.PropertyCondition]::new(
+      [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+      [System.Windows.Automation.ControlType]::MenuItem
+    )
+  )
+  $reloadEventMenuItems = $main.FindAll(
+    [System.Windows.Automation.TreeScope]::Descendants,
+    $reloadEventMenuCondition
+  )
+  [Console]::Out.WriteLine(
+    "PROC_MON_FILTER_RELOAD_EVENT_ITEM=matches:$($reloadEventMenuItems.Count)"
+  )
+  if ($reloadEventMenuItems.Count -ne 1) {
+    throw "Process Monitor did not expose one Event menu item after reload"
+  }
+  $reloadEventMenu = $reloadEventMenuItems[0]
+  $reloadEventMenuState = $reloadEventMenu.Current
+  if ($reloadEventMenuState.ProcessId -ne $process.Id -or
+    -not $reloadEventMenuState.IsEnabled -or $reloadEventMenuState.IsOffscreen) {
+    throw "Process Monitor Event menu item was unavailable after reload"
+  }
+  $reloadEventMenuExpand = $null
+  $hasReloadEventMenuExpand = $reloadEventMenu.TryGetCurrentPattern(
+    [System.Windows.Automation.ExpandCollapsePattern]::Pattern,
+    [ref]$reloadEventMenuExpand
+  )
+  $reloadEventMenuInvoke = $null
+  $hasReloadEventMenuInvoke = $reloadEventMenu.TryGetCurrentPattern(
+    [System.Windows.Automation.InvokePattern]::Pattern,
+    [ref]$reloadEventMenuInvoke
+  )
+  [Console]::Out.WriteLine(
+    "PROC_MON_FILTER_RELOAD_EVENT_ITEM_PATTERNS=expand-collapse:$($hasReloadEventMenuExpand.ToString().ToLowerInvariant());invoke:$($hasReloadEventMenuInvoke.ToString().ToLowerInvariant())"
+  )
+  if (-not $hasReloadEventMenuExpand -and -not $hasReloadEventMenuInvoke) {
+    throw "Process Monitor Event menu item exposes no supported open pattern"
+  }
   Set-Stage "open-reloaded-event-menu"
-  [System.Windows.Forms.SendKeys]::SendWait("%v")
+  if ($hasReloadEventMenuExpand) {
+    $reloadEventMenuExpand.Expand()
+  } else {
+    $reloadEventMenuInvoke.Invoke()
+  }
   Write-FocusObservation "after-reload-menu-keyboard-event" | Out-Null
   Set-Stage "wait-reloaded-event-menu"
   $reloadEventMenuScan = Wait-ProcessMenu $process

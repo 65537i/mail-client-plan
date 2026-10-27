@@ -144,6 +144,27 @@ export function describeWindowsFilterDiagnostics(output) {
     diagnostics.push("reload-filter-dialog-shortcut=sent");
   }
 
+  const reloadEventItem = output.match(
+    /^PROC_MON_FILTER_RELOAD_EVENT_ITEM=matches:(\d{1,2})\r?$/m,
+  );
+  if (reloadEventItem) {
+    const matches = Number(reloadEventItem[1]);
+    if (matches <= 64) {
+      diagnostics.push(
+        `reload-event-menu-item=matches:${matches}`,
+      );
+    }
+  }
+
+  const reloadEventItemPatterns = output.match(
+    /^PROC_MON_FILTER_RELOAD_EVENT_ITEM_PATTERNS=expand-collapse:(true|false);invoke:(true|false)\r?$/m,
+  );
+  if (reloadEventItemPatterns) {
+    diagnostics.push(
+      `reload-event-menu-item-patterns=expand-collapse:${reloadEventItemPatterns[1]};invoke:${reloadEventItemPatterns[2]}`,
+    );
+  }
+
   const reloadEventMenu = output.match(
     /^PROC_MON_FILTER_RELOAD_EVENT_MENU=opened\r?$/m,
   );

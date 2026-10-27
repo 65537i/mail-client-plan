@@ -281,6 +281,8 @@ test("AC-05: reload keyboard diagnostics retain only known Procmon commands and 
     "PROC_MON_FILTER_RELOAD_DROP_MAIN_FOREGROUND=gate:C:\\private",
     "PROC_MON_FILTER_RELOAD_SHORTCUT=command:filter-dialog;state:sent",
     "PROC_MON_FILTER_RELOAD_SHORTCUT=command:C:\\private;state:sent",
+    "PROC_MON_FILTER_RELOAD_EVENT_ITEM=matches:1",
+    "PROC_MON_FILTER_RELOAD_EVENT_ITEM_PATTERNS=expand-collapse:false;invoke:true",
     "PROC_MON_FILTER_RELOAD_EVENT_MENU=opened",
     "PROC_MON_FILTER_RELOAD_EVENT_MENU=name:C:\\private",
     "PROC_MON_FILTER_RELOAD_EVENT_FILTER_PATTERNS=expand-collapse:false;invoke:true",
@@ -292,6 +294,8 @@ test("AC-05: reload keyboard diagnostics retain only known Procmon commands and 
     describeWindowsFilterDiagnostics(output),
     "; reload-drop-main-foreground-gate=passed"
       + "; reload-filter-dialog-shortcut=sent"
+      + "; reload-event-menu-item=matches:1"
+      + "; reload-event-menu-item-patterns=expand-collapse:false;invoke:true"
       + "; reload-event-menu=opened"
       + "; reload-event-filter-patterns=expand-collapse:false;invoke:true"
       + "; reload-menu-keyboard=route:event-filter;state:activated",
@@ -467,6 +471,15 @@ test("AC-05: configuration save observations expose states, not paths or dialog 
       "PROC_MON_FILTER_RELOAD_MENU_SCAN=windows:2;menus:1;visible:1",
     ),
     "; reload-menu-scan=windows:2;menus:1;visible:1",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics([
+      "PROC_MON_FILTER_RELOAD_EVENT_ITEM=matches:65",
+      "PROC_MON_FILTER_RELOAD_EVENT_ITEM=matches:1;name=C:\\private",
+      "PROC_MON_FILTER_RELOAD_EVENT_ITEM_PATTERNS=expand-collapse:yes;invoke:false",
+      "PROC_MON_FILTER_RELOAD_EVENT_ITEM_PATTERNS=expand-collapse:false;invoke:true;name=C:\\private",
+    ].join("\n")),
+    "",
   );
   assert.equal(
     describeWindowsFilterDiagnostics([
