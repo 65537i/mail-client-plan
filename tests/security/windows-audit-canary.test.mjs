@@ -5,6 +5,24 @@ import path from "node:path";
 import test from "node:test";
 import { createWindowsAuditCanary } from "../../scripts/windows-audit-canary.mjs";
 
+test("AC-05: capture inspection is bounded, read-only and precedes control reads", async () => {
+  const [inspection, driver] = await Promise.all([
+    readFile(new URL("../../scripts/inspect-windows-procmon-capture.ps1", import.meta.url), "utf8"),
+    readFile(new URL("../../scripts/test-windows-file-access.mjs", import.meta.url), "utf8"),
+  ]);
+  assert.match(inspection, /GetProcessById\(\$OwnerProcessId\)/);
+  assert.match(inspection, /\$state.ProcessId -ne \$OwnerProcessId/);
+  assert.match(inspection, /\$visited \+ \$pending.Count -ge 256/);
+  assert.match(inspection, /switch -CaseSensitive \(\$label\)/);
+  assert.match(inspection, /TogglePattern\]::Pattern/);
+  assert.match(inspection, /SelectionItemPattern\]::Pattern/);
+  assert.match(inspection, /\$toggle = "unavailable"/);
+  assert.match(inspection, /PROC_MON_CAPTURE_FAILED_STAGE=\$stage/);
+  assert.doesNotMatch(inspection, /Invoke\(|Toggle\(|Select\(|SendKeys|SetFocus|SetForegroundWindow|WriteLine\([^)]*(?:Name|Exception)/);
+  assert.match(driver, /capture readiness[\s\S]*inspect-windows-procmon-capture.ps1[\s\S]*captureInspectionExit, 20_000[\s\S]*captureInspectionOverflow[\s\S]*evidence.length, 1[\s\S]*const positiveControl = spawn/);
+  assert.match(driver, /slice\(0, 2048\)/);
+});
+
 test("AC-05: capture readiness precedes both controls and WDIO without a fixed startup delay", async () => {
   const source = await readFile(new URL("../../scripts/test-windows-file-access.mjs", import.meta.url), "utf8");
   assert.match(

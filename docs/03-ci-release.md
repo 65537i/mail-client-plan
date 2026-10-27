@@ -19,6 +19,8 @@ Windows: MSVC toolchain、WebView2、必要SDK。WebDriverを外部利用する�
 
 ### nativeの短い検証ループ
 
+Run 384後はcaptureのread-only UIA診断を`/WaitForIdle`とcontrol読取の間へ追加する。Microsoft配布Procmon 4.12の埋込labels `Capture (Ctrl+E)` / `Capture Events` / `Show File System Activity`だけを識別し、same-processのcontrol treeを最大256件走査する。capture / filesystem各controlの一致件数、Toggle / Selection state、enabled / offscreenのみを出力し、任意UI名やpathは記録しない。子processは20秒、stdoutは2 KiB上限、不完全・失敗した診断はcaptureを中断する。一意でない場合や未対応patternは明示的`unavailable`で、capture有効の証拠とは扱わない。UI変更は一切行わず、最終的なpositive-control / canary / unknown-path / 256 MiB gatesを維持する。Windows runtimeは未検証。
+
 Run 310（`536f6d9`、manual Windows 2025 / webview）はsecurity-test build、WebView tests、Windows audit setup / worker、configuration-export regressionを通過した後、`wait-reloaded-filter-menu`で失敗した。Reload後Filter UIA itemは一意で、rectangle中心の`FromPoint` runtime ID一致、foreground一致を確認してpointer inputを送信したが、menu scanは`windows:1;menus:0;visible:0`、focusは`Window:Other`で、メニューは観測されなかった。同じpointer経路の反復は行わず、証明可能な新しいProcmon activation surfaceが得られるまで追加入力はfail-closedとする。正確なreload rules / Drop state / capture / canary / attack判定は未到達でAC-05未達。
 
 Run 311（`bffcccb`、Ubuntu 24.04 / basic）はsuccess。Windows auditに関する証拠ではない。Run 310後、Procmon packageの埋め込みmenu labelsを調べ、Filter dialogの`Ctrl+L`とEvent > Filterサブメニューを次の根拠ある経路として特定した。この時点の次run計画はforeground確認後にFilter dialog shortcutでreloaded exact rulesを読み、`Alt+V`でEvent menuを開き、Procmon所有の一意なFilter submenuとDrop itemを確認することだった。既存のsame-process menu / exact-rule / Drop checked-state gateを維持し、shortcutまたはUIA patternが観測されなければ停止する。pointer fallbackは撤去。関連Windows監査Node regression 43/43、JS syntax / diff checkはlocal成功、PowerShell 5.1 / Procmon runtimeは未検証でAC-05未達。Run 313での実際の結果は次項に記録する。

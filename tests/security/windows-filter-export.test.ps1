@@ -1,5 +1,27 @@
 $ErrorActionPreference = "Stop"
 
+$inspectionSource = Join-Path $PSScriptRoot "../../scripts/inspect-windows-procmon-capture.ps1"
+$inspectionTokens = $null
+$inspectionErrors = $null
+$inspectionAst = [System.Management.Automation.Language.Parser]::ParseFile(
+  $inspectionSource, [ref]$inspectionTokens, [ref]$inspectionErrors
+)
+if ($inspectionErrors.Count -ne 0) {
+  throw "Procmon capture inspection script has PowerShell parse errors"
+}
+$inspectionText = $inspectionAst.Extent.Text
+if (
+  $inspectionText -notmatch 'GetProcessById\(\$OwnerProcessId\)' -or
+  $inspectionText -notmatch '\$state.ProcessId -ne \$OwnerProcessId' -or
+  $inspectionText -notmatch '\$visited \+ \$pending.Count -ge 256' -or
+  $inspectionText -notmatch 'TogglePattern\]::Pattern' -or
+  $inspectionText -notmatch 'SelectionItemPattern\]::Pattern' -or
+  $inspectionText -match 'Invoke\(|Toggle\(|Select\(|SendKeys|SetFocus|SetForegroundWindow'
+) {
+  throw "Capture inspection must remain bounded, same-process and read-only"
+}
+Write-Host "PASS AC-05: capture inspection parses and remains bounded and read-only"
+
 $source = Join-Path $PSScriptRoot "../../scripts/configure-windows-procmon-filter.ps1"
 $tokens = $null
 $parseErrors = $null
