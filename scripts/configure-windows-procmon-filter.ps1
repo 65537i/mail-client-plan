@@ -989,30 +989,42 @@ function Clear-LoadedFilterRules(
     [System.StringComparer]::Ordinal
   )
   for ($rowIndex = 0; $rowIndex -lt $rows.Count; $rowIndex++) {
-    $rowElement = $rows[$rowIndex].Element
-    $rowState = $rowElement.Current
-    if ($rowState.ProcessId -ne $OwnerProcessId) {
-      throw "Process Monitor filter row ownership could not be verified"
-    }
-    $rowRuntimeId = $rowElement.GetRuntimeId() -join ","
-    if ([string]::IsNullOrWhiteSpace($rowRuntimeId) -or
-      -not $expectedRuntimeIds.Add($rowRuntimeId)) {
-      throw "Process Monitor filter rows did not expose unique runtime identifiers"
-    }
-    $rowSelectionPattern = $null
-    if (-not $rowElement.TryGetCurrentPattern(
-        [System.Windows.Automation.SelectionItemPattern]::Pattern,
-        [ref]$rowSelectionPattern
-      )) {
-      throw "Process Monitor filter row could not be selected"
-    }
-    if ($rowIndex -eq 0) {
-      $rowSelectionPattern.Select()
-    } else {
-      $rowSelectionPattern.AddToSelection()
-    }
-    if (-not $rowSelectionPattern.Current.IsSelected) {
-      throw "Process Monitor filter row selection was not confirmed"
+    $selectionPhase = "row-state"
+    try {
+      $rowElement = $rows[$rowIndex].Element
+      $rowState = $rowElement.Current
+      if ($rowState.ProcessId -ne $OwnerProcessId) {
+        throw "Process Monitor filter row ownership could not be verified"
+      }
+      $selectionPhase = "runtime-id"
+      $rowRuntimeId = $rowElement.GetRuntimeId() -join ","
+      if ([string]::IsNullOrWhiteSpace($rowRuntimeId) -or
+        -not $expectedRuntimeIds.Add($rowRuntimeId)) {
+        throw "Process Monitor filter rows did not expose unique runtime identifiers"
+      }
+      $selectionPhase = "pattern"
+      $rowSelectionPattern = $null
+      if (-not $rowElement.TryGetCurrentPattern(
+          [System.Windows.Automation.SelectionItemPattern]::Pattern,
+          [ref]$rowSelectionPattern
+        )) {
+        throw "Process Monitor filter row could not be selected"
+      }
+      $selectionPhase = if ($rowIndex -eq 0) { "select" } else { "add" }
+      if ($rowIndex -eq 0) {
+        $rowSelectionPattern.Select()
+      } else {
+        $rowSelectionPattern.AddToSelection()
+      }
+      $selectionPhase = "verify"
+      if (-not $rowSelectionPattern.Current.IsSelected) {
+        throw "Process Monitor filter row selection was not confirmed"
+      }
+    } catch {
+      [Console]::Out.WriteLine(
+        "PROC_MON_FILTER_RULE_SELECTION_FAILURE=phase:$selectionPhase;row:$($rowIndex + 1);completed:$rowIndex;expected:$($rows.Count)"
+      )
+      throw
     }
   }
   $selectedRows = $selectionPattern.GetSelection()

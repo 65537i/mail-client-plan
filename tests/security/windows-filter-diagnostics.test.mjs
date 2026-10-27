@@ -178,6 +178,12 @@ test("AC-05: filter-row clearing diagnostics retain bounded selection counts", (
       + "; filter-rule-reset=removed:26;remaining:0",
   );
   assert.equal(
+    describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_RULE_SELECTION_FAILURE=phase:add;row:2;completed:1;expected:26",
+    ),
+    "; filter-rule-selection-failure=phase:add;row:2;completed:1;expected:26",
+  );
+  assert.equal(
     describeWindowsFilterDiagnostics([
       "PROC_MON_FILTER_RULE_CLEAR=rows:65;multi-select:true",
       "PROC_MON_FILTER_RULE_SELECTION=selected:27;expected:26",
@@ -185,6 +191,8 @@ test("AC-05: filter-row clearing diagnostics retain bounded selection counts", (
       "PROC_MON_FILTER_RULES_REMAINING=rows:65",
       "PROC_MON_FILTER_RULE_RESET=removed:65;remaining:0",
       "PROC_MON_FILTER_RULE_RESET=removed:1;remaining:1",
+      "PROC_MON_FILTER_RULE_SELECTION_FAILURE=phase:add;row:65;completed:64;expected:65",
+      "PROC_MON_FILTER_RULE_SELECTION_FAILURE=phase:C:\\private;row:2;completed:1;expected:26",
     ].join("\n")),
     "",
   );

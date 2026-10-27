@@ -310,6 +310,27 @@ export function describeWindowsFilterDiagnostics(output) {
     }
   }
 
+  for (const match of output.matchAll(
+    /^PROC_MON_FILTER_RULE_SELECTION_FAILURE=phase:(row-state|runtime-id|pattern|select|add|verify);row:(\d{1,2});completed:(\d{1,2});expected:(\d{1,2})\r?$/gm,
+  )) {
+    const [, phase, rawRow, rawCompleted, rawExpected] = match;
+    const row = Number(rawRow);
+    const completed = Number(rawCompleted);
+    const expected = Number(rawExpected);
+    if (
+      expected > 0
+      && expected <= 64
+      && row > 0
+      && row <= expected
+      && completed < expected
+      && completed === row - 1
+    ) {
+      diagnostics.push(
+        `filter-rule-selection-failure=phase:${phase};row:${row};completed:${completed};expected:${expected}`,
+      );
+    }
+  }
+
   const removeControl = output.match(
     /^PROC_MON_FILTER_REMOVE=buttons:(\d{1,2});enabled:(true|false)\r?$/m,
   );
