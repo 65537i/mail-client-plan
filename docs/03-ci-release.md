@@ -55,6 +55,8 @@ Run 345（[`bc62a60`](https://github.com/65537i/mail-client-plan/commit/bc62a605
 
 Run 346（`15bec36`、push / Ubuntu 24.04 / basic）はsuccessで、Windows Procmon証拠ではない。Run 347（[`15bec36`](https://github.com/65537i/mail-client-plan/commit/15bec3697f18a095b188d6da3990b5cbd300ee1c)、[manual Windows 2025 / webview](https://github.com/65537i/mail-client-plan/actions/runs/40472071349)）はsecurity-test app build、real WebView、Windows audit setup / worker、configuration-export regressionとPowerShell regressionを通過し、PMC export / reload後のexact 2 Path/is/Include rulesも確認した。再読込後native menu handleはunavailable。main-window `OBJID_MENU` fallbackはsame-process accessible objectを取得したが`items:0;matches:0;read-failure:no-match`で、`report-msaa-menu-state`にてfail-closed停止した。Run 345で判明した`OBJID_CLIENT`誤用は修正できた一方、閉じたmenu objectにDrop itemは現れず、checked stateは未確認。capture、positive-control、canary exclusion、attack checksは未実施でAC-05未達。次の試行ではmenuの checked stateを変えない activation/read routeを根拠付きで特定し、menu / itemの一意性とsame-process条件が満たせなければcaptureへ進まない。
 
+Run 348（`816160e`、push / Ubuntu 24.04 / basic）はsuccess。Windows Procmon UI / reload-stateの証拠ではない。
+
 Run 342（`2c0d658`、push / Ubuntu 24.04 / basic）はsuccess。これはWindows Procmon auditの証拠ではない。
 
 Run 333（`02445f3`、manual Windows 2025 / webview）はsecurity-test build、real WebView tests、Windows setup / worker、configuration-export regressionに成功し、Procmonでverified clear、exact 2 Path/is/Include rulesのsave / reloadまで到達した。再読込後のEvent UIA itemは一意かつsame-process / enabled / visible、Invoke patternありと確認したが、Invoke後もsame-process UIA menuは0件で`wait-reloaded-event-menu`にて停止し、focused controlはButton。Drop checked-stateは未確認、capture / positive-control / canary / attack checks未実施でAC-05未達。後続のclickpoint試行はRun 335に記録する。
