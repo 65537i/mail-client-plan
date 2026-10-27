@@ -10,7 +10,20 @@ if ($inspectionErrors.Count -ne 0) {
   throw "Procmon capture inspection script has PowerShell parse errors"
 }
 $inspectionText = $inspectionAst.Extent.Text
+$windowSummary = $inspectionAst.Find({
+  param($node)
+  $node -is [System.Management.Automation.Language.InvokeMemberExpressionAst] -and
+    $node.Extent.Text -match '^\[Console\]::Out.WriteLine\(\s*"PROC_MON_CAPTURE_WINDOW='
+}, $true)
+$summaryParent = $windowSummary
+while ($null -ne $summaryParent) {
+  if ($summaryParent -is [System.Management.Automation.Language.LoopStatementAst]) {
+    throw "Capture window summary must be emitted once after the UI scan"
+  }
+  $summaryParent = $summaryParent.Parent
+}
 if (
+  $null -eq $windowSummary -or
   $inspectionText -notmatch 'GetProcessById\(\$OwnerProcessId\)' -or
   $inspectionText -notmatch '\$state.ProcessId -ne \$OwnerProcessId' -or
   $inspectionText -notmatch '\$visited \+ \$pending.Count -ge 256' -or

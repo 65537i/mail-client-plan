@@ -64,9 +64,6 @@ try {
       "Capture (Ctrl+E)" { "capture" }
       "Show File System Activity" { "filesystem" }
     }
-    [Console]::Out.WriteLine(
-      "PROC_MON_CAPTURE_WINDOW=visual:$visual;enabled:$mainEnabled;offscreen:$mainOffscreen;items:$visited;toolbars:$toolbars;buttons:$buttons;menuitems:$menuitems"
-    )
     if ($null -ne $target -and $state.ControlType -in @(
         [System.Windows.Automation.ControlType]::Button,
         [System.Windows.Automation.ControlType]::CheckBox,
@@ -83,6 +80,9 @@ try {
       $child = $walker.GetNextSibling($child)
     }
   }
+  [Console]::Out.WriteLine(
+    "PROC_MON_CAPTURE_WINDOW=visual:$visual;enabled:$mainEnabled;offscreen:$mainOffscreen;items:$visited;toolbars:$toolbars;buttons:$buttons;menuitems:$menuitems"
+  )
   $stage = "read-capture-control-patterns"
   foreach ($target in @("capture", "filesystem")) {
     $toggle = "unavailable"

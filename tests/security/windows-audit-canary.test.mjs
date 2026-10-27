@@ -15,6 +15,7 @@ test("AC-05: capture window visibility is observable without restoring or toggli
   assert.match(inspection, /WindowPattern\]::Pattern/);
   assert.match(inspection, /windowPattern.Current.WindowVisualState/);
   assert.match(inspection, /PROC_MON_CAPTURE_WINDOW=visual:\$visual/);
+  assert.match(inspection, /\$child = \$walker.GetNextSibling\(\$child\)\s*\}\s*\}\s*\[Console\]::Out.WriteLine\(\s*"PROC_MON_CAPTURE_WINDOW=/);
   assert.doesNotMatch(inspection, /SetWindowVisualState|ShowWindow/);
   assert.match(driver, /windowEvidence.length === 1/);
   assert.match(driver, /slice\(4, 8\).every\(\(count\) => Number\(count\) <= 256\)/);

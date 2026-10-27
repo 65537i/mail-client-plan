@@ -19,6 +19,8 @@ Windows: MSVC toolchain、WebView2、必要SDK。WebDriverを外部利用する�
 
 ### nativeの短い検証ループ
 
+[Run 390](https://github.com/65537i/mail-client-plan/actions/runs/40534473433)（`64bd5b6`、manual Windows 2025 / webview）はNode55/55、PowerShell回帰、exact reload / Drop / readinessを通過後、window evidenceの一意性検証で停止した。summary出力が誤ってscan loop内にあったため、loop完了後へ移し、Node配置guardとPowerShell ASTのloop ancestor拒否を追加した。このrunはcontrol / WDIO audit / CSV判定に到達せず、最小化の影響は未確認。AC-05未達。
+
 Run 387後の限定変更ではcaptureの`/Minimized`と`windowsHide:true`を外し、起動時のUIA公開範囲を比較する。既存のread-only同一PID inspectionへWindowPattern.Current.WindowVisualState（normal / minimized / maximized / unavailable）、main enabled / offscreen、256件上限内のitems / toolbar / button / menuitem件数を追加する。Node consumerは一意のallowlist evidenceと件数上限を検証し、2 KiB / 20秒上限を維持する。window restore / focus / capture toggle等の操作は行わず、exact rules / Drop / positive-control / canary gatesは維持。Windows runtimeは未検証。
 
 Run 384後はcaptureのread-only UIA診断を`/WaitForIdle`とcontrol読取の間へ追加した。Microsoft配布Procmon 4.12の埋込labels `Capture (Ctrl+E)` / `Capture Events` / `Show File System Activity`だけを識別し、same-processのcontrol treeを最大256件走査する。capture / filesystem各controlの一致件数、Toggle / Selection state、enabled / offscreenのみを出力し、任意UI名やpathは記録しない。子processは20秒、stdoutは2 KiB上限、不完全・失敗した診断はcaptureを中断する。一意でない場合や未対応patternは明示的`unavailable`で、capture有効の証拠とは扱わない。UI変更は一切行わず、最終的なpositive-control / canary / unknown-path / 256 MiB gatesを維持する。
