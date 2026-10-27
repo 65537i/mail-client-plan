@@ -19,7 +19,9 @@ Windows: MSVC toolchain、WebView2、必要SDK。WebDriverを外部利用する�
 
 ### nativeの短い検証ループ
 
-Run403後は一意の同一PID native toolbarへMSAA OBJID_CLIENTをread-only照会する。最大64 childの既知capture / filesystemラベル、button role、整数stateだけを受理し、object / items / matches / checked / enabledのみを出力する。未検出・toolbar非一意はunavailable、COM失敗はinspection失敗。COM objectをfinallyでreleaseし、操作・filter変更は行わない。2 KiB / 20秒・positive-control等の既存gateを維持する。Windows回帰のhelper compileとtoolbarなしのunavailable出力も更新。Windows実測待ち。
+Run403後は一意の同一PID native toolbarへMSAA OBJID_CLIENTをread-only照会する。最大64 childの既知capture / filesystemラベル、button role、整数stateだけを受理し、object / items / matches / checked / enabledのみを出力する。未検出・toolbar非一意はunavailable、COM失敗はinspection失敗。COM objectをfinallyでreleaseし、操作・filter変更は行わない。2 KiB / 20秒・positive-control等の既存gateを維持する。Windows回帰のhelper compileとtoolbarなしのunavailable出力も更新した。
+
+[Run 406](https://github.com/65537i/mail-client-plan/actions/runs/40573442656)（`c049291`、manual Windows 2025 / webview）はNode59/59、PowerShell parse / helper compile / hidden child / ownership回帰と既存export回帰に成功した。export / exact 2 reload rules / complete UI / Drop on / readinessを通過し、native toolbarのMSAAでobject:available / items:23、captureとfilesystem各matches:1 / checked:on / enabled:trueを初確認した。native children:6 / visible:6 / toolbar・list・statusbar各1、UIAはitems:7 / toolbar・button・menuitem各0のまま。positive / excluded controlは20:05:39.175Z / .457Z、WDIO開始20:05:39.460Z / 終了20:06:06.610Z。capture 30,373 ms / PML 923,942 bytesは上限内だが、CSV76 bytes / positive-control全0件でfail closed。capture / filesystem toolbarの有効状態は確認できたが、記録内容やdriver正常動作を証明しない。attack未実施・AC-05未達。次はcapture中のfilter有効状態と保存 / export経路を調査する。ローカルNode59/59・JS syntax・diff check成功、3OS full・最低OS実測は未実施。
 
 Run400後はExport Configuration dialogの待機失敗時に既存Write-ConfigSaveResultObservationを`export-timeout`として呼び、元の例外を再throwする。foregroundはprocmon-main / procmon-other / other-process / unavailable、dialog・既知button件数は既存32件上限の形式のみ。観測失敗時に0件の成功形を返さず、専用failure markerをNodeが`unavailable`として受け取る。入力操作・retry・待機上限・exact filter / Drop / positive-control条件は変更しない。Node回帰とPowerShell source guardを追加した。
 
