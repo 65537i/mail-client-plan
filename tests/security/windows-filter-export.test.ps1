@@ -32,7 +32,7 @@ if (
   $null -eq $reloadedStateFunction -or
   $reloadedStateFunction.Extent.Text -notmatch '(?s)Get-AccessibleDropMenuSnapshot\s+`?\s*\$MainWindowHandle\s+\$ProcessId\s+\$true\s+"after-reload"' -or
   $null -eq $accessibleSnapshotFunction -or
-  $accessibleSnapshotFunction.Extent.Text -notmatch '(?s)ReadAccessibleDropMenuState\(\s*\$MenuWindowHandle,\s*\$ProcessId,\s*\$UseWindowMenuObject' -or
+  $accessibleSnapshotFunction.Extent.Text -notmatch '(?s)ReadAccessibleDropMenuState\(\s*\$MenuWindowHandle,\s*\$ProcessId,\s*\$UseWindowMenuObject[\s\S]*Set-Stage "read-msaa-process-state"[\s\S]*\$snapshot\.ProcessKnown[\s\S]*Set-Stage "read-msaa-object-state"[\s\S]*\$snapshot\.AccessibleAvailable[\s\S]*Set-Stage "read-msaa-menu-counts"[\s\S]*\$snapshot\.ItemCount[\s\S]*\$snapshot\.MatchCount[\s\S]*Set-Stage "read-msaa-menu-result"[\s\S]*\$snapshot\.ReadFailure[\s\S]*\$snapshot\.CheckState[\s\S]*\$snapshot\.IsEnabled[\s\S]*Set-Stage "report-msaa-menu-state"[\s\S]*PROC_MON_FILTER_MSAA_MENU_STATE[\s\S]*Set-Stage "report-msaa-menu-enabled"[\s\S]*PROC_MON_FILTER_MSAA_MENU_ENABLED' -or
   $null -eq $eventMenuPatternFunction -or
   $eventMenuPatternFunction.Extent.Text -notmatch '(?s)PropertyCondition\]::new\([\s\S]*ControlTypeProperty[\s\S]*ControlType\]::MenuItem' -or
   $eventMenuPatternFunction.Extent.Text -notmatch '(?s)InvokePattern\]::Pattern[\s\S]*ExpandCollapsePattern\]::Pattern[\s\S]*SelectionItemPattern\]::Pattern' -or

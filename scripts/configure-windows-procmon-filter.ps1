@@ -2077,20 +2077,33 @@ function Get-AccessibleDropMenuSnapshot(
     $ProcessId,
     $UseWindowMenuObject
   )
-  Set-Stage "report-msaa-menu-state"
-  $processState = if (-not $snapshot.ProcessKnown) {
+  Set-Stage "read-msaa-process-state"
+  $processKnown = [bool]$snapshot.ProcessKnown
+  $processSame = [bool]$snapshot.ProcessSame
+  $processState = if (-not $processKnown) {
     "unavailable"
-  } elseif ($snapshot.ProcessSame) {
+  } elseif ($processSame) {
     "same"
   } else {
     "other"
   }
-  $objectState = if ($snapshot.AccessibleAvailable) { "available" } else { "unavailable" }
+  Set-Stage "read-msaa-object-state"
+  $accessibleAvailable = [bool]$snapshot.AccessibleAvailable
+  $objectState = if ($accessibleAvailable) { "available" } else { "unavailable" }
+  Set-Stage "read-msaa-menu-counts"
+  $itemCount = [int]$snapshot.ItemCount
+  $matchCount = [int]$snapshot.MatchCount
+  Set-Stage "read-msaa-menu-result"
+  $readFailure = [string]$snapshot.ReadFailure
+  $checkState = [string]$snapshot.CheckState
+  $isEnabled = [bool]$snapshot.IsEnabled
+  Set-Stage "report-msaa-menu-state"
   [Console]::Out.WriteLine(
-    "PROC_MON_FILTER_MSAA_MENU_STATE=observation:$Observation;process:$processState;object:$objectState;items:$($snapshot.ItemCount);matches:$($snapshot.MatchCount);read-failure:$($snapshot.ReadFailure);checked:$($snapshot.CheckState)"
+    "PROC_MON_FILTER_MSAA_MENU_STATE=observation:$Observation;process:$processState;object:$objectState;items:$itemCount;matches:$matchCount;read-failure:$readFailure;checked:$checkState"
   )
+  Set-Stage "report-msaa-menu-enabled"
   [Console]::Out.WriteLine(
-    "PROC_MON_FILTER_MSAA_MENU_ENABLED=observation:$Observation;enabled:$($snapshot.IsEnabled.ToString().ToLowerInvariant())"
+    "PROC_MON_FILTER_MSAA_MENU_ENABLED=observation:$Observation;enabled:$($isEnabled.ToString().ToLowerInvariant())"
   )
   return $snapshot
 }
