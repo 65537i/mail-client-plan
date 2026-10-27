@@ -19,7 +19,9 @@ Windows: MSVC toolchain、WebView2、必要SDK。WebDriverを外部利用する�
 
 ### nativeの短い検証ループ
 
-Run406後はoffline exportの起動引数だけへ`/NoFilter`を追加する。Microsoft配布Procmon 4.12の組込helpは「Clear the filter at start up」と説明する。capture起動には適用せず`/LoadConfig`とexact filter / Drop gatesを維持する。保存済みPMLの全eventをCSVへ出し、既存のunknown-path / sentinel / positive-control / canary検査とPML・CSVの256 MiB上限へ渡す。display filterで余分なeventを隠さず、追加pathがあれば監査失敗とする。Windows実測待ち。
+Run406後はoffline exportの起動引数だけへ`/NoFilter`を追加した。Microsoft配布Procmon 4.12の組込helpは「Clear the filter at start up」と説明する。capture起動には適用せず`/LoadConfig`とexact filter / Drop gatesを維持する。保存済みPMLのexport結果を既存のunknown-path / sentinel / positive-control / canary検査とPML・CSVの256 MiB上限へ渡す。display filterで余分なeventを隠さず、追加pathがあれば監査失敗とする。
+
+[Run 409](https://github.com/65537i/mail-client-plan/actions/runs/40589247217)（`937e838`、manual Windows 2025 / webview）はNode60/60・PowerShell回帰、exact reload / Drop / readinessを通過し、capture / filesystem各MSAA matches:1 / checked:on / enabled:trueを再確認した。positive / excluded controlは21:54:23.544Z / .660Z、WDIO開始21:54:23.661Z / 終了21:54:35.503Z。capture 13,755 ms / PML 876,980 bytesは上限内だが、`/NoFilter`を加えたoffline exportもCSV76 bytes / positive-control全0件でfail closed。startup display filter clearだけでは欠落を解消できない。attack未実施・AC-05未達。次はcapture中のexact filterとPML内event有無を直接切り分ける。ローカルNode60/60・JS syntax・diff check成功、3OS full・最低OS実測未実施。
 
 Run403後は一意の同一PID native toolbarへMSAA OBJID_CLIENTをread-only照会する。最大64 childの既知capture / filesystemラベル、button role、整数stateだけを受理し、object / items / matches / checked / enabledのみを出力する。未検出・toolbar非一意はunavailable、COM失敗はinspection失敗。COM objectをfinallyでreleaseし、操作・filter変更は行わない。2 KiB / 20秒・positive-control等の既存gateを維持する。Windows回帰のhelper compileとtoolbarなしのunavailable出力も更新した。
 
