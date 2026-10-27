@@ -269,12 +269,45 @@ export function describeWindowsFilterDiagnostics(output) {
   }
 
   const reloadedFilterUi = output.match(
+    /^PROC_MON_FILTER_RELOADED_UI=items:(\d{1,4});lists:(\d{1,4});data-grids:(\d{1,4});tables:(\d{1,4});list-items:(\d{1,4});data-items:(\d{1,4});dialog-window-rows:(\d{1,4});other-window-rows:(\d{1,4});unscoped-rows:(\d{1,4});combo-option-rows:(\d{1,4});rule-containers:(\d{1,2});rule-row-candidates:(\d{1,4});rule-container-unclassified-rows:(\d{1,4});rows:(\d{1,2});truncated:(true|false)\r?$/m,
+  ) ?? output.match(
     /^PROC_MON_FILTER_RELOADED_UI=items:(\d{1,4});lists:(\d{1,4});data-grids:(\d{1,4});tables:(\d{1,4});list-items:(\d{1,4});data-items:(\d{1,4});dialog-window-rows:(\d{1,4});other-window-rows:(\d{1,4});unscoped-rows:(\d{1,4});rows:(\d{1,2});truncated:(true|false)\r?$/m,
   ) ?? output.match(
     /^PROC_MON_FILTER_RELOADED_UI=items:(\d{1,4});lists:(\d{1,4});data-grids:(\d{1,4});tables:(\d{1,4});list-items:(\d{1,4});data-items:(\d{1,4});rows:(\d{1,2});truncated:(true|false)\r?$/m,
   );
   if (reloadedFilterUi) {
-    if (reloadedFilterUi.length === 12) {
+    if (reloadedFilterUi.length === 16) {
+      const counts = reloadedFilterUi.slice(1, 15).map(Number);
+      const [
+        items,
+        lists,
+        dataGrids,
+        tables,
+        listItems,
+        dataItems,
+        dialogWindowRows,
+        otherWindowRows,
+        unscopedRows,
+        comboOptionRows,
+        ruleContainers,
+        ruleRowCandidates,
+        ruleContainerUnclassifiedRows,
+        rows,
+      ] = counts;
+      if (
+        items <= 1024
+        && [lists, dataGrids, tables, listItems, dataItems].every((count) => count <= items)
+        && dialogWindowRows + otherWindowRows + unscopedRows <= items
+        && comboOptionRows <= dialogWindowRows
+        && ruleContainers <= 32
+        && ruleRowCandidates + ruleContainerUnclassifiedRows <= dialogWindowRows
+        && rows <= 64
+      ) {
+        diagnostics.push(
+          `reloaded-filter-ui=items:${items};lists:${lists};data-grids:${dataGrids};tables:${tables};list-items:${listItems};data-items:${dataItems};dialog-window-rows:${dialogWindowRows};other-window-rows:${otherWindowRows};unscoped-rows:${unscopedRows};combo-option-rows:${comboOptionRows};rule-containers:${ruleContainers};rule-row-candidates:${ruleRowCandidates};rule-container-unclassified-rows:${ruleContainerUnclassifiedRows};rows:${rows};truncated:${reloadedFilterUi[15]}`,
+        );
+      }
+    } else if (reloadedFilterUi.length === 12) {
       const counts = reloadedFilterUi.slice(1, 11).map(Number);
       const [
         items,

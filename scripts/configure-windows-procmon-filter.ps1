@@ -725,6 +725,7 @@ function Get-LoadedFilterRuleRows(
     "ControlType.DataGrid",
     "ControlType.Table"
   )
+  $containerRows = [System.Collections.Generic.Dictionary[string, object]]::new()
   $rows = [System.Collections.Generic.List[string]]::new()
   $listCount = 0
   $dataGridCount = 0
@@ -734,6 +735,9 @@ function Get-LoadedFilterRuleRows(
   $dialogWindowRowCount = 0
   $otherWindowRowCount = 0
   $unscopedRowCount = 0
+  $comboOptionRowCount = 0
+  $ruleRowCandidateCount = 0
+  $ruleContainerUnclassifiedRowCount = 0
   $rowTruncated = $false
   $itemScanCount = [Math]::Min($items.Count, 1024)
   for ($itemIndex = 0; $itemIndex -lt $itemScanCount; $itemIndex++) {
@@ -752,7 +756,8 @@ function Get-LoadedFilterRuleRows(
     }
     $parent = $treeWalker.GetParent($item)
     $insideRow = $false
-    $insideContainer = $false
+    $insideComboBox = $false
+    $nearestContainer = $null
     $nearestWindowHandle = [IntPtr]::Zero
     for ($level = 0; $null -ne $parent -and $level -lt 10; $level++) {
       $parentType = $parent.Current.ControlType.ProgrammaticName
@@ -760,8 +765,11 @@ function Get-LoadedFilterRuleRows(
         $insideRow = $true
         break
       }
-      if ($parentType -in $containerKinds) {
-        $insideContainer = $true
+      if ($parentType -eq "ControlType.ComboBox") {
+        $insideComboBox = $true
+      }
+      if ($null -eq $nearestContainer -and $parentType -in $containerKinds) {
+        $nearestContainer = $parent
       }
       if ($parentType -eq "ControlType.Window") {
         $nearestWindowHandle = [IntPtr]$parent.Current.NativeWindowHandle
@@ -769,7 +777,7 @@ function Get-LoadedFilterRuleRows(
       }
       $parent = $treeWalker.GetParent($parent)
     }
-    if ($insideRow -or -not $insideContainer) {
+    if ($insideRow -or $null -eq $nearestContainer) {
       continue
     }
     if ($nearestWindowHandle -ne $dialogHandle) {
@@ -781,12 +789,33 @@ function Get-LoadedFilterRuleRows(
       continue
     }
     $dialogWindowRowCount++
-    if ($rows.Count -ge 64) {
+    if ($insideComboBox) {
+      $comboOptionRowCount++
+      continue
+    }
+    $containerRuntimeId = $nearestContainer.GetRuntimeId() -join ","
+    if ([string]::IsNullOrWhiteSpace($containerRuntimeId)) {
+      throw "Process Monitor filter rule container did not expose a runtime identifier"
+    }
+    if (-not $containerRows.ContainsKey($containerRuntimeId)) {
+      if ($containerRows.Count -ge 32) {
+        $rowTruncated = $true
+        continue
+      }
+      $containerRows.Add($containerRuntimeId, [pscustomobject]@{
+        Rows = [System.Collections.Generic.List[string]]::new()
+        RuleRows = [System.Collections.Generic.List[string]]::new()
+      })
+    }
+    $container = $containerRows[$containerRuntimeId]
+    if ($container.Rows.Count -ge 64) {
       $rowTruncated = $true
       continue
     }
     $parts = [System.Collections.Generic.List[string]]::new()
-    $parts.Add($state.Name)
+    if (-not [string]::IsNullOrEmpty($state.Name)) {
+      $parts.Add($state.Name)
+    }
     $cells = $item.FindAll(
       [System.Windows.Automation.TreeScope]::Descendants,
       [System.Windows.Automation.Condition]::TrueCondition
@@ -803,13 +832,38 @@ function Get-LoadedFilterRuleRows(
         $parts.Add($cellState.Name)
       }
     }
-    $rows.Add(($parts -join " "))
+    $rowText = $parts -join " "
+    $container.Rows.Add($rowText)
+    if ($rowText -match "(?i)\s(?:Include|Exclude)\s*$") {
+      $container.RuleRows.Add($rowText)
+    }
+  }
+  $ruleContainers = [System.Collections.Generic.List[object]]::new()
+  foreach ($container in $containerRows.Values) {
+    if ($container.RuleRows.Count -gt 0) {
+      $ruleContainers.Add($container)
+      $ruleRowCandidateCount += $container.RuleRows.Count
+      $ruleContainerUnclassifiedRowCount += (
+        $container.Rows.Count - $container.RuleRows.Count
+      )
+    }
+  }
+  if ($ruleContainers.Count -eq 1 -and $ruleContainerUnclassifiedRowCount -eq 0) {
+    foreach ($row in $ruleContainers[0].RuleRows) {
+      $rows.Add($row)
+    }
   }
   [Console]::Out.WriteLine(
-    "PROC_MON_FILTER_RELOADED_UI=items:$itemScanCount;lists:$listCount;data-grids:$dataGridCount;tables:$tableCount;list-items:$listItemCount;data-items:$dataItemCount;dialog-window-rows:$dialogWindowRowCount;other-window-rows:$otherWindowRowCount;unscoped-rows:$unscopedRowCount;rows:$($rows.Count);truncated:$((($items.Count -gt 1024) -or $rowTruncated).ToString().ToLowerInvariant())"
+    "PROC_MON_FILTER_RELOADED_UI=items:$itemScanCount;lists:$listCount;data-grids:$dataGridCount;tables:$tableCount;list-items:$listItemCount;data-items:$dataItemCount;dialog-window-rows:$dialogWindowRowCount;other-window-rows:$otherWindowRowCount;unscoped-rows:$unscopedRowCount;combo-option-rows:$comboOptionRowCount;rule-containers:$($ruleContainers.Count);rule-row-candidates:$ruleRowCandidateCount;rule-container-unclassified-rows:$ruleContainerUnclassifiedRowCount;rows:$($rows.Count);truncated:$((($items.Count -gt 1024) -or $rowTruncated).ToString().ToLowerInvariant())"
   )
   if ($items.Count -gt 1024 -or $rowTruncated) {
     throw "Process Monitor filter dialog exceeded the bounded UI item limit"
+  }
+  if ($ruleContainers.Count -ne 1) {
+    throw "Process Monitor filter dialog did not expose one filter rule list"
+  }
+  if ($ruleContainerUnclassifiedRowCount -gt 0) {
+    throw "Process Monitor filter list contained unreadable or non-rule rows"
   }
   if ($rows.Count -eq 0) {
     throw "Process Monitor filter dialog did not expose readable rule rows"
