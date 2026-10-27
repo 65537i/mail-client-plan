@@ -221,21 +221,10 @@ async function captureScenario(scenario) {
     );
     captureExit = waitForProcess(capture);
     assert(capture.pid, "Process Monitor capture process did not start");
-    await new Promise((resolve, reject) => {
-      const timer = setTimeout(resolve, 1500);
-      captureExit.then((result) => {
-        clearTimeout(timer);
-        reject(
-          new Error(
-            result.error
-              ? "Process Monitor capture failed to start"
-              : `Process Monitor capture stopped before the WebView test (${result.signal ?? result.code})`,
-          ),
-        );
-      });
-    });
+    await runProcmon(["/AcceptEula", "/WaitForIdle"], "capture readiness");
     assert.equal(capture.exitCode, null, "Process Monitor capture exited during startup");
     await access(backingFile);
+    console.log(`Windows audit ${scenario}: Procmon readiness confirmed UTC=${new Date().toISOString()}`);
 
     const positiveControl = spawn(
       process.execPath,
@@ -261,6 +250,7 @@ async function captureScenario(scenario) {
       0,
       "Node synthetic-canary positive control failed",
     );
+    console.log(`Windows audit ${scenario}: positive-control read completed UTC=${new Date().toISOString()}`);
     const excludedControl = spawn(
       process.execPath,
       [
@@ -281,6 +271,7 @@ async function captureScenario(scenario) {
       throw new Error("Failed to start the synthetic filter negative control");
     }
     assert.equal(excludedControlResult.code, 0, "Synthetic filter negative control failed");
+    console.log(`Windows audit ${scenario}: excluded-control read completed UTC=${new Date().toISOString()}`);
 
     command.send("start");
     console.log(`Windows audit ${scenario}: WDIO start sent UTC=${new Date().toISOString()}`);
