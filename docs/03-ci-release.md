@@ -19,7 +19,9 @@ Windows: MSVC toolchain、WebView2、必要SDK。WebDriverを外部利用する�
 
 ### nativeの短い検証ループ
 
-Run400後はExport Configuration dialogの待機失敗時に既存Write-ConfigSaveResultObservationを`export-timeout`として呼び、元の例外を再throwする。foregroundはprocmon-main / procmon-other / other-process / unavailable、dialog・既知button件数は既存32件上限の形式のみ。観測失敗時に0件の成功形を返さず、専用failure markerをNodeが`unavailable`として受け取る。入力操作・retry・待機上限・exact filter / Drop / positive-control条件は変更しない。Node回帰とPowerShell source guardを追加し、Windows runtime再検証待ち。
+Run400後はExport Configuration dialogの待機失敗時に既存Write-ConfigSaveResultObservationを`export-timeout`として呼び、元の例外を再throwする。foregroundはprocmon-main / procmon-other / other-process / unavailable、dialog・既知button件数は既存32件上限の形式のみ。観測失敗時に0件の成功形を返さず、専用failure markerをNodeが`unavailable`として受け取る。入力操作・retry・待機上限・exact filter / Drop / positive-control条件は変更しない。Node回帰とPowerShell source guardを追加した。
+
+[Run 403](https://github.com/65537i/mail-client-plan/actions/runs/40549056398)（`a78e9e2`、manual Windows 2025 / webview）はNode58/58・PowerShell回帰に成功し、export / exact 2 reload rules / complete UI / Drop on / readinessを通過した。今回はexport timeout非再現のため新failure観測branchの実動作は未検証。実capture native childを初観測し、children:6 / visible:6 / toolbars:1 / lists:1 / statusbars:1 / dialogs:0 / other:3。UIAはitems:7 / toolbar・button・menuitem各0、normal / enabled / onscreen / non-modal / startup-error:none。メイン画面に相当するnative構造とUIA公開範囲の差は確認できたが、captureの有効状態は未確認。positive / excluded controlは17:25:00.362Z / .451Z、WDIO開始17:25:00.452Z / 終了17:25:11.814Z。capture 12,751 ms / PML 901,666 bytesは上限内だがCSV76 bytesでpositive-control全0件のためfail closed、attack未実施・AC-05未達。次は検出できた同一PID native toolbarのMSAA等read-only状態取得を調査する。ローカルNode58/58・JS syntax・diff check成功、3OS full・最低OS実測は未実施。
 
 Run396後はUIAとは独立したnative EnumChildWindows診断を追加した。同じroot HWND配下を最大256件とし、全childおよびroot前後のPID一致を要求する。任意window textは読まず、classはtoolbar / listview / statusbar / dialog / otherの完全一致分類だけを件数化する。重複・上限超過・class取得失敗・ownership不明はfail closed、Nodeは一意のallowlist evidenceと件数合計・visible上限を照合する。全体2 KiB / 20秒上限、exact filter / Drop / positive-control / canary gateは維持。Windows回帰ではhelperコンパイル、表示しない合成Formのchild分類、不正 / foreign root拒否を検証する。
 
