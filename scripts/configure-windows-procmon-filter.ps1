@@ -3048,10 +3048,51 @@ try {
     throw "Process Monitor reloaded main window lost the foreground before Event menu access key"
   }
   $reloadEventMenuKey = $reloadEventMenuAccessKey.Groups["key"].Value.ToLowerInvariant()
-  Set-Stage "open-reloaded-event-menu-access-key"
-  [System.Windows.Forms.SendKeys]::SendWait("%$reloadEventMenuKey")
+  Set-Stage "open-reloaded-event-menu-f10"
+  [System.Windows.Forms.SendKeys]::SendWait("{F10}")
+  $reloadMenuBarOwnerHandle = [System.IntPtr]::Zero
+  $reloadMenuBarProcessKnown = $false
+  $reloadMenuBarSameProcess = $false
+  $reloadMenuBarGuiInfoAvailable = $false
+  $reloadMenuBarActive = $false
+  $reloadMenuBarDeadline = [DateTime]::UtcNow.AddSeconds(2)
+  do {
+    $reloadMenuBarOwnerHandle = [ProcmonNativeMenu]::GetMenuOwnerWindow(
+      $mainWindowHandle,
+      $process.Id,
+      [ref]$reloadMenuBarProcessKnown,
+      [ref]$reloadMenuBarSameProcess,
+      [ref]$reloadMenuBarGuiInfoAvailable,
+      [ref]$reloadMenuBarActive
+    )
+    if ($reloadMenuBarActive -and
+      $reloadMenuBarOwnerHandle -eq $mainWindowHandle) {
+      break
+    }
+    Start-Sleep -Milliseconds 50
+  } while ([DateTime]::UtcNow -lt $reloadMenuBarDeadline)
+  $reloadMenuBarOwnerState = if ($reloadMenuBarOwnerHandle.Equals([System.IntPtr]::Zero)) {
+    "unavailable"
+  } elseif ($reloadMenuBarOwnerHandle -eq $mainWindowHandle) {
+    "main"
+  } else {
+    "other"
+  }
   [Console]::Out.WriteLine(
-    "PROC_MON_FILTER_RELOAD_EVENT_MENU_ACTIVATION=route:access-key;state:sent"
+    "PROC_MON_FILTER_RELOAD_MENU_BAR=process-known:$($reloadMenuBarProcessKnown.ToString().ToLowerInvariant());process-same:$($reloadMenuBarSameProcess.ToString().ToLowerInvariant());gui-info:$($reloadMenuBarGuiInfoAvailable.ToString().ToLowerInvariant());menu-mode:$($reloadMenuBarActive.ToString().ToLowerInvariant());owner:$reloadMenuBarOwnerState"
+  )
+  if (-not $reloadMenuBarProcessKnown -or
+    -not $reloadMenuBarSameProcess -or
+    -not $reloadMenuBarGuiInfoAvailable -or
+    -not $reloadMenuBarActive -or
+    $reloadMenuBarOwnerHandle -ne $mainWindowHandle) {
+    throw "Process Monitor did not enter same-process menu mode with F10"
+  }
+  Write-FocusObservation "after-reload-f10-menu-bar" | Out-Null
+  Set-Stage "open-reloaded-event-menu-access-key"
+  [System.Windows.Forms.SendKeys]::SendWait($reloadEventMenuKey)
+  [Console]::Out.WriteLine(
+    "PROC_MON_FILTER_RELOAD_EVENT_MENU_ACTIVATION=route:f10-access-key;state:sent"
   )
   Write-FocusObservation "after-reload-menu-access-key" | Out-Null
   $reloadMainHandle = [IntPtr]$main.Current.NativeWindowHandle

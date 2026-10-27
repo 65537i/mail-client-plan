@@ -284,7 +284,9 @@ test("AC-05: reload Event-menu diagnostics retain only allowlisted activation da
     "PROC_MON_FILTER_RELOAD_EVENT_ITEM=matches:1",
     "PROC_MON_FILTER_RELOAD_EVENT_ITEM_ACCESS_KEY=state:recognized;key:E",
     "PROC_MON_FILTER_RELOAD_EVENT_ITEM_ACCESS_KEY=state:recognized;key:C:\\private",
-    "PROC_MON_FILTER_RELOAD_EVENT_MENU_ACTIVATION=route:access-key;state:sent",
+    "PROC_MON_FILTER_RELOAD_EVENT_MENU_ACTIVATION=route:f10-access-key;state:sent",
+    "PROC_MON_FILTER_RELOAD_MENU_BAR=process-known:true;process-same:true;gui-info:true;menu-mode:true;owner:main",
+    "PROC_MON_FILTER_RELOAD_MENU_BAR=process-known:true;process-same:true;gui-info:true;menu-mode:false;owner:C:\\private",
     "PROC_MON_FILTER_RELOAD_NATIVE_MENU_OWNER=process-known:true;process-same:true;gui-info:true;menu-mode:true;owner:main",
     "PROC_MON_FILTER_RELOAD_NATIVE_EVENT=items:13;matches:1;enabled:true;highlighted:true;submenu:true",
     "PROC_MON_FILTER_RELOAD_EVENT_MENU=opened",
@@ -302,7 +304,8 @@ test("AC-05: reload Event-menu diagnostics retain only allowlisted activation da
       + "; reload-filter-dialog-shortcut=sent"
       + "; reload-event-menu-item=matches:1"
       + "; reload-event-menu-access-key=state:recognized;key:E"
-      + "; reload-event-menu-activation=route:access-key;state:sent"
+      + "; reload-event-menu-activation=route:f10-access-key;state:sent"
+      + "; reload-menu-bar=process-known:true;process-same:true;gui-info:true;menu-mode:true;owner:main"
       + "; reload-native-menu-owner=process-known:true;process-same:true;gui-info:true;menu-mode:true;owner:main"
       + "; reload-native-event=items:13;matches:1;enabled:true;highlighted:true;submenu:true"
       + "; reload-event-menu=opened"

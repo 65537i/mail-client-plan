@@ -172,10 +172,19 @@ export function describeWindowsFilterDiagnostics(output) {
   }
 
   if (
-    /^PROC_MON_FILTER_RELOAD_EVENT_MENU_ACTIVATION=route:access-key;state:sent\r?$/m
+    /^PROC_MON_FILTER_RELOAD_EVENT_MENU_ACTIVATION=route:f10-access-key;state:sent\r?$/m
       .test(output)
   ) {
-    diagnostics.push("reload-event-menu-activation=route:access-key;state:sent");
+    diagnostics.push("reload-event-menu-activation=route:f10-access-key;state:sent");
+  }
+
+  const reloadMenuBar = output.match(
+    /^PROC_MON_FILTER_RELOAD_MENU_BAR=process-known:(true|false);process-same:(true|false);gui-info:(true|false);menu-mode:(true|false);owner:(main|other|unavailable)\r?$/m,
+  );
+  if (reloadMenuBar) {
+    diagnostics.push(
+      `reload-menu-bar=process-known:${reloadMenuBar[1]};process-same:${reloadMenuBar[2]};gui-info:${reloadMenuBar[3]};menu-mode:${reloadMenuBar[4]};owner:${reloadMenuBar[5]}`,
+    );
   }
 
   const reloadNativeMenuOwner = output.match(
