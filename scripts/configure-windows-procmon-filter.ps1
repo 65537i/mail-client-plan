@@ -138,6 +138,30 @@ public static class ProcmonNativeMenu
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool SetForegroundWindow(IntPtr hWnd);
 
+    [DllImport("user32.dll", ExactSpelling = true, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetCursorPos(int x, int y);
+
+    [DllImport("user32.dll", ExactSpelling = true, SetLastError = true)]
+    private static extern void mouse_event(
+        uint flags,
+        uint dx,
+        uint dy,
+        uint data,
+        IntPtr extraInfo
+    );
+
+    public static bool ClickScreenPoint(int x, int y)
+    {
+        if (!SetCursorPos(x, y))
+        {
+            return false;
+        }
+        mouse_event(0x0002, 0, 0, 0, IntPtr.Zero);
+        mouse_event(0x0004, 0, 0, 0, IntPtr.Zero);
+        return true;
+    }
+
     public static int GetWindowProcessId(IntPtr hWnd)
     {
         uint processId;
@@ -2854,29 +2878,33 @@ try {
     -not $reloadEventMenuState.IsEnabled -or $reloadEventMenuState.IsOffscreen) {
     throw "Process Monitor Event menu item was unavailable after reload"
   }
-  $reloadEventMenuExpand = $null
-  $hasReloadEventMenuExpand = $reloadEventMenu.TryGetCurrentPattern(
-    [System.Windows.Automation.ExpandCollapsePattern]::Pattern,
-    [ref]$reloadEventMenuExpand
+  $reloadEventMenuPoint = [System.Windows.Point]::new(0, 0)
+  $hasReloadEventMenuPoint = $reloadEventMenu.TryGetClickablePoint(
+    [ref]$reloadEventMenuPoint
   )
-  $reloadEventMenuInvoke = $null
-  $hasReloadEventMenuInvoke = $reloadEventMenu.TryGetCurrentPattern(
-    [System.Windows.Automation.InvokePattern]::Pattern,
-    [ref]$reloadEventMenuInvoke
-  )
+  $reloadEventMenuPointWithinMain = $hasReloadEventMenuPoint -and
+    $main.Current.BoundingRectangle.Contains($reloadEventMenuPoint)
   [Console]::Out.WriteLine(
-    "PROC_MON_FILTER_RELOAD_EVENT_ITEM_PATTERNS=expand-collapse:$($hasReloadEventMenuExpand.ToString().ToLowerInvariant());invoke:$($hasReloadEventMenuInvoke.ToString().ToLowerInvariant())"
+    "PROC_MON_FILTER_RELOAD_EVENT_ITEM_POINT=available:$($hasReloadEventMenuPoint.ToString().ToLowerInvariant());within-main:$($reloadEventMenuPointWithinMain.ToString().ToLowerInvariant())"
   )
-  if (-not $hasReloadEventMenuExpand -and -not $hasReloadEventMenuInvoke) {
-    throw "Process Monitor Event menu item exposes no supported open pattern"
+  if (-not $reloadEventMenuPointWithinMain) {
+    throw "Process Monitor Event menu item did not expose a clickable point inside its main window"
   }
-  Set-Stage "open-reloaded-event-menu"
-  if ($hasReloadEventMenuExpand) {
-    $reloadEventMenuExpand.Expand()
-  } else {
-    $reloadEventMenuInvoke.Invoke()
+  $reloadEventMenuX = [int][Math]::Round($reloadEventMenuPoint.X)
+  $reloadEventMenuY = [int][Math]::Round($reloadEventMenuPoint.Y)
+  $currentForegroundHandle = [ProcmonNativeMenu]::GetForegroundWindow()
+  if ($currentForegroundHandle -ne $mainWindowHandle -or
+    [ProcmonNativeMenu]::GetWindowProcessId($currentForegroundHandle) -ne $process.Id) {
+    throw "Process Monitor reloaded main window lost the foreground before Event menu click"
   }
-  Write-FocusObservation "after-reload-menu-keyboard-event" | Out-Null
+  Set-Stage "open-reloaded-event-menu-clickpoint"
+  if (-not [ProcmonNativeMenu]::ClickScreenPoint($reloadEventMenuX, $reloadEventMenuY)) {
+    throw "Process Monitor Event menu click point could not be activated"
+  }
+  [Console]::Out.WriteLine(
+    "PROC_MON_FILTER_RELOAD_EVENT_MENU_ACTIVATION=route:clickpoint;state:sent"
+  )
+  Write-FocusObservation "after-reload-menu-click" | Out-Null
   Set-Stage "wait-reloaded-event-menu"
   $reloadEventMenuScan = Wait-ProcessMenu $process
   $reloadEventMenu = $reloadEventMenuScan.Menu

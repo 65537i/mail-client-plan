@@ -156,13 +156,20 @@ export function describeWindowsFilterDiagnostics(output) {
     }
   }
 
-  const reloadEventItemPatterns = output.match(
-    /^PROC_MON_FILTER_RELOAD_EVENT_ITEM_PATTERNS=expand-collapse:(true|false);invoke:(true|false)\r?$/m,
+  const reloadEventPoint = output.match(
+    /^PROC_MON_FILTER_RELOAD_EVENT_ITEM_POINT=available:(true|false);within-main:(true|false)\r?$/m,
   );
-  if (reloadEventItemPatterns) {
+  if (reloadEventPoint) {
     diagnostics.push(
-      `reload-event-menu-item-patterns=expand-collapse:${reloadEventItemPatterns[1]};invoke:${reloadEventItemPatterns[2]}`,
+      `reload-event-menu-point=available:${reloadEventPoint[1]};within-main:${reloadEventPoint[2]}`,
     );
+  }
+
+  if (
+    /^PROC_MON_FILTER_RELOAD_EVENT_MENU_ACTIVATION=route:clickpoint;state:sent\r?$/m
+      .test(output)
+  ) {
+    diagnostics.push("reload-event-menu-activation=route:clickpoint;state:sent");
   }
 
   const reloadEventMenu = output.match(
@@ -767,7 +774,7 @@ export function describeWindowsFilterDiagnostics(output) {
     }
   }
   for (const match of output.matchAll(
-    /^PROC_MON_FILTER_FOCUSED_CONTROL=(after-open|after-home|filter-command|after-enter|after-invoke|after-click|after-command-invoke|after-reload-filter-dialog-shortcut|after-reload-menu-(?:expand|select|legacy-ia|pointer|invoke|keyboard-event|keyboard-filter));focused:(none|unavailable)\r?$/gm,
+    /^PROC_MON_FILTER_FOCUSED_CONTROL=(after-open|after-home|filter-command|after-enter|after-invoke|after-click|after-command-invoke|after-reload-filter-dialog-shortcut|after-reload-menu-(?:expand|select|legacy-ia|pointer|invoke|click|keyboard-event|keyboard-filter));focused:(none|unavailable)\r?$/gm,
   )) {
     focusObservations.push({
       index: match.index,
@@ -775,7 +782,7 @@ export function describeWindowsFilterDiagnostics(output) {
     });
   }
   for (const match of output.matchAll(
-    /^PROC_MON_FILTER_FOCUSED_CONTROL=(after-open|after-home|filter-command|after-enter|after-invoke|after-click|after-command-invoke|after-reload-filter-dialog-shortcut|after-reload-menu-(?:expand|select|legacy-ia|pointer|invoke|keyboard-event|keyboard-filter));type:(MenuBar|Menu|MenuItem|Window|Pane|ToolBar|Button|Text|Edit|Other);name:(FileMenu|Filter|FilterCommand|SaveFilterCommand|ExportConfigCommand|MenuBar|ProcessMonitor|Other);offscreen:(true|false);keyboard-focusable:(true|false);tree=([A-Za-z:>]+)\r?$/gm,
+    /^PROC_MON_FILTER_FOCUSED_CONTROL=(after-open|after-home|filter-command|after-enter|after-invoke|after-click|after-command-invoke|after-reload-filter-dialog-shortcut|after-reload-menu-(?:expand|select|legacy-ia|pointer|invoke|click|keyboard-event|keyboard-filter));type:(MenuBar|Menu|MenuItem|Window|Pane|ToolBar|Button|Text|Edit|Other);name:(FileMenu|Filter|FilterCommand|SaveFilterCommand|ExportConfigCommand|MenuBar|ProcessMonitor|Other);offscreen:(true|false);keyboard-focusable:(true|false);tree=([A-Za-z:>]+)\r?$/gm,
   )) {
     const nodes = match[6].split(">");
     if (
