@@ -15,10 +15,19 @@ test("AC-05: native child inspection is ownership-scoped, bounded and metadata-o
   assert.match(inspection, /processId != ownerProcessId/);
   assert.match(inspection, /finalProcessId != ownerProcessId/);
   assert.match(inspection, /if \(failure != null\) throw new InvalidOperationException\(failure\)/);
-  assert.match(inspection, /case "ToolbarWindow32": toolbars\+\+; break;/);
+  assert.match(inspection, /case "ToolbarWindow32": toolbars\+\+; toolbar = window; break;/);
   assert.doesNotMatch(inspection, /GetWindowText|SendMessage|PostMessage|SetWindow/);
   assert.match(driver, /nativeCounts.slice\(2\).reduce/);
   assert.match(driver, /nativeCounts\[1\] <= nativeCounts\[0\]/);
+});
+
+test("AC-05: toolbar MSAA uses bounded read-only same-process client-object queries", async () => {
+  const source = await readFile(new URL("../../scripts/inspect-windows-procmon-capture.ps1", import.meta.url), "utf8");
+  assert.match(source, /AccessibleObjectFromWindow\(toolbar, unchecked\(\(uint\)-4\)/);
+  assert.match(source, /count < 0 \|\| count > 64/);
+  assert.match(source, /toolbars == 1 \? ReadToolbar/);
+  assert.match(source, /finally \{ Marshal.ReleaseComObject\(accessible\); \}/);
+  assert.doesNotMatch(source, /accDoDefaultAction|accSelect|set_acc|SendMessage|PostMessage/);
 });
 
 test("AC-05: capture startup diagnostics classify exact known errors without exposing UI text", async () => {

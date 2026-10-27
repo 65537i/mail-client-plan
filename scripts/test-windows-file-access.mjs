@@ -268,6 +268,16 @@ async function captureScenario(scenario) {
       "Process Monitor native child inspection counts are inconsistent",
     );
     console.log(`Windows audit ${scenario}: ${nativeEvidence[0][0].trim()}`);
+    for (const target of ["capture", "filesystem"]) {
+      const msaa = [...captureInspectionOutput.matchAll(
+        /^PROC_MON_CAPTURE_MSAA=(capture|filesystem);object:(available|unavailable);items:(0|[1-9]\d?);matches:(0|[1-9]\d?);checked:(unavailable|mixed|on|off);enabled:(unavailable|true|false)\r?$/gm,
+      )].filter((match) => match[1] === target);
+      assert(
+        msaa.length === 1 && Number(msaa[0][3]) <= 64 && Number(msaa[0][4]) <= Number(msaa[0][3]),
+        "Process Monitor toolbar MSAA evidence is incomplete",
+      );
+      console.log(`Windows audit ${scenario}: ${msaa[0][0].trim()}`);
+    }
     const windowEvidence = [...captureInspectionOutput.matchAll(
       /^PROC_MON_CAPTURE_WINDOW=visual:(unavailable|normal|minimized|maximized);enabled:(true|false);offscreen:(true|false);items:(0|[1-9]\d{0,2});toolbars:(0|[1-9]\d{0,2});buttons:(0|[1-9]\d{0,2});menuitems:(0|[1-9]\d{0,2})\r?$/gm,
     )];

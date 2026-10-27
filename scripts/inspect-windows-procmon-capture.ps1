@@ -7,6 +7,7 @@ $stage = "load-automation"
 try {
   Add-Type -AssemblyName UIAutomationClient
   Add-Type -AssemblyName UIAutomationTypes
+  Add-Type -AssemblyName Accessibility
   $stage = "compile-native-capture-helper"
   $nativeCaptureType = @'
 using System;
@@ -33,6 +34,57 @@ public static class ProcmonCaptureWindows
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool IsWindowVisible(IntPtr window);
 
+    [DllImport("oleacc.dll", ExactSpelling = true)]
+    private static extern int AccessibleObjectFromWindow(
+        IntPtr window, uint objectId, ref Guid interfaceId,
+        [MarshalAs(UnmanagedType.Interface)] out Accessibility.IAccessible accessible);
+
+    private static string ReadToolbar(IntPtr toolbar, uint ownerProcessId, string target)
+    {
+        uint processId;
+        if (GetWindowThreadProcessId(toolbar, out processId) == 0 || processId != ownerProcessId)
+            throw new InvalidOperationException("Toolbar ownership is unavailable");
+        var iid = new Guid("618736E0-3C3D-11CF-810C-00AA00389B71");
+        Accessibility.IAccessible accessible;
+        int result = AccessibleObjectFromWindow(toolbar, unchecked((uint)-4), ref iid, out accessible);
+        if (result != 0 || accessible == null)
+            return "object:unavailable;items:0;matches:0;checked:unavailable;enabled:unavailable";
+        try
+        {
+            int count = accessible.accChildCount;
+            if (count < 0 || count > 64)
+                throw new InvalidOperationException("Toolbar accessible child count exceeds its limit");
+            int matches = 0, matchedState = 0;
+            for (int child = 1; child <= count; child++)
+            {
+                string name = (accessible.get_accName(child) ?? String.Empty).Replace("&", "");
+                int accelerator = name.IndexOf('\t');
+                if (accelerator >= 0) name = name.Substring(0, accelerator);
+                bool match = target == "capture"
+                    ? name == "Capture (Ctrl+E)" || name == "Capture Events"
+                    : name == "Show File System Activity";
+                if (!match) continue;
+                object role = accessible.get_accRole(child);
+                if (!(role is int) || ((int)role != 43 && (int)role != 44 && (int)role != 62))
+                    throw new InvalidOperationException("Toolbar matched child role is unsupported");
+                object state = accessible.get_accState(child);
+                if (!(state is int))
+                    throw new InvalidOperationException("Toolbar matched child state is unsupported");
+                matches++;
+                matchedState = (int)state;
+            }
+            if (GetWindowThreadProcessId(toolbar, out processId) == 0 || processId != ownerProcessId)
+                throw new InvalidOperationException("Toolbar changed ownership");
+            string check = matches != 1 ? "unavailable"
+                : (matchedState & 0x20) != 0 ? "mixed"
+                : (matchedState & 0x10) != 0 ? "on" : "off";
+            string enabled = matches != 1 ? "unavailable" : (matchedState & 1) == 0 ? "true" : "false";
+            return String.Format(CultureInfo.InvariantCulture,
+                "object:available;items:{0};matches:{1};checked:{2};enabled:{3}", count, matches, check, enabled);
+        }
+        finally { Marshal.ReleaseComObject(accessible); }
+    }
+
     public static string Inspect(IntPtr root, uint ownerProcessId)
     {
         uint rootProcessId;
@@ -41,6 +93,7 @@ public static class ProcmonCaptureWindows
             throw new InvalidOperationException("Native capture root ownership is unavailable");
 
         var seen = new HashSet<IntPtr>();
+        IntPtr toolbar = IntPtr.Zero;
         int toolbars = 0, lists = 0, statusbars = 0, dialogs = 0, other = 0, visible = 0;
         string failure = null;
         EnumWindowProc callback = delegate(IntPtr window, IntPtr parameter)
@@ -64,7 +117,7 @@ public static class ProcmonCaptureWindows
             }
             switch (name.ToString())
             {
-                case "ToolbarWindow32": toolbars++; break;
+                case "ToolbarWindow32": toolbars++; toolbar = window; break;
                 case "SysListView32": lists++; break;
                 case "msctls_statusbar32": statusbars++; break;
                 case "#32770": dialogs++; break;
@@ -79,13 +132,21 @@ public static class ProcmonCaptureWindows
         uint finalProcessId;
         if (GetWindowThreadProcessId(root, out finalProcessId) == 0 || finalProcessId != ownerProcessId)
             throw new InvalidOperationException("Native capture root changed ownership");
-        return String.Format(CultureInfo.InvariantCulture,
+        string summary = String.Format(CultureInfo.InvariantCulture,
             "children:{0};visible:{1};toolbars:{2};lists:{3};statusbars:{4};dialogs:{5};other:{6}",
             seen.Count, visible, toolbars, lists, statusbars, dialogs, other);
+        foreach (string target in new[] { "capture", "filesystem" })
+        {
+            string state = toolbars == 1 ? ReadToolbar(toolbar, ownerProcessId, target)
+                : "object:unavailable;items:0;matches:0;checked:unavailable;enabled:unavailable";
+            summary += "\nPROC_MON_CAPTURE_MSAA=" + target + ";" + state;
+        }
+        return summary;
     }
 }
 '@
-  Add-Type -TypeDefinition $nativeCaptureType
+  Add-Type -TypeDefinition $nativeCaptureType `
+    -ReferencedAssemblies ([Accessibility.IAccessible].Assembly.Location)
   $stage = "find-capture-window"
   $process = [System.Diagnostics.Process]::GetProcessById($OwnerProcessId)
   $handle = $process.MainWindowHandle

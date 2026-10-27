@@ -48,7 +48,9 @@ $nativeCaptureLiteral = $inspectionAst.Find({
 if ($null -eq $nativeCaptureLiteral) {
   throw "Native capture inspection helper is missing"
 }
-Add-Type -TypeDefinition $nativeCaptureLiteral.Value
+Add-Type -AssemblyName Accessibility
+Add-Type -TypeDefinition $nativeCaptureLiteral.Value `
+  -ReferencedAssemblies ([Accessibility.IAccessible].Assembly.Location)
 $invalidRootRejected = $false
 try {
   [ProcmonCaptureWindows]::Inspect([IntPtr]::Zero, [uint32]$PID) | Out-Null
@@ -67,7 +69,7 @@ try {
   $nativeTestHandle = $nativeTestForm.Handle
   $nativeTestChildHandle = $nativeTestChild.Handle
   $nativeCaptureResult = [ProcmonCaptureWindows]::Inspect($nativeTestHandle, [uint32]$PID)
-  if ($nativeCaptureResult -notmatch '^children:1;visible:0;toolbars:0;lists:0;statusbars:0;dialogs:0;other:1$') {
+  if ($nativeCaptureResult -cne "children:1;visible:0;toolbars:0;lists:0;statusbars:0;dialogs:0;other:1`nPROC_MON_CAPTURE_MSAA=capture;object:unavailable;items:0;matches:0;checked:unavailable;enabled:unavailable`nPROC_MON_CAPTURE_MSAA=filesystem;object:unavailable;items:0;matches:0;checked:unavailable;enabled:unavailable") {
     throw "Native capture inspection did not classify the hidden synthetic child"
   }
   $foreignRootRejected = $false

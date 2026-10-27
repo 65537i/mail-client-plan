@@ -19,6 +19,8 @@ Windows: MSVC toolchain、WebView2、必要SDK。WebDriverを外部利用する�
 
 ### nativeの短い検証ループ
 
+Run403後は一意の同一PID native toolbarへMSAA OBJID_CLIENTをread-only照会する。最大64 childの既知capture / filesystemラベル、button role、整数stateだけを受理し、object / items / matches / checked / enabledのみを出力する。未検出・toolbar非一意はunavailable、COM失敗はinspection失敗。COM objectをfinallyでreleaseし、操作・filter変更は行わない。2 KiB / 20秒・positive-control等の既存gateを維持する。Windows回帰のhelper compileとtoolbarなしのunavailable出力も更新。Windows実測待ち。
+
 Run400後はExport Configuration dialogの待機失敗時に既存Write-ConfigSaveResultObservationを`export-timeout`として呼び、元の例外を再throwする。foregroundはprocmon-main / procmon-other / other-process / unavailable、dialog・既知button件数は既存32件上限の形式のみ。観測失敗時に0件の成功形を返さず、専用failure markerをNodeが`unavailable`として受け取る。入力操作・retry・待機上限・exact filter / Drop / positive-control条件は変更しない。Node回帰とPowerShell source guardを追加した。
 
 [Run 403](https://github.com/65537i/mail-client-plan/actions/runs/40549056398)（`a78e9e2`、manual Windows 2025 / webview）はNode58/58・PowerShell回帰に成功し、export / exact 2 reload rules / complete UI / Drop on / readinessを通過した。今回はexport timeout非再現のため新failure観測branchの実動作は未検証。実capture native childを初観測し、children:6 / visible:6 / toolbars:1 / lists:1 / statusbars:1 / dialogs:0 / other:3。UIAはitems:7 / toolbar・button・menuitem各0、normal / enabled / onscreen / non-modal / startup-error:none。メイン画面に相当するnative構造とUIA公開範囲の差は確認できたが、captureの有効状態は未確認。positive / excluded controlは17:25:00.362Z / .451Z、WDIO開始17:25:00.452Z / 終了17:25:11.814Z。capture 12,751 ms / PML 901,666 bytesは上限内だがCSV76 bytesでpositive-control全0件のためfail closed、attack未実施・AC-05未達。次は検出できた同一PID native toolbarのMSAA等read-only状態取得を調査する。ローカルNode58/58・JS syntax・diff check成功、3OS full・最低OS実測は未実施。
