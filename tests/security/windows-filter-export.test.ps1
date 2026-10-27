@@ -27,11 +27,13 @@ if (
   $null -eq $reloadedStateFunction -or
   $reloadedStateFunction.Extent.Text -notmatch '(?s)Get-AccessibleDropMenuSnapshot\s+`?\s*\$MainWindowHandle\s+\$ProcessId\s+\$true\s+"after-reload"' -or
   $null -eq $accessibleSnapshotFunction -or
-  $accessibleSnapshotFunction.Extent.Text -notmatch '(?s)ReadAccessibleDropMenuState\(\s*\$MenuWindowHandle,\s*\$ProcessId,\s*\$UseWindowMenuObject'
+  $accessibleSnapshotFunction.Extent.Text -notmatch '(?s)ReadAccessibleDropMenuState\(\s*\$MenuWindowHandle,\s*\$ProcessId,\s*\$UseWindowMenuObject' -or
+  $sourceText -notmatch '(?s)GetMenuBarInfo\(\s*hWnd,\s*AccessibleMenuObjectId,\s*0,\s*ref info\)' -or
+  $reloadedStateFunction.Extent.Text -notmatch '(?s)GetMenu\(\$MainWindowHandle\).*GetMenuBarSnapshot\(\$MainWindowHandle\)'
 ) {
-  throw "Reloaded MSAA state must read the main-window menu object"
+  throw "Reloaded menu state must use read-only native and MSAA menu queries"
 }
-Write-Host "PASS AC-05: reloaded MSAA state reads the main-window menu object"
+Write-Host "PASS AC-05: reloaded menu state uses bounded read-only native and MSAA queries"
 $functions = $ast.FindAll({
   param($node)
   $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and

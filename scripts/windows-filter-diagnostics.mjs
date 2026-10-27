@@ -144,6 +144,24 @@ export function describeWindowsFilterDiagnostics(output) {
     diagnostics.push("reload-filter-dialog-shortcut=sent");
   }
 
+  for (const reloadMenuBarInfo of output.matchAll(
+    /^PROC_MON_FILTER_RELOAD_MENUBAR_INFO=read:(success|failed);handle:(available|unavailable);menu-window:(available|unavailable);read-failure:(none|query-failed)\r?$/gm,
+  )) {
+    const consistentRead =
+      (reloadMenuBarInfo[1] === "success" && reloadMenuBarInfo[4] === "none")
+      || (
+        reloadMenuBarInfo[1] === "failed"
+        && reloadMenuBarInfo[2] === "unavailable"
+        && reloadMenuBarInfo[3] === "unavailable"
+        && reloadMenuBarInfo[4] === "query-failed"
+      );
+    if (consistentRead) {
+      diagnostics.push(
+        `reload-menubar-info=read:${reloadMenuBarInfo[1]};handle:${reloadMenuBarInfo[2]};menu-window:${reloadMenuBarInfo[3]};read-failure:${reloadMenuBarInfo[4]}`,
+      );
+    }
+  }
+
   const reloadNativeEvent = output.match(
     /^PROC_MON_FILTER_RELOAD_NATIVE_EVENT=items:(\d{1,2});matches:(\d{1,2});enabled:(true|false);highlighted:(true|false);submenu:(true|false)\r?$/m,
   );

@@ -304,6 +304,23 @@ test("AC-05: reloaded native menu diagnostics retain the bounded Event Filter pa
   );
 });
 
+test("AC-05: reloaded menu-bar diagnostics retain only consistent bounded states", () => {
+  const output = [
+    "PROC_MON_FILTER_RELOAD_MENUBAR_INFO=read:success;handle:available;menu-window:available;read-failure:none",
+    "PROC_MON_FILTER_RELOAD_MENUBAR_INFO=read:failed;handle:unavailable;menu-window:unavailable;read-failure:query-failed",
+    "PROC_MON_FILTER_RELOAD_MENUBAR_INFO=read:success;handle:unavailable;menu-window:unavailable;read-failure:none",
+    "PROC_MON_FILTER_RELOAD_MENUBAR_INFO=read:failed;handle:available;menu-window:unavailable;read-failure:query-failed",
+    "PROC_MON_FILTER_RELOAD_MENUBAR_INFO=read:success;handle:C:\\private;menu-window:available;read-failure:none",
+    "PROC_MON_FILTER_RELOAD_MENUBAR_INFO=read:private;handle:available;menu-window:available;read-failure:none",
+  ].join("\n");
+  assert.equal(
+    describeWindowsFilterDiagnostics(output),
+    "; reload-menubar-info=read:success;handle:available;menu-window:available;read-failure:none"
+      + "; reload-menubar-info=read:failed;handle:unavailable;menu-window:unavailable;read-failure:query-failed"
+      + "; reload-menubar-info=read:success;handle:unavailable;menu-window:unavailable;read-failure:none",
+  );
+});
+
 test("AC-05: Windows save-menu diagnostics retain bounded labels, not arbitrary text", () => {
   const output = [
     "PROC_MON_FILTER_MENU_ITEMS=before-save;count:11;truncated:true;items=MenuItem:Other:true:false:true,Other:Other:false:false:false,MenuItem:FilterCommand:true:false:true,MenuItem:Other:true:false:true,MenuItem:Other:true:false:true,MenuItem:SaveFilterCommand:true:false:true,MenuItem:Other:true:false:true,Other:Other:false:false:false",

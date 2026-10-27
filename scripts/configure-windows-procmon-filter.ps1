@@ -101,6 +101,16 @@ public static class ProcmonNativeMenu
     }
 
     [StructLayout(LayoutKind.Sequential)]
+    private struct MenuBarInfo
+    {
+        public uint Size;
+        public Rect Bounds;
+        public IntPtr Menu;
+        public IntPtr MenuWindow;
+        public uint FocusFlags;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
     private struct GuiThreadInfo
     {
         public uint cbSize;
@@ -135,8 +145,25 @@ public static class ProcmonNativeMenu
         public bool IsEnabled { get; set; }
     }
 
+    public sealed class NativeMenuBarSnapshot
+    {
+        public bool ReadSuccessful { get; set; }
+        public IntPtr MenuHandle { get; set; }
+        public IntPtr MenuWindowHandle { get; set; }
+        public string ReadFailure { get; set; }
+    }
+
     [DllImport("user32.dll", ExactSpelling = true, SetLastError = true)]
     public static extern IntPtr GetMenu(IntPtr hWnd);
+
+    [DllImport("user32.dll", ExactSpelling = true, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetMenuBarInfo(
+        IntPtr hWnd,
+        int objectId,
+        int itemId,
+        ref MenuBarInfo info
+    );
 
     [DllImport("user32.dll", ExactSpelling = true, SetLastError = true)]
     private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
@@ -154,6 +181,28 @@ public static class ProcmonNativeMenu
         return GetWindowThreadProcessId(hWnd, out processId) == 0
             ? 0
             : processId > int.MaxValue ? 0 : (int)processId;
+    }
+
+    public static NativeMenuBarSnapshot GetMenuBarSnapshot(IntPtr hWnd)
+    {
+        var snapshot = new NativeMenuBarSnapshot
+        {
+            ReadFailure = "query-failed"
+        };
+        var info = new MenuBarInfo
+        {
+            Size = (uint)Marshal.SizeOf(typeof(MenuBarInfo))
+        };
+        if (!GetMenuBarInfo(hWnd, AccessibleMenuObjectId, 0, ref info))
+        {
+            return snapshot;
+        }
+
+        snapshot.ReadSuccessful = true;
+        snapshot.ReadFailure = "none";
+        snapshot.MenuHandle = info.Menu;
+        snapshot.MenuWindowHandle = info.MenuWindow;
+        return snapshot;
     }
 
     [DllImport("user32.dll", ExactSpelling = true, SetLastError = true)]
@@ -1849,6 +1898,20 @@ function Get-ReloadedNativeDropCheckState(
 
   Set-Stage "read-reloaded-native-main-menu"
   $menuHandle = [ProcmonNativeMenu]::GetMenu($MainWindowHandle)
+  if ($menuHandle.Equals([System.IntPtr]::Zero)) {
+    Set-Stage "read-reloaded-native-menu-bar-info"
+    $menuBarSnapshot = [ProcmonNativeMenu]::GetMenuBarSnapshot($MainWindowHandle)
+    $menuBarRead = if ($menuBarSnapshot.ReadSuccessful) { "success" } else { "failed" }
+    $menuBarHandle = if ($menuBarSnapshot.MenuHandle.Equals([System.IntPtr]::Zero)) { "unavailable" } else { "available" }
+    $menuBarWindow = if ($menuBarSnapshot.MenuWindowHandle.Equals([System.IntPtr]::Zero)) { "unavailable" } else { "available" }
+    [Console]::Out.WriteLine(
+      "PROC_MON_FILTER_RELOAD_MENUBAR_INFO=read:$menuBarRead;handle:$menuBarHandle;menu-window:$menuBarWindow;read-failure:$($menuBarSnapshot.ReadFailure)"
+    )
+    if ($menuBarSnapshot.ReadSuccessful -and
+      -not $menuBarSnapshot.MenuHandle.Equals([System.IntPtr]::Zero)) {
+      $menuHandle = $menuBarSnapshot.MenuHandle
+    }
+  }
   $checkState = "unavailable"
   $dropEnabled = $false
   if (-not $menuHandle.Equals([System.IntPtr]::Zero)) {
