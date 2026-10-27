@@ -1320,6 +1320,16 @@ function Write-ConfigSaveResultObservation(
   }
 }
 
+function Get-UniqueConfigSaveDialogMatch([System.Collections.IList]$Candidates) {
+  if ($Candidates.Count -gt 1) {
+    throw "Process Monitor exposed multiple configuration save dialogs"
+  }
+  if ($Candidates.Count -eq 1) {
+    return $Candidates[0]
+  }
+  return $null
+}
+
 function Wait-ConfigSaveDialog(
   [System.Diagnostics.Process]$Process,
   [System.Windows.Automation.AutomationElement]$MainWindow,
@@ -1358,7 +1368,7 @@ function Wait-ConfigSaveDialog(
       $windowCondition
     )
     $seenHandles = [System.Collections.Generic.HashSet[int]]::new()
-    $matchedItems = [System.Collections.Generic.List[object]]::new()
+    $dialogMatches = [System.Collections.Generic.List[object]]::new()
     $fileNameCount = 0
     $saveCount = 0
     foreach ($window in @($windows) + @($embeddedWindows)) {
@@ -1379,14 +1389,12 @@ function Wait-ConfigSaveDialog(
       $fileNameCount += $fileNames.Count
       $saveCount += $saveButtons.Count
       if ($fileNames.Count -eq 1 -and $saveButtons.Count -eq 1) {
-        $matches.Add(@{ Dialog = $window; FileName = $fileNames[0]; Save = $saveButtons[0] })
+        $dialogMatches.Add(@{ Dialog = $window; FileName = $fileNames[0]; Save = $saveButtons[0] })
       }
     }
-    if ($matches.Count -gt 1) {
-      throw "Process Monitor exposed multiple configuration save dialogs"
-    }
-    if ($matches.Count -eq 1) {
-      return $matches[0]
+    $dialogMatch = Get-UniqueConfigSaveDialogMatch $dialogMatches
+    if ($null -ne $dialogMatch) {
+      return $dialogMatch
     }
     Start-Sleep -Milliseconds 100
   } while ([DateTime]::UtcNow -lt $deadline)

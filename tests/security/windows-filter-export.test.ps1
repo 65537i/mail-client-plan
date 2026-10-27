@@ -18,17 +18,47 @@ $functions = $ast.FindAll({
       "Wait-FilterConfigFile",
       "Get-ConfigFilterPathEvidence",
       "Get-LoadedFilterRuleEvidence",
+      "Get-UniqueConfigSaveDialogMatch",
       "Wait-ProcessMenu",
       "Wait-KeyboardFocus",
       "ConvertTo-SendKeysLiteral"
     )
 }, $true)
-if ($functions.Count -ne 8) {
+if ($functions.Count -ne 9) {
   throw "Expected the configuration file observation functions"
 }
 foreach ($function in $functions) {
   . ([scriptblock]::Create($function.Extent.Text))
 }
+
+$noDialog = Get-UniqueConfigSaveDialogMatch ([System.Collections.ArrayList]::new())
+$oneDialogCandidate = [System.Collections.ArrayList]::new()
+$oneDialogCandidate.Add(@{ Dialog = "dialog"; FileName = "file-name"; Save = "save" }) | Out-Null
+$uniqueDialog = Get-UniqueConfigSaveDialogMatch $oneDialogCandidate
+$multipleDialogCandidates = [System.Collections.ArrayList]::new()
+$multipleDialogCandidates.Add("first") | Out-Null
+$multipleDialogCandidates.Add("second") | Out-Null
+$multipleDialogsRejected = $false
+try {
+  Get-UniqueConfigSaveDialogMatch $multipleDialogCandidates | Out-Null
+} catch {
+  if ($_.Exception.Message -ne
+    "Process Monitor exposed multiple configuration save dialogs") {
+    throw
+  }
+  $multipleDialogsRejected = $true
+}
+if (
+  $null -ne $noDialog -or
+  $null -eq $uniqueDialog -or
+  $uniqueDialog.Dialog -cne "dialog" -or
+  $uniqueDialog.FileName -cne "file-name" -or
+  $uniqueDialog.Save -cne "save" -or
+  -not $multipleDialogsRejected
+) {
+  throw "Configuration save dialog uniqueness gate did not handle zero, one, and multiple candidates"
+}
+Write-Host "PASS AC-05: save dialog matching accepts exactly one candidate"
 
 $previousOutput = [Console]::Out
 $capturedOutput = [IO.StringWriter]::new()
