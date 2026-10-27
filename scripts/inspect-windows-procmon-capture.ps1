@@ -17,6 +17,20 @@ try {
   if ($main.Current.ProcessId -ne $OwnerProcessId) {
     throw "Capture window belongs to a different process"
   }
+  $visual = "unavailable"
+  $windowPattern = $null
+  if ($main.TryGetCurrentPattern(
+      [System.Windows.Automation.WindowPattern]::Pattern, [ref]$windowPattern
+    )) {
+    $visual = switch ($windowPattern.Current.WindowVisualState) {
+      ([System.Windows.Automation.WindowVisualState]::Normal) { "normal" }
+      ([System.Windows.Automation.WindowVisualState]::Minimized) { "minimized" }
+      ([System.Windows.Automation.WindowVisualState]::Maximized) { "maximized" }
+      default { throw "Unknown capture window visual state" }
+    }
+  }
+  $mainEnabled = $main.Current.IsEnabled.ToString().ToLowerInvariant()
+  $mainOffscreen = $main.Current.IsOffscreen.ToString().ToLowerInvariant()
   $stage = "scan-capture-controls"
   $walker = [System.Windows.Automation.TreeWalker]::ControlViewWalker
   $pending = [System.Collections.Generic.Queue[System.Windows.Automation.AutomationElement]]::new()
@@ -26,6 +40,9 @@ try {
     filesystem = [System.Collections.Generic.List[System.Windows.Automation.AutomationElement]]::new()
   }
   $visited = 0
+  $toolbars = 0
+  $buttons = 0
+  $menuitems = 0
   while ($pending.Count -gt 0) {
     $item = $pending.Dequeue()
     $visited++
@@ -36,12 +53,20 @@ try {
     if ($state.ProcessId -ne $OwnerProcessId) {
       throw "Capture UI contains a foreign-process control"
     }
+    switch ($state.ControlType) {
+      ([System.Windows.Automation.ControlType]::ToolBar) { $toolbars++ }
+      ([System.Windows.Automation.ControlType]::Button) { $buttons++ }
+      ([System.Windows.Automation.ControlType]::MenuItem) { $menuitems++ }
+    }
     $label = ($state.Name -replace "&", "") -replace "`t.*$", ""
     $target = switch -CaseSensitive ($label) {
       "Capture Events" { "capture" }
       "Capture (Ctrl+E)" { "capture" }
       "Show File System Activity" { "filesystem" }
     }
+    [Console]::Out.WriteLine(
+      "PROC_MON_CAPTURE_WINDOW=visual:$visual;enabled:$mainEnabled;offscreen:$mainOffscreen;items:$visited;toolbars:$toolbars;buttons:$buttons;menuitems:$menuitems"
+    )
     if ($null -ne $target -and $state.ControlType -in @(
         [System.Windows.Automation.ControlType]::Button,
         [System.Windows.Automation.ControlType]::CheckBox,

@@ -16,7 +16,9 @@ if (
   $inspectionText -notmatch '\$visited \+ \$pending.Count -ge 256' -or
   $inspectionText -notmatch 'TogglePattern\]::Pattern' -or
   $inspectionText -notmatch 'SelectionItemPattern\]::Pattern' -or
-  $inspectionText -match 'Invoke\(|Toggle\(|Select\(|SendKeys|SetFocus|SetForegroundWindow'
+  $inspectionText -notmatch 'windowPattern.Current.WindowVisualState' -or
+  $inspectionText -notmatch 'PROC_MON_CAPTURE_WINDOW=visual:\$visual' -or
+  $inspectionText -match 'Invoke\(|Toggle\(|Select\(|SendKeys|SetFocus|SetForegroundWindow|SetWindowVisualState|ShowWindow'
 ) {
   throw "Capture inspection must remain bounded, same-process and read-only"
 }

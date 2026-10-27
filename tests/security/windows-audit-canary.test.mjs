@@ -5,6 +5,21 @@ import path from "node:path";
 import test from "node:test";
 import { createWindowsAuditCanary } from "../../scripts/windows-audit-canary.mjs";
 
+test("AC-05: capture window visibility is observable without restoring or toggling controls", async () => {
+  const [inspection, driver] = await Promise.all([
+    readFile(new URL("../../scripts/inspect-windows-procmon-capture.ps1", import.meta.url), "utf8"),
+    readFile(new URL("../../scripts/test-windows-file-access.mjs", import.meta.url), "utf8"),
+  ]);
+  assert.doesNotMatch(driver, /"\/Minimized"/);
+  assert.match(driver, /capture = spawn\([\s\S]*windowsHide: false/);
+  assert.match(inspection, /WindowPattern\]::Pattern/);
+  assert.match(inspection, /windowPattern.Current.WindowVisualState/);
+  assert.match(inspection, /PROC_MON_CAPTURE_WINDOW=visual:\$visual/);
+  assert.doesNotMatch(inspection, /SetWindowVisualState|ShowWindow/);
+  assert.match(driver, /windowEvidence.length === 1/);
+  assert.match(driver, /slice\(4, 8\).every\(\(count\) => Number\(count\) <= 256\)/);
+});
+
 test("AC-05: capture inspection is bounded, read-only and precedes control reads", async () => {
   const [inspection, driver] = await Promise.all([
     readFile(new URL("../../scripts/inspect-windows-procmon-capture.ps1", import.meta.url), "utf8"),

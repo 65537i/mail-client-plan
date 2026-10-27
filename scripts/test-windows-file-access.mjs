@@ -211,13 +211,12 @@ async function captureScenario(scenario) {
       [
         "/AcceptEula",
         "/Quiet",
-        "/Minimized",
         "/LoadConfig",
         filterConfig,
         "/BackingFile",
         backingFile,
       ],
-      { stdio: "ignore", windowsHide: true },
+      { stdio: "ignore", windowsHide: false },
     );
     captureExit = waitForProcess(capture);
     assert(capture.pid, "Process Monitor capture process did not start");
@@ -257,6 +256,14 @@ async function captureScenario(scenario) {
       !captureInspectionResult.error && captureInspectionResult.code === 0 && !captureInspectionOverflow,
       `Process Monitor capture inspection failed${captureInspectionStage ? ` at ${captureInspectionStage}` : ""}`,
     );
+    const windowEvidence = [...captureInspectionOutput.matchAll(
+      /^PROC_MON_CAPTURE_WINDOW=visual:(unavailable|normal|minimized|maximized);enabled:(true|false);offscreen:(true|false);items:(0|[1-9]\d{0,2});toolbars:(0|[1-9]\d{0,2});buttons:(0|[1-9]\d{0,2});menuitems:(0|[1-9]\d{0,2})\r?$/gm,
+    )];
+    assert(
+      windowEvidence.length === 1 && windowEvidence[0].slice(4, 8).every((count) => Number(count) <= 256),
+      "Process Monitor capture window inspection evidence is incomplete",
+    );
+    console.log(`Windows audit ${scenario}: ${windowEvidence[0][0].trim()}`);
     for (const target of ["capture", "filesystem"]) {
       const evidence = [...captureInspectionOutput.matchAll(
         /^PROC_MON_CAPTURE_CONTROL=(capture|filesystem);matches:(0|[1-9]\d{0,2});toggle:(unavailable|on|off|mixed);selected:(unavailable|on|off);enabled:(unavailable|true|false);offscreen:(unavailable|true|false)\r?$/gm,
