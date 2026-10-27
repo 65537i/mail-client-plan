@@ -623,7 +623,7 @@ function Get-ConfigFilterPathEvidence([string]$Path, [string]$CanaryPath, [strin
 }
 
 function Get-LoadedFilterRuleEvidence(
-  [string[]]$Rows,
+  [object[]]$Rows,
   [string]$CanaryPath,
   [string]$ControlPath
 ) {
@@ -634,11 +634,12 @@ function Get-LoadedFilterRuleEvidence(
   $includeRows = 0
   $exactRows = 0
   foreach ($row in $Rows) {
-    $hasCanary = $row.IndexOf(
+    $rowText = if ($row -is [string]) { $row } else { $row.Text }
+    $hasCanary = $rowText.IndexOf(
       $CanaryPath,
       [System.StringComparison]::OrdinalIgnoreCase
     ) -ge 0
-    $hasControl = $row.IndexOf(
+    $hasControl = $rowText.IndexOf(
       $ControlPath,
       [System.StringComparison]::OrdinalIgnoreCase
     ) -ge 0
@@ -647,19 +648,19 @@ function Get-LoadedFilterRuleEvidence(
     $canaryPattern = [regex]::Escape($CanaryPath)
     $controlPattern = [regex]::Escape($ControlPath)
     $hasCanaryPathRule = [regex]::IsMatch(
-      $row,
+      $rowText,
       "(?i)(?<!\w)Path\s+is\s+$canaryPattern(?=\s|$)"
     )
     $hasControlPathRule = [regex]::IsMatch(
-      $row,
+      $rowText,
       "(?i)(?<!\w)Path\s+is\s+$controlPattern(?=\s|$)"
     )
     $hasCanaryInclude = [regex]::IsMatch(
-      $row,
+      $rowText,
       "(?i)$canaryPattern\s+Include\s*$"
     )
     $hasControlInclude = [regex]::IsMatch(
-      $row,
+      $rowText,
       "(?i)$controlPattern\s+Include\s*$"
     )
     $hasPathRule = $hasCanaryPathRule -or $hasControlPathRule
@@ -703,7 +704,9 @@ function Get-LoadedFilterRuleEvidence(
 
 function Get-LoadedFilterRuleRows(
   [System.Windows.Automation.AutomationElement]$Dialog,
-  [int]$OwnerProcessId
+  [int]$OwnerProcessId,
+  [switch]$AllowEmpty,
+  [switch]$Quiet
 ) {
   $dialogState = $Dialog.Current
   $dialogHandle = [IntPtr]$dialogState.NativeWindowHandle
@@ -726,7 +729,7 @@ function Get-LoadedFilterRuleRows(
     "ControlType.Table"
   )
   $containerRows = [System.Collections.Generic.Dictionary[string, object]]::new()
-  $rows = [System.Collections.Generic.List[string]]::new()
+  $rows = [System.Collections.Generic.List[object]]::new()
   $listCount = 0
   $dataGridCount = 0
   $tableCount = 0
@@ -805,6 +808,7 @@ function Get-LoadedFilterRuleRows(
       $containerRows.Add($containerRuntimeId, [pscustomobject]@{
         Rows = [System.Collections.Generic.List[string]]::new()
         RuleRows = [System.Collections.Generic.List[string]]::new()
+        RuleRowElements = [System.Collections.Generic.List[object]]::new()
         RuleControlTypes = [System.Collections.Generic.List[string]]::new()
         UniqueRuleRows = [System.Collections.Generic.HashSet[string]]::new(
           [System.StringComparer]::OrdinalIgnoreCase
@@ -840,6 +844,7 @@ function Get-LoadedFilterRuleRows(
     $container.Rows.Add($rowText)
     if ($rowText -match "(?i)\s(?:Include|Exclude)\s*$") {
       $container.RuleRows.Add($rowText)
+      $container.RuleRowElements.Add($item)
       $container.RuleControlTypes.Add($state.ControlType.ProgrammaticName)
       $normalizedRow = [regex]::Replace($rowText, "\s+", " ").Trim()
       $container.UniqueRuleRows.Add($normalizedRow) | Out-Null
@@ -904,20 +909,34 @@ function Get-LoadedFilterRuleRows(
     }
   }
   if ($ruleContainers.Count -eq 1 -and $ruleContainerUnclassifiedRowCount -eq 0) {
-    foreach ($row in $ruleContainers[0].RuleRows) {
-      $rows.Add($row)
+    for ($rowIndex = 0; $rowIndex -lt $ruleContainers[0].RuleRows.Count; $rowIndex++) {
+      $rows.Add([pscustomobject]@{
+        Text = $ruleContainers[0].RuleRows[$rowIndex]
+        Element = $ruleContainers[0].RuleRowElements[$rowIndex]
+      })
     }
   }
-  [Console]::Out.WriteLine(
-    "PROC_MON_FILTER_RELOADED_UI=items:$itemScanCount;lists:$listCount;data-grids:$dataGridCount;tables:$tableCount;list-items:$listItemCount;data-items:$dataItemCount;dialog-window-rows:$dialogWindowRowCount;other-window-rows:$otherWindowRowCount;unscoped-rows:$unscopedRowCount;combo-option-rows:$comboOptionRowCount;rule-containers:$($ruleContainers.Count);rule-row-candidates:$ruleRowCandidateCount;rule-container-unclassified-rows:$ruleContainerUnclassifiedRowCount;rows:$($rows.Count);truncated:$((($items.Count -gt 1024) -or $rowTruncated).ToString().ToLowerInvariant())"
-  )
-  if ($ruleContainers.Count -eq 1) {
+  if (-not $Quiet) {
     [Console]::Out.WriteLine(
-      "PROC_MON_FILTER_RELOADED_ROW_SHAPE=rows:$($ruleRowShape.Rows);distinct:$($ruleRowShape.Distinct);duplicates:$($ruleRowShape.Duplicates);list-items:$($ruleRowShape.ListItems);data-items:$($ruleRowShape.DataItems);include:$($ruleRowShape.Include);exclude:$($ruleRowShape.Exclude);path-field:$($ruleRowShape.PathField);process-field:$($ruleRowShape.ProcessField);operation-field:$($ruleRowShape.OperationField);other-field:$($ruleRowShape.OtherField);unknown-field:$($ruleRowShape.UnknownField)"
+      "PROC_MON_FILTER_RELOADED_UI=items:$itemScanCount;lists:$listCount;data-grids:$dataGridCount;tables:$tableCount;list-items:$listItemCount;data-items:$dataItemCount;dialog-window-rows:$dialogWindowRowCount;other-window-rows:$otherWindowRowCount;unscoped-rows:$unscopedRowCount;combo-option-rows:$comboOptionRowCount;rule-containers:$($ruleContainers.Count);rule-row-candidates:$ruleRowCandidateCount;rule-container-unclassified-rows:$ruleContainerUnclassifiedRowCount;rows:$($rows.Count);truncated:$((($items.Count -gt 1024) -or $rowTruncated).ToString().ToLowerInvariant())"
     )
+    if ($ruleContainers.Count -eq 1) {
+      [Console]::Out.WriteLine(
+        "PROC_MON_FILTER_RELOADED_ROW_SHAPE=rows:$($ruleRowShape.Rows);distinct:$($ruleRowShape.Distinct);duplicates:$($ruleRowShape.Duplicates);list-items:$($ruleRowShape.ListItems);data-items:$($ruleRowShape.DataItems);include:$($ruleRowShape.Include);exclude:$($ruleRowShape.Exclude);path-field:$($ruleRowShape.PathField);process-field:$($ruleRowShape.ProcessField);operation-field:$($ruleRowShape.OperationField);other-field:$($ruleRowShape.OtherField);unknown-field:$($ruleRowShape.UnknownField)"
+      )
+    }
   }
   if ($items.Count -gt 1024 -or $rowTruncated) {
     throw "Process Monitor filter dialog exceeded the bounded UI item limit"
+  }
+  $allContainerRows = 0
+  foreach ($container in $containerRows.Values) {
+    $allContainerRows += $container.Rows.Count
+  }
+  if ($AllowEmpty -and
+    $ruleContainers.Count -eq 0 -and
+    $allContainerRows -eq 0) {
+    return ,@()
   }
   if ($ruleContainers.Count -ne 1) {
     throw "Process Monitor filter dialog did not expose one filter rule list"
@@ -929,6 +948,72 @@ function Get-LoadedFilterRuleRows(
     throw "Process Monitor filter dialog did not expose readable rule rows"
   }
   return ,$rows.ToArray()
+}
+
+function Clear-LoadedFilterRules(
+  [System.Windows.Automation.AutomationElement]$Dialog,
+  [int]$OwnerProcessId
+) {
+  $removedRows = 0
+  $maximumRows = 64
+  while ($removedRows -lt $maximumRows) {
+    $rows = Get-LoadedFilterRuleRows $Dialog $OwnerProcessId -AllowEmpty -Quiet
+    if ($rows.Count -eq 0) {
+      [Console]::Out.WriteLine(
+        "PROC_MON_FILTER_RULE_RESET=removed:$removedRows;remaining:0"
+      )
+      return
+    }
+    if ($rows.Count -gt $maximumRows) {
+      throw "Process Monitor filter list exceeded the bounded row limit"
+    }
+    $rowElement = $rows[0].Element
+    $rowState = $rowElement.Current
+    if ($rowState.ProcessId -ne $OwnerProcessId) {
+      throw "Process Monitor filter row ownership could not be verified"
+    }
+    $selectionPattern = $null
+    if (-not $rowElement.TryGetCurrentPattern(
+        [System.Windows.Automation.SelectionItemPattern]::Pattern,
+        [ref]$selectionPattern
+      )) {
+      throw "Process Monitor filter row could not be selected"
+    }
+    $selectionPattern.Select()
+    if (-not $selectionPattern.Current.IsSelected) {
+      throw "Process Monitor filter row selection was not confirmed"
+    }
+    $removeButtons = $Dialog.FindAll(
+      [System.Windows.Automation.TreeScope]::Descendants,
+      [System.Windows.Automation.AndCondition]::new(
+        [System.Windows.Automation.PropertyCondition]::new(
+          [System.Windows.Automation.AutomationElement]::NameProperty,
+          "Remove"
+        ),
+        [System.Windows.Automation.PropertyCondition]::new(
+          [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+          [System.Windows.Automation.ControlType]::Button
+        )
+      )
+    )
+    if ($removeButtons.Count -ne 1) {
+      throw "Process Monitor filter dialog did not expose one Remove button"
+    }
+    $removeState = $removeButtons[0].Current
+    if ($removeState.ProcessId -ne $OwnerProcessId -or
+      -not $removeState.IsEnabled -or $removeState.IsOffscreen) {
+      throw "Process Monitor Remove button was unavailable"
+    }
+    $removeButtons[0].GetCurrentPattern(
+      [System.Windows.Automation.InvokePattern]::Pattern
+    ).Invoke()
+    $remainingRows = Get-LoadedFilterRuleRows $Dialog $OwnerProcessId -AllowEmpty -Quiet
+    if ($remainingRows.Count -ne $rows.Count - 1) {
+      throw "Process Monitor filter row removal could not be confirmed"
+    }
+    $removedRows++
+  }
+  throw "Process Monitor filter list exceeded the bounded removal limit"
 }
 
 function Wait-KeyboardFocus($Control, [int]$TimeoutMilliseconds = 2000) {
@@ -2161,6 +2246,8 @@ try {
     [System.Windows.Automation.AutomationElement]::NameProperty, "Reset"
   )) 5
   $reset.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
+  Set-Stage "clear-existing-filter-rules"
+  Clear-LoadedFilterRules $filterDialog $process.Id
   Set-Stage "set-canary-filter"
   Set-FilterRule $filterDialog $CanaryPath $process.Id
   Set-Stage "set-control-filter"

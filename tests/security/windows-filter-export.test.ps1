@@ -52,6 +52,22 @@ if (
 }
 Write-Host "PASS AC-05: reloaded exact Path/is/Include rules are confirmed without exposing paths"
 
+$capturedOutput = [IO.StringWriter]::new()
+try {
+  [Console]::SetOut($capturedOutput)
+  $loadedRuleItems = Get-LoadedFilterRuleEvidence @(
+    [pscustomobject]@{ Text = "Path is C:\audit\canary.png Include" }
+    [pscustomobject]@{ Text = "Path is C:\audit\control.png Include" }
+  ) "C:\audit\canary.png" "C:\audit\control.png"
+} finally {
+  [Console]::SetOut($previousOutput)
+}
+if ($loadedRuleItems.ExactRows -ne 2 -or
+  $capturedOutput.ToString().Contains("C:\audit")) {
+  throw "UI Automation rule items did not preserve exact-rule verification"
+}
+Write-Host "PASS AC-05: UI Automation row objects use the exact-rule verifier safely"
+
 foreach ($invalidRows in @(
     ,@("Path is C:\audit\canary.png Exclude", "Path is C:\audit\control.png Include")
     ,@("Path is C:\audit\canary.png Include", "Path is C:\audit\control.png Include", "Operation is ReadFile Include")
