@@ -34,7 +34,7 @@ if (
   $null -eq $accessibleSnapshotFunction -or
   $accessibleSnapshotFunction.Extent.Text -notmatch '(?s)ReadAccessibleDropMenuState\(\s*\$MenuWindowHandle,\s*\$ProcessId,\s*\$UseWindowMenuObject' -or
   $null -eq $eventMenuPatternFunction -or
-  $eventMenuPatternFunction.Extent.Text -notmatch '(?s)FindAll\([\s\S]*ControlType\]::MenuItem' -or
+  $eventMenuPatternFunction.Extent.Text -notmatch '(?s)PropertyCondition\]::new\([\s\S]*ControlTypeProperty[\s\S]*ControlType\]::MenuItem' -or
   $eventMenuPatternFunction.Extent.Text -notmatch '(?s)InvokePattern\]::Pattern[\s\S]*ExpandCollapsePattern\]::Pattern[\s\S]*SelectionItemPattern\]::Pattern[\s\S]*LegacyIAccessiblePattern\]::Pattern' -or
   $reloadedStateFunction.Extent.Text -notmatch '(?s)Write-NativeDropMenuSnapshot[\s\S]*Write-ReloadedEventMenuPatternSnapshot\s+\$MainWindowHandle\s+\$ProcessId[\s\S]*Get-AccessibleDropMenuSnapshot'
 ) {
