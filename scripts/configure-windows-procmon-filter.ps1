@@ -65,6 +65,8 @@ public static class ProcmonNativeMenu
     private const uint MFT_OWNERDRAW = 0x00000100;
     private const uint GUI_INMENUMODE = 0x00000004;
     private const uint GUI_POPUPMENUMODE = 0x00000010;
+    private const int AccessibleMenuObjectId = -3;
+    private const int AccessibleClientObjectId = -4;
     private const uint MaximumTextCharacters = 255;
     private const int MaximumAccessibleMenuItems = 64;
     private const int MenuItemRole = 12;
@@ -194,7 +196,8 @@ public static class ProcmonNativeMenu
 
     public static AccessibleMenuSnapshot ReadAccessibleDropMenuState(
         IntPtr menuWindow,
-        uint expectedProcessId
+        uint expectedProcessId,
+        bool useWindowMenuObject
     )
     {
         var snapshot = new AccessibleMenuSnapshot
@@ -217,9 +220,12 @@ public static class ProcmonNativeMenu
 
         var interfaceId = new Guid("618736E0-3C3D-11CF-810C-00AA00389B71");
         Accessibility.IAccessible accessibleObject;
+        var objectId = useWindowMenuObject
+            ? unchecked((uint)AccessibleMenuObjectId)
+            : unchecked((uint)AccessibleClientObjectId);
         var result = AccessibleObjectFromWindow(
             menuWindow,
-            unchecked((uint)-4),
+            objectId,
             ref interfaceId,
             out accessibleObject
         );
@@ -1896,7 +1902,7 @@ function Get-ReloadedNativeDropCheckState(
     Write-NativeDropMenuSnapshot $nativeSnapshot "after-reload"
     Set-Stage "read-reloaded-msaa-menu-state"
     $accessibleSnapshot = Get-AccessibleDropMenuSnapshot `
-      $MainWindowHandle $ProcessId "after-reload"
+      $MainWindowHandle $ProcessId $true "after-reload"
     if ($accessibleSnapshot.CheckState -in @("on", "off")) {
       $checkState = $accessibleSnapshot.CheckState
       $dropEnabled = [bool]$accessibleSnapshot.IsEnabled
@@ -1986,12 +1992,14 @@ function Write-NativeDropMenuSnapshot($Snapshot, [string]$Observation) {
 function Get-AccessibleDropMenuSnapshot(
   [System.IntPtr]$MenuWindowHandle,
   [uint32]$ProcessId,
+  [bool]$UseWindowMenuObject,
   [string]$Observation
 ) {
   Set-Stage "invoke-msaa-menu-state"
   $snapshot = [ProcmonNativeMenu]::ReadAccessibleDropMenuState(
     $MenuWindowHandle,
-    $ProcessId
+    $ProcessId,
+    $UseWindowMenuObject
   )
   Set-Stage "report-msaa-menu-state"
   $processState = if (-not $snapshot.ProcessKnown) {
@@ -2635,7 +2643,7 @@ try {
   $accessibleDropMenuSnapshot = $null
   if ($nativeDropMenuSnapshot.CheckState -eq "unavailable") {
     $accessibleDropMenuSnapshot = Get-AccessibleDropMenuSnapshot `
-      $dropMenuWindowHandle $process.Id "before"
+      $dropMenuWindowHandle $process.Id $false "before"
   }
   $dropCheckState = Get-VerifiedDropMenuCheckState `
     $nativeDropMenuSnapshot $accessibleDropMenuSnapshot
@@ -2720,7 +2728,7 @@ try {
     $accessibleDropMenuSnapshot = $null
     if ($nativeDropMenuSnapshot.CheckState -eq "unavailable") {
       $accessibleDropMenuSnapshot = Get-AccessibleDropMenuSnapshot `
-        $dropMenuWindowHandle $process.Id "after-invoke"
+        $dropMenuWindowHandle $process.Id $false "after-invoke"
     }
     $dropCheckState = Get-VerifiedDropMenuCheckState `
       $nativeDropMenuSnapshot $accessibleDropMenuSnapshot

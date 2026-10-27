@@ -9,6 +9,29 @@ $ast = [System.Management.Automation.Language.Parser]::ParseFile(
 if ($parseErrors.Count -ne 0) {
   throw "Procmon configuration script has PowerShell parse errors"
 }
+$sourceText = [IO.File]::ReadAllText($source)
+$reloadedStateFunction = $ast.Find({
+  param($node)
+  $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+    $node.Name -eq "Get-ReloadedNativeDropCheckState"
+}, $true)
+$accessibleSnapshotFunction = $ast.Find({
+  param($node)
+  $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+    $node.Name -eq "Get-AccessibleDropMenuSnapshot"
+}, $true)
+if (
+  $sourceText -notmatch 'AccessibleMenuObjectId\s*=\s*-3' -or
+  $sourceText -notmatch 'AccessibleClientObjectId\s*=\s*-4' -or
+  $sourceText -notmatch '(?s)var objectId = useWindowMenuObject\s*\?.*AccessibleMenuObjectId.*AccessibleClientObjectId' -or
+  $null -eq $reloadedStateFunction -or
+  $reloadedStateFunction.Extent.Text -notmatch '(?s)Get-AccessibleDropMenuSnapshot\s+`?\s*\$MainWindowHandle\s+\$ProcessId\s+\$true\s+"after-reload"' -or
+  $null -eq $accessibleSnapshotFunction -or
+  $accessibleSnapshotFunction.Extent.Text -notmatch '(?s)ReadAccessibleDropMenuState\(\s*\$MenuWindowHandle,\s*\$ProcessId,\s*\$UseWindowMenuObject'
+) {
+  throw "Reloaded MSAA state must read the main-window menu object"
+}
+Write-Host "PASS AC-05: reloaded MSAA state reads the main-window menu object"
 $functions = $ast.FindAll({
   param($node)
   $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
