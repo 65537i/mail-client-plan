@@ -2029,7 +2029,6 @@ function Write-ReloadedEventMenuPatternSnapshot(
   $hasInvokePattern = $false
   $hasExpandCollapsePattern = $false
   $hasSelectionItemPattern = $false
-  $hasLegacyIAccessiblePattern = $false
   Set-Stage "probe-reloaded-event-item-state"
   if ($eventMatches.Count -eq 1) {
     $eventItem = $eventMatches[0]
@@ -2057,18 +2056,12 @@ function Write-ReloadedEventMenuPatternSnapshot(
         [System.Windows.Automation.SelectionItemPattern]::Pattern,
         [ref]$pattern
       )
-      $pattern = $null
-      Set-Stage "probe-reloaded-event-legacy-accessible-pattern"
-      $hasLegacyIAccessiblePattern = $eventItem.TryGetCurrentPattern(
-        [System.Windows.Automation.LegacyIAccessiblePattern]::Pattern,
-        [ref]$pattern
-      )
     } else {
       $processState = "other"
     }
   }
   [Console]::Out.WriteLine(
-    "PROC_MON_FILTER_RELOAD_EVENT_MENU_ITEM=process:$processState;items:$($menuItems.Count);matches:$($eventMatches.Count);enabled:$($isEnabled.ToString().ToLowerInvariant());offscreen:$($isOffscreen.ToString().ToLowerInvariant());keyboard-focusable:$($isKeyboardFocusable.ToString().ToLowerInvariant());invoke:$($hasInvokePattern.ToString().ToLowerInvariant());expand-collapse:$($hasExpandCollapsePattern.ToString().ToLowerInvariant());selection-item:$($hasSelectionItemPattern.ToString().ToLowerInvariant());legacy-ia:$($hasLegacyIAccessiblePattern.ToString().ToLowerInvariant())"
+    "PROC_MON_FILTER_RELOAD_EVENT_MENU_ITEM=process:$processState;items:$($menuItems.Count);matches:$($eventMatches.Count);enabled:$($isEnabled.ToString().ToLowerInvariant());offscreen:$($isOffscreen.ToString().ToLowerInvariant());keyboard-focusable:$($isKeyboardFocusable.ToString().ToLowerInvariant());invoke:$($hasInvokePattern.ToString().ToLowerInvariant());expand-collapse:$($hasExpandCollapsePattern.ToString().ToLowerInvariant());selection-item:$($hasSelectionItemPattern.ToString().ToLowerInvariant())"
   )
 }
 

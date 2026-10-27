@@ -306,18 +306,19 @@ test("AC-05: reloaded native menu diagnostics retain the bounded Event Filter pa
 
 test("AC-05: reloaded Event item diagnostics retain only bounded pattern state", () => {
   const output = [
+    "PROC_MON_FILTER_RELOAD_EVENT_MENU_ITEM=process:same;items:13;matches:1;enabled:true;offscreen:false;keyboard-focusable:false;invoke:true;expand-collapse:false;selection-item:false",
+    "PROC_MON_FILTER_RELOAD_EVENT_MENU_ITEM=process:unavailable;items:12;matches:0;enabled:false;offscreen:false;keyboard-focusable:false;invoke:false;expand-collapse:false;selection-item:false",
+    "PROC_MON_FILTER_RELOAD_EVENT_MENU_ITEM=process:other;items:13;matches:1;enabled:false;offscreen:false;keyboard-focusable:false;invoke:false;expand-collapse:false;selection-item:false",
+    "PROC_MON_FILTER_RELOAD_EVENT_MENU_ITEM=process:same;items:13;matches:2;enabled:true;offscreen:false;keyboard-focusable:false;invoke:true;expand-collapse:false;selection-item:false",
+    "PROC_MON_FILTER_RELOAD_EVENT_MENU_ITEM=process:same;items:257;matches:1;enabled:true;offscreen:false;keyboard-focusable:false;invoke:true;expand-collapse:false;selection-item:false",
+    "PROC_MON_FILTER_RELOAD_EVENT_MENU_ITEM=process:same;items:13;matches:1;enabled:C:\\private;offscreen:false;keyboard-focusable:false;invoke:true;expand-collapse:false;selection-item:false",
     "PROC_MON_FILTER_RELOAD_EVENT_MENU_ITEM=process:same;items:13;matches:1;enabled:true;offscreen:false;keyboard-focusable:false;invoke:true;expand-collapse:false;selection-item:false;legacy-ia:false",
-    "PROC_MON_FILTER_RELOAD_EVENT_MENU_ITEM=process:unavailable;items:12;matches:0;enabled:false;offscreen:false;keyboard-focusable:false;invoke:false;expand-collapse:false;selection-item:false;legacy-ia:false",
-    "PROC_MON_FILTER_RELOAD_EVENT_MENU_ITEM=process:other;items:13;matches:1;enabled:false;offscreen:false;keyboard-focusable:false;invoke:false;expand-collapse:false;selection-item:false;legacy-ia:false",
-    "PROC_MON_FILTER_RELOAD_EVENT_MENU_ITEM=process:same;items:13;matches:2;enabled:true;offscreen:false;keyboard-focusable:false;invoke:true;expand-collapse:false;selection-item:false;legacy-ia:false",
-    "PROC_MON_FILTER_RELOAD_EVENT_MENU_ITEM=process:same;items:257;matches:1;enabled:true;offscreen:false;keyboard-focusable:false;invoke:true;expand-collapse:false;selection-item:false;legacy-ia:false",
-    "PROC_MON_FILTER_RELOAD_EVENT_MENU_ITEM=process:same;items:13;matches:1;enabled:C:\\private;offscreen:false;keyboard-focusable:false;invoke:true;expand-collapse:false;selection-item:false;legacy-ia:false",
   ].join("\n");
   assert.equal(
     describeWindowsFilterDiagnostics(output),
-    "; reload-event-menu-item=process:same;items:13;matches:1;enabled:true;offscreen:false;keyboard-focusable:false;invoke:true;expand-collapse:false;selection-item:false;legacy-ia:false"
-      + "; reload-event-menu-item=process:unavailable;items:12;matches:0;enabled:false;offscreen:false;keyboard-focusable:false;invoke:false;expand-collapse:false;selection-item:false;legacy-ia:false"
-      + "; reload-event-menu-item=process:other;items:13;matches:1;enabled:false;offscreen:false;keyboard-focusable:false;invoke:false;expand-collapse:false;selection-item:false;legacy-ia:false",
+    "; reload-event-menu-item=process:same;items:13;matches:1;enabled:true;offscreen:false;keyboard-focusable:false;invoke:true;expand-collapse:false;selection-item:false"
+      + "; reload-event-menu-item=process:unavailable;items:12;matches:0;enabled:false;offscreen:false;keyboard-focusable:false;invoke:false;expand-collapse:false;selection-item:false"
+      + "; reload-event-menu-item=process:other;items:13;matches:1;enabled:false;offscreen:false;keyboard-focusable:false;invoke:false;expand-collapse:false;selection-item:false",
   );
 });
 

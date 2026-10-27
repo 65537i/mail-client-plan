@@ -145,7 +145,7 @@ export function describeWindowsFilterDiagnostics(output) {
   }
 
   for (const match of output.matchAll(
-    /^PROC_MON_FILTER_RELOAD_EVENT_MENU_ITEM=process:(same|other|unavailable);items:(\d{1,3});matches:(\d{1,3});enabled:(true|false);offscreen:(true|false);keyboard-focusable:(true|false);invoke:(true|false);expand-collapse:(true|false);selection-item:(true|false);legacy-ia:(true|false)\r?$/gm,
+    /^PROC_MON_FILTER_RELOAD_EVENT_MENU_ITEM=process:(same|other|unavailable);items:(\d{1,3});matches:(\d{1,3});enabled:(true|false);offscreen:(true|false);keyboard-focusable:(true|false);invoke:(true|false);expand-collapse:(true|false);selection-item:(true|false)\r?$/gm,
   )) {
     const [
       ,
@@ -158,7 +158,6 @@ export function describeWindowsFilterDiagnostics(output) {
       invoke,
       expandCollapse,
       selectionItem,
-      legacyIA,
     ] = match;
     const items = Number(rawItems);
     const matches = Number(rawMatches);
@@ -179,12 +178,11 @@ export function describeWindowsFilterDiagnostics(output) {
           && invoke === "false"
           && expandCollapse === "false"
           && selectionItem === "false"
-          && legacyIA === "false"
         )
       );
     if (consistent) {
       diagnostics.push(
-        `reload-event-menu-item=process:${process};items:${items};matches:${matches};enabled:${enabled};offscreen:${offscreen};keyboard-focusable:${keyboardFocusable};invoke:${invoke};expand-collapse:${expandCollapse};selection-item:${selectionItem};legacy-ia:${legacyIA}`,
+        `reload-event-menu-item=process:${process};items:${items};matches:${matches};enabled:${enabled};offscreen:${offscreen};keyboard-focusable:${keyboardFocusable};invoke:${invoke};expand-collapse:${expandCollapse};selection-item:${selectionItem}`,
       );
     }
   }
