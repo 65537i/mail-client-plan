@@ -4,6 +4,7 @@
 
 ## 現在の範囲
 
+- Run396後の限定診断: captureの同じPID / root HWNDからnative EnumChildWindowsを最大256件で照会し、child / visible / toolbar / listview / statusbar / dialog / other件数だけを記録する。全childのPIDとrootの前後PIDを確認し、class取得失敗・重複・上限超過は停止する。任意class名・window text・HWNDは出力せず、Nodeで件数合計と上限を検証する。hidden synthetic childの分類と不正 / 別PID root拒否をWindows回帰へ追加。capture操作・filter緩和なし、Windows runtime再検証待ち・AC-05未達。
 - [Run 396](https://github.com/65537i/mail-client-plan/actions/runs/40540080184)（`918f489`、Windows 2025 / webview）はNode56/56・PowerShell回帰とexact reload / Drop / readinessを通過。capture UIはnormal / enabled / onscreen、7 items、toolbar / button / menuitem / Text各0、root classはdialog以外、modal:false、既知startup-error:noneだった。前回の種類別件数修正を実測できたが、capture有効状態は未確認。baseline WDIOは終了、capture 12,726 ms / PML 848,634 bytes / CSV76 bytes、positive-control全0件で失敗。attack未実施・AC-05未達。次はUIA control tree以外のnative child HWND / MSAA等を同一PID・bounded read-onlyで調べる。通常表示や既知error未検出をcapture成功とは扱わない。
 - [Run 395](https://github.com/65537i/mail-client-plan/actions/runs/40538394503)（同commit）はNode56/56と新診断のPowerShell parse / source guardを通過したが、既存のTransient Save focus試験で期限内に状態を観測できず失敗した。capture未実施。同じcommitを条件変更なしでRun396へ再実行し同試験は成功したが、Run395の失敗を合格に読み替えない。
 - Run392後の限定診断: shallow capture UIが起動dialogかを区別するため、root classの`#32770`一致分類、WindowPattern.IsModal、Text件数、公式Procmon 4.12内の7種類の既知startup error完全一致だけを追加。任意UI文字列を出さず、known errorを検出した場合はNodeでcontrol前に停止する。`none`は既知エラー未検出という意味であり、capture有効・未知error不存在の証拠ではない。256件 / 2 KiB / 20秒上限と既存audit gatesは維持。Windows実測は上記Run396、AC-05未達。

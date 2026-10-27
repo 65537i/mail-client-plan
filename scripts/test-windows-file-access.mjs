@@ -256,6 +256,18 @@ async function captureScenario(scenario) {
       !captureInspectionResult.error && captureInspectionResult.code === 0 && !captureInspectionOverflow,
       `Process Monitor capture inspection failed${captureInspectionStage ? ` at ${captureInspectionStage}` : ""}`,
     );
+    const nativeEvidence = [...captureInspectionOutput.matchAll(
+      /^PROC_MON_CAPTURE_NATIVE=children:(0|[1-9]\d{0,2});visible:(0|[1-9]\d{0,2});toolbars:(0|[1-9]\d{0,2});lists:(0|[1-9]\d{0,2});statusbars:(0|[1-9]\d{0,2});dialogs:(0|[1-9]\d{0,2});other:(0|[1-9]\d{0,2})\r?$/gm,
+    )];
+    assert.equal(nativeEvidence.length, 1, "Process Monitor native child inspection evidence is incomplete");
+    const nativeCounts = nativeEvidence[0].slice(1, 8).map(Number);
+    assert(
+      nativeCounts.every((count) => count <= 256) &&
+      nativeCounts[1] <= nativeCounts[0] &&
+      nativeCounts.slice(2).reduce((sum, count) => sum + count, 0) === nativeCounts[0],
+      "Process Monitor native child inspection counts are inconsistent",
+    );
+    console.log(`Windows audit ${scenario}: ${nativeEvidence[0][0].trim()}`);
     const windowEvidence = [...captureInspectionOutput.matchAll(
       /^PROC_MON_CAPTURE_WINDOW=visual:(unavailable|normal|minimized|maximized);enabled:(true|false);offscreen:(true|false);items:(0|[1-9]\d{0,2});toolbars:(0|[1-9]\d{0,2});buttons:(0|[1-9]\d{0,2});menuitems:(0|[1-9]\d{0,2})\r?$/gm,
     )];

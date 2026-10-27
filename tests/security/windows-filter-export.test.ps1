@@ -40,6 +40,50 @@ if (
   throw "Capture inspection must remain bounded, same-process and read-only"
 }
 Write-Host "PASS AC-05: capture inspection parses and remains bounded and read-only"
+$nativeCaptureLiteral = $inspectionAst.Find({
+  param($node)
+  $node -is [System.Management.Automation.Language.StringConstantExpressionAst] -and
+    $node.Value -match 'public static class ProcmonCaptureWindows'
+}, $true)
+if ($null -eq $nativeCaptureLiteral) {
+  throw "Native capture inspection helper is missing"
+}
+Add-Type -TypeDefinition $nativeCaptureLiteral.Value
+$invalidRootRejected = $false
+try {
+  [ProcmonCaptureWindows]::Inspect([IntPtr]::Zero, [uint32]$PID) | Out-Null
+} catch [System.Management.Automation.MethodInvocationException] {
+  if ($_.Exception.InnerException -isnot [InvalidOperationException]) { throw }
+  $invalidRootRejected = $true
+}
+if (-not $invalidRootRejected) {
+  throw "Native capture inspection must reject an invalid root"
+}
+Add-Type -AssemblyName System.Windows.Forms
+$nativeTestForm = [System.Windows.Forms.Form]::new()
+try {
+  $nativeTestChild = [System.Windows.Forms.TextBox]::new()
+  $nativeTestForm.Controls.Add($nativeTestChild)
+  $nativeTestHandle = $nativeTestForm.Handle
+  $nativeTestChildHandle = $nativeTestChild.Handle
+  $nativeCaptureResult = [ProcmonCaptureWindows]::Inspect($nativeTestHandle, [uint32]$PID)
+  if ($nativeCaptureResult -notmatch '^children:1;visible:0;toolbars:0;lists:0;statusbars:0;dialogs:0;other:1$') {
+    throw "Native capture inspection did not classify the hidden synthetic child"
+  }
+  $foreignRootRejected = $false
+  try {
+    [ProcmonCaptureWindows]::Inspect($nativeTestHandle, [uint32]0) | Out-Null
+  } catch [System.Management.Automation.MethodInvocationException] {
+    if ($_.Exception.InnerException -isnot [InvalidOperationException]) { throw }
+    $foreignRootRejected = $true
+  }
+  if (-not $foreignRootRejected) {
+    throw "Native capture inspection must reject a foreign root"
+  }
+} finally {
+  $nativeTestForm.Dispose()
+}
+Write-Host "PASS AC-05: native child inspection compiles, classifies a hidden child and rejects invalid ownership"
 
 $source = Join-Path $PSScriptRoot "../../scripts/configure-windows-procmon-filter.ps1"
 $tokens = $null

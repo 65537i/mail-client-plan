@@ -5,6 +5,22 @@ import path from "node:path";
 import test from "node:test";
 import { createWindowsAuditCanary } from "../../scripts/windows-audit-canary.mjs";
 
+test("AC-05: native child inspection is ownership-scoped, bounded and metadata-only", async () => {
+  const [inspection, driver] = await Promise.all([
+    readFile(new URL("../../scripts/inspect-windows-procmon-capture.ps1", import.meta.url), "utf8"),
+    readFile(new URL("../../scripts/test-windows-file-access.mjs", import.meta.url), "utf8"),
+  ]);
+  assert.match(inspection, /EnumChildWindows\(root, callback, IntPtr.Zero\)/);
+  assert.match(inspection, /seen.Count >= 256 \|\| !seen.Add\(window\)/);
+  assert.match(inspection, /processId != ownerProcessId/);
+  assert.match(inspection, /finalProcessId != ownerProcessId/);
+  assert.match(inspection, /if \(failure != null\) throw new InvalidOperationException\(failure\)/);
+  assert.match(inspection, /case "ToolbarWindow32": toolbars\+\+; break;/);
+  assert.doesNotMatch(inspection, /GetWindowText|SendMessage|PostMessage|SetWindow/);
+  assert.match(driver, /nativeCounts.slice\(2\).reduce/);
+  assert.match(driver, /nativeCounts\[1\] <= nativeCounts\[0\]/);
+});
+
 test("AC-05: capture startup diagnostics classify exact known errors without exposing UI text", async () => {
   const [inspection, driver] = await Promise.all([
     readFile(new URL("../../scripts/inspect-windows-procmon-capture.ps1", import.meta.url), "utf8"),

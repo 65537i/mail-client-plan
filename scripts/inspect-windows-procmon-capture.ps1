@@ -7,6 +7,85 @@ $stage = "load-automation"
 try {
   Add-Type -AssemblyName UIAutomationClient
   Add-Type -AssemblyName UIAutomationTypes
+  $stage = "compile-native-capture-helper"
+  $nativeCaptureType = @'
+using System;
+using System.Collections.Generic;
+using System.Globalization;
+using System.Runtime.InteropServices;
+using System.Text;
+
+public static class ProcmonCaptureWindows
+{
+    private delegate bool EnumWindowProc(IntPtr window, IntPtr parameter);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool EnumChildWindows(IntPtr parent, EnumWindowProc callback, IntPtr parameter);
+
+    [DllImport("user32.dll")]
+    private static extern uint GetWindowThreadProcessId(IntPtr window, out uint processId);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern int GetClassName(IntPtr window, StringBuilder name, int maximum);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool IsWindowVisible(IntPtr window);
+
+    public static string Inspect(IntPtr root, uint ownerProcessId)
+    {
+        uint rootProcessId;
+        if (root == IntPtr.Zero || GetWindowThreadProcessId(root, out rootProcessId) == 0 ||
+            rootProcessId != ownerProcessId)
+            throw new InvalidOperationException("Native capture root ownership is unavailable");
+
+        var seen = new HashSet<IntPtr>();
+        int toolbars = 0, lists = 0, statusbars = 0, dialogs = 0, other = 0, visible = 0;
+        string failure = null;
+        EnumWindowProc callback = delegate(IntPtr window, IntPtr parameter)
+        {
+            if (seen.Count >= 256 || !seen.Add(window))
+            {
+                failure = "Native capture child scan exceeded its limit or repeated a window";
+                return false;
+            }
+            uint processId;
+            if (GetWindowThreadProcessId(window, out processId) == 0 || processId != ownerProcessId)
+            {
+                failure = "Native capture child ownership is unavailable";
+                return false;
+            }
+            var name = new StringBuilder(256);
+            if (GetClassName(window, name, name.Capacity) == 0)
+            {
+                failure = "Native capture child class is unavailable";
+                return false;
+            }
+            switch (name.ToString())
+            {
+                case "ToolbarWindow32": toolbars++; break;
+                case "SysListView32": lists++; break;
+                case "msctls_statusbar32": statusbars++; break;
+                case "#32770": dialogs++; break;
+                default: other++; break;
+            }
+            if (IsWindowVisible(window)) visible++;
+            return true;
+        };
+        EnumChildWindows(root, callback, IntPtr.Zero);
+        GC.KeepAlive(callback);
+        if (failure != null) throw new InvalidOperationException(failure);
+        uint finalProcessId;
+        if (GetWindowThreadProcessId(root, out finalProcessId) == 0 || finalProcessId != ownerProcessId)
+            throw new InvalidOperationException("Native capture root changed ownership");
+        return String.Format(CultureInfo.InvariantCulture,
+            "children:{0};visible:{1};toolbars:{2};lists:{3};statusbars:{4};dialogs:{5};other:{6}",
+            seen.Count, visible, toolbars, lists, statusbars, dialogs, other);
+    }
+}
+'@
+  Add-Type -TypeDefinition $nativeCaptureType
   $stage = "find-capture-window"
   $process = [System.Diagnostics.Process]::GetProcessById($OwnerProcessId)
   $handle = $process.MainWindowHandle
@@ -17,6 +96,9 @@ try {
   if ($main.Current.ProcessId -ne $OwnerProcessId) {
     throw "Capture window belongs to a different process"
   }
+  $stage = "read-native-capture-children"
+  $nativeChildren = [ProcmonCaptureWindows]::Inspect($handle, [uint32]$OwnerProcessId)
+  [Console]::Out.WriteLine("PROC_MON_CAPTURE_NATIVE=$nativeChildren")
   $visual = "unavailable"
   $windowPattern = $null
   if ($main.TryGetCurrentPattern(
