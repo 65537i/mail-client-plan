@@ -43,6 +43,24 @@ if (
   throw "Reloaded menu state must probe the Event item's read-only UI Automation patterns"
 }
 Write-Host "PASS AC-05: reloaded menu state probes bounded Event menu patterns without activation"
+$reloadPopupFunction = $ast.Find({
+  param($node)
+  $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+    $node.Name -eq "Read-ReloadedFilterPopupState"
+}, $true)
+if (
+  $null -eq $reloadPopupFunction -or
+  $reloadPopupFunction.Extent.Text -notmatch '\$items.Count -ne 1' -or
+  $reloadPopupFunction.Extent.Text -notmatch '\$parent.Current.ControlType -ne \[System.Windows.Automation.ControlType\]::ToolBar' -or
+  $reloadPopupFunction.Extent.Text -notmatch 'GetForegroundWindow\(\) -ne \$MainWindowHandle' -or
+  $reloadPopupFunction.Extent.Text -notmatch '(?s)\$filter.GetCurrentPattern\(\[System.Windows.Automation.InvokePattern\]::Pattern\)[\s\S]*\$pattern.Invoke\(\)[\s\S]*Wait-ProcessMenu[\s\S]*\$popupHandle -eq \$MainWindowHandle[\s\S]*\$drops.Count -ne 1[\s\S]*\$dropState.ProcessId -ne \$ProcessId[\s\S]*Get-NativeDropMenuSnapshot[\s\S]*Get-AccessibleDropMenuSnapshot \$popupHandle \$ProcessId \$false "after-reload"[\s\S]*Get-VerifiedDropMenuCheckState' -or
+  ([regex]::Matches($reloadPopupFunction.Extent.Text, '\.Invoke\(')).Count -ne 1 -or
+  $reloadPopupFunction.Extent.Text -match 'Toggle\(|SendKeys|SelectionItemPattern' -or
+  $reloadedStateFunction.Extent.Text -notmatch '(?s)if \(\$checkState -eq "unavailable"\)[\s\S]*Read-ReloadedFilterPopupState \$MainWindowHandle \$ProcessId'
+) {
+  throw "Reloaded popup read must open only one verified Filter toolbar item and never invoke Drop"
+}
+Write-Host "PASS AC-05: reloaded popup read opens only the verified Filter toolbar menu"
 $closeReloadedDialogFunction = $ast.Find({
   param($node)
   $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and

@@ -1900,6 +1900,91 @@ function Get-NativeMenuItemSnapshot(
   }
 }
 
+function Read-ReloadedFilterPopupState(
+  [System.IntPtr]$MainWindowHandle,
+  [uint32]$ProcessId
+) {
+  Set-Stage "find-reloaded-filter-toolbar-item"
+  $main = [System.Windows.Automation.AutomationElement]::FromHandle($MainWindowHandle)
+  $condition = [System.Windows.Automation.AndCondition]::new(
+    [System.Windows.Automation.PropertyCondition]::new(
+      [System.Windows.Automation.AutomationElement]::NameProperty, "Filter"
+    ),
+    [System.Windows.Automation.PropertyCondition]::new(
+      [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+      [System.Windows.Automation.ControlType]::MenuItem
+    )
+  )
+  $items = $main.FindAll([System.Windows.Automation.TreeScope]::Descendants, $condition)
+  if ($items.Count -ne 1) {
+    throw "Process Monitor reloaded main window did not expose one Filter menu item"
+  }
+  $filter = $items[0]
+  $state = $filter.Current
+  $parent = [System.Windows.Automation.TreeWalker]::ControlViewWalker.GetParent($filter)
+  if (
+    $main.Current.ProcessId -ne $ProcessId -or
+    -not $main.Current.IsEnabled -or $main.Current.IsOffscreen -or
+    $state.ProcessId -ne $ProcessId -or -not $state.IsEnabled -or $state.IsOffscreen -or
+    $null -eq $parent -or $parent.Current.ProcessId -ne $ProcessId -or
+    $parent.Current.ControlType -ne [System.Windows.Automation.ControlType]::ToolBar -or
+    [ProcmonNativeMenu]::GetWindowProcessId($MainWindowHandle) -ne $ProcessId -or
+    [ProcmonNativeMenu]::GetForegroundWindow() -ne $MainWindowHandle
+  ) {
+    throw "Process Monitor reloaded Filter toolbar item is not available in its foreground main window"
+  }
+  Set-Stage "open-reloaded-filter-toolbar-menu"
+  $pattern = $filter.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern)
+  $pattern.Invoke()
+  Set-Stage "wait-reloaded-filter-toolbar-popup"
+  $process = [System.Diagnostics.Process]::GetProcessById([int]$ProcessId)
+  $popup = (Wait-ProcessMenu $process).Menu
+  Set-Stage "validate-reloaded-filter-popup"
+  $popupState = $popup.Current
+  $popupHandle = [IntPtr]$popupState.NativeWindowHandle
+  if (
+    $popupState.ProcessId -ne $ProcessId -or
+    -not $popupState.IsEnabled -or $popupState.IsOffscreen -or
+    $popupHandle -eq [IntPtr]::Zero -or
+    $popupHandle -eq $MainWindowHandle -or
+    [ProcmonNativeMenu]::GetWindowProcessId($popupHandle) -ne $ProcessId
+  ) {
+    throw "Process Monitor reloaded Filter popup is unavailable"
+  }
+  $dropCondition = [System.Windows.Automation.AndCondition]::new(
+    [System.Windows.Automation.PropertyCondition]::new(
+      [System.Windows.Automation.AutomationElement]::NameProperty, "Drop Filtered Events"
+    ),
+    [System.Windows.Automation.PropertyCondition]::new(
+      [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+      [System.Windows.Automation.ControlType]::MenuItem
+    )
+  )
+  $drops = $popup.FindAll([System.Windows.Automation.TreeScope]::Descendants, $dropCondition)
+  if ($drops.Count -ne 1) {
+    throw "Process Monitor reloaded Filter popup did not expose one Drop item"
+  }
+  $dropState = $drops[0].Current
+  if ($dropState.ProcessId -ne $ProcessId -or -not $dropState.IsEnabled -or $dropState.IsOffscreen) {
+    throw "Process Monitor reloaded Drop item is unavailable"
+  }
+  $native = Get-NativeDropMenuSnapshot $MainWindowHandle $popupHandle $ProcessId
+  Write-NativeDropMenuSnapshot $native "after-reload"
+  $accessible = $null
+  if ($native.CheckState -eq "unavailable") {
+    $accessible = Get-AccessibleDropMenuSnapshot $popupHandle $ProcessId $false "after-reload"
+    if (-not $accessible.IsEnabled) {
+      throw "Process Monitor reloaded Filter popup did not expose an enabled accessible Drop item"
+    }
+  }
+  Set-Stage "verify-reloaded-filter-popup-state"
+  $checked = Get-VerifiedDropMenuCheckState $native $accessible
+  if ($checked -notin @("on", "off")) {
+    throw "Process Monitor reloaded Filter popup checked-state is unavailable"
+  }
+  return $checked
+}
+
 function Get-ReloadedNativeDropCheckState(
   [System.IntPtr]$MainWindowHandle,
   [uint32]$ProcessId
@@ -1970,6 +2055,10 @@ function Get-ReloadedNativeDropCheckState(
     if ($accessibleSnapshot.CheckState -in @("on", "off")) {
       $checkState = $accessibleSnapshot.CheckState
       $dropEnabled = [bool]$accessibleSnapshot.IsEnabled
+    }
+    if ($checkState -eq "unavailable") {
+      $checkState = Read-ReloadedFilterPopupState $MainWindowHandle $ProcessId
+      $dropEnabled = $true
     }
   }
   Set-Stage "verify-reloaded-drop-check-state"
