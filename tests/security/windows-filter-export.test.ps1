@@ -78,6 +78,29 @@ if (
   throw "Reloaded rules must be verified before closing only the same-process filter dialog and restoring the main window"
 }
 Write-Host "PASS AC-05: reloaded dialog closure is scoped and verified before the Drop state read"
+$ruleRowsFunction = $ast.Find({
+  param($node)
+  $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+    $node.Name -eq "Get-LoadedFilterRuleRows"
+}, $true)
+$reloadRowCalls = $ast.FindAll({
+  param($node)
+  $node -is [System.Management.Automation.Language.CommandAst] -and
+    $node.GetCommandName() -eq "Get-LoadedFilterRuleRows" -and
+    $node.Extent.Text -match '-Reloaded\b'
+}, $true)
+if (
+  $null -eq $ruleRowsFunction -or
+  $ruleRowsFunction.Extent.Text -notmatch '\[switch\]\$Reloaded' -or
+  $ruleRowsFunction.Extent.Text -notmatch '\$observation = if \(\$Reloaded\) \{ "RELOADED" \} else \{ "INITIAL" \}' -or
+  $ruleRowsFunction.Extent.Text -notmatch 'PROC_MON_FILTER_\$\{observation\}_UI=' -or
+  $ruleRowsFunction.Extent.Text -notmatch 'PROC_MON_FILTER_\$\{observation\}_ROW_SHAPE=' -or
+  $reloadRowCalls.Count -ne 1 -or
+  $reloadRowCalls[0].Extent.Text -cne 'Get-LoadedFilterRuleRows $reloadFilterDialog $process.Id -Reloaded'
+) {
+  throw "Only the reloaded dialog may emit reloaded rule UI evidence"
+}
+Write-Host "PASS AC-05: initial rule UI cannot masquerade as reloaded evidence"
 $functions = $ast.FindAll({
   param($node)
   $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and

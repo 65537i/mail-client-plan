@@ -732,7 +732,8 @@ function Get-LoadedFilterRuleRows(
   [System.Windows.Automation.AutomationElement]$Dialog,
   [int]$OwnerProcessId,
   [switch]$AllowEmpty,
-  [switch]$Quiet
+  [switch]$Quiet,
+  [switch]$Reloaded
 ) {
   $dialogState = $Dialog.Current
   $dialogHandle = [IntPtr]$dialogState.NativeWindowHandle
@@ -945,12 +946,13 @@ function Get-LoadedFilterRuleRows(
     }
   }
   if (-not $Quiet) {
+    $observation = if ($Reloaded) { "RELOADED" } else { "INITIAL" }
     [Console]::Out.WriteLine(
-      "PROC_MON_FILTER_RELOADED_UI=items:$itemScanCount;lists:$listCount;data-grids:$dataGridCount;tables:$tableCount;list-items:$listItemCount;data-items:$dataItemCount;dialog-window-rows:$dialogWindowRowCount;other-window-rows:$otherWindowRowCount;unscoped-rows:$unscopedRowCount;combo-option-rows:$comboOptionRowCount;rule-containers:$($ruleContainers.Count);rule-row-candidates:$ruleRowCandidateCount;rule-container-unclassified-rows:$ruleContainerUnclassifiedRowCount;rows:$($rows.Count);truncated:$((($items.Count -gt 1024) -or $rowTruncated).ToString().ToLowerInvariant())"
+      "PROC_MON_FILTER_${observation}_UI=items:$itemScanCount;lists:$listCount;data-grids:$dataGridCount;tables:$tableCount;list-items:$listItemCount;data-items:$dataItemCount;dialog-window-rows:$dialogWindowRowCount;other-window-rows:$otherWindowRowCount;unscoped-rows:$unscopedRowCount;combo-option-rows:$comboOptionRowCount;rule-containers:$($ruleContainers.Count);rule-row-candidates:$ruleRowCandidateCount;rule-container-unclassified-rows:$ruleContainerUnclassifiedRowCount;rows:$($rows.Count);truncated:$((($items.Count -gt 1024) -or $rowTruncated).ToString().ToLowerInvariant())"
     )
     if ($ruleContainers.Count -eq 1) {
       [Console]::Out.WriteLine(
-        "PROC_MON_FILTER_RELOADED_ROW_SHAPE=rows:$($ruleRowShape.Rows);distinct:$($ruleRowShape.Distinct);duplicates:$($ruleRowShape.Duplicates);list-items:$($ruleRowShape.ListItems);data-items:$($ruleRowShape.DataItems);include:$($ruleRowShape.Include);exclude:$($ruleRowShape.Exclude);path-field:$($ruleRowShape.PathField);process-field:$($ruleRowShape.ProcessField);operation-field:$($ruleRowShape.OperationField);other-field:$($ruleRowShape.OtherField);unknown-field:$($ruleRowShape.UnknownField)"
+        "PROC_MON_FILTER_${observation}_ROW_SHAPE=rows:$($ruleRowShape.Rows);distinct:$($ruleRowShape.Distinct);duplicates:$($ruleRowShape.Duplicates);list-items:$($ruleRowShape.ListItems);data-items:$($ruleRowShape.DataItems);include:$($ruleRowShape.Include);exclude:$($ruleRowShape.Exclude);path-field:$($ruleRowShape.PathField);process-field:$($ruleRowShape.ProcessField);operation-field:$($ruleRowShape.OperationField);other-field:$($ruleRowShape.OtherField);unknown-field:$($ruleRowShape.UnknownField)"
       )
     }
   }
@@ -3212,7 +3214,7 @@ try {
   Set-Stage "wait-reloaded-filter-dialog"
   $reloadFilterDialog = Wait-FilterDialog $process $main
   Set-Stage "read-reloaded-filter-rules"
-  $reloadFilterRows = Get-LoadedFilterRuleRows $reloadFilterDialog $process.Id
+  $reloadFilterRows = Get-LoadedFilterRuleRows $reloadFilterDialog $process.Id -Reloaded
   Set-Stage "verify-reloaded-filter-rules"
   Get-LoadedFilterRuleEvidence $reloadFilterRows $CanaryPath $ControlPath | Out-Null
   Close-ReloadedFilterDialog $reloadFilterDialog $main $process.Id

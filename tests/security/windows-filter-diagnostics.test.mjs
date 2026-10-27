@@ -842,3 +842,18 @@ test("AC-05: parsed UI evidence accepts supported complete shapes but not incomp
     assert.doesNotMatch(`${parsed};private:path`, reloadedFilterUiEvidencePattern);
   }
 });
+
+test("AC-05: initial UI snapshots cannot substitute for reloaded evidence", () => {
+  const initial = "PROC_MON_FILTER_INITIAL_UI=items:34;lists:1;data-grids:0;tables:0;list-items:2;data-items:0;rows:2;truncated:false";
+  const reloaded = "PROC_MON_FILTER_RELOADED_UI=items:34;lists:1;data-grids:0;tables:0;list-items:2;data-items:0;rows:2;truncated:false";
+  assert.equal(describeWindowsFilterDiagnostics(initial), "");
+  const captured = appendBoundedWindowsFilterOutput(
+    `${"x".repeat(9000)}\n${initial}\n${reloaded}\n`,
+    "y".repeat(12000),
+  );
+  assert.ok(captured.length <= windowsFilterOutputLimit);
+  assert.equal(
+    describeWindowsFilterDiagnostics(captured),
+    describeWindowsFilterDiagnostics(reloaded),
+  );
+});
