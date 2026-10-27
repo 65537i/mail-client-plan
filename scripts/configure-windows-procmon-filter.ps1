@@ -1994,13 +1994,15 @@ function Write-ReloadedEventMenuPatternSnapshot(
   [System.IntPtr]$MainWindowHandle,
   [uint32]$ProcessId
 ) {
-  Set-Stage "probe-reloaded-event-menu-patterns"
+  Set-Stage "probe-reloaded-event-main-window"
   $mainWindow = [System.Windows.Automation.AutomationElement]::FromHandle(
     $MainWindowHandle
   )
+  Set-Stage "probe-reloaded-event-window-process"
   if ($mainWindow.Current.ProcessId -ne $ProcessId) {
     throw "Process Monitor reloaded main window belongs to a different process"
   }
+  Set-Stage "probe-reloaded-event-menu-items"
   $menuItemCondition = [System.Windows.Automation.PropertyCondition]::new(
     [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
     [System.Windows.Automation.ControlType]::MenuItem
@@ -2013,6 +2015,7 @@ function Write-ReloadedEventMenuPatternSnapshot(
     throw "Process Monitor reloaded menu-item probe exceeded its bounded limit"
   }
   $eventMatches = [System.Collections.Generic.List[System.Windows.Automation.AutomationElement]]::new()
+  Set-Stage "probe-reloaded-event-menu-item-names"
   foreach ($item in $menuItems) {
     if ($item.Current.Name -ceq "Event") {
       $eventMatches.Add($item)
@@ -2027,6 +2030,7 @@ function Write-ReloadedEventMenuPatternSnapshot(
   $hasExpandCollapsePattern = $false
   $hasSelectionItemPattern = $false
   $hasLegacyIAccessiblePattern = $false
+  Set-Stage "probe-reloaded-event-item-patterns"
   if ($eventMatches.Count -eq 1) {
     $eventItem = $eventMatches[0]
     $eventState = $eventItem.Current

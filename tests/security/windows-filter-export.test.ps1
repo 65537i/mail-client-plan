@@ -36,6 +36,7 @@ if (
   $null -eq $eventMenuPatternFunction -or
   $eventMenuPatternFunction.Extent.Text -notmatch '(?s)PropertyCondition\]::new\([\s\S]*ControlTypeProperty[\s\S]*ControlType\]::MenuItem' -or
   $eventMenuPatternFunction.Extent.Text -notmatch '(?s)InvokePattern\]::Pattern[\s\S]*ExpandCollapsePattern\]::Pattern[\s\S]*SelectionItemPattern\]::Pattern[\s\S]*LegacyIAccessiblePattern\]::Pattern' -or
+  $eventMenuPatternFunction.Extent.Text -notmatch '(?s)Set-Stage "probe-reloaded-event-main-window"[\s\S]*AutomationElement\]::FromHandle[\s\S]*Set-Stage "probe-reloaded-event-window-process"[\s\S]*Current\.ProcessId[\s\S]*Set-Stage "probe-reloaded-event-menu-items"[\s\S]*FindAll\([\s\S]*Set-Stage "probe-reloaded-event-menu-item-names"[\s\S]*foreach \(\$item in \$menuItems\)[\s\S]*Set-Stage "probe-reloaded-event-item-patterns"[\s\S]*TryGetCurrentPattern' -or
   $reloadedStateFunction.Extent.Text -notmatch '(?s)Write-NativeDropMenuSnapshot[\s\S]*Write-ReloadedEventMenuPatternSnapshot\s+\$MainWindowHandle\s+\$ProcessId[\s\S]*Get-AccessibleDropMenuSnapshot'
 ) {
   throw "Reloaded menu state must probe the Event item's read-only UI Automation patterns"
