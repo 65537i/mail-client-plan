@@ -275,44 +275,32 @@ test("AC-05: Windows filter diagnostics retain safe focused-control observations
   );
 });
 
-test("AC-05: reload Event-menu diagnostics retain only allowlisted activation data", () => {
+test("AC-05: reloaded MSAA enablement diagnostics retain only checked-state support", () => {
   const output = [
-    "PROC_MON_FILTER_RELOAD_DROP_MAIN_FOREGROUND=gate:passed",
-    "PROC_MON_FILTER_RELOAD_DROP_MAIN_FOREGROUND=gate:C:\\private",
-    "PROC_MON_FILTER_RELOAD_SHORTCUT=command:filter-dialog;state:sent",
-    "PROC_MON_FILTER_RELOAD_SHORTCUT=command:C:\\private;state:sent",
-    "PROC_MON_FILTER_RELOAD_EVENT_ITEM=matches:1",
-    "PROC_MON_FILTER_RELOAD_EVENT_ITEM_ACCESS_KEY=state:recognized;key:E",
-    "PROC_MON_FILTER_RELOAD_EVENT_ITEM_ACCESS_KEY=state:recognized;key:C:\\private",
-    "PROC_MON_FILTER_RELOAD_EVENT_MENU_ACTIVATION=route:f10-access-key;state:sent",
-    "PROC_MON_FILTER_RELOAD_MENU_BAR=process-known:true;process-same:true;gui-info:true;menu-mode:true;owner:main",
-    "PROC_MON_FILTER_RELOAD_MENU_BAR=process-known:true;process-same:true;gui-info:true;menu-mode:false;owner:C:\\private",
-    "PROC_MON_FILTER_RELOAD_NATIVE_MENU_OWNER=process-known:true;process-same:true;gui-info:true;menu-mode:true;owner:main",
-    "PROC_MON_FILTER_RELOAD_NATIVE_EVENT=items:13;matches:1;enabled:true;highlighted:true;submenu:true",
-    "PROC_MON_FILTER_RELOAD_EVENT_MENU=opened",
-    "PROC_MON_FILTER_RELOAD_NATIVE_FILTER=items:5;matches:1;enabled:true;submenu:true",
-    "PROC_MON_FILTER_RELOAD_NATIVE_DROP=items:19;matches:1;read-failure:none;readable:true;enabled:true;checked:on",
-    "PROC_MON_FILTER_RELOAD_EVENT_MENU=name:C:\\private",
-    "PROC_MON_FILTER_RELOAD_EVENT_FILTER_PATTERNS=expand-collapse:false;invoke:true",
-    "PROC_MON_FILTER_RELOAD_EVENT_FILTER_PATTERNS=expand-collapse:true;invoke:unknown",
-    "PROC_MON_FILTER_RELOAD_MENU_KEYBOARD=route:event-filter;state:activated",
-    "PROC_MON_FILTER_RELOAD_MENU_KEYBOARD=route:C:\\private;state:activated",
+    "PROC_MON_FILTER_MSAA_MENU_ENABLED=observation:after-reload;enabled:true",
+    "PROC_MON_FILTER_MSAA_MENU_ENABLED=observation:after-reload;enabled:no",
+    "PROC_MON_FILTER_MSAA_MENU_ENABLED=observation:private;enabled:true",
   ].join("\n");
   assert.equal(
     describeWindowsFilterDiagnostics(output),
-    "; reload-drop-main-foreground-gate=passed"
-      + "; reload-filter-dialog-shortcut=sent"
-      + "; reload-event-menu-item=matches:1"
-      + "; reload-event-menu-access-key=state:recognized;key:E"
-      + "; reload-event-menu-activation=route:f10-access-key;state:sent"
-      + "; reload-menu-bar=process-known:true;process-same:true;gui-info:true;menu-mode:true;owner:main"
-      + "; reload-native-menu-owner=process-known:true;process-same:true;gui-info:true;menu-mode:true;owner:main"
-      + "; reload-native-event=items:13;matches:1;enabled:true;highlighted:true;submenu:true"
-      + "; reload-event-menu=opened"
+    "; drop-msaa-menu-enabled=observation:after-reload;enabled:true",
+  );
+});
+
+test("AC-05: reloaded native menu diagnostics retain the bounded Event Filter path", () => {
+  const output = [
+    "PROC_MON_FILTER_RELOAD_NATIVE_EVENT=items:13;matches:1;enabled:true;highlighted:false;submenu:true",
+    "PROC_MON_FILTER_RELOAD_NATIVE_FILTER=items:5;matches:1;enabled:true;submenu:true",
+    "PROC_MON_FILTER_RELOAD_NATIVE_DROP=items:19;matches:1;read-failure:none;readable:true;enabled:true;checked:on",
+    "PROC_MON_FILTER_RELOAD_NATIVE_EVENT=items:65;matches:1;enabled:true;highlighted:false;submenu:true",
+    "PROC_MON_FILTER_RELOAD_NATIVE_FILTER=items:2;matches:3;enabled:true;submenu:true",
+    "PROC_MON_FILTER_RELOAD_NATIVE_DROP=items:19;matches:1;read-failure:none;readable:true;enabled:C:\\private;checked:on",
+  ].join("\n");
+  assert.equal(
+    describeWindowsFilterDiagnostics(output),
+    "; reload-native-event=items:13;matches:1;enabled:true;highlighted:false;submenu:true"
       + "; reload-native-filter=items:5;matches:1;enabled:true;submenu:true"
-      + "; reload-native-drop=items:19;matches:1;read-failure:none;readable:true;enabled:true;checked:on"
-      + "; reload-event-filter-patterns=expand-collapse:false;invoke:true"
-      + "; reload-menu-keyboard=route:event-filter;state:activated",
+      + "; reload-native-drop=items:19;matches:1;read-failure:none;readable:true;enabled:true;checked:on",
   );
 });
 
@@ -667,35 +655,6 @@ test("AC-05: Windows filter diagnostics reject unsafe Drop menu values", () => {
       "PROC_MON_FILTER_DROP_MENU_STATE=owner-same-process:true;enabled:yes;offscreen:false",
       "PROC_MON_FILTER_DROP_MENU_MATCH=items:10000;matches:1",
       "PROC_MON_FILTER_DROP_MENU_MATCH=items:11;matches:C:\\private\\mail",
-    ].join("\n")),
-    "",
-  );
-});
-
-test("AC-05: reloaded native-menu diagnostics retain only bounded state", () => {
-  const accepted = [
-    "PROC_MON_FILTER_RELOAD_NATIVE_MENU_OWNER=process-known:true;process-same:true;gui-info:true;menu-mode:true;owner:main",
-    "PROC_MON_FILTER_RELOAD_NATIVE_EVENT=items:13;matches:1;enabled:true;highlighted:true;submenu:true",
-    "PROC_MON_FILTER_RELOAD_NATIVE_FILTER=items:5;matches:1;enabled:true;submenu:true",
-    "PROC_MON_FILTER_RELOAD_NATIVE_DROP=items:19;matches:1;read-failure:none;readable:true;enabled:true;checked:on",
-  ].join("\n");
-  assert.equal(
-    describeWindowsFilterDiagnostics(accepted),
-    "; reload-native-menu-owner=process-known:true;process-same:true;gui-info:true;menu-mode:true;owner:main"
-      + "; reload-native-event=items:13;matches:1;enabled:true;highlighted:true;submenu:true"
-      + "; reload-native-filter=items:5;matches:1;enabled:true;submenu:true"
-      + "; reload-native-drop=items:19;matches:1;read-failure:none;readable:true;enabled:true;checked:on",
-  );
-  assert.equal(
-    describeWindowsFilterDiagnostics([
-      "PROC_MON_FILTER_RELOAD_NATIVE_MENU_OWNER=process-known:true;process-same:true;gui-info:true;menu-mode:true;owner:C:\\private",
-      "PROC_MON_FILTER_RELOAD_NATIVE_EVENT=items:65;matches:1;enabled:true;highlighted:true;submenu:true",
-      "PROC_MON_FILTER_RELOAD_NATIVE_EVENT=items:2;matches:3;enabled:true;highlighted:true;submenu:true",
-      "PROC_MON_FILTER_RELOAD_NATIVE_FILTER=items:65;matches:1;enabled:true;submenu:true",
-      "PROC_MON_FILTER_RELOAD_NATIVE_FILTER=items:2;matches:3;enabled:true;submenu:true",
-      "PROC_MON_FILTER_RELOAD_NATIVE_DROP=items:257;matches:1;read-failure:none;readable:true;enabled:true;checked:on",
-      "PROC_MON_FILTER_RELOAD_NATIVE_DROP=items:2;matches:3;read-failure:none;readable:true;enabled:true;checked:on",
-      "PROC_MON_FILTER_RELOAD_NATIVE_DROP=items:2;matches:1;read-failure:C:\\private;readable:true;enabled:true;checked:on",
     ].join("\n")),
     "",
   );

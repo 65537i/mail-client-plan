@@ -144,58 +144,6 @@ export function describeWindowsFilterDiagnostics(output) {
     diagnostics.push("reload-filter-dialog-shortcut=sent");
   }
 
-  const reloadEventItem = output.match(
-    /^PROC_MON_FILTER_RELOAD_EVENT_ITEM=matches:(\d{1,2})\r?$/m,
-  );
-  if (reloadEventItem) {
-    const matches = Number(reloadEventItem[1]);
-    if (matches <= 64) {
-      diagnostics.push(
-        `reload-event-menu-item=matches:${matches}`,
-      );
-    }
-  }
-
-  const reloadEventAccessKey = output.match(
-    /^PROC_MON_FILTER_RELOAD_EVENT_ITEM_ACCESS_KEY=state:(recognized|unavailable);key:(?:([A-Z])|none)\r?$/m,
-  );
-  if (
-    reloadEventAccessKey
-    && (
-      (reloadEventAccessKey[1] === "recognized" && reloadEventAccessKey[2])
-      || (reloadEventAccessKey[1] === "unavailable" && !reloadEventAccessKey[2])
-    )
-  ) {
-    diagnostics.push(
-      `reload-event-menu-access-key=state:${reloadEventAccessKey[1]};key:${reloadEventAccessKey[2] ?? "none"}`,
-    );
-  }
-
-  if (
-    /^PROC_MON_FILTER_RELOAD_EVENT_MENU_ACTIVATION=route:f10-access-key;state:sent\r?$/m
-      .test(output)
-  ) {
-    diagnostics.push("reload-event-menu-activation=route:f10-access-key;state:sent");
-  }
-
-  const reloadMenuBar = output.match(
-    /^PROC_MON_FILTER_RELOAD_MENU_BAR=process-known:(true|false);process-same:(true|false);gui-info:(true|false);menu-mode:(true|false);owner:(main|other|unavailable)\r?$/m,
-  );
-  if (reloadMenuBar) {
-    diagnostics.push(
-      `reload-menu-bar=process-known:${reloadMenuBar[1]};process-same:${reloadMenuBar[2]};gui-info:${reloadMenuBar[3]};menu-mode:${reloadMenuBar[4]};owner:${reloadMenuBar[5]}`,
-    );
-  }
-
-  const reloadNativeMenuOwner = output.match(
-    /^PROC_MON_FILTER_RELOAD_NATIVE_MENU_OWNER=process-known:(true|false);process-same:(true|false);gui-info:(true|false);menu-mode:(true|false);owner:(main|other|unavailable)\r?$/m,
-  );
-  if (reloadNativeMenuOwner) {
-    diagnostics.push(
-      `reload-native-menu-owner=process-known:${reloadNativeMenuOwner[1]};process-same:${reloadNativeMenuOwner[2]};gui-info:${reloadNativeMenuOwner[3]};menu-mode:${reloadNativeMenuOwner[4]};owner:${reloadNativeMenuOwner[5]}`,
-    );
-  }
-
   const reloadNativeEvent = output.match(
     /^PROC_MON_FILTER_RELOAD_NATIVE_EVENT=items:(\d{1,2});matches:(\d{1,2});enabled:(true|false);highlighted:(true|false);submenu:(true|false)\r?$/m,
   );
@@ -206,13 +154,6 @@ export function describeWindowsFilterDiagnostics(output) {
         `reload-native-event=items:${items};matches:${matches};enabled:${reloadNativeEvent[3]};highlighted:${reloadNativeEvent[4]};submenu:${reloadNativeEvent[5]}`,
       );
     }
-  }
-
-  const reloadEventMenu = output.match(
-    /^PROC_MON_FILTER_RELOAD_EVENT_MENU=opened\r?$/m,
-  );
-  if (reloadEventMenu) {
-    diagnostics.push("reload-event-menu=opened");
   }
 
   const reloadNativeFilter = output.match(
@@ -228,31 +169,15 @@ export function describeWindowsFilterDiagnostics(output) {
   }
 
   const reloadNativeDrop = output.match(
-    /^PROC_MON_FILTER_RELOAD_NATIVE_DROP=items:(\d{1,3});matches:(\d{1,3});read-failure:(none|depth-limit|total-limit|invalid-menu-handle|menu-count-invalid|menu-count-failed|menu-count-limit|owner-drawn|item-read-failed);readable:(true|false);enabled:(true|false);checked:(on|off|unavailable)\r?$/m,
+    /^PROC_MON_FILTER_RELOAD_NATIVE_DROP=items:(\d{1,2});matches:(\d{1,2});read-failure:(none|depth-limit|total-limit|invalid-menu-handle|menu-count-invalid|menu-count-failed|menu-count-limit|owner-drawn|item-read-failed);readable:(true|false);enabled:(true|false);checked:(on|off|unavailable)\r?$/m,
   );
   if (reloadNativeDrop) {
     const [items, matches] = reloadNativeDrop.slice(1, 3).map(Number);
-    if (items <= 256 && matches <= items) {
+    if (items <= 64 && matches <= items) {
       diagnostics.push(
         `reload-native-drop=items:${items};matches:${matches};read-failure:${reloadNativeDrop[3]};readable:${reloadNativeDrop[4]};enabled:${reloadNativeDrop[5]};checked:${reloadNativeDrop[6]}`,
       );
     }
-  }
-
-  const reloadEventFilterPatterns = output.match(
-    /^PROC_MON_FILTER_RELOAD_EVENT_FILTER_PATTERNS=expand-collapse:(true|false);invoke:(true|false)\r?$/m,
-  );
-  if (reloadEventFilterPatterns) {
-    diagnostics.push(
-      `reload-event-filter-patterns=expand-collapse:${reloadEventFilterPatterns[1]};invoke:${reloadEventFilterPatterns[2]}`,
-    );
-  }
-
-  const reloadMenuKeyboard = output.match(
-    /^PROC_MON_FILTER_RELOAD_MENU_KEYBOARD=route:event-filter;state:activated\r?$/m,
-  );
-  if (reloadMenuKeyboard) {
-    diagnostics.push("reload-menu-keyboard=route:event-filter;state:activated");
   }
 
   const reloadMenuPatterns = output.match(
@@ -754,6 +679,14 @@ export function describeWindowsFilterDiagnostics(output) {
         `drop-msaa-menu-state=observation:${observation};process:${process};object:${object};items:${items};matches:${matches};read-failure:${readFailure};checked:${checked}`,
       );
     }
+  }
+
+  for (const match of output.matchAll(
+    /^PROC_MON_FILTER_MSAA_MENU_ENABLED=observation:after-reload;enabled:(true|false)\r?$/gm,
+  )) {
+    diagnostics.push(
+      `drop-msaa-menu-enabled=observation:after-reload;enabled:${match[1]}`,
+    );
   }
 
   const resetTree = output.match(

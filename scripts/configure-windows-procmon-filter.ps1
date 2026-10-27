@@ -70,6 +70,7 @@ public static class ProcmonNativeMenu
     private const int MenuItemRole = 12;
     private const int CheckedState = 0x10;
     private const int MixedState = 0x20;
+    private const int UnavailableState = 0x1;
 
     [StructLayout(LayoutKind.Sequential)]
     private struct MenuItemInfo
@@ -129,6 +130,7 @@ public static class ProcmonNativeMenu
         public int MatchCount { get; set; }
         public string ReadFailure { get; set; }
         public string CheckState { get; set; }
+        public bool IsEnabled { get; set; }
     }
 
     [DllImport("user32.dll", ExactSpelling = true, SetLastError = true)]
@@ -298,6 +300,7 @@ public static class ProcmonNativeMenu
             }
             snapshot.ReadFailure = "none";
             snapshot.CheckState = (matchState & CheckedState) != 0 ? "on" : "off";
+            snapshot.IsEnabled = (matchState & UnavailableState) == 0;
             return snapshot;
         }
         catch (COMException)
@@ -1833,99 +1836,74 @@ function Get-ReloadedNativeDropCheckState(
   [System.IntPtr]$MainWindowHandle,
   [uint32]$ProcessId
 ) {
-  Set-Stage "read-reloaded-native-menu-owner"
-  $menuWindowProcessKnown = $false
-  $menuWindowSameProcess = $false
-  $guiThreadInfoAvailable = $false
-  $menuModeActive = $false
-  $menuOwnerWindowHandle = [ProcmonNativeMenu]::GetMenuOwnerWindow(
-    $MainWindowHandle,
-    $ProcessId,
-    [ref]$menuWindowProcessKnown,
-    [ref]$menuWindowSameProcess,
-    [ref]$guiThreadInfoAvailable,
-    [ref]$menuModeActive
-  )
-  $ownerState = if ($menuOwnerWindowHandle.Equals([System.IntPtr]::Zero)) {
-    "unavailable"
-  } elseif ($menuOwnerWindowHandle -eq $MainWindowHandle) {
-    "main"
-  } else {
-    "other"
-  }
-  [Console]::Out.WriteLine(
-    "PROC_MON_FILTER_RELOAD_NATIVE_MENU_OWNER=process-known:$($menuWindowProcessKnown.ToString().ToLowerInvariant());process-same:$($menuWindowSameProcess.ToString().ToLowerInvariant());gui-info:$($guiThreadInfoAvailable.ToString().ToLowerInvariant());menu-mode:$($menuModeActive.ToString().ToLowerInvariant());owner:$ownerState"
-  )
-  if (
-    -not $menuWindowProcessKnown -or
-    -not $menuWindowSameProcess -or
-    -not $guiThreadInfoAvailable -or
-    -not $menuModeActive -or
-    $menuOwnerWindowHandle -ne $MainWindowHandle
-  ) {
-    throw "Process Monitor did not expose an active same-process main-window menu"
+  Set-Stage "verify-reloaded-main-window-process"
+  if ([ProcmonNativeMenu]::GetWindowProcessId($MainWindowHandle) -ne $ProcessId) {
+    throw "Process Monitor reloaded main window belongs to a different process"
   }
 
-  Set-Stage "get-reloaded-native-main-menu"
+  Set-Stage "read-reloaded-native-main-menu"
   $menuHandle = [ProcmonNativeMenu]::GetMenu($MainWindowHandle)
-  if ($menuHandle.Equals([System.IntPtr]::Zero)) {
-    throw "Process Monitor reloaded main menu handle was unavailable"
-  }
-  $script:nativeMenuVisited = 0
-  Set-Stage "find-reloaded-native-event-menu-item"
-  $eventMenu = Get-NativeMenuItemSnapshot $menuHandle "Event"
-  $eventHighlighted = $false
-  $eventEnabled = $false
-  $eventSubmenuAvailable = $false
-  if ($null -ne $eventMenu.Item) {
-    $eventHighlighted = [bool]$eventMenu.Item.IsHighlighted
-    $eventEnabled = [bool]$eventMenu.Item.IsEnabled
-    $eventSubmenuAvailable = -not $eventMenu.Item.Submenu.Equals([System.IntPtr]::Zero)
-  }
-  [Console]::Out.WriteLine(
-    "PROC_MON_FILTER_RELOAD_NATIVE_EVENT=items:$($eventMenu.ItemCount);matches:$($eventMenu.MatchCount);enabled:$($eventEnabled.ToString().ToLowerInvariant());highlighted:$($eventHighlighted.ToString().ToLowerInvariant());submenu:$($eventSubmenuAvailable.ToString().ToLowerInvariant())"
-  )
-  if (
-    $eventMenu.MatchCount -ne 1 -or
-    -not $eventEnabled -or
-    -not $eventHighlighted -or
-    -not $eventSubmenuAvailable
-  ) {
-    throw "Process Monitor Event menu was not uniquely active"
-  }
-  [Console]::Out.WriteLine("PROC_MON_FILTER_RELOAD_EVENT_MENU=opened")
-
-  Set-Stage "find-reloaded-native-filter-menu-item"
-  $filterMenu = Get-NativeMenuItemSnapshot $eventMenu.Item.Submenu "Filter"
-  $filterEnabled = $false
-  $filterSubmenuAvailable = $false
-  if ($null -ne $filterMenu.Item) {
-    $filterEnabled = [bool]$filterMenu.Item.IsEnabled
-    $filterSubmenuAvailable = -not $filterMenu.Item.Submenu.Equals([System.IntPtr]::Zero)
-  }
-  [Console]::Out.WriteLine(
-    "PROC_MON_FILTER_RELOAD_NATIVE_FILTER=items:$($filterMenu.ItemCount);matches:$($filterMenu.MatchCount);enabled:$($filterEnabled.ToString().ToLowerInvariant());submenu:$($filterSubmenuAvailable.ToString().ToLowerInvariant())"
-  )
-  if ($filterMenu.MatchCount -ne 1 -or -not $filterEnabled -or -not $filterSubmenuAvailable) {
-    throw "Process Monitor Event menu did not expose one native Filter submenu"
-  }
-
-  Set-Stage "read-reloaded-native-drop-filtered-events-state"
-  $script:nativeMenuReadable = $true
-  $script:nativeMenuFailure = "none"
-  $script:nativeDropMenuMatches = [System.Collections.Generic.List[object]]::new()
-  Find-NativeDropMenuItem $filterMenu.Item.Submenu 0
   $checkState = "unavailable"
   $dropEnabled = $false
-  if ($script:nativeMenuReadable -and $script:nativeDropMenuMatches.Count -eq 1) {
-    $checkState = if ($script:nativeDropMenuMatches[0].IsChecked) { "on" } else { "off" }
-    $dropEnabled = [bool]$script:nativeDropMenuMatches[0].IsEnabled
+  if (-not $menuHandle.Equals([System.IntPtr]::Zero)) {
+    $script:nativeMenuVisited = 0
+    Set-Stage "find-reloaded-native-event-menu-item"
+    $eventMenu = Get-NativeMenuItemSnapshot $menuHandle "Event"
+    $eventEnabled = $false
+    $eventHighlighted = $false
+    $eventSubmenuAvailable = $false
+    if ($null -ne $eventMenu.Item) {
+      $eventEnabled = [bool]$eventMenu.Item.IsEnabled
+      $eventHighlighted = [bool]$eventMenu.Item.IsHighlighted
+      $eventSubmenuAvailable = -not $eventMenu.Item.Submenu.Equals([System.IntPtr]::Zero)
+    }
+    [Console]::Out.WriteLine(
+      "PROC_MON_FILTER_RELOAD_NATIVE_EVENT=items:$($eventMenu.ItemCount);matches:$($eventMenu.MatchCount);enabled:$($eventEnabled.ToString().ToLowerInvariant());highlighted:$($eventHighlighted.ToString().ToLowerInvariant());submenu:$($eventSubmenuAvailable.ToString().ToLowerInvariant())"
+    )
+    if ($eventMenu.MatchCount -ne 1 -or -not $eventEnabled -or -not $eventSubmenuAvailable) {
+      throw "Process Monitor reloaded main menu did not expose one enabled Event submenu"
+    }
+
+    Set-Stage "find-reloaded-native-filter-menu-item"
+    $filterMenu = Get-NativeMenuItemSnapshot $eventMenu.Item.Submenu "Filter"
+    $filterEnabled = $false
+    $filterSubmenuAvailable = $false
+    if ($null -ne $filterMenu.Item) {
+      $filterEnabled = [bool]$filterMenu.Item.IsEnabled
+      $filterSubmenuAvailable = -not $filterMenu.Item.Submenu.Equals([System.IntPtr]::Zero)
+    }
+    [Console]::Out.WriteLine(
+      "PROC_MON_FILTER_RELOAD_NATIVE_FILTER=items:$($filterMenu.ItemCount);matches:$($filterMenu.MatchCount);enabled:$($filterEnabled.ToString().ToLowerInvariant());submenu:$($filterSubmenuAvailable.ToString().ToLowerInvariant())"
+    )
+    if ($filterMenu.MatchCount -ne 1 -or -not $filterEnabled -or -not $filterSubmenuAvailable) {
+      throw "Process Monitor reloaded Event menu did not expose one enabled Filter submenu"
+    }
+
+    Set-Stage "read-reloaded-native-drop-filtered-events-state"
+    $dropMenu = Get-NativeMenuItemSnapshot $filterMenu.Item.Submenu "Drop Filtered Events"
+    $dropEnabled = $false
+    if ($null -ne $dropMenu.Item) {
+      $dropEnabled = [bool]$dropMenu.Item.IsEnabled
+      $checkState = if ($dropMenu.Item.IsChecked) { "on" } else { "off" }
+    }
+    $dropReadable = ($dropMenu.MatchCount -eq 1).ToString().ToLowerInvariant()
+    [Console]::Out.WriteLine(
+      "PROC_MON_FILTER_RELOAD_NATIVE_DROP=items:$($dropMenu.ItemCount);matches:$($dropMenu.MatchCount);read-failure:none;readable:$dropReadable;enabled:$($dropEnabled.ToString().ToLowerInvariant());checked:$checkState"
+    )
+  } else {
+    $nativeSnapshot = Get-NativeDropMenuSnapshot `
+      $MainWindowHandle ([System.IntPtr]::Zero) $ProcessId
+    Write-NativeDropMenuSnapshot $nativeSnapshot "after-reload"
+    Set-Stage "read-reloaded-msaa-menu-state"
+    $accessibleSnapshot = Get-AccessibleDropMenuSnapshot `
+      $MainWindowHandle $ProcessId "after-reload"
+    if ($accessibleSnapshot.CheckState -in @("on", "off")) {
+      $checkState = $accessibleSnapshot.CheckState
+      $dropEnabled = [bool]$accessibleSnapshot.IsEnabled
+    }
   }
-  [Console]::Out.WriteLine(
-    "PROC_MON_FILTER_RELOAD_NATIVE_DROP=items:$($script:nativeMenuVisited);matches:$($script:nativeDropMenuMatches.Count);read-failure:$($script:nativeMenuFailure);readable:$($script:nativeMenuReadable.ToString().ToLowerInvariant());enabled:$($dropEnabled.ToString().ToLowerInvariant());checked:$checkState"
-  )
   if ($checkState -notin @("on", "off") -or -not $dropEnabled) {
-    throw "Process Monitor reloaded native Drop Filtered Events state was unavailable"
+    throw "Process Monitor reloaded Drop Filtered Events state was unavailable or disabled"
   }
   return $checkState
 }
@@ -2026,6 +2004,9 @@ function Get-AccessibleDropMenuSnapshot(
   $objectState = if ($snapshot.AccessibleAvailable) { "available" } else { "unavailable" }
   [Console]::Out.WriteLine(
     "PROC_MON_FILTER_MSAA_MENU_STATE=observation:$Observation;process:$processState;object:$objectState;items:$($snapshot.ItemCount);matches:$($snapshot.MatchCount);read-failure:$($snapshot.ReadFailure);checked:$($snapshot.CheckState)"
+  )
+  [Console]::Out.WriteLine(
+    "PROC_MON_FILTER_MSAA_MENU_ENABLED=observation:$Observation;enabled:$($snapshot.IsEnabled.ToString().ToLowerInvariant())"
   )
   return $snapshot
 }
@@ -2985,117 +2966,8 @@ try {
   Set-Stage "verify-reloaded-filter-rules"
   Get-LoadedFilterRuleEvidence $reloadFilterRows $CanaryPath $ControlPath | Out-Null
   [System.Windows.Forms.SendKeys]::SendWait("{ESC}")
-  $main.SetFocus()
-  Set-Stage "activate-reloaded-main-window-for-drop-menu"
-  [ProcmonNativeMenu]::SetForegroundWindow($mainWindowHandle) | Out-Null
-  $reloadDropMainForegroundGate = "failed"
-  $reloadDropMainForegroundDeadline = [DateTime]::UtcNow.AddSeconds(2)
-  do {
-    $currentForegroundHandle = [ProcmonNativeMenu]::GetForegroundWindow()
-    if ($currentForegroundHandle -eq $mainWindowHandle -and
-      [ProcmonNativeMenu]::GetWindowProcessId($currentForegroundHandle) -eq $process.Id) {
-      $reloadDropMainForegroundGate = "passed"
-      break
-    }
-    Start-Sleep -Milliseconds 50
-  } while ([DateTime]::UtcNow -lt $reloadDropMainForegroundDeadline)
-  [Console]::Out.WriteLine(
-    "PROC_MON_FILTER_RELOAD_DROP_MAIN_FOREGROUND=gate:$reloadDropMainForegroundGate"
-  )
-  if ($reloadDropMainForegroundGate -ne "passed") {
-    throw "Process Monitor reloaded main window lost the foreground before Event menu activation"
-  }
-  Set-Stage "find-reloaded-event-menu-item"
-  $reloadEventMenuCondition = [System.Windows.Automation.AndCondition]::new(
-    [System.Windows.Automation.PropertyCondition]::new(
-      [System.Windows.Automation.AutomationElement]::NameProperty, "Event"
-    ),
-    [System.Windows.Automation.PropertyCondition]::new(
-      [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
-      [System.Windows.Automation.ControlType]::MenuItem
-    )
-  )
-  $reloadEventMenuItems = $main.FindAll(
-    [System.Windows.Automation.TreeScope]::Descendants,
-    $reloadEventMenuCondition
-  )
-  [Console]::Out.WriteLine(
-    "PROC_MON_FILTER_RELOAD_EVENT_ITEM=matches:$($reloadEventMenuItems.Count)"
-  )
-  if ($reloadEventMenuItems.Count -ne 1) {
-    throw "Process Monitor did not expose one Event menu item after reload"
-  }
-  $reloadEventMenu = $reloadEventMenuItems[0]
-  $reloadEventMenuState = $reloadEventMenu.Current
-  if ($reloadEventMenuState.ProcessId -ne $process.Id -or
-    -not $reloadEventMenuState.IsEnabled -or $reloadEventMenuState.IsOffscreen) {
-    throw "Process Monitor Event menu item was unavailable after reload"
-  }
-  $reloadEventMenuAccessKey = [regex]::Match(
-    [string]$reloadEventMenuState.AccessKey,
-    "^(?:Alt\+)?(?<key>[A-Za-z])$"
-  )
-  $reloadEventMenuAccessKeyRecognized = $reloadEventMenuAccessKey.Success
-  [Console]::Out.WriteLine(
-    "PROC_MON_FILTER_RELOAD_EVENT_ITEM_ACCESS_KEY=state:$(if ($reloadEventMenuAccessKeyRecognized) { 'recognized' } else { 'unavailable' });key:$(if ($reloadEventMenuAccessKeyRecognized) { $reloadEventMenuAccessKey.Groups['key'].Value.ToUpperInvariant() } else { 'none' })"
-  )
-  if (-not $reloadEventMenuAccessKeyRecognized) {
-    throw "Process Monitor Event menu item did not expose a recognized access key"
-  }
-  $currentForegroundHandle = [ProcmonNativeMenu]::GetForegroundWindow()
-  if ($currentForegroundHandle -ne $mainWindowHandle -or
-    [ProcmonNativeMenu]::GetWindowProcessId($currentForegroundHandle) -ne $process.Id) {
-    throw "Process Monitor reloaded main window lost the foreground before Event menu access key"
-  }
-  $reloadEventMenuKey = $reloadEventMenuAccessKey.Groups["key"].Value.ToLowerInvariant()
-  Set-Stage "open-reloaded-event-menu-f10"
-  [System.Windows.Forms.SendKeys]::SendWait("{F10}")
-  $reloadMenuBarOwnerHandle = [System.IntPtr]::Zero
-  $reloadMenuBarProcessKnown = $false
-  $reloadMenuBarSameProcess = $false
-  $reloadMenuBarGuiInfoAvailable = $false
-  $reloadMenuBarActive = $false
-  $reloadMenuBarDeadline = [DateTime]::UtcNow.AddSeconds(2)
-  do {
-    $reloadMenuBarOwnerHandle = [ProcmonNativeMenu]::GetMenuOwnerWindow(
-      $mainWindowHandle,
-      $process.Id,
-      [ref]$reloadMenuBarProcessKnown,
-      [ref]$reloadMenuBarSameProcess,
-      [ref]$reloadMenuBarGuiInfoAvailable,
-      [ref]$reloadMenuBarActive
-    )
-    if ($reloadMenuBarActive -and
-      $reloadMenuBarOwnerHandle -eq $mainWindowHandle) {
-      break
-    }
-    Start-Sleep -Milliseconds 50
-  } while ([DateTime]::UtcNow -lt $reloadMenuBarDeadline)
-  $reloadMenuBarOwnerState = if ($reloadMenuBarOwnerHandle.Equals([System.IntPtr]::Zero)) {
-    "unavailable"
-  } elseif ($reloadMenuBarOwnerHandle -eq $mainWindowHandle) {
-    "main"
-  } else {
-    "other"
-  }
-  [Console]::Out.WriteLine(
-    "PROC_MON_FILTER_RELOAD_MENU_BAR=process-known:$($reloadMenuBarProcessKnown.ToString().ToLowerInvariant());process-same:$($reloadMenuBarSameProcess.ToString().ToLowerInvariant());gui-info:$($reloadMenuBarGuiInfoAvailable.ToString().ToLowerInvariant());menu-mode:$($reloadMenuBarActive.ToString().ToLowerInvariant());owner:$reloadMenuBarOwnerState"
-  )
-  if (-not $reloadMenuBarProcessKnown -or
-    -not $reloadMenuBarSameProcess -or
-    -not $reloadMenuBarGuiInfoAvailable -or
-    -not $reloadMenuBarActive -or
-    $reloadMenuBarOwnerHandle -ne $mainWindowHandle) {
-    throw "Process Monitor did not enter same-process menu mode with F10"
-  }
-  Write-FocusObservation "after-reload-f10-menu-bar" | Out-Null
-  Set-Stage "open-reloaded-event-menu-access-key"
-  [System.Windows.Forms.SendKeys]::SendWait($reloadEventMenuKey)
-  [Console]::Out.WriteLine(
-    "PROC_MON_FILTER_RELOAD_EVENT_MENU_ACTIVATION=route:f10-access-key;state:sent"
-  )
-  Write-FocusObservation "after-reload-menu-access-key" | Out-Null
   $reloadMainHandle = [IntPtr]$main.Current.NativeWindowHandle
+  Set-Stage "read-reloaded-drop-state"
   $reloadDropCheckState = Get-ReloadedNativeDropCheckState `
     $reloadMainHandle $process.Id
   [Console]::Out.WriteLine(
