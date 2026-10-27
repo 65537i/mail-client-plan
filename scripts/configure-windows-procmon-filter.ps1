@@ -60,7 +60,11 @@ public static class ProcmonNativeMenu
     private const uint MIIM_STRING = 0x00000040;
     private const uint MIIM_FTYPE = 0x00000100;
     private const uint MFS_CHECKED = 0x00000008;
+    private const uint MFS_HILITE = 0x00000080;
+    private const uint MFS_DISABLED = 0x00000003;
     private const uint MFT_OWNERDRAW = 0x00000100;
+    private const uint GUI_INMENUMODE = 0x00000004;
+    private const uint GUI_POPUPMENUMODE = 0x00000010;
     private const uint MaximumTextCharacters = 255;
     private const int MaximumAccessibleMenuItems = 64;
     private const int MenuItemRole = 12;
@@ -111,6 +115,8 @@ public static class ProcmonNativeMenu
     {
         public string Text { get; set; }
         public bool IsChecked { get; set; }
+        public bool IsHighlighted { get; set; }
+        public bool IsEnabled { get; set; }
         public IntPtr Submenu { get; set; }
     }
 
@@ -306,12 +312,14 @@ public static class ProcmonNativeMenu
         uint expectedProcessId,
         out bool menuWindowProcessKnown,
         out bool menuWindowSameProcess,
-        out bool guiThreadInfoAvailable
+        out bool guiThreadInfoAvailable,
+        out bool menuModeActive
     )
     {
         menuWindowProcessKnown = false;
         menuWindowSameProcess = false;
         guiThreadInfoAvailable = false;
+        menuModeActive = false;
         uint menuProcessId;
         var menuThreadId = GetWindowThreadProcessId(menuWindow, out menuProcessId);
         if (menuThreadId == 0)
@@ -334,6 +342,8 @@ public static class ProcmonNativeMenu
             return IntPtr.Zero;
         }
         guiThreadInfoAvailable = true;
+        menuModeActive =
+            (info.flags & (GUI_INMENUMODE | GUI_POPUPMENUMODE)) != 0;
         if (info.hwndMenuOwner == IntPtr.Zero)
         {
             return IntPtr.Zero;
@@ -396,6 +406,7 @@ public static class ProcmonNativeMenu
         {
             return null;
         }
+        var itemState = info.fState;
         ownerDrawn = (info.fType & MFT_OWNERDRAW) != 0;
         if (ownerDrawn)
         {
@@ -423,7 +434,9 @@ public static class ProcmonNativeMenu
             return new ItemSnapshot
             {
                 Text = Marshal.PtrToStringUni(buffer, (int)info.cch) ?? string.Empty,
-                IsChecked = (info.fState & MFS_CHECKED) != 0,
+                IsChecked = (itemState & MFS_CHECKED) != 0,
+                IsHighlighted = (itemState & MFS_HILITE) != 0,
+                IsEnabled = (itemState & MFS_DISABLED) == 0,
                 Submenu = info.hSubMenu
             };
         }
@@ -1345,7 +1358,7 @@ function Wait-ConfigSaveDialog(
       $windowCondition
     )
     $seenHandles = [System.Collections.Generic.HashSet[int]]::new()
-    $matches = [System.Collections.Generic.List[object]]::new()
+    $matchedItems = [System.Collections.Generic.List[object]]::new()
     $fileNameCount = 0
     $saveCount = 0
     foreach ($window in @($windows) + @($embeddedWindows)) {
@@ -1748,12 +1761,165 @@ function Find-NativeDropMenuItem([System.IntPtr]$MenuHandle, [int]$Depth) {
         "Drop Filtered Events",
         [System.StringComparison]::Ordinal
       )) {
-      $script:nativeDropMenuMatches.Add([bool]$item.IsChecked)
+      $script:nativeDropMenuMatches.Add([pscustomobject]@{
+        IsChecked = [bool]$item.IsChecked
+        IsEnabled = [bool]$item.IsEnabled
+      })
     }
     if (-not $item.Submenu.Equals([System.IntPtr]::Zero)) {
       Find-NativeDropMenuItem $item.Submenu ($Depth + 1)
     }
   }
+}
+
+function Get-NativeMenuItemSnapshot(
+  [System.IntPtr]$MenuHandle,
+  [string]$ExpectedName
+) {
+  if ($MenuHandle.Equals([System.IntPtr]::Zero)) {
+    throw "Process Monitor native menu handle was unavailable"
+  }
+  $itemCount = [ProcmonNativeMenu]::GetMenuItemCount($MenuHandle)
+  if ($itemCount -lt 0) {
+    throw "Process Monitor native menu count could not be read"
+  }
+  if ($itemCount -gt 64) {
+    throw "Process Monitor native menu exceeded the bounded item limit"
+  }
+  $matchedItems = [System.Collections.Generic.List[object]]::new()
+  for ($position = 0; $position -lt $itemCount; $position++) {
+    if ($script:nativeMenuVisited -ge 256) {
+      throw "Process Monitor native menu exceeded the bounded traversal limit"
+    }
+    $ownerDrawn = $false
+    $item = [ProcmonNativeMenu]::ReadItem(
+      $MenuHandle,
+      [uint32]$position,
+      [ref]$ownerDrawn
+    )
+    if ($null -eq $item) {
+      throw "Process Monitor native menu item could not be read"
+    }
+    $script:nativeMenuVisited++
+    $itemName = $item.Text.Replace("&", "")
+    $acceleratorIndex = $itemName.IndexOf("`t")
+    if ($acceleratorIndex -ge 0) {
+      $itemName = $itemName.Substring(0, $acceleratorIndex)
+    }
+    if ([string]::Equals(
+        $itemName.Trim(),
+        $ExpectedName,
+        [System.StringComparison]::Ordinal
+      )) {
+      $matchedItems.Add($item)
+    }
+  }
+  [pscustomobject]@{
+    ItemCount = $itemCount
+    MatchCount = $matchedItems.Count
+    Item = if ($matchedItems.Count -eq 1) { $matchedItems[0] } else { $null }
+  }
+}
+
+function Get-ReloadedNativeDropCheckState(
+  [System.IntPtr]$MainWindowHandle,
+  [uint32]$ProcessId
+) {
+  Set-Stage "read-reloaded-native-menu-owner"
+  $menuWindowProcessKnown = $false
+  $menuWindowSameProcess = $false
+  $guiThreadInfoAvailable = $false
+  $menuModeActive = $false
+  $menuOwnerWindowHandle = [ProcmonNativeMenu]::GetMenuOwnerWindow(
+    $MainWindowHandle,
+    $ProcessId,
+    [ref]$menuWindowProcessKnown,
+    [ref]$menuWindowSameProcess,
+    [ref]$guiThreadInfoAvailable,
+    [ref]$menuModeActive
+  )
+  $ownerState = if ($menuOwnerWindowHandle.Equals([System.IntPtr]::Zero)) {
+    "unavailable"
+  } elseif ($menuOwnerWindowHandle -eq $MainWindowHandle) {
+    "main"
+  } else {
+    "other"
+  }
+  [Console]::Out.WriteLine(
+    "PROC_MON_FILTER_RELOAD_NATIVE_MENU_OWNER=process-known:$($menuWindowProcessKnown.ToString().ToLowerInvariant());process-same:$($menuWindowSameProcess.ToString().ToLowerInvariant());gui-info:$($guiThreadInfoAvailable.ToString().ToLowerInvariant());menu-mode:$($menuModeActive.ToString().ToLowerInvariant());owner:$ownerState"
+  )
+  if (
+    -not $menuWindowProcessKnown -or
+    -not $menuWindowSameProcess -or
+    -not $guiThreadInfoAvailable -or
+    -not $menuModeActive -or
+    $menuOwnerWindowHandle -ne $MainWindowHandle
+  ) {
+    throw "Process Monitor did not expose an active same-process main-window menu"
+  }
+
+  Set-Stage "get-reloaded-native-main-menu"
+  $menuHandle = [ProcmonNativeMenu]::GetMenu($MainWindowHandle)
+  if ($menuHandle.Equals([System.IntPtr]::Zero)) {
+    throw "Process Monitor reloaded main menu handle was unavailable"
+  }
+  $script:nativeMenuVisited = 0
+  Set-Stage "find-reloaded-native-event-menu-item"
+  $eventMenu = Get-NativeMenuItemSnapshot $menuHandle "Event"
+  $eventHighlighted = $false
+  $eventEnabled = $false
+  $eventSubmenuAvailable = $false
+  if ($null -ne $eventMenu.Item) {
+    $eventHighlighted = [bool]$eventMenu.Item.IsHighlighted
+    $eventEnabled = [bool]$eventMenu.Item.IsEnabled
+    $eventSubmenuAvailable = -not $eventMenu.Item.Submenu.Equals([System.IntPtr]::Zero)
+  }
+  [Console]::Out.WriteLine(
+    "PROC_MON_FILTER_RELOAD_NATIVE_EVENT=items:$($eventMenu.ItemCount);matches:$($eventMenu.MatchCount);enabled:$($eventEnabled.ToString().ToLowerInvariant());highlighted:$($eventHighlighted.ToString().ToLowerInvariant());submenu:$($eventSubmenuAvailable.ToString().ToLowerInvariant())"
+  )
+  if (
+    $eventMenu.MatchCount -ne 1 -or
+    -not $eventEnabled -or
+    -not $eventHighlighted -or
+    -not $eventSubmenuAvailable
+  ) {
+    throw "Process Monitor Event menu was not uniquely active"
+  }
+  [Console]::Out.WriteLine("PROC_MON_FILTER_RELOAD_EVENT_MENU=opened")
+
+  Set-Stage "find-reloaded-native-filter-menu-item"
+  $filterMenu = Get-NativeMenuItemSnapshot $eventMenu.Item.Submenu "Filter"
+  $filterEnabled = $false
+  $filterSubmenuAvailable = $false
+  if ($null -ne $filterMenu.Item) {
+    $filterEnabled = [bool]$filterMenu.Item.IsEnabled
+    $filterSubmenuAvailable = -not $filterMenu.Item.Submenu.Equals([System.IntPtr]::Zero)
+  }
+  [Console]::Out.WriteLine(
+    "PROC_MON_FILTER_RELOAD_NATIVE_FILTER=items:$($filterMenu.ItemCount);matches:$($filterMenu.MatchCount);enabled:$($filterEnabled.ToString().ToLowerInvariant());submenu:$($filterSubmenuAvailable.ToString().ToLowerInvariant())"
+  )
+  if ($filterMenu.MatchCount -ne 1 -or -not $filterEnabled -or -not $filterSubmenuAvailable) {
+    throw "Process Monitor Event menu did not expose one native Filter submenu"
+  }
+
+  Set-Stage "read-reloaded-native-drop-filtered-events-state"
+  $script:nativeMenuReadable = $true
+  $script:nativeMenuFailure = "none"
+  $script:nativeDropMenuMatches = [System.Collections.Generic.List[object]]::new()
+  Find-NativeDropMenuItem $filterMenu.Item.Submenu 0
+  $checkState = "unavailable"
+  $dropEnabled = $false
+  if ($script:nativeMenuReadable -and $script:nativeDropMenuMatches.Count -eq 1) {
+    $checkState = if ($script:nativeDropMenuMatches[0].IsChecked) { "on" } else { "off" }
+    $dropEnabled = [bool]$script:nativeDropMenuMatches[0].IsEnabled
+  }
+  [Console]::Out.WriteLine(
+    "PROC_MON_FILTER_RELOAD_NATIVE_DROP=items:$($script:nativeMenuVisited);matches:$($script:nativeDropMenuMatches.Count);read-failure:$($script:nativeMenuFailure);readable:$($script:nativeMenuReadable.ToString().ToLowerInvariant());enabled:$($dropEnabled.ToString().ToLowerInvariant());checked:$checkState"
+  )
+  if ($checkState -notin @("on", "off") -or -not $dropEnabled) {
+    throw "Process Monitor reloaded native Drop Filtered Events state was unavailable"
+  }
+  return $checkState
 }
 
 function Get-NativeDropMenuSnapshot(
@@ -1768,13 +1934,15 @@ function Get-NativeDropMenuSnapshot(
   $menuWindowProcessKnown = $false
   $menuWindowSameProcess = $false
   $guiThreadInfoAvailable = $false
+  $menuModeActive = $false
   if ($menuHandle.Equals([System.IntPtr]::Zero)) {
     $menuOwnerWindowHandle = [ProcmonNativeMenu]::GetMenuOwnerWindow(
       $MenuWindowHandle,
       $ProcessId,
       [ref]$menuWindowProcessKnown,
       [ref]$menuWindowSameProcess,
-      [ref]$guiThreadInfoAvailable
+      [ref]$guiThreadInfoAvailable,
+      [ref]$menuModeActive
     )
     if (-not $menuOwnerWindowHandle.Equals([System.IntPtr]::Zero)) {
       $menuHandle = [ProcmonNativeMenu]::GetMenu($MenuWindowHandle)
@@ -1796,7 +1964,7 @@ function Get-NativeDropMenuSnapshot(
   $script:nativeMenuVisited = 0
   $script:nativeMenuReadable = $handleAvailable
   $script:nativeMenuFailure = "none"
-  $script:nativeDropMenuMatches = [System.Collections.Generic.List[bool]]::new()
+  $script:nativeDropMenuMatches = [System.Collections.Generic.List[object]]::new()
   if ($handleAvailable) {
     Set-Stage "scan-native-menu-state"
     Find-NativeDropMenuItem $menuHandle 0
@@ -1804,7 +1972,7 @@ function Get-NativeDropMenuSnapshot(
   Set-Stage "report-native-menu-state"
   $checkState = "unavailable"
   if ($script:nativeMenuReadable -and $script:nativeDropMenuMatches.Count -eq 1) {
-    $checkState = if ($script:nativeDropMenuMatches[0]) { "on" } else { "off" }
+    $checkState = if ($script:nativeDropMenuMatches[0].IsChecked) { "on" } else { "off" }
   }
   [pscustomobject]@{
     MenuSource = $menuSource
@@ -2878,100 +3046,9 @@ try {
     "PROC_MON_FILTER_RELOAD_EVENT_MENU_ACTIVATION=route:access-key;state:sent"
   )
   Write-FocusObservation "after-reload-menu-access-key" | Out-Null
-  Set-Stage "wait-reloaded-event-menu"
-  $reloadEventMenuScan = Wait-ProcessMenu $process
-  $reloadEventMenu = $reloadEventMenuScan.Menu
-  [Console]::Out.WriteLine("PROC_MON_FILTER_RELOAD_EVENT_MENU=opened")
-  Set-Stage "find-reloaded-filter-submenu"
-  $reloadEventItems = $reloadEventMenu.FindAll(
-    [System.Windows.Automation.TreeScope]::Children,
-    [System.Windows.Automation.Condition]::TrueCondition
-  )
-  $reloadEventFilterMatches = [System.Collections.Generic.List[System.Windows.Automation.AutomationElement]]::new()
-  foreach ($item in $reloadEventItems) {
-    $itemState = $item.Current
-    if ($itemState.Name -eq "Filter" -and
-      $itemState.ControlType.ProgrammaticName -eq "ControlType.MenuItem" -and
-      $itemState.ProcessId -eq $process.Id -and
-      $itemState.IsEnabled -and
-      -not $itemState.IsOffscreen) {
-      $reloadEventFilterMatches.Add($item)
-    }
-  }
-  if ($reloadEventFilterMatches.Count -ne 1) {
-    throw "Process Monitor Event menu did not expose one enabled Filter submenu"
-  }
-  $reloadEventFilter = $reloadEventFilterMatches[0]
-  $reloadEventFilterExpand = $null
-  $hasReloadEventFilterExpand = $reloadEventFilter.TryGetCurrentPattern(
-    [System.Windows.Automation.ExpandCollapsePattern]::Pattern,
-    [ref]$reloadEventFilterExpand
-  )
-  $reloadEventFilterInvoke = $null
-  $hasReloadEventFilterInvoke = $reloadEventFilter.TryGetCurrentPattern(
-    [System.Windows.Automation.InvokePattern]::Pattern,
-    [ref]$reloadEventFilterInvoke
-  )
-  [Console]::Out.WriteLine(
-    "PROC_MON_FILTER_RELOAD_EVENT_FILTER_PATTERNS=expand-collapse:$($hasReloadEventFilterExpand.ToString().ToLowerInvariant());invoke:$($hasReloadEventFilterInvoke.ToString().ToLowerInvariant())"
-  )
-  if (-not $hasReloadEventFilterExpand -and -not $hasReloadEventFilterInvoke) {
-    throw "Process Monitor Event menu Filter submenu exposes no supported open pattern"
-  }
-  $currentForegroundHandle = [ProcmonNativeMenu]::GetForegroundWindow()
-  if ($currentForegroundHandle -ne $mainWindowHandle -or
-    [ProcmonNativeMenu]::GetWindowProcessId($currentForegroundHandle) -ne $process.Id) {
-    throw "Process Monitor Event menu lost the foreground before Filter submenu activation"
-  }
-  Set-Stage "open-reloaded-filter-submenu"
-  if ($hasReloadEventFilterExpand) {
-    $reloadEventFilterExpand.Expand()
-  } else {
-    $reloadEventFilterInvoke.Invoke()
-  }
-  Write-FocusObservation "after-reload-menu-keyboard-filter" | Out-Null
-  [Console]::Out.WriteLine(
-    "PROC_MON_FILTER_RELOAD_MENU_KEYBOARD=route:event-filter;state:activated"
-  )
-  Set-Stage "wait-reloaded-filter-submenu"
-  $reloadFilterMenuScan = Wait-ProcessMenu $process
-  $reloadDropMenu = $reloadFilterMenuScan.Menu
-  [Console]::Out.WriteLine(
-    "PROC_MON_FILTER_RELOAD_MENU_SCAN=windows:$($reloadFilterMenuScan.Windows);menus:$($reloadFilterMenuScan.Menus);visible:$($reloadFilterMenuScan.VisibleMenus)"
-  )
-  Set-Stage "read-reloaded-drop-filtered-events-state"
-  $reloadDropItems = $reloadDropMenu.FindAll(
-    [System.Windows.Automation.TreeScope]::Children,
-    [System.Windows.Automation.Condition]::TrueCondition
-  )
-  $reloadDropMatches = [System.Collections.Generic.List[System.Windows.Automation.AutomationElement]]::new()
-  foreach ($item in $reloadDropItems) {
-    $itemState = $item.Current
-    if ($itemState.Name -eq "Drop Filtered Events" -and
-      $itemState.ControlType.ProgrammaticName -eq "ControlType.MenuItem" -and
-      $itemState.ProcessId -eq $process.Id) {
-      $reloadDropMatches.Add($item)
-    }
-  }
-  if ($reloadDropMatches.Count -ne 1) {
-    throw "Reloaded Process Monitor did not expose one Drop Filtered Events item"
-  }
-  $reloadDropItemState = $reloadDropMatches[0].Current
-  if (-not $reloadDropItemState.IsEnabled -or $reloadDropItemState.IsOffscreen) {
-    throw "Reloaded Process Monitor Drop Filtered Events item is unavailable"
-  }
   $reloadMainHandle = [IntPtr]$main.Current.NativeWindowHandle
-  $reloadDropMenuHandle = [IntPtr]$reloadDropMenu.Current.NativeWindowHandle
-  $reloadNativeDropState = Get-NativeDropMenuSnapshot `
-    $reloadMainHandle $reloadDropMenuHandle $process.Id
-  Write-NativeDropMenuSnapshot $reloadNativeDropState "after-reload"
-  $reloadAccessibleDropState = $null
-  if ($reloadNativeDropState.CheckState -eq "unavailable") {
-    $reloadAccessibleDropState = Get-AccessibleDropMenuSnapshot `
-      $reloadDropMenuHandle $process.Id "after-reload"
-  }
-  $reloadDropCheckState = Get-VerifiedDropMenuCheckState `
-    $reloadNativeDropState $reloadAccessibleDropState
+  $reloadDropCheckState = Get-ReloadedNativeDropCheckState `
+    $reloadMainHandle $process.Id
   [Console]::Out.WriteLine(
     "PROC_MON_FILTER_RELOADED_DROP=checked:$reloadDropCheckState"
   )

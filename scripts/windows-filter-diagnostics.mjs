@@ -178,11 +178,56 @@ export function describeWindowsFilterDiagnostics(output) {
     diagnostics.push("reload-event-menu-activation=route:access-key;state:sent");
   }
 
+  const reloadNativeMenuOwner = output.match(
+    /^PROC_MON_FILTER_RELOAD_NATIVE_MENU_OWNER=process-known:(true|false);process-same:(true|false);gui-info:(true|false);menu-mode:(true|false);owner:(main|other|unavailable)\r?$/m,
+  );
+  if (reloadNativeMenuOwner) {
+    diagnostics.push(
+      `reload-native-menu-owner=process-known:${reloadNativeMenuOwner[1]};process-same:${reloadNativeMenuOwner[2]};gui-info:${reloadNativeMenuOwner[3]};menu-mode:${reloadNativeMenuOwner[4]};owner:${reloadNativeMenuOwner[5]}`,
+    );
+  }
+
+  const reloadNativeEvent = output.match(
+    /^PROC_MON_FILTER_RELOAD_NATIVE_EVENT=items:(\d{1,2});matches:(\d{1,2});enabled:(true|false);highlighted:(true|false);submenu:(true|false)\r?$/m,
+  );
+  if (reloadNativeEvent) {
+    const [items, matches] = reloadNativeEvent.slice(1, 3).map(Number);
+    if (items <= 64 && matches <= items) {
+      diagnostics.push(
+        `reload-native-event=items:${items};matches:${matches};enabled:${reloadNativeEvent[3]};highlighted:${reloadNativeEvent[4]};submenu:${reloadNativeEvent[5]}`,
+      );
+    }
+  }
+
   const reloadEventMenu = output.match(
     /^PROC_MON_FILTER_RELOAD_EVENT_MENU=opened\r?$/m,
   );
   if (reloadEventMenu) {
     diagnostics.push("reload-event-menu=opened");
+  }
+
+  const reloadNativeFilter = output.match(
+    /^PROC_MON_FILTER_RELOAD_NATIVE_FILTER=items:(\d{1,2});matches:(\d{1,2});enabled:(true|false);submenu:(true|false)\r?$/m,
+  );
+  if (reloadNativeFilter) {
+    const [items, matches] = reloadNativeFilter.slice(1, 3).map(Number);
+    if (items <= 64 && matches <= items) {
+      diagnostics.push(
+        `reload-native-filter=items:${items};matches:${matches};enabled:${reloadNativeFilter[3]};submenu:${reloadNativeFilter[4]}`,
+      );
+    }
+  }
+
+  const reloadNativeDrop = output.match(
+    /^PROC_MON_FILTER_RELOAD_NATIVE_DROP=items:(\d{1,3});matches:(\d{1,3});read-failure:(none|depth-limit|total-limit|invalid-menu-handle|menu-count-invalid|menu-count-failed|menu-count-limit|owner-drawn|item-read-failed);readable:(true|false);enabled:(true|false);checked:(on|off|unavailable)\r?$/m,
+  );
+  if (reloadNativeDrop) {
+    const [items, matches] = reloadNativeDrop.slice(1, 3).map(Number);
+    if (items <= 256 && matches <= items) {
+      diagnostics.push(
+        `reload-native-drop=items:${items};matches:${matches};read-failure:${reloadNativeDrop[3]};readable:${reloadNativeDrop[4]};enabled:${reloadNativeDrop[5]};checked:${reloadNativeDrop[6]}`,
+      );
+    }
   }
 
   const reloadEventFilterPatterns = output.match(
