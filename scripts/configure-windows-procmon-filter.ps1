@@ -2030,7 +2030,7 @@ function Write-ReloadedEventMenuPatternSnapshot(
   $hasExpandCollapsePattern = $false
   $hasSelectionItemPattern = $false
   $hasLegacyIAccessiblePattern = $false
-  Set-Stage "probe-reloaded-event-item-patterns"
+  Set-Stage "probe-reloaded-event-item-state"
   if ($eventMatches.Count -eq 1) {
     $eventItem = $eventMatches[0]
     $eventState = $eventItem.Current
@@ -2040,21 +2040,25 @@ function Write-ReloadedEventMenuPatternSnapshot(
       $isOffscreen = [bool]$eventState.IsOffscreen
       $isKeyboardFocusable = [bool]$eventState.IsKeyboardFocusable
       $pattern = $null
+      Set-Stage "probe-reloaded-event-invoke-pattern"
       $hasInvokePattern = $eventItem.TryGetCurrentPattern(
         [System.Windows.Automation.InvokePattern]::Pattern,
         [ref]$pattern
       )
       $pattern = $null
+      Set-Stage "probe-reloaded-event-expand-collapse-pattern"
       $hasExpandCollapsePattern = $eventItem.TryGetCurrentPattern(
         [System.Windows.Automation.ExpandCollapsePattern]::Pattern,
         [ref]$pattern
       )
       $pattern = $null
+      Set-Stage "probe-reloaded-event-selection-item-pattern"
       $hasSelectionItemPattern = $eventItem.TryGetCurrentPattern(
         [System.Windows.Automation.SelectionItemPattern]::Pattern,
         [ref]$pattern
       )
       $pattern = $null
+      Set-Stage "probe-reloaded-event-legacy-accessible-pattern"
       $hasLegacyIAccessiblePattern = $eventItem.TryGetCurrentPattern(
         [System.Windows.Automation.LegacyIAccessiblePattern]::Pattern,
         [ref]$pattern
