@@ -5,6 +5,21 @@ import path from "node:path";
 import test from "node:test";
 import { createWindowsAuditCanary } from "../../scripts/windows-audit-canary.mjs";
 
+test("AC-05: capture startup diagnostics classify exact known errors without exposing UI text", async () => {
+  const [inspection, driver] = await Promise.all([
+    readFile(new URL("../../scripts/inspect-windows-procmon-capture.ps1", import.meta.url), "utf8"),
+    readFile(new URL("../../scripts/test-windows-file-access.mjs", import.meta.url), "utf8"),
+  ]);
+  assert.match(inspection, /\$state.Name -ceq \$errorText/);
+  assert.match(inspection, /ClassName -ceq "#32770"/);
+  assert.match(inspection, /windowPattern.Current.IsModal/);
+  assert.match(inspection, /startupErrors.Count -eq 0\) \{ "none" \}/);
+  assert.match(inspection, /PROC_MON_CAPTURE_CONTEXT=class:\$rootClass;modal:\$modal;texts:\$texts;startup-error:\$startupError/);
+  assert.match(driver, /contextEvidence.length === 1 && Number\(contextEvidence\[0\]\[3\]\) <= 256/);
+  assert.match(driver, /assert.equal\(contextEvidence\[0\]\[4\], "none"/);
+  assert.doesNotMatch(inspection, /WriteLine\([^)]*(?:state.Name|ClassName|Exception)/);
+});
+
 test("AC-05: capture window visibility is observable without restoring or toggling controls", async () => {
   const [inspection, driver] = await Promise.all([
     readFile(new URL("../../scripts/inspect-windows-procmon-capture.ps1", import.meta.url), "utf8"),

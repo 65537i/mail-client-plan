@@ -19,6 +19,8 @@ Windows: MSVC toolchain、WebView2、必要SDK。WebDriverを外部利用する�
 
 ### nativeの短い検証ループ
 
+Run392後の診断ではroot classのdialog分類（`#32770`完全一致）、WindowPattern.IsModal、Text件数と、公式配布Procmon 4.12内の既知startup errors（64-bit要求 / already monitoring / admin要求 / driver version conflict / driver load / enable capture / config open）の完全一致分類を追加した。任意画面文字列は記録しない。既知errorありはNodeでcontrol開始前にfail closed、`none`は既知error未検出だけを意味し、capture成功とは扱わない。256件 / 2 KiB / 20秒上限は維持。Windows runtime未検証。
+
 [Run 392](https://github.com/65537i/mail-client-plan/actions/runs/40536386302)（`dc64e3e`、manual Windows 2025 / webview）はNode55/55・PowerShell回帰、exact reload / Drop / readinessを通過した。capture windowはnormal / enabled:true / offscreen:falseで、UIA scanは7件、capture / filesystem各matches:0。非最小化でも対象controlは読めなかった。positive / excluded controlは16:08:37.934Z / 16:08:38.037Z、WDIO開始16:08:38.038Z / 終了16:09:06.054Z。capture 30,015 ms / PML 880,838 bytesは上限内だがCSV76 bytes / positive-control全0件で失敗し、attack未実施・AC-05未達。種類別toolbar / button / menuitemが全て7という不整合も発見した。ControlTypeオブジェクトを文字列表現で照合するPowerShell switchを型付きEqualsの排他的分岐に修正したため、Run392の種類別件数は無効とする。総scan件数・window state・target未検出の結果と区別する。修正後local Node55/55・syntax・diff check成功、Windows再検証未実施。次は通常表示でも浅いUIA treeしか公開されない理由とnative/MSAA read経路を調査する。
 
 [Run 390](https://github.com/65537i/mail-client-plan/actions/runs/40534473433)（`64bd5b6`、manual Windows 2025 / webview）はNode55/55、PowerShell回帰、exact reload / Drop / readinessを通過後、window evidenceの一意性検証で停止した。summary出力が誤ってscan loop内にあったため、loop完了後へ移し、Node配置guardとPowerShell ASTのloop ancestor拒否を追加した。このrunはcontrol / WDIO audit / CSV判定に到達せず、最小化の影響は未確認。AC-05未達。

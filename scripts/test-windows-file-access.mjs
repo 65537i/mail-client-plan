@@ -264,6 +264,15 @@ async function captureScenario(scenario) {
       "Process Monitor capture window inspection evidence is incomplete",
     );
     console.log(`Windows audit ${scenario}: ${windowEvidence[0][0].trim()}`);
+    const contextEvidence = [...captureInspectionOutput.matchAll(
+      /^PROC_MON_CAPTURE_CONTEXT=class:(dialog|other);modal:(unavailable|true|false);texts:(0|[1-9]\d{0,2});startup-error:(none|multiple|requires-64-bit|already-monitoring|requires-admin|driver-version-conflict|driver-load|enable-capture|config-open)\r?$/gm,
+    )];
+    assert(
+      contextEvidence.length === 1 && Number(contextEvidence[0][3]) <= 256,
+      "Process Monitor capture context inspection evidence is incomplete",
+    );
+    console.log(`Windows audit ${scenario}: ${contextEvidence[0][0].trim()}`);
+    assert.equal(contextEvidence[0][4], "none", "Process Monitor reported a known capture startup error");
     for (const target of ["capture", "filesystem"]) {
       const evidence = [...captureInspectionOutput.matchAll(
         /^PROC_MON_CAPTURE_CONTROL=(capture|filesystem);matches:(0|[1-9]\d{0,2});toggle:(unavailable|on|off|mixed);selected:(unavailable|on|off);enabled:(unavailable|true|false);offscreen:(unavailable|true|false)\r?$/gm,

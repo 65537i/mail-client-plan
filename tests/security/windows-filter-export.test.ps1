@@ -33,6 +33,8 @@ if (
   $inspectionText -notmatch 'PROC_MON_CAPTURE_WINDOW=visual:\$visual' -or
   $inspectionText -match 'switch \(\$state.ControlType\)' -or
   $inspectionText -notmatch 'ControlType.Equals\(\[System.Windows.Automation.ControlType\]::ToolBar\)' -or
+  $inspectionText -notmatch '\$state.Name -ceq \$errorText' -or
+  $inspectionText -notmatch 'PROC_MON_CAPTURE_CONTEXT=class:\$rootClass' -or
   $inspectionText -match 'Invoke\(|Toggle\(|Select\(|SendKeys|SetFocus|SetForegroundWindow|SetWindowVisualState|ShowWindow'
 ) {
   throw "Capture inspection must remain bounded, same-process and read-only"
