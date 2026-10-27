@@ -145,6 +145,23 @@ test("AC-05: reloaded filter UI diagnostics retain only bounded control counts",
   );
 });
 
+test("AC-05: reloaded rule shape diagnostics retain only consistent bounded counts", () => {
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_RELOADED_ROW_SHAPE=rows:26;distinct:26;duplicates:0;list-items:0;data-items:26;include:2;exclude:24;path-field:2;process-field:0;operation-field:0;other-field:0;unknown-field:24",
+    ),
+    "; reloaded-filter-row-shape=rows:26;distinct:26;duplicates:0;list-items:0;data-items:26;include:2;exclude:24;path-field:2;process-field:0;operation-field:0;other-field:0;unknown-field:24",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics([
+      "PROC_MON_FILTER_RELOADED_ROW_SHAPE=rows:65;distinct:65;duplicates:0;list-items:0;data-items:65;include:2;exclude:63;path-field:2;process-field:0;operation-field:0;other-field:0;unknown-field:63",
+      "PROC_MON_FILTER_RELOADED_ROW_SHAPE=rows:2;distinct:1;duplicates:0;list-items:0;data-items:2;include:2;exclude:0;path-field:2;process-field:0;operation-field:0;other-field:0;unknown-field:0",
+      "PROC_MON_FILTER_RELOADED_ROW_SHAPE=rows:2;distinct:2;duplicates:0;list-items:1;data-items:0;include:2;exclude:0;path-field:2;process-field:0;operation-field:0;other-field:0;unknown-field:0;name=C:\\private\\mail",
+    ].join("\n")),
+    "",
+  );
+});
+
 test("AC-05: reloaded Drop Filtered Events state accepts only a safe enum", () => {
   assert.equal(
     describeWindowsFilterDiagnostics([

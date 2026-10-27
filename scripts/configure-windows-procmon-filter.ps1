@@ -805,6 +805,10 @@ function Get-LoadedFilterRuleRows(
       $containerRows.Add($containerRuntimeId, [pscustomobject]@{
         Rows = [System.Collections.Generic.List[string]]::new()
         RuleRows = [System.Collections.Generic.List[string]]::new()
+        RuleControlTypes = [System.Collections.Generic.List[string]]::new()
+        UniqueRuleRows = [System.Collections.Generic.HashSet[string]]::new(
+          [System.StringComparer]::OrdinalIgnoreCase
+        )
       })
     }
     $container = $containerRows[$containerRuntimeId]
@@ -836,6 +840,9 @@ function Get-LoadedFilterRuleRows(
     $container.Rows.Add($rowText)
     if ($rowText -match "(?i)\s(?:Include|Exclude)\s*$") {
       $container.RuleRows.Add($rowText)
+      $container.RuleControlTypes.Add($state.ControlType.ProgrammaticName)
+      $normalizedRow = [regex]::Replace($rowText, "\s+", " ").Trim()
+      $container.UniqueRuleRows.Add($normalizedRow) | Out-Null
     }
   }
   $ruleContainers = [System.Collections.Generic.List[object]]::new()
@@ -848,6 +855,54 @@ function Get-LoadedFilterRuleRows(
       )
     }
   }
+  $ruleRowShape = [ordered]@{
+    Rows = 0
+    Distinct = 0
+    Duplicates = 0
+    ListItems = 0
+    DataItems = 0
+    Include = 0
+    Exclude = 0
+    PathField = 0
+    ProcessField = 0
+    OperationField = 0
+    OtherField = 0
+    UnknownField = 0
+  }
+  if ($ruleContainers.Count -eq 1) {
+    $ruleContainer = $ruleContainers[0]
+    $ruleRowShape.Rows = $ruleContainer.RuleRows.Count
+    $ruleRowShape.Distinct = $ruleContainer.UniqueRuleRows.Count
+    $ruleRowShape.Duplicates = (
+      $ruleRowShape.Rows - $ruleRowShape.Distinct
+    )
+    $ruleRowShape.ListItems = @(
+      $ruleContainer.RuleControlTypes |
+        Where-Object { $_ -eq "ControlType.ListItem" }
+    ).Count
+    $ruleRowShape.DataItems = @(
+      $ruleContainer.RuleControlTypes |
+        Where-Object { $_ -eq "ControlType.DataItem" }
+    ).Count
+    foreach ($row in $ruleContainer.RuleRows) {
+      if ($row -match "(?i)\sInclude\s*$") {
+        $ruleRowShape.Include++
+      } elseif ($row -match "(?i)\sExclude\s*$") {
+        $ruleRowShape.Exclude++
+      }
+      if ($row -match "^(?i)Path\s") {
+        $ruleRowShape.PathField++
+      } elseif ($row -match "^(?i)Process Name\s") {
+        $ruleRowShape.ProcessField++
+      } elseif ($row -match "^(?i)Operation\s") {
+        $ruleRowShape.OperationField++
+      } elseif ($row -match "^(?i)(Result|Detail|Event Class|Date & Time|Duration|Sequence|PID|TID|User|Session|Architecture)\s") {
+        $ruleRowShape.OtherField++
+      } else {
+        $ruleRowShape.UnknownField++
+      }
+    }
+  }
   if ($ruleContainers.Count -eq 1 -and $ruleContainerUnclassifiedRowCount -eq 0) {
     foreach ($row in $ruleContainers[0].RuleRows) {
       $rows.Add($row)
@@ -856,6 +911,11 @@ function Get-LoadedFilterRuleRows(
   [Console]::Out.WriteLine(
     "PROC_MON_FILTER_RELOADED_UI=items:$itemScanCount;lists:$listCount;data-grids:$dataGridCount;tables:$tableCount;list-items:$listItemCount;data-items:$dataItemCount;dialog-window-rows:$dialogWindowRowCount;other-window-rows:$otherWindowRowCount;unscoped-rows:$unscopedRowCount;combo-option-rows:$comboOptionRowCount;rule-containers:$($ruleContainers.Count);rule-row-candidates:$ruleRowCandidateCount;rule-container-unclassified-rows:$ruleContainerUnclassifiedRowCount;rows:$($rows.Count);truncated:$((($items.Count -gt 1024) -or $rowTruncated).ToString().ToLowerInvariant())"
   )
+  if ($ruleContainers.Count -eq 1) {
+    [Console]::Out.WriteLine(
+      "PROC_MON_FILTER_RELOADED_ROW_SHAPE=rows:$($ruleRowShape.Rows);distinct:$($ruleRowShape.Distinct);duplicates:$($ruleRowShape.Duplicates);list-items:$($ruleRowShape.ListItems);data-items:$($ruleRowShape.DataItems);include:$($ruleRowShape.Include);exclude:$($ruleRowShape.Exclude);path-field:$($ruleRowShape.PathField);process-field:$($ruleRowShape.ProcessField);operation-field:$($ruleRowShape.OperationField);other-field:$($ruleRowShape.OtherField);unknown-field:$($ruleRowShape.UnknownField)"
+    )
+  }
   if ($items.Count -gt 1024 -or $rowTruncated) {
     throw "Process Monitor filter dialog exceeded the bounded UI item limit"
   }

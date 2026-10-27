@@ -256,6 +256,39 @@ export function describeWindowsFilterDiagnostics(output) {
     }
   }
 
+  const reloadedFilterRowShape = output.match(
+    /^PROC_MON_FILTER_RELOADED_ROW_SHAPE=rows:(\d{1,2});distinct:(\d{1,2});duplicates:(\d{1,2});list-items:(\d{1,2});data-items:(\d{1,2});include:(\d{1,2});exclude:(\d{1,2});path-field:(\d{1,2});process-field:(\d{1,2});operation-field:(\d{1,2});other-field:(\d{1,2});unknown-field:(\d{1,2})\r?$/m,
+  );
+  if (reloadedFilterRowShape) {
+    const counts = reloadedFilterRowShape.slice(1).map(Number);
+    const [
+      rows,
+      distinct,
+      duplicates,
+      listItems,
+      dataItems,
+      include,
+      exclude,
+      pathField,
+      processField,
+      operationField,
+      otherField,
+      unknownField,
+    ] = counts;
+    if (
+      rows <= 64
+      && counts.every((count) => count <= rows)
+      && distinct + duplicates === rows
+      && listItems + dataItems === rows
+      && include + exclude === rows
+      && pathField + processField + operationField + otherField + unknownField === rows
+    ) {
+      diagnostics.push(
+        `reloaded-filter-row-shape=rows:${rows};distinct:${distinct};duplicates:${duplicates};list-items:${listItems};data-items:${dataItems};include:${include};exclude:${exclude};path-field:${pathField};process-field:${processField};operation-field:${operationField};other-field:${otherField};unknown-field:${unknownField}`,
+      );
+    }
+  }
+
   const windowScan = output.match(
     /^PROC_MON_FILTER_WINDOW_SCAN=stage:(initial|reload);phase:(refresh-process|check-process|enumerate-uia-windows|read-uia-window-owner|read-main-window-handle|read-main-window-owner|wait|foreground-owner);process-exited:(true|false);root-windows:(\d{1,4});uia-owned-windows:(\d{1,4});main-handle:(available|unavailable);foreground-owner:(same|other|unavailable)\r?$/m,
   );
