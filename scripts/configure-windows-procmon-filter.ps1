@@ -1904,11 +1904,13 @@ function Get-ReloadedNativeDropCheckState(
     Set-Stage "read-reloaded-msaa-menu-state"
     $accessibleSnapshot = Get-AccessibleDropMenuSnapshot `
       $MainWindowHandle $ProcessId $true "after-reload"
+    Set-Stage "consume-reloaded-msaa-menu-state"
     if ($accessibleSnapshot.CheckState -in @("on", "off")) {
       $checkState = $accessibleSnapshot.CheckState
       $dropEnabled = [bool]$accessibleSnapshot.IsEnabled
     }
   }
+  Set-Stage "verify-reloaded-drop-check-state"
   if ($checkState -notin @("on", "off") -or -not $dropEnabled) {
     throw "Process Monitor reloaded Drop Filtered Events state was unavailable or disabled"
   }
