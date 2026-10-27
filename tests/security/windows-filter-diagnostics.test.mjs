@@ -251,7 +251,7 @@ test("AC-05: Windows filter diagnostics retain safe focused-control observations
     "PROC_MON_FILTER_FOCUSED_CONTROL=after-reload-menu-select;type:Button;name:Other;offscreen:false;keyboard-focusable:true;tree=Button:Other>Window:ProcessMonitor",
     "PROC_MON_FILTER_FOCUSED_CONTROL=after-reload-menu-pointer;type:Menu;name:Filter;offscreen:false;keyboard-focusable:true;tree=Menu:Filter>Window:ProcessMonitor",
     "PROC_MON_FILTER_FOCUSED_CONTROL=after-reload-filter-dialog-shortcut;type:Window;name:ProcessMonitor;offscreen:false;keyboard-focusable:false;tree=Window:ProcessMonitor",
-    "PROC_MON_FILTER_FOCUSED_CONTROL=after-reload-menu-click;type:Button;name:Other;offscreen:false;keyboard-focusable:true;tree=Button:Other>Window:ProcessMonitor",
+    "PROC_MON_FILTER_FOCUSED_CONTROL=after-reload-menu-access-key;type:Menu;name:Event;offscreen:false;keyboard-focusable:false;tree=Menu:Event>Window:ProcessMonitor",
     "PROC_MON_FILTER_FOCUSED_CONTROL=after-reload-menu-keyboard-filter;type:Menu;name:Other;offscreen:false;keyboard-focusable:false;tree=Menu:Other>Window:ProcessMonitor",
   ].join("\n");
   assert.equal(
@@ -270,7 +270,7 @@ test("AC-05: Windows filter diagnostics retain safe focused-control observations
       + "; focus-after-reload-menu-select=Button:Other;offscreen:false;keyboard-focusable:true;tree=Button:Other>Window:ProcessMonitor"
       + "; focus-after-reload-menu-pointer=Menu:Filter;offscreen:false;keyboard-focusable:true;tree=Menu:Filter>Window:ProcessMonitor"
       + "; focus-after-reload-filter-dialog-shortcut=Window:ProcessMonitor;offscreen:false;keyboard-focusable:false;tree=Window:ProcessMonitor"
-      + "; focus-after-reload-menu-click=Button:Other;offscreen:false;keyboard-focusable:true;tree=Button:Other>Window:ProcessMonitor"
+      + "; focus-after-reload-menu-access-key=Menu:Event;offscreen:false;keyboard-focusable:false;tree=Menu:Event>Window:ProcessMonitor"
       + "; focus-after-reload-menu-keyboard-filter=Menu:Other;offscreen:false;keyboard-focusable:false;tree=Menu:Other>Window:ProcessMonitor",
   );
 });
@@ -282,8 +282,9 @@ test("AC-05: reload Event-menu diagnostics retain only allowlisted activation da
     "PROC_MON_FILTER_RELOAD_SHORTCUT=command:filter-dialog;state:sent",
     "PROC_MON_FILTER_RELOAD_SHORTCUT=command:C:\\private;state:sent",
     "PROC_MON_FILTER_RELOAD_EVENT_ITEM=matches:1",
-    "PROC_MON_FILTER_RELOAD_EVENT_ITEM_POINT=available:true;within-main:true",
-    "PROC_MON_FILTER_RELOAD_EVENT_MENU_ACTIVATION=route:clickpoint;state:sent",
+    "PROC_MON_FILTER_RELOAD_EVENT_ITEM_ACCESS_KEY=state:recognized;key:E",
+    "PROC_MON_FILTER_RELOAD_EVENT_ITEM_ACCESS_KEY=state:recognized;key:C:\\private",
+    "PROC_MON_FILTER_RELOAD_EVENT_MENU_ACTIVATION=route:access-key;state:sent",
     "PROC_MON_FILTER_RELOAD_EVENT_MENU=opened",
     "PROC_MON_FILTER_RELOAD_EVENT_MENU=name:C:\\private",
     "PROC_MON_FILTER_RELOAD_EVENT_FILTER_PATTERNS=expand-collapse:false;invoke:true",
@@ -296,8 +297,8 @@ test("AC-05: reload Event-menu diagnostics retain only allowlisted activation da
     "; reload-drop-main-foreground-gate=passed"
       + "; reload-filter-dialog-shortcut=sent"
       + "; reload-event-menu-item=matches:1"
-      + "; reload-event-menu-point=available:true;within-main:true"
-      + "; reload-event-menu-activation=route:clickpoint;state:sent"
+      + "; reload-event-menu-access-key=state:recognized;key:E"
+      + "; reload-event-menu-activation=route:access-key;state:sent"
       + "; reload-event-menu=opened"
       + "; reload-event-filter-patterns=expand-collapse:false;invoke:true"
       + "; reload-menu-keyboard=route:event-filter;state:activated",
@@ -478,7 +479,9 @@ test("AC-05: configuration save observations expose states, not paths or dialog 
     describeWindowsFilterDiagnostics([
       "PROC_MON_FILTER_RELOAD_EVENT_ITEM=matches:65",
       "PROC_MON_FILTER_RELOAD_EVENT_ITEM=matches:1;name=C:\\private",
-      "PROC_MON_FILTER_RELOAD_EVENT_ITEM_POINT=available:true;within-main:false;name=C:\\private",
+      "PROC_MON_FILTER_RELOAD_EVENT_ITEM_ACCESS_KEY=state:recognized;key:AB",
+      "PROC_MON_FILTER_RELOAD_EVENT_ITEM_ACCESS_KEY=state:recognized;key:C:\\private",
+      "PROC_MON_FILTER_RELOAD_EVENT_ITEM_ACCESS_KEY=state:unavailable;key:E",
       "PROC_MON_FILTER_RELOAD_EVENT_MENU_ACTIVATION=route:unknown;state:sent",
     ].join("\n")),
     "",

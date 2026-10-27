@@ -138,30 +138,6 @@ public static class ProcmonNativeMenu
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool SetForegroundWindow(IntPtr hWnd);
 
-    [DllImport("user32.dll", ExactSpelling = true, SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool SetCursorPos(int x, int y);
-
-    [DllImport("user32.dll", ExactSpelling = true, SetLastError = true)]
-    private static extern void mouse_event(
-        uint flags,
-        uint dx,
-        uint dy,
-        uint data,
-        IntPtr extraInfo
-    );
-
-    public static bool ClickScreenPoint(int x, int y)
-    {
-        if (!SetCursorPos(x, y))
-        {
-            return false;
-        }
-        mouse_event(0x0002, 0, 0, 0, IntPtr.Zero);
-        mouse_event(0x0004, 0, 0, 0, IntPtr.Zero);
-        return true;
-    }
-
     public static int GetWindowProcessId(IntPtr hWnd)
     {
         uint processId;
@@ -2036,6 +2012,7 @@ function Get-ControlTypeLabel([System.Windows.Automation.AutomationElement]$Elem
 
 function Get-ControlNameLabel([System.Windows.Automation.AutomationElement]$Element) {
   switch ($Element.Current.Name) {
+    "Event" { return "Event" }
     "File" { return "FileMenu" }
     "Filter" { return "Filter" }
     "Filter..." { return "FilterCommand" }
@@ -2878,33 +2855,29 @@ try {
     -not $reloadEventMenuState.IsEnabled -or $reloadEventMenuState.IsOffscreen) {
     throw "Process Monitor Event menu item was unavailable after reload"
   }
-  $reloadEventMenuPoint = [System.Windows.Point]::new(0, 0)
-  $hasReloadEventMenuPoint = $reloadEventMenu.TryGetClickablePoint(
-    [ref]$reloadEventMenuPoint
+  $reloadEventMenuAccessKey = [regex]::Match(
+    [string]$reloadEventMenuState.AccessKey,
+    "^(?:Alt\+)?(?<key>[A-Za-z])$"
   )
-  $reloadEventMenuPointWithinMain = $hasReloadEventMenuPoint -and
-    $main.Current.BoundingRectangle.Contains($reloadEventMenuPoint)
+  $reloadEventMenuAccessKeyRecognized = $reloadEventMenuAccessKey.Success
   [Console]::Out.WriteLine(
-    "PROC_MON_FILTER_RELOAD_EVENT_ITEM_POINT=available:$($hasReloadEventMenuPoint.ToString().ToLowerInvariant());within-main:$($reloadEventMenuPointWithinMain.ToString().ToLowerInvariant())"
+    "PROC_MON_FILTER_RELOAD_EVENT_ITEM_ACCESS_KEY=state:$(if ($reloadEventMenuAccessKeyRecognized) { 'recognized' } else { 'unavailable' });key:$(if ($reloadEventMenuAccessKeyRecognized) { $reloadEventMenuAccessKey.Groups['key'].Value.ToUpperInvariant() } else { 'none' })"
   )
-  if (-not $reloadEventMenuPointWithinMain) {
-    throw "Process Monitor Event menu item did not expose a clickable point inside its main window"
+  if (-not $reloadEventMenuAccessKeyRecognized) {
+    throw "Process Monitor Event menu item did not expose a recognized access key"
   }
-  $reloadEventMenuX = [int][Math]::Round($reloadEventMenuPoint.X)
-  $reloadEventMenuY = [int][Math]::Round($reloadEventMenuPoint.Y)
   $currentForegroundHandle = [ProcmonNativeMenu]::GetForegroundWindow()
   if ($currentForegroundHandle -ne $mainWindowHandle -or
     [ProcmonNativeMenu]::GetWindowProcessId($currentForegroundHandle) -ne $process.Id) {
-    throw "Process Monitor reloaded main window lost the foreground before Event menu click"
+    throw "Process Monitor reloaded main window lost the foreground before Event menu access key"
   }
-  Set-Stage "open-reloaded-event-menu-clickpoint"
-  if (-not [ProcmonNativeMenu]::ClickScreenPoint($reloadEventMenuX, $reloadEventMenuY)) {
-    throw "Process Monitor Event menu click point could not be activated"
-  }
+  $reloadEventMenuKey = $reloadEventMenuAccessKey.Groups["key"].Value.ToLowerInvariant()
+  Set-Stage "open-reloaded-event-menu-access-key"
+  [System.Windows.Forms.SendKeys]::SendWait("%$reloadEventMenuKey")
   [Console]::Out.WriteLine(
-    "PROC_MON_FILTER_RELOAD_EVENT_MENU_ACTIVATION=route:clickpoint;state:sent"
+    "PROC_MON_FILTER_RELOAD_EVENT_MENU_ACTIVATION=route:access-key;state:sent"
   )
-  Write-FocusObservation "after-reload-menu-click" | Out-Null
+  Write-FocusObservation "after-reload-menu-access-key" | Out-Null
   Set-Stage "wait-reloaded-event-menu"
   $reloadEventMenuScan = Wait-ProcessMenu $process
   $reloadEventMenu = $reloadEventMenuScan.Menu

@@ -1,5 +1,5 @@
 const allowedTypes = /^(?:MenuBar|Menu|MenuItem|Window|Pane|ToolBar|Button|Text|Edit|Other)$/;
-const allowedNames = /^(?:FileMenu|Filter|FilterCommand|SaveFilterCommand|ExportConfigCommand|DropFilteredEvents|HighlightFilteredEvents|MenuBar|ProcessMonitor|Other)$/;
+const allowedNames = /^(?:Event|FileMenu|Filter|FilterCommand|SaveFilterCommand|ExportConfigCommand|DropFilteredEvents|HighlightFilteredEvents|MenuBar|ProcessMonitor|Other)$/;
 export const windowsFilterOutputLimit = 8192;
 const windowsFilterOutputHeadLimit = 3072;
 const windowsFilterOutputTruncationMarker = "\nPROC_MON_FILTER_OUTPUT_TRUNCATED=true\n";
@@ -156,20 +156,26 @@ export function describeWindowsFilterDiagnostics(output) {
     }
   }
 
-  const reloadEventPoint = output.match(
-    /^PROC_MON_FILTER_RELOAD_EVENT_ITEM_POINT=available:(true|false);within-main:(true|false)\r?$/m,
+  const reloadEventAccessKey = output.match(
+    /^PROC_MON_FILTER_RELOAD_EVENT_ITEM_ACCESS_KEY=state:(recognized|unavailable);key:(?:([A-Z])|none)\r?$/m,
   );
-  if (reloadEventPoint) {
+  if (
+    reloadEventAccessKey
+    && (
+      (reloadEventAccessKey[1] === "recognized" && reloadEventAccessKey[2])
+      || (reloadEventAccessKey[1] === "unavailable" && !reloadEventAccessKey[2])
+    )
+  ) {
     diagnostics.push(
-      `reload-event-menu-point=available:${reloadEventPoint[1]};within-main:${reloadEventPoint[2]}`,
+      `reload-event-menu-access-key=state:${reloadEventAccessKey[1]};key:${reloadEventAccessKey[2] ?? "none"}`,
     );
   }
 
   if (
-    /^PROC_MON_FILTER_RELOAD_EVENT_MENU_ACTIVATION=route:clickpoint;state:sent\r?$/m
+    /^PROC_MON_FILTER_RELOAD_EVENT_MENU_ACTIVATION=route:access-key;state:sent\r?$/m
       .test(output)
   ) {
-    diagnostics.push("reload-event-menu-activation=route:clickpoint;state:sent");
+    diagnostics.push("reload-event-menu-activation=route:access-key;state:sent");
   }
 
   const reloadEventMenu = output.match(
@@ -774,7 +780,7 @@ export function describeWindowsFilterDiagnostics(output) {
     }
   }
   for (const match of output.matchAll(
-    /^PROC_MON_FILTER_FOCUSED_CONTROL=(after-open|after-home|filter-command|after-enter|after-invoke|after-click|after-command-invoke|after-reload-filter-dialog-shortcut|after-reload-menu-(?:expand|select|legacy-ia|pointer|invoke|click|keyboard-event|keyboard-filter));focused:(none|unavailable)\r?$/gm,
+    /^PROC_MON_FILTER_FOCUSED_CONTROL=(after-open|after-home|filter-command|after-enter|after-invoke|after-click|after-command-invoke|after-reload-filter-dialog-shortcut|after-reload-menu-(?:expand|select|legacy-ia|pointer|invoke|access-key|keyboard-event|keyboard-filter));focused:(none|unavailable)\r?$/gm,
   )) {
     focusObservations.push({
       index: match.index,
@@ -782,7 +788,7 @@ export function describeWindowsFilterDiagnostics(output) {
     });
   }
   for (const match of output.matchAll(
-    /^PROC_MON_FILTER_FOCUSED_CONTROL=(after-open|after-home|filter-command|after-enter|after-invoke|after-click|after-command-invoke|after-reload-filter-dialog-shortcut|after-reload-menu-(?:expand|select|legacy-ia|pointer|invoke|click|keyboard-event|keyboard-filter));type:(MenuBar|Menu|MenuItem|Window|Pane|ToolBar|Button|Text|Edit|Other);name:(FileMenu|Filter|FilterCommand|SaveFilterCommand|ExportConfigCommand|MenuBar|ProcessMonitor|Other);offscreen:(true|false);keyboard-focusable:(true|false);tree=([A-Za-z:>]+)\r?$/gm,
+    /^PROC_MON_FILTER_FOCUSED_CONTROL=(after-open|after-home|filter-command|after-enter|after-invoke|after-click|after-command-invoke|after-reload-filter-dialog-shortcut|after-reload-menu-(?:expand|select|legacy-ia|pointer|invoke|access-key|keyboard-event|keyboard-filter));type:(MenuBar|Menu|MenuItem|Window|Pane|ToolBar|Button|Text|Edit|Other);name:(Event|FileMenu|Filter|FilterCommand|SaveFilterCommand|ExportConfigCommand|MenuBar|ProcessMonitor|Other);offscreen:(true|false);keyboard-focusable:(true|false);tree=([A-Za-z:>]+)\r?$/gm,
   )) {
     const nodes = match[6].split(">");
     if (
