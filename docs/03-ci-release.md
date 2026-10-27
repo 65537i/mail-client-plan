@@ -19,7 +19,9 @@ Windows: MSVC toolchain、WebView2、必要SDK。WebDriverを外部利用する�
 
 ### nativeの短い検証ループ
 
-Run396後はUIAとは独立したnative EnumChildWindows診断を追加する。同じroot HWND配下を最大256件とし、全childおよびroot前後のPID一致を要求する。任意window textは読まず、classはtoolbar / listview / statusbar / dialog / otherの完全一致分類だけを件数化する。重複・上限超過・class取得失敗・ownership不明はfail closed、Nodeは一意のallowlist evidenceと件数合計・visible上限を照合する。全体2 KiB / 20秒上限、exact filter / Drop / positive-control / canary gateは維持。Windows回帰ではhelperコンパイル、表示しない合成Formのchild分類、不正 / foreign root拒否を検証する。Windows runtime未検証。
+Run396後はUIAとは独立したnative EnumChildWindows診断を追加した。同じroot HWND配下を最大256件とし、全childおよびroot前後のPID一致を要求する。任意window textは読まず、classはtoolbar / listview / statusbar / dialog / otherの完全一致分類だけを件数化する。重複・上限超過・class取得失敗・ownership不明はfail closed、Nodeは一意のallowlist evidenceと件数合計・visible上限を照合する。全体2 KiB / 20秒上限、exact filter / Drop / positive-control / canary gateは維持。Windows回帰ではhelperコンパイル、表示しない合成Formのchild分類、不正 / foreign root拒否を検証する。
+
+[Run 399](https://github.com/65537i/mail-client-plan/actions/runs/40542104607) / [Run 400](https://github.com/65537i/mail-client-plan/actions/runs/40543666555)（いずれも`20bd895`、manual Windows 2025 / webview）はNode57/57、PowerShell parse・native helperコンパイル・hidden childの完全一致分類・invalid / foreign root拒否と既存export回帰に成功した。両runとも実filter setupの`wait-export-config-dialog`で失敗し、dialog scanはwindows:0 / file-names:0 / save-buttons:0。Drop初期設定はMSAA off→onを確認したが、PMC保存 / reload / captureには未到達。native child比較、positive-control、canary exclusion、attackは未実施。Run400は条件・timeoutを変更せず同commitの限定再試行で、同じ停止を再現したため反復を打ち切った。helper回帰成功と実capture検証を混同せず、新helper追加とdialog停止の因果も断定しない。次はExport Configuration Invoke後のdialog検出 / focus経路を調査する。ローカルNode57/57・JS syntax・diff check成功。AC-05未達、3OS full・最低OS実測は未実施。
 
 Run392後の診断ではroot classのdialog分類（`#32770`完全一致）、WindowPattern.IsModal、Text件数と、公式配布Procmon 4.12内の既知startup errors（64-bit要求 / already monitoring / admin要求 / driver version conflict / driver load / enable capture / config open）の完全一致分類を追加した。任意画面文字列は記録しない。既知errorありはNodeでcontrol開始前にfail closed、`none`は既知error未検出だけを意味し、capture成功とは扱わない。256件 / 2 KiB / 20秒上限は維持。
 
