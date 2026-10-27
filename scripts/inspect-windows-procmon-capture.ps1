@@ -53,10 +53,12 @@ try {
     if ($state.ProcessId -ne $OwnerProcessId) {
       throw "Capture UI contains a foreign-process control"
     }
-    switch ($state.ControlType) {
-      ([System.Windows.Automation.ControlType]::ToolBar) { $toolbars++ }
-      ([System.Windows.Automation.ControlType]::Button) { $buttons++ }
-      ([System.Windows.Automation.ControlType]::MenuItem) { $menuitems++ }
+    if ($state.ControlType.Equals([System.Windows.Automation.ControlType]::ToolBar)) {
+      $toolbars++
+    } elseif ($state.ControlType.Equals([System.Windows.Automation.ControlType]::Button)) {
+      $buttons++
+    } elseif ($state.ControlType.Equals([System.Windows.Automation.ControlType]::MenuItem)) {
+      $menuitems++
     }
     $label = ($state.Name -replace "&", "") -replace "`t.*$", ""
     $target = switch -CaseSensitive ($label) {
