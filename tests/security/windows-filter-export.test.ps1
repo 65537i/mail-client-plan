@@ -95,6 +95,17 @@ if ($parseErrors.Count -ne 0) {
   throw "Procmon configuration script has PowerShell parse errors"
 }
 $sourceText = [IO.File]::ReadAllText($source)
+if ($sourceText -notmatch '(?s)Set-Stage "wait-export-config-dialog"\s*try \{\s*\$saveControls = Wait-ConfigSaveDialog \$process \$main\s*\} catch \{\s*Write-ConfigSaveResultObservation "export-timeout" \$process \$main\s*throw\s*\}') {
+  throw "Export dialog failure must retain the original failure after a read-only observation"
+}
+$saveObservationFunction = $ast.Find({
+  param($node)
+  $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+    $node.Name -eq "Write-ConfigSaveResultObservation"
+}, $true)
+if ($saveObservationFunction.Extent.Text -notmatch 'PROC_MON_FILTER_SAVE_RESULT_FAILED=phase:\$Phase') {
+  throw "Failed save observation must not report successful zero counts"
+}
 $reloadedStateFunction = $ast.Find({
   param($node)
   $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and

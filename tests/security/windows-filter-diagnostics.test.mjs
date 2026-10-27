@@ -7,6 +7,21 @@ import {
   windowsFilterOutputLimit,
 } from "../../scripts/windows-filter-diagnostics.mjs";
 
+test("AC-05: export timeout observations distinguish missing dialogs from failed inspection", () => {
+  const line = "PROC_MON_FILTER_SAVE_RESULT=phase:export-timeout;foreground:procmon-main;same-process-dialogs:0;other-process-windows:1;buttons:save:0;cancel:0;yes:0;no:0;ok:0;retry:0;close:0;truncated:false";
+  assert.equal(
+    describeWindowsFilterDiagnostics(line),
+    "; config-save-result-export-timeout=foreground:procmon-main;same-process-dialogs:0;other-process-windows:1;buttons:save:0;cancel:0;yes:0;no:0;ok:0;retry:0;close:0;truncated:false",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics("PROC_MON_FILTER_SAVE_RESULT_FAILED=phase:export-timeout"),
+    "; config-save-result-export-timeout=unavailable",
+  );
+  assert.equal(describeWindowsFilterDiagnostics(line.replace("windows:1", "windows:33")), "");
+  assert.equal(describeWindowsFilterDiagnostics(`${line};name=private`), "");
+  assert.equal(describeWindowsFilterDiagnostics("PROC_MON_FILTER_SAVE_RESULT_FAILED=phase:private"), "");
+});
+
 test("AC-05: Windows filter diagnostics retain only allowlisted UIA and native menu state", () => {
   const output = [
     "PROC_MON_FILTER_MENU_STATE=enabled:true;offscreen:false;keyboard-focusable:true",

@@ -1330,7 +1330,7 @@ function Write-ConfigSaveResultObservation(
     )
   } catch {
     [Console]::Out.WriteLine(
-      "PROC_MON_FILTER_SAVE_RESULT=phase:$Phase;foreground:unavailable;same-process-dialogs:0;other-process-windows:0;buttons:save:0;cancel:0;yes:0;no:0;ok:0;retry:0;close:0;truncated:false"
+      "PROC_MON_FILTER_SAVE_RESULT_FAILED=phase:$Phase"
     )
   }
 }
@@ -3045,7 +3045,12 @@ try {
   Set-Stage "invoke-export-config-command"
   $saveInvokePattern.Invoke()
   Set-Stage "wait-export-config-dialog"
-  $saveControls = Wait-ConfigSaveDialog $process $main
+  try {
+    $saveControls = Wait-ConfigSaveDialog $process $main
+  } catch {
+    Write-ConfigSaveResultObservation "export-timeout" $process $main
+    throw
+  }
   $fileName = $saveControls.FileName
   $save = $saveControls.Save
   if ($fileName.Current.ProcessId -ne $process.Id -or
