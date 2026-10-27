@@ -705,6 +705,15 @@ function Get-LoadedFilterRuleRows(
   [System.Windows.Automation.AutomationElement]$Dialog,
   [int]$OwnerProcessId
 ) {
+  $dialogState = $Dialog.Current
+  $dialogHandle = [IntPtr]$dialogState.NativeWindowHandle
+  if (
+    $dialogState.ProcessId -ne $OwnerProcessId -or
+    $dialogHandle -eq [IntPtr]::Zero -or
+    [ProcmonNativeMenu]::GetWindowProcessId($dialogHandle) -ne $OwnerProcessId
+  ) {
+    throw "Process Monitor filter dialog ownership could not be verified"
+  }
   $items = $Dialog.FindAll(
     [System.Windows.Automation.TreeScope]::Descendants,
     [System.Windows.Automation.Condition]::TrueCondition
@@ -722,6 +731,9 @@ function Get-LoadedFilterRuleRows(
   $tableCount = 0
   $listItemCount = 0
   $dataItemCount = 0
+  $dialogWindowRowCount = 0
+  $otherWindowRowCount = 0
+  $unscopedRowCount = 0
   $rowTruncated = $false
   $itemScanCount = [Math]::Min($items.Count, 1024)
   for ($itemIndex = 0; $itemIndex -lt $itemScanCount; $itemIndex++) {
@@ -741,7 +753,8 @@ function Get-LoadedFilterRuleRows(
     $parent = $treeWalker.GetParent($item)
     $insideRow = $false
     $insideContainer = $false
-    for ($level = 0; $null -ne $parent -and $level -lt 6; $level++) {
+    $nearestWindowHandle = [IntPtr]::Zero
+    for ($level = 0; $null -ne $parent -and $level -lt 10; $level++) {
       $parentType = $parent.Current.ControlType.ProgrammaticName
       if ($parentType -in $rowKinds) {
         $insideRow = $true
@@ -749,6 +762,9 @@ function Get-LoadedFilterRuleRows(
       }
       if ($parentType -in $containerKinds) {
         $insideContainer = $true
+      }
+      if ($parentType -eq "ControlType.Window") {
+        $nearestWindowHandle = [IntPtr]$parent.Current.NativeWindowHandle
         break
       }
       $parent = $treeWalker.GetParent($parent)
@@ -756,6 +772,15 @@ function Get-LoadedFilterRuleRows(
     if ($insideRow -or -not $insideContainer) {
       continue
     }
+    if ($nearestWindowHandle -ne $dialogHandle) {
+      if ($nearestWindowHandle -eq [IntPtr]::Zero) {
+        $unscopedRowCount++
+      } else {
+        $otherWindowRowCount++
+      }
+      continue
+    }
+    $dialogWindowRowCount++
     if ($rows.Count -ge 64) {
       $rowTruncated = $true
       continue
@@ -781,7 +806,7 @@ function Get-LoadedFilterRuleRows(
     $rows.Add(($parts -join " "))
   }
   [Console]::Out.WriteLine(
-    "PROC_MON_FILTER_RELOADED_UI=items:$itemScanCount;lists:$listCount;data-grids:$dataGridCount;tables:$tableCount;list-items:$listItemCount;data-items:$dataItemCount;rows:$($rows.Count);truncated:$((($items.Count -gt 1024) -or $rowTruncated).ToString().ToLowerInvariant())"
+    "PROC_MON_FILTER_RELOADED_UI=items:$itemScanCount;lists:$listCount;data-grids:$dataGridCount;tables:$tableCount;list-items:$listItemCount;data-items:$dataItemCount;dialog-window-rows:$dialogWindowRowCount;other-window-rows:$otherWindowRowCount;unscoped-rows:$unscopedRowCount;rows:$($rows.Count);truncated:$((($items.Count -gt 1024) -or $rowTruncated).ToString().ToLowerInvariant())"
   )
   if ($items.Count -gt 1024 -or $rowTruncated) {
     throw "Process Monitor filter dialog exceeded the bounded UI item limit"

@@ -117,11 +117,20 @@ test("AC-05: reloaded filter UI diagnostics retain only bounded control counts",
     "; reloaded-filter-ui=items:34;lists:1;data-grids:0;tables:0;list-items:2;data-items:0;rows:2;truncated:false",
   );
   assert.equal(
+    describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_RELOADED_UI=items:34;lists:1;data-grids:0;tables:0;list-items:2;data-items:0;dialog-window-rows:2;other-window-rows:8;unscoped-rows:1;rows:2;truncated:false",
+    ),
+    "; reloaded-filter-ui=items:34;lists:1;data-grids:0;tables:0;list-items:2;data-items:0;dialog-window-rows:2;other-window-rows:8;unscoped-rows:1;rows:2;truncated:false",
+  );
+  assert.equal(
     describeWindowsFilterDiagnostics([
       "PROC_MON_FILTER_RELOADED_UI=items:1025;lists:1;data-grids:0;tables:0;list-items:2;data-items:0;rows:2;truncated:false",
       "PROC_MON_FILTER_RELOADED_UI=items:34;lists:35;data-grids:0;tables:0;list-items:2;data-items:0;rows:2;truncated:false",
       "PROC_MON_FILTER_RELOADED_UI=items:34;lists:1;data-grids:0;tables:0;list-items:2;data-items:0;rows:65;truncated:false",
       "PROC_MON_FILTER_RELOADED_UI=items:34;lists:1;data-grids:0;tables:0;list-items:2;data-items:0;rows:2;truncated:false;name=C:\\private\\mail",
+      "PROC_MON_FILTER_RELOADED_UI=items:34;lists:1;data-grids:0;tables:0;list-items:2;data-items:0;dialog-window-rows:35;other-window-rows:0;unscoped-rows:0;rows:2;truncated:false",
+      "PROC_MON_FILTER_RELOADED_UI=items:34;lists:1;data-grids:0;tables:0;list-items:2;data-items:0;dialog-window-rows:34;other-window-rows:1;unscoped-rows:0;rows:2;truncated:false",
+      "PROC_MON_FILTER_RELOADED_UI=items:34;lists:1;data-grids:0;tables:0;list-items:2;data-items:0;dialog-window-rows:2;other-window-rows:8;unscoped-rows:1;rows:2;truncated:false;name=C:\\private\\mail",
     ].join("\n")),
     "",
   );

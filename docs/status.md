@@ -1,13 +1,16 @@
 # 開発状況
 
-更新日: 2026-10-26
+更新日: 2026-10-27
 
 ## 現在の範囲
 
+- Windows最新診断: [Run 313](https://github.com/65537i/mail-client-plan/actions/runs/40429901466)（`8358ef5`、manual Windows 2025 / webview）はsecurity-test build、WebView security tests、Windows audit setup / worker、configuration-export regressionを通過したが、step 30の`read-reloaded-filter-rules`で失敗。Ctrl+L後にProcmon所有Filter dialog（embedded-window、combos 4 / edits 1）を見つけたものの、UIA scanは64行で上限に達し、dialog外の同一process行を除外できず停止した。正確なreload rulesは未確認。Alt+V、Drop再読込状態、capture、canary / attack判定へ未到達でAC-05未達。
+- 次はFilter dialog自身のHWNDと一致するUIA Window配下のrule rowだけを読む。所有者HWNDを検証し、dialog / other-window / unscopedの行数だけをbounded diagnosticsに追加した。関連Windows監査Node tests 43/43、JS syntax、`git diff --check`成功。PowerShell 5.1 / Procmonでの修正後runtime検証は未実施。
+- Push [Run 312](https://github.com/65537i/mail-client-plan/actions/runs/40429873452)（`8358ef5`、Ubuntu basic）はsuccess。Windows UIA / Procmon監査の証拠ではない。
 - Windows最新診断: [Run 310](https://github.com/65537i/mail-client-plan/actions/runs/40379682219)（`536f6d9`、manual Windows 2025 / webview）はsecurity-test build、WebView tests、Windows audit setup / worker、configuration-export regressionを通過したが、Procmon監査は`wait-reloaded-filter-menu`で停止。Filter項目は一意、rectangle中心のFromPoint runtime ID一致、Procmon foregroundを確認してpointer inputを送信したが、後続scanは`windows:1;menus:0;visible:0`、focusは`Window:Other`。クリックはメニューを開かず、AC-05のreloaded rules、Drop state、capture、canary / attack判定は未到達。export header `other`はPMC rule proofではない。
-- 次のWindows試行では、Procmonのメニュー資源で確認したFilter dialogの`Ctrl+L`と、Event > Filterサブメニューの経路を使う。再読込後はforegroundとProcmon所有Filter dialog/menu、exact rules、unique Drop項目を確認し、どのgateも緩めない。ポインター経路は撤去した。Windows監査Node regression 43/43、JS syntax、`git diff --check`成功。PowerShell 5.1 / Procmon runtime validationは未実施でAC-05未達。
+- Run 310後に選んだ`Ctrl+L` / Event > Filter経路はRun 313で実行したが、exact rules読取前にUIA row上限で停止した。上記のHWND境界修正で行抽出を限定し、既存gateは緩めない。
 - Linux push [Run 311](https://github.com/65537i/mail-client-plan/actions/runs/40417015055)（`bffcccb`）はsuccess。Ubuntu basic validationであり、Windows UIA / Procmon監査の証拠ではない。
-- Run 310後、Procmonのembedded menu labelsからFilter dialog `Ctrl+L`とEvent > Filter submenuを確認。Run 310のpointer経路は撤去し、次runでこの別経路をforeground / same-process UIA gate付きで検証する。exact rules、Drop state、capture、canary / attack判定は依然未達。
+- Run 310後、Procmonのembedded menu labelsからFilter dialog `Ctrl+L`とEvent > Filter submenuを確認した。Run 310のpointer経路は撤去済み。Run 313ではCtrl+L後のFilter dialog確認まで進んだが、exact rules、Drop state、capture、canary / attack判定は未達。
 - Windows最新診断: [Run 308](https://github.com/65537i/mail-client-plan/actions/runs/40376060761)（`b2253ea`、manual Windows 2025 / webview）はsecurity-test build、WebView tests、Windows audit setup / worker、configuration-export regressionを通過。Procmon監査は`wait-reloaded-filter-menu`で停止。`AutomationPattern.LookupById(10018)`によるprobeは成功し、ExpandCollapse=false、SelectionItem=false、LegacyIAccessible=false、Invoke=trueを記録したが、Invoke後focusはButton、bounded scanは`windows:1;menus:0;visible:0`。reloaded rules、Drop state、capture、canary/attack判定は未到達でAC-05未達。export headerは`other`でPMC rule proofではない。
 - Windows最新診断: [Run 306](https://github.com/65537i/mail-client-plan/actions/runs/40373877671)（`122083f`、manual Windows 2025 / webview）はsecurity-test build、WebView tests、audit setup / worker、configuration-export regressionと41件のNode testsに成功。Procmon監査は`read-reloaded-filter-menu-pattern`で停止し、pattern diagnostics出力前にRuntimeExceptionとなったため、LegacyIAccessible対応可否は未確認。前runで確認したMSAA `OBJID_MENU` children 0件とUIA Filter > ToolBar ancestryから、次はUIA AutomationPattern IDでLegacyIAccessibleを取得する形にし、same-process unique open-menu gateは維持する。exact reload rules、reload Drop状態、capture、canary/attack判定は未到達、AC-05未達。
 - Linux push [Run 305](https://github.com/65537i/mail-client-plan/actions/runs/40373795212)（`122083f`）はsuccess。basic validationでありWindows UIA / Procmon監査の証拠ではない。
