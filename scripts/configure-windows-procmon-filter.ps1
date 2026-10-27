@@ -1027,7 +1027,14 @@ function Clear-LoadedFilterRules(
       throw
     }
   }
-  $selectedRows = $selectionPattern.GetSelection()
+  try {
+    $selectedRows = $selectionPattern.GetSelection()
+  } catch {
+    [Console]::Out.WriteLine(
+      "PROC_MON_FILTER_RULE_SELECTION_FAILURE=phase:selection-set;row:0;completed:$($rows.Count);expected:$($rows.Count)"
+    )
+    throw
+  }
   [Console]::Out.WriteLine(
     "PROC_MON_FILTER_RULE_SELECTION=selected:$($selectedRows.Count);expected:$($rows.Count)"
   )

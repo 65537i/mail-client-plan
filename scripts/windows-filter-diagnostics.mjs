@@ -311,19 +311,31 @@ export function describeWindowsFilterDiagnostics(output) {
   }
 
   for (const match of output.matchAll(
-    /^PROC_MON_FILTER_RULE_SELECTION_FAILURE=phase:(row-state|runtime-id|pattern|select|add|verify);row:(\d{1,2});completed:(\d{1,2});expected:(\d{1,2})\r?$/gm,
+    /^PROC_MON_FILTER_RULE_SELECTION_FAILURE=phase:(row-state|runtime-id|pattern|select|add|verify|selection-set);row:(\d{1,2});completed:(\d{1,2});expected:(\d{1,2})\r?$/gm,
   )) {
     const [, phase, rawRow, rawCompleted, rawExpected] = match;
     const row = Number(rawRow);
     const completed = Number(rawCompleted);
     const expected = Number(rawExpected);
+    const isSelectionSetFailure = phase === "selection-set";
     if (
       expected > 0
       && expected <= 64
-      && row > 0
-      && row <= expected
-      && completed < expected
-      && completed === row - 1
+      && completed <= expected
+      && (
+        (
+          isSelectionSetFailure
+          && row === 0
+          && completed === expected
+        )
+        || (
+          !isSelectionSetFailure
+          && row > 0
+          && row <= expected
+          && completed < expected
+          && completed === row - 1
+        )
+      )
     ) {
       diagnostics.push(
         `filter-rule-selection-failure=phase:${phase};row:${row};completed:${completed};expected:${expected}`,
