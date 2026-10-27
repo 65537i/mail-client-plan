@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   appendBoundedWindowsFilterOutput,
   describeWindowsFilterDiagnostics,
+  reloadedFilterUiEvidencePattern,
   windowsFilterOutputLimit,
 } from "../../scripts/windows-filter-diagnostics.mjs";
 
@@ -789,4 +790,55 @@ test("AC-05: Windows filter output retains diagnostics within a strict 8192-char
   assert.ok(
     appendBoundedWindowsFilterOutput(bounded, "extra").endsWith("extra"),
   );
+});
+
+test("AC-05: truncation preserves mandatory evidence across chunk boundaries within 8192 characters", () => {
+  const lines = [
+    "PROC_MON_FILTER_CONFIG_PATHS=canary:1;control:1",
+    "PROC_MON_FILTER_RELOADED_RULES=rows:2;canary:1;control:1;path:2;is:2;include:2;unclassified:0",
+    "PROC_MON_FILTER_RELOADED_UI=items:86;lists:4;data-grids:1;tables:0;list-items:41;data-items:2;dialog-window-rows:43;other-window-rows:0;unscoped-rows:0;combo-option-rows:41;rule-containers:1;rule-row-candidates:2;rule-container-unclassified-rows:0;rows:2;truncated:false",
+    "PROC_MON_FILTER_RELOADED_DROP=checked:on",
+  ];
+  for (const chunkSize of [1, 7, 64, 4096, 65536]) {
+    const stream = `${"x".repeat(9000)}\n${lines.join("\n")}\n${"y".repeat(12000)}\n`;
+    let captured = "";
+    for (let offset = 0; offset < stream.length; offset += chunkSize) {
+      captured = appendBoundedWindowsFilterOutput(captured, stream.slice(offset, offset + chunkSize));
+      assert.ok(captured.length <= windowsFilterOutputLimit);
+    }
+    const diagnostics = describeWindowsFilterDiagnostics(captured);
+    assert.ok(diagnostics.includes("; config-filter-paths=canary:1;control:1"));
+    assert.ok(diagnostics.includes("; reloaded-filter-rules=rows:2;canary:1;control:1;path:2;is:2;include:2;unclassified:0"));
+    assert.ok(diagnostics.includes("; reloaded-drop-filtered-events=on"));
+    const ui = diagnostics.split("; ").find(value => value.startsWith("reloaded-filter-ui="));
+    assert.match(ui, reloadedFilterUiEvidencePattern);
+    assert.equal(captured.length, windowsFilterOutputLimit);
+  }
+});
+
+test("AC-05: retained mandatory evidence does not preserve unsafe values or upgrade failed gates", () => {
+  const captured = appendBoundedWindowsFilterOutput(
+    `${"x".repeat(4000)}\nPROC_MON_FILTER_CONFIG_PATHS=canary:C:\\private;control:1\n`
+      + "PROC_MON_FILTER_RELOADED_DROP=checked:off\n",
+    "y".repeat(12000),
+  );
+  assert.equal(captured.length, windowsFilterOutputLimit);
+  assert.ok(!captured.includes("C:\\private"));
+  assert.ok(describeWindowsFilterDiagnostics(captured).includes("; reloaded-drop-filtered-events=off"));
+  assert.ok(!describeWindowsFilterDiagnostics(captured).includes("; reloaded-drop-filtered-events=on"));
+});
+
+test("AC-05: parsed UI evidence accepts supported complete shapes but not incomplete or arbitrary data", () => {
+  for (const extra of [
+    "",
+    ";dialog-window-rows:2;other-window-rows:0;unscoped-rows:0",
+    ";dialog-window-rows:2;other-window-rows:0;unscoped-rows:0;combo-option-rows:0;rule-containers:1;rule-row-candidates:2;rule-container-unclassified-rows:0",
+  ]) {
+    const line = `PROC_MON_FILTER_RELOADED_UI=items:34;lists:1;data-grids:0;tables:0;list-items:2;data-items:0${extra};rows:2;truncated:false`;
+    const parsed = describeWindowsFilterDiagnostics(line).slice(2);
+    assert.match(parsed, reloadedFilterUiEvidencePattern);
+    assert.doesNotMatch(parsed.replace("truncated:false", "truncated:true"), reloadedFilterUiEvidencePattern);
+    assert.doesNotMatch(parsed.replace(";rows:2;", ";rows:1;"), reloadedFilterUiEvidencePattern);
+    assert.doesNotMatch(`${parsed};private:path`, reloadedFilterUiEvidencePattern);
+  }
 });

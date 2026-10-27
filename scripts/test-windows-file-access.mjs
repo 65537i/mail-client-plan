@@ -13,6 +13,7 @@ import { createWindowsAuditCanary } from "./windows-audit-canary.mjs";
 import {
   appendBoundedWindowsFilterOutput,
   describeWindowsFilterDiagnostics,
+  reloadedFilterUiEvidencePattern,
   windowsFilterOutputLimit,
 } from "./windows-filter-diagnostics.mjs";
 
@@ -167,7 +168,7 @@ async function captureScenario(scenario) {
       .find((diagnostic) => diagnostic.startsWith("reloaded-filter-ui="));
     assert.match(
       reloadedFilterUiEvidence ?? "",
-      /^reloaded-filter-ui=items:\d+;lists:\d+;data-grids:\d+;tables:\d+;list-items:\d+;data-items:\d+;rows:2;truncated:false$/,
+      reloadedFilterUiEvidencePattern,
       "Process Monitor did not provide a complete bounded UI snapshot for the reloaded rules",
     );
     console.log(`Windows audit ${scenario}: ${reloadedFilterUiEvidence}`);

@@ -1,6 +1,7 @@
 const allowedTypes = /^(?:MenuBar|Menu|MenuItem|Window|Pane|ToolBar|Button|Text|Edit|Other)$/;
 const allowedNames = /^(?:Event|FileMenu|Filter|FilterCommand|SaveFilterCommand|ExportConfigCommand|DropFilteredEvents|HighlightFilteredEvents|MenuBar|ProcessMonitor|Other)$/;
 export const windowsFilterOutputLimit = 8192;
+export const reloadedFilterUiEvidencePattern = /^reloaded-filter-ui=items:\d+;lists:\d+;data-grids:\d+;tables:\d+;list-items:\d+;data-items:\d+(?:;dialog-window-rows:\d+;other-window-rows:\d+;unscoped-rows:\d+(?:;combo-option-rows:\d+;rule-containers:\d+;rule-row-candidates:\d+;rule-container-unclassified-rows:\d+)?)?;rows:2;truncated:false$/;
 const windowsFilterOutputHeadLimit = 3072;
 const windowsFilterOutputTruncationMarker = "\nPROC_MON_FILTER_OUTPUT_TRUNCATED=true\n";
 const windowsFilterOutputTailLimit =
@@ -11,9 +12,20 @@ const windowsFilterOutputTailLimit =
 export function appendBoundedWindowsFilterOutput(current, chunk) {
   const combined = current + chunk;
   if (combined.length <= windowsFilterOutputLimit) return combined;
+  const evidence = new Map();
+  for (const match of combined.matchAll(
+    /^(PROC_MON_FILTER_CONFIG_PATHS|PROC_MON_FILTER_RELOADED_RULES|PROC_MON_FILTER_RELOADED_UI|PROC_MON_FILTER_RELOADED_DROP)=[^\r\n]{1,1024}\r?$/gm,
+  )) {
+    if (!evidence.has(match[1]) && describeWindowsFilterDiagnostics(match[0])) {
+      evidence.set(match[1], match[0].replace(/\r$/, ""));
+    }
+  }
+  const retainedEvidence = evidence.size ? `${[...evidence.values()].join("\n")}\n` : "";
+  const tailLimit = windowsFilterOutputTailLimit - retainedEvidence.length;
   return combined.slice(0, windowsFilterOutputHeadLimit)
     + windowsFilterOutputTruncationMarker
-    + combined.slice(-windowsFilterOutputTailLimit);
+    + retainedEvidence
+    + combined.slice(-tailLimit);
 }
 
 export function describeWindowsFilterDiagnostics(output) {
