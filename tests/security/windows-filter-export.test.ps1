@@ -43,6 +43,23 @@ if (
   throw "Reloaded menu state must probe the Event item's read-only UI Automation patterns"
 }
 Write-Host "PASS AC-05: reloaded menu state probes bounded Event menu patterns without activation"
+$closeReloadedDialogFunction = $ast.Find({
+  param($node)
+  $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+    $node.Name -eq "Close-ReloadedFilterDialog"
+}, $true)
+if (
+  $null -eq $closeReloadedDialogFunction -or
+  $closeReloadedDialogFunction.Extent.Text -notmatch '\$dialogHandle -eq \$mainHandle' -or
+  $closeReloadedDialogFunction.Extent.Text -notmatch '\$dialogState\.ProcessId -ne \$OwnerProcessId' -or
+  $closeReloadedDialogFunction.Extent.Text -notmatch '\$mainState\.ProcessId -ne \$OwnerProcessId' -or
+  $closeReloadedDialogFunction.Extent.Text -notmatch '(?s)GetWindowProcessId\(\$dialogHandle\)[\s\S]*GetWindowProcessId\(\$mainHandle\)[\s\S]*IsWindowVisible\(\$dialogHandle\)[\s\S]*WindowPattern\]::Pattern[\s\S]*\$windowPattern\.Close\(\)[\s\S]*Set-Stage "wait-reloaded-filter-dialog-closed"[\s\S]*IsWindowVisible\(\$dialogHandle\)[\s\S]*Set-Stage "restore-reloaded-main-window"[\s\S]*SetForegroundWindow\(\$mainHandle\)[\s\S]*\$currentMainState\.IsEnabled[\s\S]*GetForegroundWindow\(\)[\s\S]*IsWindowVisible\(\$dialogHandle\)' -or
+  $closeReloadedDialogFunction.Extent.Text -match 'SendKeys|\.Invoke\(' -or
+  $sourceText -notmatch '(?s)Set-Stage "verify-reloaded-filter-rules"\s*Get-LoadedFilterRuleEvidence[^\r\n]*\r?\n\s*Close-ReloadedFilterDialog \$reloadFilterDialog \$main \$process.Id[\s\S]*Set-Stage "read-reloaded-drop-state"'
+) {
+  throw "Reloaded rules must be verified before closing only the same-process filter dialog and restoring the main window"
+}
+Write-Host "PASS AC-05: reloaded dialog closure is scoped and verified before the Drop state read"
 $functions = $ast.FindAll({
   param($node)
   $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and

@@ -128,6 +128,13 @@ export function describeWindowsFilterDiagnostics(output) {
     diagnostics.push(`reload-main-foreground-gate=${reloadMainForegroundGate}`);
   }
 
+  const reloadDialogClosedGate = output.match(
+    /^PROC_MON_FILTER_RELOAD_DIALOG_CLOSED=gate:(passed|failed)\r?$/m,
+  )?.[1];
+  if (reloadDialogClosedGate) {
+    diagnostics.push(`reload-dialog-closed-gate=${reloadDialogClosedGate}`);
+  }
+
   const reloadDropMainForegroundGate = output.match(
     /^PROC_MON_FILTER_RELOAD_DROP_MAIN_FOREGROUND=gate:(passed|failed)\r?$/m,
   )?.[1];

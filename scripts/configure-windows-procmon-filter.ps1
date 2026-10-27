@@ -148,6 +148,10 @@ public static class ProcmonNativeMenu
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool SetForegroundWindow(IntPtr hWnd);
 
+    [DllImport("user32.dll", ExactSpelling = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool IsWindowVisible(IntPtr hWnd);
+
     public static int GetWindowProcessId(IntPtr hWnd)
     {
         uint processId;
@@ -1714,6 +1718,64 @@ function Wait-FilterDialog([System.Diagnostics.Process]$Process, [System.Windows
   throw "Process Monitor filter dialog did not expose its Reset control"
 }
 
+function Close-ReloadedFilterDialog($Dialog, $MainWindow, [int]$OwnerProcessId) {
+  Set-Stage "validate-reloaded-filter-dialog-close"
+  $dialogState = $Dialog.Current
+  $mainState = $MainWindow.Current
+  $dialogHandle = [IntPtr]$dialogState.NativeWindowHandle
+  $mainHandle = [IntPtr]$mainState.NativeWindowHandle
+  if (
+    $dialogState.ProcessId -ne $OwnerProcessId -or
+    $mainState.ProcessId -ne $OwnerProcessId -or
+    $dialogHandle -eq [IntPtr]::Zero -or
+    $mainHandle -eq [IntPtr]::Zero -or
+    $dialogHandle -eq $mainHandle -or
+    [ProcmonNativeMenu]::GetWindowProcessId($dialogHandle) -ne $OwnerProcessId -or
+    [ProcmonNativeMenu]::GetWindowProcessId($mainHandle) -ne $OwnerProcessId -or
+    -not [ProcmonNativeMenu]::IsWindowVisible($dialogHandle) -or
+    -not $dialogState.IsEnabled -or $dialogState.IsOffscreen
+  ) {
+    throw "Process Monitor reloaded filter dialog cannot be closed safely"
+  }
+  Set-Stage "close-reloaded-filter-dialog"
+  $windowPattern = $Dialog.GetCurrentPattern(
+    [System.Windows.Automation.WindowPattern]::Pattern
+  )
+  $windowPattern.Close()
+  Set-Stage "wait-reloaded-filter-dialog-closed"
+  $deadline = [DateTime]::UtcNow.AddSeconds(2)
+  do {
+    if (-not [ProcmonNativeMenu]::IsWindowVisible($dialogHandle)) { break }
+    Start-Sleep -Milliseconds 50
+  } while ([DateTime]::UtcNow -lt $deadline)
+  if ([ProcmonNativeMenu]::IsWindowVisible($dialogHandle)) {
+    [Console]::Out.WriteLine("PROC_MON_FILTER_RELOAD_DIALOG_CLOSED=gate:failed")
+    throw "Process Monitor reloaded filter dialog remained visible after Close"
+  }
+  Set-Stage "restore-reloaded-main-window"
+  [ProcmonNativeMenu]::SetForegroundWindow($mainHandle) | Out-Null
+  $deadline = [DateTime]::UtcNow.AddSeconds(2)
+  $gate = "failed"
+  do {
+    $currentMainState = $MainWindow.Current
+    if (
+      $currentMainState.ProcessId -eq $OwnerProcessId -and
+      $currentMainState.IsEnabled -and -not $currentMainState.IsOffscreen -and
+      [ProcmonNativeMenu]::GetForegroundWindow() -eq $mainHandle -and
+      [ProcmonNativeMenu]::GetWindowProcessId($mainHandle) -eq $OwnerProcessId -and
+      -not [ProcmonNativeMenu]::IsWindowVisible($dialogHandle)
+    ) {
+      $gate = "passed"
+      break
+    }
+    Start-Sleep -Milliseconds 50
+  } while ([DateTime]::UtcNow -lt $deadline)
+  [Console]::Out.WriteLine("PROC_MON_FILTER_RELOAD_DIALOG_CLOSED=gate:$gate")
+  if ($gate -ne "passed") {
+    throw "Process Monitor main window was not restored after closing the reloaded filter dialog"
+  }
+}
+
 function Find-NativeDropMenuItem([System.IntPtr]$MenuHandle, [int]$Depth) {
   if ($Depth -gt 4 -or $script:nativeMenuVisited -ge 256) {
     $script:nativeMenuReadable = $false
@@ -3064,7 +3126,7 @@ try {
   $reloadFilterRows = Get-LoadedFilterRuleRows $reloadFilterDialog $process.Id
   Set-Stage "verify-reloaded-filter-rules"
   Get-LoadedFilterRuleEvidence $reloadFilterRows $CanaryPath $ControlPath | Out-Null
-  [System.Windows.Forms.SendKeys]::SendWait("{ESC}")
+  Close-ReloadedFilterDialog $reloadFilterDialog $main $process.Id
   $reloadMainHandle = [IntPtr]$main.Current.NativeWindowHandle
   Set-Stage "read-reloaded-drop-state"
   $reloadDropCheckState = Get-ReloadedNativeDropCheckState `

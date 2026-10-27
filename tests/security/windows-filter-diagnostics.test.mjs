@@ -322,6 +322,21 @@ test("AC-05: reloaded Event item diagnostics retain only bounded pattern state",
   );
 });
 
+test("AC-05: reloaded dialog closure diagnostics accept only an exact gate state", () => {
+  for (const gate of ["passed", "failed"]) {
+    assert.equal(
+      describeWindowsFilterDiagnostics(`PROC_MON_FILTER_RELOAD_DIALOG_CLOSED=gate:${gate}\r\n`),
+      `; reload-dialog-closed-gate=${gate}`,
+    );
+  }
+  for (const gate of ["unknown", "passed;title:private", "C:\\private"]) {
+    assert.equal(
+      describeWindowsFilterDiagnostics(`PROC_MON_FILTER_RELOAD_DIALOG_CLOSED=gate:${gate}\n`),
+      "",
+    );
+  }
+});
+
 test("AC-05: Windows save-menu diagnostics retain bounded labels, not arbitrary text", () => {
   const output = [
     "PROC_MON_FILTER_MENU_ITEMS=before-save;count:11;truncated:true;items=MenuItem:Other:true:false:true,Other:Other:false:false:false,MenuItem:FilterCommand:true:false:true,MenuItem:Other:true:false:true,MenuItem:Other:true:false:true,MenuItem:SaveFilterCommand:true:false:true,MenuItem:Other:true:false:true,Other:Other:false:false:false",
