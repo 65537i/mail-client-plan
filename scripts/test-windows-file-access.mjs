@@ -381,7 +381,7 @@ async function captureScenario(scenario) {
     );
 
     await runProcmon(
-      ["/AcceptEula", "/Quiet", "/OpenLog", backingFile, "/SaveAs", csvFile],
+      ["/AcceptEula", "/Quiet", "/NoFilter", "/OpenLog", backingFile, "/SaveAs", csvFile],
       "CSV export",
     );
     const csvStats = await stat(csvFile);

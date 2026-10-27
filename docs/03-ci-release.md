@@ -19,6 +19,8 @@ Windows: MSVC toolchain、WebView2、必要SDK。WebDriverを外部利用する�
 
 ### nativeの短い検証ループ
 
+Run406後はoffline exportの起動引数だけへ`/NoFilter`を追加する。Microsoft配布Procmon 4.12の組込helpは「Clear the filter at start up」と説明する。capture起動には適用せず`/LoadConfig`とexact filter / Drop gatesを維持する。保存済みPMLの全eventをCSVへ出し、既存のunknown-path / sentinel / positive-control / canary検査とPML・CSVの256 MiB上限へ渡す。display filterで余分なeventを隠さず、追加pathがあれば監査失敗とする。Windows実測待ち。
+
 Run403後は一意の同一PID native toolbarへMSAA OBJID_CLIENTをread-only照会する。最大64 childの既知capture / filesystemラベル、button role、整数stateだけを受理し、object / items / matches / checked / enabledのみを出力する。未検出・toolbar非一意はunavailable、COM失敗はinspection失敗。COM objectをfinallyでreleaseし、操作・filter変更は行わない。2 KiB / 20秒・positive-control等の既存gateを維持する。Windows回帰のhelper compileとtoolbarなしのunavailable出力も更新した。
 
 [Run 406](https://github.com/65537i/mail-client-plan/actions/runs/40573442656)（`c049291`、manual Windows 2025 / webview）はNode59/59、PowerShell parse / helper compile / hidden child / ownership回帰と既存export回帰に成功した。export / exact 2 reload rules / complete UI / Drop on / readinessを通過し、native toolbarのMSAAでobject:available / items:23、captureとfilesystem各matches:1 / checked:on / enabled:trueを初確認した。native children:6 / visible:6 / toolbar・list・statusbar各1、UIAはitems:7 / toolbar・button・menuitem各0のまま。positive / excluded controlは20:05:39.175Z / .457Z、WDIO開始20:05:39.460Z / 終了20:06:06.610Z。capture 30,373 ms / PML 923,942 bytesは上限内だが、CSV76 bytes / positive-control全0件でfail closed。capture / filesystem toolbarの有効状態は確認できたが、記録内容やdriver正常動作を証明しない。attack未実施・AC-05未達。次はcapture中のfilter有効状態と保存 / export経路を調査する。ローカルNode59/59・JS syntax・diff check成功、3OS full・最低OS実測は未実施。

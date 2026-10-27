@@ -5,6 +5,14 @@ import path from "node:path";
 import test from "node:test";
 import { createWindowsAuditCanary } from "../../scripts/windows-audit-canary.mjs";
 
+test("AC-05: only offline export clears display filters and all exported paths remain validated", async () => {
+  const source = await readFile(new URL("../../scripts/test-windows-file-access.mjs", import.meta.url), "utf8");
+  assert.equal((source.match(/"\/NoFilter"/g) ?? []).length, 1);
+  assert.match(source, /\["\/AcceptEula", "\/Quiet", "\/NoFilter", "\/OpenLog", backingFile, "\/SaveAs", csvFile\]/);
+  assert.match(source, /capture = spawn\([\s\S]*"\/LoadConfig",\s*filterConfig,\s*"\/BackingFile",\s*backingFile/);
+  assert.match(source, /CSV export[\s\S]*csvStats.size <= 256 \* 1024 \* 1024[\s\S]*inspectWindowsFileTrace\(trace, canaryPath, positiveControlPath, excludedPath\)/);
+});
+
 test("AC-05: native child inspection is ownership-scoped, bounded and metadata-only", async () => {
   const [inspection, driver] = await Promise.all([
     readFile(new URL("../../scripts/inspect-windows-procmon-capture.ps1", import.meta.url), "utf8"),
