@@ -4,6 +4,7 @@
 
 ## 現在の範囲
 
+- Windows診断: [Run 323](https://github.com/65537i/mail-client-plan/actions/runs/40449120817)（`1266fe8`、manual Windows 2025 / webview）はsecurity-test app build、実WebView security tests、Windows audit setup / workerが成功したが、step 29の`windows-filter-export.test.ps1`で失敗しstep 30のProcmon監査は未実行。exact-rule helperのaccept/reject回帰は通過した一方、合成Save-button focus fixtureがfocus到達を返さずtimeoutした。Run 323はmulti-select row removalや実Procmon動作の証拠ではなく、AC-05未達。fixtureをカウンタ副作用から明示的なfocus sequenceへ変え、`false, false, true`の遷移と確認読み取りを再現する。
 - Windows最新診断: [Run 321](https://github.com/65537i/mail-client-plan/actions/runs/40444069991)（`5f52c51`、manual Windows 2025 / webview）はsecurity-test build、WebView tests、Windows setup / worker、configuration-export regressionを通過したが、step 30のfilter setupが60秒でtimeoutした。timeout後のProcmon `/Terminate` cleanupも失敗し、既存Node handlerがcleanup errorを先に出したため元のtimeout stageと診断が見えなかった。filter setup / captureは未完了でAC-05未達。
 - timeout原因を分離するため、既存row全てを一度にUIA multi-selectし、SelectionPatternが返したselected setが候補row全件と同一であることを確認してから、唯一のRemove buttonを1回invokeする方式へ変更した。最後にrule rowsが0件であることを再読込確認する。multi-select / pattern / selection / Remove / row-count gateのいずれかが確認できなければ停止。さらにtimeout cleanup失敗が元stageを隠さないよう、timeout本体とcleanup結果を分けて報告する。安全なbounded diagnostics tests 29/29、JS syntax、`git diff --check`成功。今回のPowerShell / Procmon runtimeは未実行。
 - Push [Run 320](https://github.com/65537i/mail-client-plan/actions/runs/40444036421)（`5f52c51`、Ubuntu basic）はsuccess。Windows監査の証拠ではない。

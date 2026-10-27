@@ -96,12 +96,19 @@ foreach ($invalidRows in @(
 }
 Write-Host "PASS AC-05: extra, excluded, and non-exact reloaded rules fail closed"
 
-$focusState = [pscustomobject]@{}
-$focusState | Add-Member -MemberType ScriptProperty -Name HasKeyboardFocus -Value {
-  $this.ReadCount++
-  return $this.ReadCount -ge 3
+$focusState = [pscustomobject]@{
+  FocusSequence = [System.Collections.Generic.Queue[bool]]::new()
 }
-$focusState | Add-Member -MemberType NoteProperty -Name ReadCount -Value 0
+$focusState.FocusSequence.Enqueue($false)
+$focusState.FocusSequence.Enqueue($false)
+$focusState.FocusSequence.Enqueue($true)
+$focusState.FocusSequence.Enqueue($true)
+$focusState | Add-Member -MemberType ScriptProperty -Name HasKeyboardFocus -Value {
+  if ($this.FocusSequence.Count -gt 0) {
+    return $this.FocusSequence.Dequeue()
+  }
+  return $false
+}
 $saveControl = [pscustomobject]@{ Current = $focusState }
 $confirmedFocus = Wait-KeyboardFocus $saveControl 500
 if ($null -eq $confirmedFocus -or -not $confirmedFocus.HasKeyboardFocus) {
