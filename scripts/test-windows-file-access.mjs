@@ -120,11 +120,16 @@ async function captureScenario(scenario) {
       )].at(-1)?.[1];
       filterSetup.kill();
       await filterSetupExit;
-      await runProcmon(["/AcceptEula", "/Terminate"], "filter setup cleanup");
+      let cleanupStatus = "passed";
+      try {
+        await runProcmon(["/AcceptEula", "/Terminate"], "filter setup cleanup");
+      } catch {
+        cleanupStatus = "failed";
+      }
       throw new Error(
         filterStage
-          ? `Process Monitor exact-path filter configuration timed out at ${filterStage}${describeWindowsFilterDiagnostics(filterSetupOutput)}${outputAtCap}`
-          : `Process Monitor exact-path filter configuration timed out${outputAtCap}`,
+          ? `Process Monitor exact-path filter configuration timed out at ${filterStage}${describeWindowsFilterDiagnostics(filterSetupOutput)}; cleanup:${cleanupStatus}${outputAtCap}`
+          : `Process Monitor exact-path filter configuration timed out; cleanup:${cleanupStatus}${outputAtCap}`,
       );
     }
     if (filterSetupResult.error) throw new Error("Failed to start Process Monitor filter configuration");

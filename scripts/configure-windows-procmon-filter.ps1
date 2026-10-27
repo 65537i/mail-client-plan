@@ -809,6 +809,7 @@ function Get-LoadedFilterRuleRows(
         Rows = [System.Collections.Generic.List[string]]::new()
         RuleRows = [System.Collections.Generic.List[string]]::new()
         RuleRowElements = [System.Collections.Generic.List[object]]::new()
+        Element = $nearestContainer
         RuleControlTypes = [System.Collections.Generic.List[string]]::new()
         UniqueRuleRows = [System.Collections.Generic.HashSet[string]]::new(
           [System.StringComparer]::OrdinalIgnoreCase
@@ -913,6 +914,7 @@ function Get-LoadedFilterRuleRows(
       $rows.Add([pscustomobject]@{
         Text = $ruleContainers[0].RuleRows[$rowIndex]
         Element = $ruleContainers[0].RuleRowElements[$rowIndex]
+        Container = $ruleContainers[0].Element
       })
     }
   }
@@ -954,36 +956,79 @@ function Clear-LoadedFilterRules(
   [System.Windows.Automation.AutomationElement]$Dialog,
   [int]$OwnerProcessId
 ) {
-  $removedRows = 0
   $maximumRows = 64
-  while ($removedRows -lt $maximumRows) {
-    $rows = Get-LoadedFilterRuleRows $Dialog $OwnerProcessId -AllowEmpty -Quiet
-    if ($rows.Count -eq 0) {
-      [Console]::Out.WriteLine(
-        "PROC_MON_FILTER_RULE_RESET=removed:$removedRows;remaining:0"
-      )
-      return
-    }
-    if ($rows.Count -gt $maximumRows) {
-      throw "Process Monitor filter list exceeded the bounded row limit"
-    }
-    $rowElement = $rows[0].Element
+  $rows = Get-LoadedFilterRuleRows $Dialog $OwnerProcessId -AllowEmpty
+  if ($rows.Count -eq 0) {
+    [Console]::Out.WriteLine("PROC_MON_FILTER_RULE_RESET=removed:0;remaining:0")
+    return
+  }
+  if ($rows.Count -gt $maximumRows) {
+    throw "Process Monitor filter list exceeded the bounded row limit"
+  }
+  $container = $rows[0].Container
+  $containerState = $container.Current
+  if ($containerState.ProcessId -ne $OwnerProcessId) {
+    throw "Process Monitor filter rule container ownership could not be verified"
+  }
+  $selectionPattern = $null
+  $hasSelectionPattern = $container.TryGetCurrentPattern(
+    [System.Windows.Automation.SelectionPattern]::Pattern,
+    [ref]$selectionPattern
+  )
+  $canSelectMultiple = $false
+  if ($hasSelectionPattern) {
+    $canSelectMultiple = $selectionPattern.Current.CanSelectMultiple
+  }
+  [Console]::Out.WriteLine(
+    "PROC_MON_FILTER_RULE_CLEAR=rows:$($rows.Count);multi-select:$($canSelectMultiple.ToString().ToLowerInvariant())"
+  )
+  if (-not $canSelectMultiple) {
+    throw "Process Monitor filter list does not support verified multi-selection"
+  }
+  $expectedRuntimeIds = [System.Collections.Generic.HashSet[string]]::new(
+    [System.StringComparer]::Ordinal
+  )
+  for ($rowIndex = 0; $rowIndex -lt $rows.Count; $rowIndex++) {
+    $rowElement = $rows[$rowIndex].Element
     $rowState = $rowElement.Current
     if ($rowState.ProcessId -ne $OwnerProcessId) {
       throw "Process Monitor filter row ownership could not be verified"
     }
-    $selectionPattern = $null
+    $rowRuntimeId = $rowElement.GetRuntimeId() -join ","
+    if ([string]::IsNullOrWhiteSpace($rowRuntimeId) -or
+      -not $expectedRuntimeIds.Add($rowRuntimeId)) {
+      throw "Process Monitor filter rows did not expose unique runtime identifiers"
+    }
+    $rowSelectionPattern = $null
     if (-not $rowElement.TryGetCurrentPattern(
         [System.Windows.Automation.SelectionItemPattern]::Pattern,
-        [ref]$selectionPattern
+        [ref]$rowSelectionPattern
       )) {
       throw "Process Monitor filter row could not be selected"
     }
-    $selectionPattern.Select()
-    if (-not $selectionPattern.Current.IsSelected) {
+    if ($rowIndex -eq 0) {
+      $rowSelectionPattern.Select()
+    } else {
+      $rowSelectionPattern.AddToSelection()
+    }
+    if (-not $rowSelectionPattern.Current.IsSelected) {
       throw "Process Monitor filter row selection was not confirmed"
     }
-    $removeButtons = $Dialog.FindAll(
+  }
+  $selectedRows = $selectionPattern.GetSelection()
+  [Console]::Out.WriteLine(
+    "PROC_MON_FILTER_RULE_SELECTION=selected:$($selectedRows.Count);expected:$($rows.Count)"
+  )
+  if ($selectedRows.Count -ne $rows.Count) {
+    throw "Process Monitor filter list did not select every existing row"
+  }
+  foreach ($selectedRow in $selectedRows) {
+    if ($selectedRow.Current.ProcessId -ne $OwnerProcessId -or
+      -not $expectedRuntimeIds.Contains(($selectedRow.GetRuntimeId() -join ","))) {
+      throw "Process Monitor filter selection included an unexpected row"
+    }
+  }
+  $removeButtons = $Dialog.FindAll(
       [System.Windows.Automation.TreeScope]::Descendants,
       [System.Windows.Automation.AndCondition]::new(
         [System.Windows.Automation.PropertyCondition]::new(
@@ -995,25 +1040,40 @@ function Clear-LoadedFilterRules(
           [System.Windows.Automation.ControlType]::Button
         )
       )
-    )
-    if ($removeButtons.Count -ne 1) {
-      throw "Process Monitor filter dialog did not expose one Remove button"
-    }
-    $removeState = $removeButtons[0].Current
-    if ($removeState.ProcessId -ne $OwnerProcessId -or
-      -not $removeState.IsEnabled -or $removeState.IsOffscreen) {
-      throw "Process Monitor Remove button was unavailable"
-    }
-    $removeButtons[0].GetCurrentPattern(
-      [System.Windows.Automation.InvokePattern]::Pattern
-    ).Invoke()
-    $remainingRows = Get-LoadedFilterRuleRows $Dialog $OwnerProcessId -AllowEmpty -Quiet
-    if ($remainingRows.Count -ne $rows.Count - 1) {
-      throw "Process Monitor filter row removal could not be confirmed"
-    }
-    $removedRows++
+  )
+  $removeEnabled = $false
+  if ($removeButtons.Count -eq 1) {
+    $removeEnabled = $removeButtons[0].Current.IsEnabled
   }
-  throw "Process Monitor filter list exceeded the bounded removal limit"
+  [Console]::Out.WriteLine(
+    "PROC_MON_FILTER_REMOVE=buttons:$($removeButtons.Count);enabled:$($removeEnabled.ToString().ToLowerInvariant())"
+  )
+  if ($removeButtons.Count -ne 1) {
+    throw "Process Monitor filter dialog did not expose one Remove button"
+  }
+  $removeState = $removeButtons[0].Current
+  if ($removeState.ProcessId -ne $OwnerProcessId -or
+    -not $removeState.IsEnabled -or $removeState.IsOffscreen) {
+    throw "Process Monitor Remove button was unavailable"
+  }
+  $removePattern = $null
+  if (-not $removeButtons[0].TryGetCurrentPattern(
+      [System.Windows.Automation.InvokePattern]::Pattern,
+      [ref]$removePattern
+    )) {
+    throw "Process Monitor Remove button could not be invoked"
+  }
+  $removePattern.Invoke()
+  $remainingRows = Get-LoadedFilterRuleRows $Dialog $OwnerProcessId -AllowEmpty -Quiet
+  [Console]::Out.WriteLine(
+    "PROC_MON_FILTER_RULES_REMAINING=rows:$($remainingRows.Count)"
+  )
+  if ($remainingRows.Count -ne 0) {
+    throw "Process Monitor filter list did not become empty after removal"
+  }
+  [Console]::Out.WriteLine(
+    "PROC_MON_FILTER_RULE_RESET=removed:$($rows.Count);remaining:0"
+  )
 }
 
 function Wait-KeyboardFocus($Control, [int]$TimeoutMilliseconds = 2000) {

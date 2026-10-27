@@ -289,6 +289,52 @@ export function describeWindowsFilterDiagnostics(output) {
     }
   }
 
+  const ruleClear = output.match(
+    /^PROC_MON_FILTER_RULE_CLEAR=rows:(\d{1,2});multi-select:(true|false)\r?$/m,
+  );
+  if (ruleClear && Number(ruleClear[1]) <= 64) {
+    diagnostics.push(
+      `filter-rule-clear=rows:${ruleClear[1]};multi-select:${ruleClear[2]}`,
+    );
+  }
+
+  const ruleSelection = output.match(
+    /^PROC_MON_FILTER_RULE_SELECTION=selected:(\d{1,2});expected:(\d{1,2})\r?$/m,
+  );
+  if (ruleSelection) {
+    const [selected, expected] = ruleSelection.slice(1).map(Number);
+    if (selected <= 64 && expected <= 64 && selected <= expected) {
+      diagnostics.push(
+        `filter-rule-selection=selected:${selected};expected:${expected}`,
+      );
+    }
+  }
+
+  const removeControl = output.match(
+    /^PROC_MON_FILTER_REMOVE=buttons:(\d{1,2});enabled:(true|false)\r?$/m,
+  );
+  if (removeControl && Number(removeControl[1]) <= 16) {
+    diagnostics.push(
+      `filter-rule-remove=buttons:${removeControl[1]};enabled:${removeControl[2]}`,
+    );
+  }
+
+  const remainingRules = output.match(
+    /^PROC_MON_FILTER_RULES_REMAINING=rows:(\d{1,2})\r?$/m,
+  );
+  if (remainingRules && Number(remainingRules[1]) <= 64) {
+    diagnostics.push(`filter-rules-remaining=${remainingRules[1]}`);
+  }
+
+  const resetRules = output.match(
+    /^PROC_MON_FILTER_RULE_RESET=removed:(\d{1,2});remaining:(0)\r?$/m,
+  );
+  if (resetRules && Number(resetRules[1]) <= 64) {
+    diagnostics.push(
+      `filter-rule-reset=removed:${resetRules[1]};remaining:0`,
+    );
+  }
+
   const windowScan = output.match(
     /^PROC_MON_FILTER_WINDOW_SCAN=stage:(initial|reload);phase:(refresh-process|check-process|enumerate-uia-windows|read-uia-window-owner|read-main-window-handle|read-main-window-owner|wait|foreground-owner);process-exited:(true|false);root-windows:(\d{1,4});uia-owned-windows:(\d{1,4});main-handle:(available|unavailable);foreground-owner:(same|other|unavailable)\r?$/m,
   );

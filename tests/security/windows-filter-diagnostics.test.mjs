@@ -162,6 +162,34 @@ test("AC-05: reloaded rule shape diagnostics retain only consistent bounded coun
   );
 });
 
+test("AC-05: filter-row clearing diagnostics retain bounded selection counts", () => {
+  assert.equal(
+    describeWindowsFilterDiagnostics([
+      "PROC_MON_FILTER_RULE_CLEAR=rows:26;multi-select:true",
+      "PROC_MON_FILTER_RULE_SELECTION=selected:26;expected:26",
+      "PROC_MON_FILTER_REMOVE=buttons:1;enabled:true",
+      "PROC_MON_FILTER_RULES_REMAINING=rows:0",
+      "PROC_MON_FILTER_RULE_RESET=removed:26;remaining:0",
+    ].join("\n")),
+    "; filter-rule-clear=rows:26;multi-select:true"
+      + "; filter-rule-selection=selected:26;expected:26"
+      + "; filter-rule-remove=buttons:1;enabled:true"
+      + "; filter-rules-remaining=0"
+      + "; filter-rule-reset=removed:26;remaining:0",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics([
+      "PROC_MON_FILTER_RULE_CLEAR=rows:65;multi-select:true",
+      "PROC_MON_FILTER_RULE_SELECTION=selected:27;expected:26",
+      "PROC_MON_FILTER_REMOVE=buttons:17;enabled:true",
+      "PROC_MON_FILTER_RULES_REMAINING=rows:65",
+      "PROC_MON_FILTER_RULE_RESET=removed:65;remaining:0",
+      "PROC_MON_FILTER_RULE_RESET=removed:1;remaining:1",
+    ].join("\n")),
+    "",
+  );
+});
+
 test("AC-05: reloaded Drop Filtered Events state accepts only a safe enum", () => {
   assert.equal(
     describeWindowsFilterDiagnostics([
