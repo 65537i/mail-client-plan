@@ -304,20 +304,20 @@ test("AC-05: reloaded native menu diagnostics retain the bounded Event Filter pa
   );
 });
 
-test("AC-05: reloaded menu-bar diagnostics retain only consistent bounded states", () => {
+test("AC-05: reloaded Event item diagnostics retain only bounded pattern state", () => {
   const output = [
-    "PROC_MON_FILTER_RELOAD_MENUBAR_INFO=read:success;handle:available;menu-window:available;read-failure:none",
-    "PROC_MON_FILTER_RELOAD_MENUBAR_INFO=read:failed;handle:unavailable;menu-window:unavailable;read-failure:query-failed",
-    "PROC_MON_FILTER_RELOAD_MENUBAR_INFO=read:success;handle:unavailable;menu-window:unavailable;read-failure:none",
-    "PROC_MON_FILTER_RELOAD_MENUBAR_INFO=read:failed;handle:available;menu-window:unavailable;read-failure:query-failed",
-    "PROC_MON_FILTER_RELOAD_MENUBAR_INFO=read:success;handle:C:\\private;menu-window:available;read-failure:none",
-    "PROC_MON_FILTER_RELOAD_MENUBAR_INFO=read:private;handle:available;menu-window:available;read-failure:none",
+    "PROC_MON_FILTER_RELOAD_EVENT_MENU_ITEM=process:same;items:13;matches:1;enabled:true;offscreen:false;keyboard-focusable:false;invoke:true;expand-collapse:false;selection-item:false;legacy-ia:false",
+    "PROC_MON_FILTER_RELOAD_EVENT_MENU_ITEM=process:unavailable;items:12;matches:0;enabled:false;offscreen:false;keyboard-focusable:false;invoke:false;expand-collapse:false;selection-item:false;legacy-ia:false",
+    "PROC_MON_FILTER_RELOAD_EVENT_MENU_ITEM=process:other;items:13;matches:1;enabled:false;offscreen:false;keyboard-focusable:false;invoke:false;expand-collapse:false;selection-item:false;legacy-ia:false",
+    "PROC_MON_FILTER_RELOAD_EVENT_MENU_ITEM=process:same;items:13;matches:2;enabled:true;offscreen:false;keyboard-focusable:false;invoke:true;expand-collapse:false;selection-item:false;legacy-ia:false",
+    "PROC_MON_FILTER_RELOAD_EVENT_MENU_ITEM=process:same;items:257;matches:1;enabled:true;offscreen:false;keyboard-focusable:false;invoke:true;expand-collapse:false;selection-item:false;legacy-ia:false",
+    "PROC_MON_FILTER_RELOAD_EVENT_MENU_ITEM=process:same;items:13;matches:1;enabled:C:\\private;offscreen:false;keyboard-focusable:false;invoke:true;expand-collapse:false;selection-item:false;legacy-ia:false",
   ].join("\n");
   assert.equal(
     describeWindowsFilterDiagnostics(output),
-    "; reload-menubar-info=read:success;handle:available;menu-window:available;read-failure:none"
-      + "; reload-menubar-info=read:failed;handle:unavailable;menu-window:unavailable;read-failure:query-failed"
-      + "; reload-menubar-info=read:success;handle:unavailable;menu-window:unavailable;read-failure:none",
+    "; reload-event-menu-item=process:same;items:13;matches:1;enabled:true;offscreen:false;keyboard-focusable:false;invoke:true;expand-collapse:false;selection-item:false;legacy-ia:false"
+      + "; reload-event-menu-item=process:unavailable;items:12;matches:0;enabled:false;offscreen:false;keyboard-focusable:false;invoke:false;expand-collapse:false;selection-item:false;legacy-ia:false"
+      + "; reload-event-menu-item=process:other;items:13;matches:1;enabled:false;offscreen:false;keyboard-focusable:false;invoke:false;expand-collapse:false;selection-item:false;legacy-ia:false",
   );
 });
 

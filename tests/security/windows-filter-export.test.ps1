@@ -20,6 +20,11 @@ $accessibleSnapshotFunction = $ast.Find({
   $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
     $node.Name -eq "Get-AccessibleDropMenuSnapshot"
 }, $true)
+$eventMenuPatternFunction = $ast.Find({
+  param($node)
+  $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+    $node.Name -eq "Write-ReloadedEventMenuPatternSnapshot"
+}, $true)
 if (
   $sourceText -notmatch 'AccessibleMenuObjectId\s*=\s*-3' -or
   $sourceText -notmatch 'AccessibleClientObjectId\s*=\s*-4' -or
@@ -28,12 +33,14 @@ if (
   $reloadedStateFunction.Extent.Text -notmatch '(?s)Get-AccessibleDropMenuSnapshot\s+`?\s*\$MainWindowHandle\s+\$ProcessId\s+\$true\s+"after-reload"' -or
   $null -eq $accessibleSnapshotFunction -or
   $accessibleSnapshotFunction.Extent.Text -notmatch '(?s)ReadAccessibleDropMenuState\(\s*\$MenuWindowHandle,\s*\$ProcessId,\s*\$UseWindowMenuObject' -or
-  $sourceText -notmatch '(?s)GetMenuBarInfo\(\s*hWnd,\s*AccessibleMenuObjectId,\s*0,\s*ref info\)' -or
-  $reloadedStateFunction.Extent.Text -notmatch '(?s)GetMenu\(\$MainWindowHandle\).*GetMenuBarSnapshot\(\$MainWindowHandle\)'
+  $null -eq $eventMenuPatternFunction -or
+  $eventMenuPatternFunction.Extent.Text -notmatch '(?s)FindAll\([\s\S]*ControlType\.MenuItem' -or
+  $eventMenuPatternFunction.Extent.Text -notmatch '(?s)InvokePattern\]::Pattern[\s\S]*ExpandCollapsePattern\]::Pattern[\s\S]*SelectionItemPattern\]::Pattern[\s\S]*LegacyIAccessiblePattern\]::Pattern' -or
+  $reloadedStateFunction.Extent.Text -notmatch '(?s)Write-NativeDropMenuSnapshot[\s\S]*Write-ReloadedEventMenuPatternSnapshot\s+\$MainWindowHandle\s+\$ProcessId[\s\S]*Get-AccessibleDropMenuSnapshot'
 ) {
-  throw "Reloaded menu state must use read-only native and MSAA menu queries"
+  throw "Reloaded menu state must probe the Event item's read-only UI Automation patterns"
 }
-Write-Host "PASS AC-05: reloaded menu state uses bounded read-only native and MSAA queries"
+Write-Host "PASS AC-05: reloaded menu state probes bounded Event menu patterns without activation"
 $functions = $ast.FindAll({
   param($node)
   $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and

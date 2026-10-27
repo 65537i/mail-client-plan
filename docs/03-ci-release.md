@@ -57,6 +57,8 @@ Run 346（`15bec36`、push / Ubuntu 24.04 / basic）はsuccessで、Windows Proc
 
 Run 348（`816160e`、push / Ubuntu 24.04 / basic）はsuccess。Windows Procmon UI / reload-stateの証拠ではない。
 
+Run 351（[`a87f31c`](https://github.com/65537i/mail-client-plan/commit/a87f31c9300d3848c1bfc0aaf80107e6a2beaf0f)、[manual Windows 2025 / webview](https://github.com/65537i/mail-client-plan/actions/runs/40476303269)）はsecurity-test app build、real WebView、Windows audit setup / worker、configuration-export regression、Windows diagnostics tests 47/47、PowerShell regressionに成功し、PMC export後のexact 2 Path/is/Include rulesも確認した。再読込後native `GetMenu`とMSAAはDrop checked-stateを返さず、追加したread-only `GetMenuBarInfo` queryも`read:failed;handle:unavailable;menu-window:unavailable`となり`report-msaa-menu-state`にてfail-closed停止した。capture、positive-control、canary exclusion、attack checksは未実施でAC-05未達。GetMenuBarInfo fallbackを撤去し、次runはEvent UIA item patternのbounded read-only probeに限り、activationは行わない。
+
 Run 342（`2c0d658`、push / Ubuntu 24.04 / basic）はsuccess。これはWindows Procmon auditの証拠ではない。
 
 Run 333（`02445f3`、manual Windows 2025 / webview）はsecurity-test build、real WebView tests、Windows setup / worker、configuration-export regressionに成功し、Procmonでverified clear、exact 2 Path/is/Include rulesのsave / reloadまで到達した。再読込後のEvent UIA itemは一意かつsame-process / enabled / visible、Invoke patternありと確認したが、Invoke後もsame-process UIA menuは0件で`wait-reloaded-event-menu`にて停止し、focused controlはButton。Drop checked-stateは未確認、capture / positive-control / canary / attack checks未実施でAC-05未達。後続のclickpoint試行はRun 335に記録する。

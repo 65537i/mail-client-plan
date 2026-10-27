@@ -144,20 +144,47 @@ export function describeWindowsFilterDiagnostics(output) {
     diagnostics.push("reload-filter-dialog-shortcut=sent");
   }
 
-  for (const reloadMenuBarInfo of output.matchAll(
-    /^PROC_MON_FILTER_RELOAD_MENUBAR_INFO=read:(success|failed);handle:(available|unavailable);menu-window:(available|unavailable);read-failure:(none|query-failed)\r?$/gm,
+  for (const match of output.matchAll(
+    /^PROC_MON_FILTER_RELOAD_EVENT_MENU_ITEM=process:(same|other|unavailable);items:(\d{1,3});matches:(\d{1,3});enabled:(true|false);offscreen:(true|false);keyboard-focusable:(true|false);invoke:(true|false);expand-collapse:(true|false);selection-item:(true|false);legacy-ia:(true|false)\r?$/gm,
   )) {
-    const consistentRead =
-      (reloadMenuBarInfo[1] === "success" && reloadMenuBarInfo[4] === "none")
-      || (
-        reloadMenuBarInfo[1] === "failed"
-        && reloadMenuBarInfo[2] === "unavailable"
-        && reloadMenuBarInfo[3] === "unavailable"
-        && reloadMenuBarInfo[4] === "query-failed"
+    const [
+      ,
+      process,
+      rawItems,
+      rawMatches,
+      enabled,
+      offscreen,
+      keyboardFocusable,
+      invoke,
+      expandCollapse,
+      selectionItem,
+      legacyIA,
+    ] = match;
+    const items = Number(rawItems);
+    const matches = Number(rawMatches);
+    const uniqueProcess = process === "same" || process === "other";
+    const consistent =
+      items <= 256
+      && matches <= items
+      && (
+        (uniqueProcess && matches === 1)
+        || (process === "unavailable" && matches !== 1)
+      )
+      && (
+        (process === "same")
+        || (
+          enabled === "false"
+          && offscreen === "false"
+          && keyboardFocusable === "false"
+          && invoke === "false"
+          && expandCollapse === "false"
+          && selectionItem === "false"
+          && legacyIA === "false"
+        )
       );
-    if (consistentRead) {
+    if (consistent) {
       diagnostics.push(
-        `reload-menubar-info=read:${reloadMenuBarInfo[1]};handle:${reloadMenuBarInfo[2]};menu-window:${reloadMenuBarInfo[3]};read-failure:${reloadMenuBarInfo[4]}`,
+        `reload-event-menu-item=process:${process};items:${items};matches:${matches};enabled:${enabled};offscreen:${offscreen};keyboard-focusable:${keyboardFocusable};invoke:${invoke};expand-collapse:${expandCollapse};selection-item:${selectionItem};legacy-ia:${legacyIA}`,
       );
     }
   }

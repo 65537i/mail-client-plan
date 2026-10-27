@@ -101,16 +101,6 @@ public static class ProcmonNativeMenu
     }
 
     [StructLayout(LayoutKind.Sequential)]
-    private struct MenuBarInfo
-    {
-        public uint Size;
-        public Rect Bounds;
-        public IntPtr Menu;
-        public IntPtr MenuWindow;
-        public uint FocusFlags;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
     private struct GuiThreadInfo
     {
         public uint cbSize;
@@ -145,25 +135,8 @@ public static class ProcmonNativeMenu
         public bool IsEnabled { get; set; }
     }
 
-    public sealed class NativeMenuBarSnapshot
-    {
-        public bool ReadSuccessful { get; set; }
-        public IntPtr MenuHandle { get; set; }
-        public IntPtr MenuWindowHandle { get; set; }
-        public string ReadFailure { get; set; }
-    }
-
     [DllImport("user32.dll", ExactSpelling = true, SetLastError = true)]
     public static extern IntPtr GetMenu(IntPtr hWnd);
-
-    [DllImport("user32.dll", ExactSpelling = true, SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool GetMenuBarInfo(
-        IntPtr hWnd,
-        int objectId,
-        int itemId,
-        ref MenuBarInfo info
-    );
 
     [DllImport("user32.dll", ExactSpelling = true, SetLastError = true)]
     private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
@@ -181,28 +154,6 @@ public static class ProcmonNativeMenu
         return GetWindowThreadProcessId(hWnd, out processId) == 0
             ? 0
             : processId > int.MaxValue ? 0 : (int)processId;
-    }
-
-    public static NativeMenuBarSnapshot GetMenuBarSnapshot(IntPtr hWnd)
-    {
-        var snapshot = new NativeMenuBarSnapshot
-        {
-            ReadFailure = "query-failed"
-        };
-        var info = new MenuBarInfo
-        {
-            Size = (uint)Marshal.SizeOf(typeof(MenuBarInfo))
-        };
-        if (!GetMenuBarInfo(hWnd, AccessibleMenuObjectId, 0, ref info))
-        {
-            return snapshot;
-        }
-
-        snapshot.ReadSuccessful = true;
-        snapshot.ReadFailure = "none";
-        snapshot.MenuHandle = info.Menu;
-        snapshot.MenuWindowHandle = info.MenuWindow;
-        return snapshot;
     }
 
     [DllImport("user32.dll", ExactSpelling = true, SetLastError = true)]
@@ -1898,20 +1849,6 @@ function Get-ReloadedNativeDropCheckState(
 
   Set-Stage "read-reloaded-native-main-menu"
   $menuHandle = [ProcmonNativeMenu]::GetMenu($MainWindowHandle)
-  if ($menuHandle.Equals([System.IntPtr]::Zero)) {
-    Set-Stage "read-reloaded-native-menu-bar-info"
-    $menuBarSnapshot = [ProcmonNativeMenu]::GetMenuBarSnapshot($MainWindowHandle)
-    $menuBarRead = if ($menuBarSnapshot.ReadSuccessful) { "success" } else { "failed" }
-    $menuBarHandle = if ($menuBarSnapshot.MenuHandle.Equals([System.IntPtr]::Zero)) { "unavailable" } else { "available" }
-    $menuBarWindow = if ($menuBarSnapshot.MenuWindowHandle.Equals([System.IntPtr]::Zero)) { "unavailable" } else { "available" }
-    [Console]::Out.WriteLine(
-      "PROC_MON_FILTER_RELOAD_MENUBAR_INFO=read:$menuBarRead;handle:$menuBarHandle;menu-window:$menuBarWindow;read-failure:$($menuBarSnapshot.ReadFailure)"
-    )
-    if ($menuBarSnapshot.ReadSuccessful -and
-      -not $menuBarSnapshot.MenuHandle.Equals([System.IntPtr]::Zero)) {
-      $menuHandle = $menuBarSnapshot.MenuHandle
-    }
-  }
   $checkState = "unavailable"
   $dropEnabled = $false
   if (-not $menuHandle.Equals([System.IntPtr]::Zero)) {
@@ -1963,6 +1900,7 @@ function Get-ReloadedNativeDropCheckState(
     $nativeSnapshot = Get-NativeDropMenuSnapshot `
       $MainWindowHandle ([System.IntPtr]::Zero) $ProcessId
     Write-NativeDropMenuSnapshot $nativeSnapshot "after-reload"
+    Write-ReloadedEventMenuPatternSnapshot $MainWindowHandle $ProcessId
     Set-Stage "read-reloaded-msaa-menu-state"
     $accessibleSnapshot = Get-AccessibleDropMenuSnapshot `
       $MainWindowHandle $ProcessId $true "after-reload"
@@ -2049,6 +1987,80 @@ function Write-NativeDropMenuSnapshot($Snapshot, [string]$Observation) {
   $handleState = if ($Snapshot.HandleAvailable) { "available" } else { "unavailable" }
   [Console]::Out.WriteLine(
     "PROC_MON_FILTER_NATIVE_MENU_STATE=observation:$Observation;source:$($Snapshot.MenuSource);menu-window-process:$($Snapshot.MenuWindowProcess);gui-thread-info:$guiThreadInfoState;owner-window:$ownerWindowState;handle:$handleState;items:$($Snapshot.ItemCount);matches:$($Snapshot.MatchCount);read-failure:$($Snapshot.ReadFailure);readable:$($Snapshot.Readable.ToString().ToLowerInvariant());checked:$($Snapshot.CheckState)"
+  )
+}
+
+function Write-ReloadedEventMenuPatternSnapshot(
+  [System.IntPtr]$MainWindowHandle,
+  [uint32]$ProcessId
+) {
+  Set-Stage "probe-reloaded-event-menu-patterns"
+  $mainWindow = [System.Windows.Automation.AutomationElement]::FromHandle(
+    $MainWindowHandle
+  )
+  if ($mainWindow.Current.ProcessId -ne $ProcessId) {
+    throw "Process Monitor reloaded main window belongs to a different process"
+  }
+  $menuItemCondition = [System.Windows.Automation.PropertyCondition]::new(
+    [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+    [System.Windows.Automation.ControlType]::MenuItem
+  )
+  $menuItems = $mainWindow.FindAll(
+    [System.Windows.Automation.TreeScope]::Descendants,
+    $menuItemCondition
+  )
+  if ($menuItems.Count -gt 256) {
+    throw "Process Monitor reloaded menu-item probe exceeded its bounded limit"
+  }
+  $eventMatches = [System.Collections.Generic.List[System.Windows.Automation.AutomationElement]]::new()
+  foreach ($item in $menuItems) {
+    if ($item.Current.Name -ceq "Event") {
+      $eventMatches.Add($item)
+    }
+  }
+
+  $processState = "unavailable"
+  $isEnabled = $false
+  $isOffscreen = $false
+  $isKeyboardFocusable = $false
+  $hasInvokePattern = $false
+  $hasExpandCollapsePattern = $false
+  $hasSelectionItemPattern = $false
+  $hasLegacyIAccessiblePattern = $false
+  if ($eventMatches.Count -eq 1) {
+    $eventItem = $eventMatches[0]
+    $eventState = $eventItem.Current
+    if ($eventState.ProcessId -eq $ProcessId) {
+      $processState = "same"
+      $isEnabled = [bool]$eventState.IsEnabled
+      $isOffscreen = [bool]$eventState.IsOffscreen
+      $isKeyboardFocusable = [bool]$eventState.IsKeyboardFocusable
+      $pattern = $null
+      $hasInvokePattern = $eventItem.TryGetCurrentPattern(
+        [System.Windows.Automation.InvokePattern]::Pattern,
+        [ref]$pattern
+      )
+      $pattern = $null
+      $hasExpandCollapsePattern = $eventItem.TryGetCurrentPattern(
+        [System.Windows.Automation.ExpandCollapsePattern]::Pattern,
+        [ref]$pattern
+      )
+      $pattern = $null
+      $hasSelectionItemPattern = $eventItem.TryGetCurrentPattern(
+        [System.Windows.Automation.SelectionItemPattern]::Pattern,
+        [ref]$pattern
+      )
+      $pattern = $null
+      $hasLegacyIAccessiblePattern = $eventItem.TryGetCurrentPattern(
+        [System.Windows.Automation.LegacyIAccessiblePattern]::Pattern,
+        [ref]$pattern
+      )
+    } else {
+      $processState = "other"
+    }
+  }
+  [Console]::Out.WriteLine(
+    "PROC_MON_FILTER_RELOAD_EVENT_MENU_ITEM=process:$processState;items:$($menuItems.Count);matches:$($eventMatches.Count);enabled:$($isEnabled.ToString().ToLowerInvariant());offscreen:$($isOffscreen.ToString().ToLowerInvariant());keyboard-focusable:$($isKeyboardFocusable.ToString().ToLowerInvariant());invoke:$($hasInvokePattern.ToString().ToLowerInvariant());expand-collapse:$($hasExpandCollapsePattern.ToString().ToLowerInvariant());selection-item:$($hasSelectionItemPattern.ToString().ToLowerInvariant());legacy-ia:$($hasLegacyIAccessiblePattern.ToString().ToLowerInvariant())"
   )
 }
 
