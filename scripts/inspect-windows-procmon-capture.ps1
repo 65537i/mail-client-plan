@@ -193,7 +193,7 @@ function Get-ProcmonFilterManagerEvidence {
 }
 
 function Get-ProcmonFilterManagerVolumeEvidence {
-  param([string[]]$Lines)
+  param([string[]]$Lines, [string]$ExpectedVolume)
   $script:filterManagerVolumeParseState = "started"
   if ($Lines.Count -eq 0 -or $Lines.Count -gt 256) {
     $script:filterManagerVolumeParseState = if ($Lines.Count -eq 0) { "empty-output" } else { "line-limit" }
@@ -201,6 +201,7 @@ function Get-ProcmonFilterManagerVolumeEvidence {
   }
   $headerSeen = $false
   $separatorSeen = $false
+  $volumeHeadingSeen = $false
   $hasSupportedFeatures = $false
   $candidates = 0
   $instances = 0
@@ -220,6 +221,30 @@ function Get-ProcmonFilterManagerVolumeEvidence {
     }
     if (-not $headerSeen) {
       if ([string]::IsNullOrWhiteSpace($line)) { continue }
+      if ($line -match '^\s*Instances for\s+(.+?)\s*$') {
+        $reportedVolume = $Matches[1].Trim()
+        $expectedVolumeMatches = $false
+        if ($ExpectedVolume -is [string] -and $ExpectedVolume.Length -gt 0 -and
+          $ExpectedVolume.Length -le 260) {
+          $expectedHeadings = @($ExpectedVolume, "$ExpectedVolume\")
+          foreach ($expectedHeading in $expectedHeadings) {
+            if ([string]::Equals(
+                $reportedVolume,
+                $expectedHeading,
+                [System.StringComparison]::OrdinalIgnoreCase
+              )) {
+              $expectedVolumeMatches = $true
+              break
+            }
+          }
+        }
+        if ($expectedVolumeMatches -and -not $volumeHeadingSeen) {
+          $volumeHeadingSeen = $true
+          continue
+        }
+        $script:filterManagerVolumeParseState = "volume-heading"
+        throw "Filter Manager volume heading did not match the target"
+      }
       if ($line -match '^\s*Instance Name\s+Altitude\s+Frame\s+Volume Name\s*$') {
         $script:filterManagerVolumeParseState = "instance-list-header"
       } elseif ($line -match '^\s*Instances for volume\b') {
@@ -340,7 +365,7 @@ function Get-ProcmonFilterManagerSnapshot {
     throw "Procmon target-volume instance query failed"
   }
   $script:stage = "parse-filter-manager-instance-output"
-  $volumeEvidence = Get-ProcmonFilterManagerVolumeEvidence $instanceLines
+  $volumeEvidence = Get-ProcmonFilterManagerVolumeEvidence $instanceLines $volumeName
   $volumeEvidenceParts = $volumeEvidence -split ";", 2
   $targetVolumeCandidateCount = [int]($volumeEvidenceParts[0] -replace "^candidates:", "")
   $targetVolumeInstances = [int]($volumeEvidenceParts[1] -replace "^instances:", "")

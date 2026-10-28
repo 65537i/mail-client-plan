@@ -112,6 +112,28 @@ if ((Get-ProcmonFilterManagerVolumeEvidence @(
 if ((Get-ProcmonFilterManagerVolumeEvidence @($volumeHeader, $volumeSeparator)) -cne "candidates:0;instances:0") {
   throw "A valid empty target-volume query must remain unattached"
 }
+$expectedVolumeHeadingEvidence = Get-ProcmonFilterManagerVolumeEvidence @(
+  "Instances for C:\",
+  $volumeHeader,
+  $volumeSeparator,
+  "PROCMON24 2 385200 0 0x00"
+) "C:"
+if ($expectedVolumeHeadingEvidence -cne "candidates:1;instances:2" -or
+  $script:filterManagerVolumeParseState -cne "valid") {
+  throw "A target-volume summary heading must match the queried volume exactly"
+}
+$wrongVolumeHeadingRejected = $false
+try {
+  Get-ProcmonFilterManagerVolumeEvidence @(
+    "Instances for D:",
+    $volumeHeader,
+    $volumeSeparator
+  ) "C:" | Out-Null
+} catch { $wrongVolumeHeadingRejected = $true }
+if (-not $wrongVolumeHeadingRejected -or
+  $script:filterManagerVolumeParseState -cne "volume-heading") {
+  throw "A mismatched target-volume heading must fail closed"
+}
 $emptyInstanceOutputRejected = $false
 try { Get-ProcmonFilterManagerVolumeEvidence @() | Out-Null } catch { $emptyInstanceOutputRejected = $true }
 if (-not $emptyInstanceOutputRejected) {
