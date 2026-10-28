@@ -242,7 +242,17 @@ function Get-ProcmonFilterManagerVolumeEvidence {
           $volumeHeadingSeen = $true
           continue
         }
-        $script:filterManagerVolumeParseState = "volume-heading"
+        $script:filterManagerVolumeParseState = if ($reportedVolume -match '^[A-Za-z]:\\?$') {
+          "volume-heading-drive"
+        } elseif ($reportedVolume -match '^\\\\\?\\Volume\{[0-9A-Fa-f]{8}(?:-[0-9A-Fa-f]{4}){3}-[0-9A-Fa-f]{12}\}\\?$') {
+          "volume-heading-guid"
+        } elseif ($reportedVolume -match '^\\Device\\HarddiskVolume[0-9]+$') {
+          "volume-heading-device"
+        } elseif ($reportedVolume -match '^[A-Za-z]:\\[A-Za-z0-9_.$ -]+(?:\\[A-Za-z0-9_.$ -]+)*\\?$') {
+          "volume-heading-mount-path"
+        } else {
+          "volume-heading-unrecognized"
+        }
         throw "Filter Manager volume heading did not match the target"
       }
       if ($line -match '^\s*Instance Name\s+Altitude\s+Frame\s+Volume Name\s*$') {
@@ -774,6 +784,11 @@ public static class ProcmonCaptureWindows
       "duplicate-header",
       "instance-list-header",
       "volume-heading",
+      "volume-heading-drive",
+      "volume-heading-guid",
+      "volume-heading-device",
+      "volume-heading-mount-path",
+      "volume-heading-unrecognized",
       "instances-heading",
       "filter-manager-heading",
       "unexpected-preamble",
