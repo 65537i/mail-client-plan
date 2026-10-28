@@ -61,6 +61,8 @@ Run448後はProcmon Filter Manager candidate countに加え、canary/controlフ�
 
 Run448後の初期実装は`GetVolumePathNameW`でtarget fileのvolume mount pointを得て、各Procmon Filter Manager candidateへ`fltmc instances -f <candidate> -v <volume>`をread-only照会するものだった。Run463でこの併用commandがexit code 1を返したため、上記のとおりvolume selector単独の照会へ修正した。
 
+[Run 481](https://github.com/65537i/mail-client-plan/actions/runs/40768636277)（manual Windows 2025 / webview、`0b8e2d5`）はNode audit regression 65/65とWindows PowerShell filter/export fixtureに成功。実baseline監査はparse stageでfail closedし、allowlist修正後のstate `volume-heading-drive-prefix`を確認。target volumeと完全一致しないdrive-letter prefixであることだけを記録し、値/raw outputは未記録。positive control / WDIOへ未到達。次の切り分けとしてdrive root / path / decoratedの固定分類を追加した。Linux regression 65/65、JS syntax、`git diff --check`成功。AC-05未達。
+
 [Run 479](https://github.com/65537i/mail-client-plan/actions/runs/40767325713)（manual Windows 2025 / webview、`742d2ea`）はNode audit regression 65/65とWindows PowerShell filter/export fixtureに成功した。実baseline監査はparse stageでfail closedし、positive control / WDIOへ未到達。今回は新しいheading-state codeをPowerShell側のdiagnostic allowlistへ含め忘れ、assertionにparse stateが出なかった。state allowlistの網羅性を直接検査するNode regressionを追加し、PowerShell出力にも全stateを通す。raw outputは未記録。AC-05未達。
 
 [Run 477](https://github.com/65537i/mail-client-plan/actions/runs/40765464939)（manual Windows 2025 / webview、`b65a818`）はNode audit regression 65/65とWindows PowerShell filter/export fixtureに成功。実baseline監査はvolume query後、strict parserでfail closedし、固定diagnostic state `volume-heading-unrecognized`を確認。positive control / WDIOへ未到達。raw outputは未記録。次runではdrive / volume-GUID / NT-device / object-manager / rooted / otherのbounded heading-prefix分類を使って出力形状を切り分ける。Linux regression 65/65、JS syntax、`git diff --check`成功。AC-05未達。

@@ -131,8 +131,28 @@ try {
   ) "C:" | Out-Null
 } catch { $wrongVolumeHeadingRejected = $true }
 if (-not $wrongVolumeHeadingRejected -or
-  $script:filterManagerVolumeParseState -cne "volume-heading-drive-prefix") {
+  $script:filterManagerVolumeParseState -cne "volume-heading-drive-other") {
   throw "A mismatched target-volume heading must fail closed"
+}
+$drivePathHeadingRejected = $false
+try {
+  Get-ProcmonFilterManagerVolumeEvidence @(
+    "Instances for D:\nested"
+  ) "C:" | Out-Null
+} catch { $drivePathHeadingRejected = $true }
+if (-not $drivePathHeadingRejected -or
+  $script:filterManagerVolumeParseState -cne "volume-heading-drive-path") {
+  throw "A mismatched drive path heading must fail closed"
+}
+$decoratedDriveHeadingRejected = $false
+try {
+  Get-ProcmonFilterManagerVolumeEvidence @(
+    "Instances for D: (metadata)"
+  ) "C:" | Out-Null
+} catch { $decoratedDriveHeadingRejected = $true }
+if (-not $decoratedDriveHeadingRejected -or
+  $script:filterManagerVolumeParseState -cne "volume-heading-drive-decorated") {
+  throw "A decorated drive heading must fail closed"
 }
 $guidVolumeHeadingRejected = $false
 try {

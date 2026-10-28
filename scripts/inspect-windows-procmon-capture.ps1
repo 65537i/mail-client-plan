@@ -243,7 +243,14 @@ function Get-ProcmonFilterManagerVolumeEvidence {
           continue
         }
         $script:filterManagerVolumeParseState = if ($reportedVolume -match '^[A-Za-z]:') {
-          "volume-heading-drive-prefix"
+          $driveRemainder = $reportedVolume.Substring(2)
+          if ($driveRemainder -match '^[\\/]') {
+            "volume-heading-drive-path"
+          } elseif ($driveRemainder -match '^\s') {
+            "volume-heading-drive-decorated"
+          } else {
+            "volume-heading-drive-other"
+          }
         } elseif ($reportedVolume -match '^\\\\\?\\Volume\{') {
           "volume-heading-guid-prefix"
         } elseif ($reportedVolume -match '^\\Device\\') {
@@ -786,7 +793,9 @@ public static class ProcmonCaptureWindows
       "duplicate-header",
       "instance-list-header",
       "volume-heading",
-      "volume-heading-drive-prefix",
+      "volume-heading-drive-path",
+      "volume-heading-drive-decorated",
+      "volume-heading-drive-other",
       "volume-heading-guid-prefix",
       "volume-heading-device-prefix",
       "volume-heading-object-manager-prefix",
