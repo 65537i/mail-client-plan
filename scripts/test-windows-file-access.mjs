@@ -268,6 +268,16 @@ async function captureScenario(scenario) {
       "Process Monitor native child inspection counts are inconsistent",
     );
     console.log(`Windows audit ${scenario}: ${nativeEvidence[0][0].trim()}`);
+    const driverEvidence = [...captureInspectionOutput.matchAll(
+      /^PROC_MON_CAPTURE_DRIVER=services:(0|[1-9]\d?);running:(0|[1-9]\d?);started:(0|[1-9]\d?);filesystem:(0|[1-9]\d?);exit-errors:(0|[1-9]\d?)\r?$/gm,
+    )];
+    assert(
+      driverEvidence.length === 1 &&
+      Number(driverEvidence[0][1]) <= 16 &&
+      driverEvidence[0].slice(2, 6).every((count) => Number(count) <= Number(driverEvidence[0][1])),
+      "Process Monitor driver service evidence is incomplete",
+    );
+    console.log(`Windows audit ${scenario}: ${driverEvidence[0][0].trim()}`);
     for (const target of ["capture", "filesystem"]) {
       const msaa = [...captureInspectionOutput.matchAll(
         /^PROC_MON_CAPTURE_MSAA=(capture|filesystem);object:(available|unavailable);items:(0|[1-9]\d?);matches:(0|[1-9]\d?);checked:(unavailable|mixed|on|off);enabled:(unavailable|true|false)\r?$/gm,

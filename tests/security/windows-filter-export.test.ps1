@@ -10,6 +10,42 @@ if ($inspectionErrors.Count -ne 0) {
   throw "Procmon capture inspection script has PowerShell parse errors"
 }
 $inspectionText = $inspectionAst.Extent.Text
+$driverEvidenceFunction = $inspectionAst.Find({
+  param($node)
+  $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+    $node.Name -eq "Get-ProcmonDriverEvidence"
+}, $true)
+if ($null -eq $driverEvidenceFunction) { throw "Procmon driver formatter is missing" }
+. ([scriptblock]::Create($driverEvidenceFunction.Extent.Text))
+if ((Get-ProcmonDriverEvidence @()) -cne "services:0;running:0;started:0;filesystem:0;exit-errors:0") {
+  throw "Empty driver inventory must not imply a running driver"
+}
+$driverFixtures = @(
+  [pscustomobject]@{
+    Name = "PROCMON24"; State = "Running"; Started = $true
+    ServiceType = "File System Driver"; ExitCode = [uint32]0
+  },
+  [pscustomobject]@{
+    Name = "PROCMON23"; State = "Stopped"; Started = $false
+    ServiceType = "Kernel Driver"; ExitCode = [uint32]5
+  }
+)
+if ((Get-ProcmonDriverEvidence $driverFixtures) -cne "services:2;running:1;started:1;filesystem:1;exit-errors:1") {
+  throw "Driver inventory must preserve stopped and failed service counts"
+}
+foreach ($invalid in @(
+  (@($driverFixtures[0]) * 17),
+  @([pscustomobject]@{ Name = "PROCMON-secret"; State = "Running"; Started = $true; ServiceType = "Kernel Driver"; ExitCode = [uint32]0 }),
+  @([pscustomobject]@{ Name = "PROCMON24"; State = "secret"; Started = $true; ServiceType = "Kernel Driver"; ExitCode = [uint32]0 }),
+  @([pscustomobject]@{ Name = "PROCMON24"; State = "Running"; Started = "false"; ServiceType = "Kernel Driver"; ExitCode = [uint32]0 }),
+  @([pscustomobject]@{ Name = "PROCMON24"; State = "Running"; Started = $true; ServiceType = "secret"; ExitCode = [uint32]0 }),
+  @([pscustomobject]@{ Name = "PROCMON24"; State = "Running"; Started = $true; ServiceType = "Kernel Driver"; ExitCode = "secret" })
+)) {
+  $rejected = $false
+  try { Get-ProcmonDriverEvidence $invalid | Out-Null } catch { $rejected = $true }
+  if (-not $rejected) { throw "Unsafe driver inventory must be rejected" }
+}
+Write-Host "PASS AC-05: driver inventory counts empty, running and stopped services and rejects unsafe shapes"
 $windowSummary = $inspectionAst.Find({
   param($node)
   $node -is [System.Management.Automation.Language.InvokeMemberExpressionAst] -and
