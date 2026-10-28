@@ -17,29 +17,34 @@ $driverEvidenceFunction = $inspectionAst.Find({
 }, $true)
 if ($null -eq $driverEvidenceFunction) { throw "Procmon driver formatter is missing" }
 . ([scriptblock]::Create($driverEvidenceFunction.Extent.Text))
-if ((Get-ProcmonDriverEvidence @()) -cne "services:0;running:0;started:0;filesystem:0;exit-errors:0") {
-  throw "Empty driver inventory must not imply a running driver"
+if ((Get-ProcmonDriverEvidence @()) -cne "inventory:0;candidates:0;name-matches:0;image-matches:0;running:0;started:0;filesystem:0;exit-errors:0") {
+  throw "Empty driver inventory must remain an empty observation"
 }
 $driverFixtures = @(
   [pscustomobject]@{
-    Name = "PROCMON24"; State = "Running"; Started = $true
+    Name = "PROCMON24"; PathName = "\SystemRoot\System32\drivers\PROCMON24.SYS"; State = "Running"; Started = $true
     ServiceType = "File System Driver"; ExitCode = [uint32]0
   },
   [pscustomobject]@{
-    Name = "PROCMON23"; State = "Stopped"; Started = $false
+    Name = "PROCALT"; PathName = """C:\Windows\System32\drivers\PROCMON25.SYS"""; State = "Stopped"; Started = $false
     ServiceType = "Kernel Driver"; ExitCode = [uint32]5
+  },
+  [pscustomobject]@{
+    Name = "UNRELATED"; PathName = $null; State = "Running"; Started = $true
+    ServiceType = "Kernel Driver"; ExitCode = [uint32]0
   }
 )
-if ((Get-ProcmonDriverEvidence $driverFixtures) -cne "services:2;running:1;started:1;filesystem:1;exit-errors:1") {
-  throw "Driver inventory must preserve stopped and failed service counts"
+if ((Get-ProcmonDriverEvidence $driverFixtures) -cne "inventory:3;candidates:2;name-matches:1;image-matches:2;running:1;started:1;filesystem:1;exit-errors:1") {
+  throw "SCM driver inventory must identify Procmon candidates by service name or image path"
 }
 foreach ($invalid in @(
-  (@($driverFixtures[0]) * 17),
-  @([pscustomobject]@{ Name = "PROCMON-secret"; State = "Running"; Started = $true; ServiceType = "Kernel Driver"; ExitCode = [uint32]0 }),
-  @([pscustomobject]@{ Name = "PROCMON24"; State = "secret"; Started = $true; ServiceType = "Kernel Driver"; ExitCode = [uint32]0 }),
-  @([pscustomobject]@{ Name = "PROCMON24"; State = "Running"; Started = "false"; ServiceType = "Kernel Driver"; ExitCode = [uint32]0 }),
-  @([pscustomobject]@{ Name = "PROCMON24"; State = "Running"; Started = $true; ServiceType = "secret"; ExitCode = [uint32]0 }),
-  @([pscustomobject]@{ Name = "PROCMON24"; State = "Running"; Started = $true; ServiceType = "Kernel Driver"; ExitCode = "secret" })
+  (@($driverFixtures[0]) * 1025),
+  @([pscustomobject]@{ Name = "PROCMON24"; PathName = 1; State = "Running"; Started = $true; ServiceType = "Kernel Driver"; ExitCode = [uint32]0 }),
+  @([pscustomobject]@{ Name = "PROCMON24"; PathName = [string]::new('x', 2049); State = "Running"; Started = $true; ServiceType = "Kernel Driver"; ExitCode = [uint32]0 }),
+  @([pscustomobject]@{ Name = "PROCMON24"; PathName = "x"; State = "secret"; Started = $true; ServiceType = "Kernel Driver"; ExitCode = [uint32]0 }),
+  @([pscustomobject]@{ Name = "PROCMON24"; PathName = "x"; State = "Running"; Started = "false"; ServiceType = "Kernel Driver"; ExitCode = [uint32]0 }),
+  @([pscustomobject]@{ Name = "PROCMON24"; PathName = "x"; State = "Running"; Started = $true; ServiceType = "secret"; ExitCode = [uint32]0 }),
+  @([pscustomobject]@{ Name = "PROCMON24"; PathName = "x"; State = "Running"; Started = $true; ServiceType = "Kernel Driver"; ExitCode = "secret" })
 )) {
   $rejected = $false
   try { Get-ProcmonDriverEvidence $invalid | Out-Null } catch { $rejected = $true }

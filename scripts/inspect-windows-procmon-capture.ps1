@@ -7,32 +7,47 @@ $ErrorActionPreference = "Stop"
 
 function Get-ProcmonDriverEvidence {
   param([object[]]$Drivers)
-  if ($Drivers.Count -gt 16) {
-    throw "Procmon driver inventory exceeded its limit"
+  if ($Drivers.Count -gt 1024) {
+    throw "System driver inventory exceeded its limit"
   }
+  $candidates = 0
+  $nameMatches = 0
+  $imageMatches = 0
   $running = 0
   $started = 0
   $filesystem = 0
   $exitErrors = 0
   foreach ($driver in $Drivers) {
     if (
-      $driver.Name -notmatch '^PROCMON[0-9]*$' -or
+      $driver.Name -isnot [string] -or
+      $driver.Name -notmatch '^[A-Za-z0-9_]{1,256}$' -or
+      ($null -ne $driver.PathName -and $driver.PathName -isnot [string]) -or
+      ($null -ne $driver.PathName -and $driver.PathName.Length -gt 2048) -or
       $driver.State -notin @(
         "Running", "Stopped", "Start Pending", "Stop Pending",
         "Continue Pending", "Pause Pending", "Paused", "Unknown"
       ) -or
       $driver.Started -isnot [bool] -or
-      $driver.ServiceType -notin @("Kernel Driver", "File System Driver") -or
+      $driver.ServiceType -notin @(
+        "Kernel Driver", "File System Driver", "Adapter", "Recognizer Driver"
+      ) -or
       $driver.ExitCode -isnot [uint32]
     ) {
-      throw "Procmon driver inventory has an unsupported shape"
+      throw "System driver inventory has an unsupported shape"
     }
+    $nameMatch = $driver.Name -match '^PROCMON[0-9]*$'
+    $imagePath = if ($null -eq $driver.PathName) { "" } else { $driver.PathName }
+    $imageMatch = $imagePath -match '(?i)(?:^|[\\/])procmon[^\\/]*\.sys(?:[" ]|$)'
+    if (-not $nameMatch -and -not $imageMatch) { continue }
+    $candidates++
+    if ($nameMatch) { $nameMatches++ }
+    if ($imageMatch) { $imageMatches++ }
     if ($driver.State -eq "Running") { $running++ }
     if ($driver.Started) { $started++ }
     if ($driver.ServiceType -eq "File System Driver") { $filesystem++ }
     if ($driver.ExitCode -ne 0) { $exitErrors++ }
   }
-  return "services:$($Drivers.Count);running:$running;started:$started;filesystem:$filesystem;exit-errors:$exitErrors"
+  return "inventory:$($Drivers.Count);candidates:$candidates;name-matches:$nameMatches;image-matches:$imageMatches;running:$running;started:$started;filesystem:$filesystem;exit-errors:$exitErrors"
 }
 
 $stage = "load-automation"
@@ -221,11 +236,11 @@ public static class ProcmonCaptureWindows
   $nativeChildren = [ProcmonCaptureWindows]::Inspect($handle, [uint32]$OwnerProcessId)
   [Console]::Out.WriteLine("PROC_MON_CAPTURE_NATIVE=$nativeChildren")
   if ($CountOnly) { exit 0 }
-  $stage = "read-driver-services"
+  $stage = "read-system-driver-inventory"
   $drivers = @(
-    Get-CimInstance -ClassName Win32_SystemDriver -Filter "Name LIKE 'PROCMON%'" `
-      -Property Name, State, Started, ServiceType, ExitCode -OperationTimeoutSec 5 |
-      Select-Object -First 17
+    Get-CimInstance -ClassName Win32_SystemDriver `
+      -Property Name, PathName, State, Started, ServiceType, ExitCode -OperationTimeoutSec 5 |
+      Select-Object -First 1025
   )
   $driverEvidence = Get-ProcmonDriverEvidence $drivers
   [Console]::Out.WriteLine("PROC_MON_CAPTURE_DRIVER=$driverEvidence")

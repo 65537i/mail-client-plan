@@ -5,19 +5,24 @@ import path from "node:path";
 import test from "node:test";
 import { createWindowsAuditCanary } from "../../scripts/windows-audit-canary.mjs";
 
-test("AC-05: driver inventory is read-only, bounded and exposes only aggregate service state", async () => {
+test("AC-05: SCM driver inventory is bounded and identifies Procmon by service name or image path", async () => {
   const [inspection, driver] = await Promise.all([
     readFile(new URL("../../scripts/inspect-windows-procmon-capture.ps1", import.meta.url), "utf8"),
     readFile(new URL("../../scripts/test-windows-file-access.mjs", import.meta.url), "utf8"),
   ]);
-  assert.match(inspection, /Get-CimInstance -ClassName Win32_SystemDriver -Filter "Name LIKE 'PROCMON%'"[\s\S]*-OperationTimeoutSec 5 \|\s*Select-Object -First 17/);
-  assert.match(inspection, /\$Drivers.Count -gt 16/);
+  assert.match(inspection, /Get-CimInstance -ClassName Win32_SystemDriver[\s\S]*PathName, State, Started, ServiceType, ExitCode -OperationTimeoutSec 5 \|\s*Select-Object -First 1025/);
+  assert.match(inspection, /\$Drivers.Count -gt 1024/);
+  assert.match(inspection, /\$driver.Name -match '\^PROCMON\[0-9\]\*\$'/);
+  assert.match(inspection, /\$imagePath -match/);
+  assert.match(inspection, /procmon/);
+  assert.match(inspection, /\\.sys/);
+  assert.match(inspection, /if \(-not \$nameMatch -and -not \$imageMatch\) \{ continue \}/);
   assert.match(inspection, /\$driver.Started -isnot \[bool\]/);
   assert.match(inspection, /\$driver.ExitCode -isnot \[uint32\]/);
-  assert.match(inspection, /if \(\$CountOnly\) \{ exit 0 \}[\s\S]*read-driver-services/);
-  assert.doesNotMatch(inspection, /Start-Service|Stop-Service|Set-Service|Invoke-CimMethod|PathName|WriteLine\([^)]*driver\.(Name|State)/);
-  assert.match(driver, /driverEvidence.length === 1[\s\S]*Number\(driverEvidence\[0\]\[1\]\) <= 16/);
-  assert.match(driver, /slice\(2, 6\).every\(\(count\) => Number\(count\) <= Number\(driverEvidence\[0\]\[1\]\)\)/);
+  assert.match(inspection, /if \(\$CountOnly\) \{ exit 0 \}[\s\S]*read-system-driver-inventory/);
+  assert.doesNotMatch(inspection, /Start-Service|Stop-Service|Set-Service|Invoke-CimMethod|WriteLine\([^)]*driver\.(Name|PathName|State)/);
+  assert.match(driver, /driverEvidence.length === 1[\s\S]*Number\(driverEvidence\[0\]\[1\]\) <= 1024/);
+  assert.match(driver, /slice\(2, 9\).every\(\(count\) => Number\(count\) <= Number\(driverEvidence\[0\]\[1\]\)\)/);
 });
 
 test("AC-05: live filter verification attaches to the capture PID and preserves its lifetime", async () => {

@@ -269,12 +269,13 @@ async function captureScenario(scenario) {
     );
     console.log(`Windows audit ${scenario}: ${nativeEvidence[0][0].trim()}`);
     const driverEvidence = [...captureInspectionOutput.matchAll(
-      /^PROC_MON_CAPTURE_DRIVER=services:(0|[1-9]\d?);running:(0|[1-9]\d?);started:(0|[1-9]\d?);filesystem:(0|[1-9]\d?);exit-errors:(0|[1-9]\d?)\r?$/gm,
+      /^PROC_MON_CAPTURE_DRIVER=inventory:(0|[1-9]\d{0,3});candidates:(0|[1-9]\d{0,3});name-matches:(0|[1-9]\d{0,3});image-matches:(0|[1-9]\d{0,3});running:(0|[1-9]\d{0,3});started:(0|[1-9]\d{0,3});filesystem:(0|[1-9]\d{0,3});exit-errors:(0|[1-9]\d{0,3})\r?$/gm,
     )];
     assert(
       driverEvidence.length === 1 &&
-      Number(driverEvidence[0][1]) <= 16 &&
-      driverEvidence[0].slice(2, 6).every((count) => Number(count) <= Number(driverEvidence[0][1])),
+      Number(driverEvidence[0][1]) <= 1024 &&
+      driverEvidence[0].slice(2, 9).every((count) => Number(count) <= Number(driverEvidence[0][1])) &&
+      Number(driverEvidence[0][2]) <= Number(driverEvidence[0][3]) + Number(driverEvidence[0][4]),
       "Process Monitor driver service evidence is incomplete",
     );
     console.log(`Windows audit ${scenario}: ${driverEvidence[0][0].trim()}`);
