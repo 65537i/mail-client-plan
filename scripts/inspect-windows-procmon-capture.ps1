@@ -20,9 +20,18 @@ function Get-ProcmonDriverEvidence {
   foreach ($driver in $Drivers) {
     if (
       $driver.Name -isnot [string] -or
-      $driver.Name -notmatch '^[A-Za-z0-9_]{1,256}$' -or
+      $driver.Name.Length -lt 1 -or
+      $driver.Name.Length -gt 256 -or
       ($null -ne $driver.PathName -and $driver.PathName -isnot [string]) -or
-      ($null -ne $driver.PathName -and $driver.PathName.Length -gt 2048) -or
+      ($null -ne $driver.PathName -and $driver.PathName.Length -gt 2048)
+    ) {
+      throw "System driver inventory has an unsupported shape"
+    }
+    $nameMatch = $driver.Name -match '^PROCMON[0-9]*$'
+    $imagePath = if ($null -eq $driver.PathName) { "" } else { $driver.PathName }
+    $imageMatch = $imagePath -match '(?i)(?:^|[\\/])procmon[^\\/]*\.sys(?:[" ]|$)'
+    if (-not $nameMatch -and -not $imageMatch) { continue }
+    if (
       $driver.State -notin @(
         "Running", "Stopped", "Start Pending", "Stop Pending",
         "Continue Pending", "Pause Pending", "Paused", "Unknown"
@@ -33,12 +42,8 @@ function Get-ProcmonDriverEvidence {
       ) -or
       $driver.ExitCode -isnot [uint32]
     ) {
-      throw "System driver inventory has an unsupported shape"
+      throw "Procmon driver candidate has an unsupported shape"
     }
-    $nameMatch = $driver.Name -match '^PROCMON[0-9]*$'
-    $imagePath = if ($null -eq $driver.PathName) { "" } else { $driver.PathName }
-    $imageMatch = $imagePath -match '(?i)(?:^|[\\/])procmon[^\\/]*\.sys(?:[" ]|$)'
-    if (-not $nameMatch -and -not $imageMatch) { continue }
     $candidates++
     if ($nameMatch) { $nameMatches++ }
     if ($imageMatch) { $imageMatches++ }
@@ -236,12 +241,13 @@ public static class ProcmonCaptureWindows
   $nativeChildren = [ProcmonCaptureWindows]::Inspect($handle, [uint32]$OwnerProcessId)
   [Console]::Out.WriteLine("PROC_MON_CAPTURE_NATIVE=$nativeChildren")
   if ($CountOnly) { exit 0 }
-  $stage = "read-system-driver-inventory"
+  $stage = "query-system-driver-inventory"
   $drivers = @(
     Get-CimInstance -ClassName Win32_SystemDriver `
       -Property Name, PathName, State, Started, ServiceType, ExitCode -OperationTimeoutSec 5 |
       Select-Object -First 1025
   )
+  $stage = "classify-system-driver-inventory"
   $driverEvidence = Get-ProcmonDriverEvidence $drivers
   [Console]::Out.WriteLine("PROC_MON_CAPTURE_DRIVER=$driverEvidence")
   $visual = "unavailable"

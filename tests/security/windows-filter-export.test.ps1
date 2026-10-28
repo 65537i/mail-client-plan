@@ -41,10 +41,10 @@ foreach ($invalid in @(
   (@($driverFixtures[0]) * 1025),
   @([pscustomobject]@{ Name = "PROCMON24"; PathName = 1; State = "Running"; Started = $true; ServiceType = "Kernel Driver"; ExitCode = [uint32]0 }),
   @([pscustomobject]@{ Name = "PROCMON24"; PathName = [string]::new('x', 2049); State = "Running"; Started = $true; ServiceType = "Kernel Driver"; ExitCode = [uint32]0 }),
-  @([pscustomobject]@{ Name = "PROCMON24"; PathName = "x"; State = "secret"; Started = $true; ServiceType = "Kernel Driver"; ExitCode = [uint32]0 }),
-  @([pscustomobject]@{ Name = "PROCMON24"; PathName = "x"; State = "Running"; Started = "false"; ServiceType = "Kernel Driver"; ExitCode = [uint32]0 }),
-  @([pscustomobject]@{ Name = "PROCMON24"; PathName = "x"; State = "Running"; Started = $true; ServiceType = "secret"; ExitCode = [uint32]0 }),
-  @([pscustomobject]@{ Name = "PROCMON24"; PathName = "x"; State = "Running"; Started = $true; ServiceType = "Kernel Driver"; ExitCode = "secret" })
+  @([pscustomobject]@{ Name = "PROCMON24"; PathName = "\SystemRoot\System32\drivers\PROCMON24.SYS"; State = "secret"; Started = $true; ServiceType = "Kernel Driver"; ExitCode = [uint32]0 }),
+  @([pscustomobject]@{ Name = "PROCMON24"; PathName = "\SystemRoot\System32\drivers\PROCMON24.SYS"; State = "Running"; Started = "false"; ServiceType = "Kernel Driver"; ExitCode = [uint32]0 }),
+  @([pscustomobject]@{ Name = "PROCMON24"; PathName = "\SystemRoot\System32\drivers\PROCMON24.SYS"; State = "Running"; Started = $true; ServiceType = "secret"; ExitCode = [uint32]0 }),
+  @([pscustomobject]@{ Name = "PROCMON24"; PathName = "\SystemRoot\System32\drivers\PROCMON24.SYS"; State = "Running"; Started = $true; ServiceType = "Kernel Driver"; ExitCode = "secret" })
 )) {
   $rejected = $false
   try { Get-ProcmonDriverEvidence $invalid | Out-Null } catch { $rejected = $true }
