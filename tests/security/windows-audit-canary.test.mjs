@@ -68,6 +68,7 @@ test("AC-05: Filter Manager inventory is an independent bounded read-only driver
   assert.match(inspection, /Procmon Filter Manager candidate has an unsupported shape/);
   assert.match(inspection, /GetVolumePathName[\s\S]*\$filterManagerPath instances -f \$candidateName -v \$volumeName/);
   assert.match(inspection, /Get-ProcmonFilterInstanceEvidence[\s\S]*Lines\.Count -eq 0 -or \$Lines\.Count -gt 256[\s\S]*\$instances -gt 64/);
+  assert.match(inspection, /\$script:stage = "query-filter-manager-filter-inventory"[\s\S]*\$script:stage = "resolve-filter-manager-target-volume"[\s\S]*\$script:stage = "query-filter-manager-instance-command"[\s\S]*\$script:stage = "parse-filter-manager-instance-output"/);
   assert.match(inspection, /target-volume-attached:\$attached;target-volume-instances:\$targetVolumeInstances/);
   assert.match(inspection, /PROC_MON_CAPTURE_FILTER_MANAGER=\$filterManagerEvidence/);
   assert.doesNotMatch(inspection, /fltmc\.exe\s+(?:load|unload|attach|detach)|WriteLine\([^)]*(?:\$line|\$filterManagerPath|\$volumeName|\$candidateName)/i);

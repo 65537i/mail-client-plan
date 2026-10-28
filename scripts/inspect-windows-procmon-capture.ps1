@@ -246,6 +246,7 @@ function Get-ProcmonFilterInstanceEvidence {
 
 function Get-ProcmonFilterManagerSnapshot {
   param([string]$Path)
+  $script:stage = "query-filter-manager-filter-inventory"
   $filterManagerPath = Join-Path $env:SystemRoot "System32\fltmc.exe"
   if (-not [IO.File]::Exists($filterManagerPath)) {
     throw "Filter Manager query utility is unavailable"
@@ -265,6 +266,7 @@ function Get-ProcmonFilterManagerSnapshot {
   if ($candidateNames.Count -gt 64) {
     throw "Procmon Filter Manager candidate inventory exceeded its limit"
   }
+  $script:stage = "resolve-filter-manager-target-volume"
   if ($Path -isnot [string] -or $Path.Length -eq 0 -or $Path.Length -gt 2048 -or
     -not [IO.Path]::IsPathRooted($Path) -or -not [IO.File]::Exists($Path)) {
     throw "Procmon target-volume path is unavailable"
@@ -281,10 +283,12 @@ function Get-ProcmonFilterManagerSnapshot {
   }
   $targetVolumeInstances = 0
   foreach ($candidateName in $candidateNames) {
+    $script:stage = "query-filter-manager-instance-command"
     $instanceLines = @(& $filterManagerPath instances -f $candidateName -v $volumeName 2>$null)
     if ($LASTEXITCODE -ne 0) {
       throw "Procmon target-volume instance query failed"
     }
+    $script:stage = "parse-filter-manager-instance-output"
     $targetVolumeInstances += Get-ProcmonFilterInstanceEvidence $instanceLines $candidateName
     if ($targetVolumeInstances -gt 4096) {
       throw "Procmon target-volume instance inventory exceeded its limit"
@@ -537,6 +541,7 @@ public static class ProcmonCaptureWindows
   $stage = "query-filter-manager-volume-instances"
   $filterManagerEvidence = Get-ProcmonFilterManagerSnapshot $TargetPath
   [Console]::Out.WriteLine("PROC_MON_CAPTURE_FILTER_MANAGER=$filterManagerEvidence")
+  $stage = "inspect-capture-window"
   $visual = "unavailable"
   $windowPattern = $null
   if ($main.TryGetCurrentPattern(
