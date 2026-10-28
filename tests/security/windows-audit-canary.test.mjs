@@ -82,7 +82,10 @@ test("AC-05: live filter verification attaches to the capture PID and preserves 
   assert.match(configuration, /if \(-not \$PSBoundParameters.ContainsKey\("CaptureProcessId"\)\) \{\s*Set-Stage "wait-for-input-idle"/);
   assert.match(configuration, /if \(-not \$PSBoundParameters.ContainsKey\("CaptureProcessId"\) -and -not \$process.HasExited\)/);
   assert.match(configuration, /reloaded-filter-rules-verified"[\s\S]*PROC_MON_FILTER_LIVE_VERIFIED=rules:exact-two;drop:on/);
-  assert.match(driver, /WDIO finished[\s\S]*"-CaptureProcessId", String\(capture.pid\)[\s\S]*liveFilterExit, 30_000[\s\S]*live-filter=rules:exact-two;drop:on[\s\S]*await readCaptureListCount\("final"\)/);
+  assert.match(driver, /async function verifyLiveCaptureFilter\(label\)[\s\S]*"-CaptureProcessId", String\(capture\.pid\)[\s\S]*liveFilterExit, 30_000[\s\S]*PROC_MON_FILTER_LIVE_VERIFIED=rules:exact-two;drop:on/);
+  assert.match(driver, /await verifyLiveCaptureFilter\("before-controls"\)[\s\S]*const positiveControl = spawn/);
+  assert.match(driver, /await readCaptureListCount\("after-controls", true\)[\s\S]*command\.send\("start"\)/);
+  assert.match(driver, /WDIO finished[\s\S]*await verifyLiveCaptureFilter\("after-wdio"\)[\s\S]*await readCaptureListCount\("final"\)/);
 });
 
 test("AC-05: only offline export clears display filters and all exported paths remain validated", async () => {
