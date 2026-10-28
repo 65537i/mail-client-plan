@@ -41,6 +41,8 @@ Run438後はcandidate nameを出さずに`Get-Service`でSCM statusをread-only�
 
 Run442後は同じreadiness inspectionで`fltmc.exe filters`をread-only照会し、SCM / registry / WMIとは独立してFilter Managerへの登録有無を確認する。最大256行・512文字、Procmon候補64件まで、標準行形式のみを受理し、名前やraw outputは出さずcandidate / instance数のみ記録する。Node source guardとPowerShell fixtureは追加済み。Linux上のNode25/25は成功したが、PowerShell fixtureとWindows実captureは次のWindows run待ち。AC-05は未達で、capture filter・positive-control gateは変更しない。
 
+[Run 444](https://github.com/65537i/mail-client-plan/actions/runs/40716755045)（`66dc3cf`、manual Windows 2025 / webview）はWindows Node回帰 / worker coordination、PowerShell configuration regression、security-test build、WDIOに成功し、最後の実capture auditでpositive control 0件のためfail closedした。readiness inspection時の`fltmc filters`はProcmon候補1 / instances6を示し、以前の「SCM / WMI / registryで候補なし」をdriver未登録に一般化する仮説を否定する。Procmon runtimeがFilter Managerへ登録されていることは観測されたが、PMLは932,300 bytesでもCSV76 bytesでheader-only、live list 0、Node `ReadFile` positive control 0。exact filter / Drop / toolbar state / startup error none / WDIO successは維持。次はfilter instanceがある状態でcapture event delivery / export経路のどこでイベントが消えるかを、gateを緩めず追加切り分ける。AC-05未達。
+
 [native Run 443](https://github.com/65537i/mail-client-plan/actions/runs/40712594438)（`7f4f905`、push / Ubuntu 24.04 / basic）はplan、Rust format / tests / clippy、frontend typecheck / buildに成功。Windows regression / PowerShell fixture / Procmon実captureはすべてskipされており、Filter Manager診断のWindows実測は未実施。
 
 [Run 434](https://github.com/65537i/mail-client-plan/actions/runs/40692872751)（`f707d9e`）は64 Node / PowerShell checksに成功。実capture registry evidence parseで停止し、control / WDIOへ到達しなかった。Registry `keys` count上限4096に対しNode patternが3桁制限だったため、4桁対応へ修正する。
