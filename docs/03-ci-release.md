@@ -63,6 +63,10 @@ Run448後の初期実装は`GetVolumePathNameW`でtarget fileのvolume mount poi
 
 [Run 483](https://github.com/65537i/mail-client-plan/actions/runs/40770822851)（manual Windows 2025 / webview、`4d6042f`）はNode audit regression 65/65とWindows PowerShell filter/export fixtureに成功。実baseline監査はparse stageでfail closedし、state `volume-heading-drive-decorated`を確認。ドライブ文字後に空白が続く形状のみを記録し、見出しの値/raw outputは未記録。positive control / WDIOへ未到達。次に空白後の構文を固定分類する診断変更を追加。AC-05未達。
 
+[Run 485](https://github.com/65537i/mail-client-plan/actions/runs/40773165490)（manual Windows 2025 / webview、`d9f1dfe`）はNode audit regression 65/65とWindows PowerShell filter/export fixtureに成功。実baseline監査はparse stageでfail closedし、drive prefix後の空白に続く先頭文字が括弧・角括弧・引用符以外の固定クラス `other` と判明。positive control / WDIOへ未到達。raw output・volume heading値は記録しない。AC-05未達。
+
+[Run 487](https://github.com/65537i/mail-client-plan/actions/runs/40774215719)（manual Windows 2025 / webview、`9469764`）はNode audit regression 65/65とWindows PowerShell filter/export fixtureに成功。実baseline監査はparse stageでfail closedし、先頭文字クラスを `text` と分類。positive control / WDIOへ未到達。語句やheading値/raw outputは記録しない。次は一般的な安全な固定語句カテゴリの診断を追加する。AC-05未達。
+
 [Run 481](https://github.com/65537i/mail-client-plan/actions/runs/40768636277)（manual Windows 2025 / webview、`0b8e2d5`）はNode audit regression 65/65とWindows PowerShell filter/export fixtureに成功。実baseline監査はparse stageでfail closedし、allowlist修正後のstate `volume-heading-drive-prefix`を確認。target volumeと完全一致しないdrive-letter prefixであることだけを記録し、値/raw outputは未記録。positive control / WDIOへ未到達。次の切り分けとしてdrive root / path / decoratedの固定分類を追加した。Linux regression 65/65、JS syntax、`git diff --check`成功。AC-05未達。
 
 [Run 479](https://github.com/65537i/mail-client-plan/actions/runs/40767325713)（manual Windows 2025 / webview、`742d2ea`）はNode audit regression 65/65とWindows PowerShell filter/export fixtureに成功した。実baseline監査はparse stageでfail closedし、positive control / WDIOへ未到達。今回は新しいheading-state codeをPowerShell側のdiagnostic allowlistへ含め忘れ、assertionにparse stateが出なかった。state allowlistの網羅性を直接検査するNode regressionを追加し、PowerShell出力にも全stateを通す。raw outputは未記録。AC-05未達。

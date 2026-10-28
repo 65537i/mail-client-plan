@@ -158,6 +158,9 @@ $decoratedDriveShapeFixtures = @(
   [pscustomobject]@{ Heading = "Instances for D: [metadata]"; State = "volume-heading-drive-decorated-bracket" }
   [pscustomobject]@{ Heading = "Instances for D: 'metadata'"; State = "volume-heading-drive-decorated-quoted" }
   [pscustomobject]@{ Heading = "Instances for D: metadata"; State = "volume-heading-drive-decorated-text" }
+  [pscustomobject]@{ Heading = "Instances for D: Volume Name: value"; State = "volume-heading-drive-decorated-volume" }
+  [pscustomobject]@{ Heading = "Instances for D: Device Name: value"; State = "volume-heading-drive-decorated-device" }
+  [pscustomobject]@{ Heading = "Instances for D: Harddisk Volume"; State = "volume-heading-drive-decorated-harddisk" }
   [pscustomobject]@{ Heading = "Instances for D: 12"; State = "volume-heading-drive-decorated-numeric" }
   [pscustomobject]@{ Heading = "Instances for D: \metadata"; State = "volume-heading-drive-decorated-path" }
   [pscustomobject]@{ Heading = "Instances for D: :metadata"; State = "volume-heading-drive-decorated-punctuation" }
