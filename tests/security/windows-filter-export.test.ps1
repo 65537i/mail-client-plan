@@ -151,8 +151,20 @@ try {
   ) "C:" | Out-Null
 } catch { $decoratedDriveHeadingRejected = $true }
 if (-not $decoratedDriveHeadingRejected -or
-  $script:filterManagerVolumeParseState -cne "volume-heading-drive-decorated") {
+  $script:filterManagerVolumeParseState -cne "volume-heading-drive-decorated-parenthesis") {
   throw "A decorated drive heading must fail closed"
+}
+$decoratedDriveShapeFixtures = @(
+  [pscustomobject]@{ Heading = "Instances for D: [metadata]"; State = "volume-heading-drive-decorated-bracket" }
+  [pscustomobject]@{ Heading = "Instances for D: 'metadata'"; State = "volume-heading-drive-decorated-quoted" }
+  [pscustomobject]@{ Heading = "Instances for D: metadata"; State = "volume-heading-drive-decorated-other" }
+)
+foreach ($fixture in $decoratedDriveShapeFixtures) {
+  $rejected = $false
+  try { Get-ProcmonFilterManagerVolumeEvidence @($fixture.Heading) "C:" | Out-Null } catch { $rejected = $true }
+  if (-not $rejected -or $script:filterManagerVolumeParseState -cne $fixture.State) {
+    throw "A drive heading decoration must remain rejected and safely classified"
+  }
 }
 $guidVolumeHeadingRejected = $false
 try {
