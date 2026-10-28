@@ -55,6 +55,10 @@ Run446後はpositive-control read直後に、excluded-control後およびWDIO後
 
 Run447後は同じpositive-control fileをPowerShell `[System.IO.File]::ReadAllBytes`でも読むread-only differential controlを追加し、その直後にsame bounded list countを記録する。exact path Include rulesのままprocess差を調べる。これは診断専用であり、AC-05合格に必要なNode `ReadFile` positive controlを代替しない。追加イベントも既存のunknown-path / excluded-path / CSV validationに通し、positive-control / Drop gateは変更しない。Node regression / JS syntax / diff check成功、Windows regressionと実測待ち。
 
+[Run 448](https://github.com/65537i/mail-client-plan/actions/runs/40728842489)（`9314904`、manual Windows 2025 / webview）はsecurity-test buildとWDIOに成功後、実capture auditのpositive-control assertionでfail closedした。live filterは初回control前・WDIO後ともexact-two / Drop on、Filter Manager Procmon候補1 / instances6、capture / filesystem MSAA on、known startup-error none。Node read 16:53:53.363Z直後のafter-positive-control-list-items=0。PowerShell `[System.IO.File]::ReadAllBytes`の同一path read 16:53:54.762Z直後もafter-alternate-control-list-items=0。excluded後・WDIO後のlistも0、capture 22,137 ms / PML 966,390 bytes / CSV76 bytes / Node positive-control全event分類0。Node固有のread API差では説明できないが、volume-specific filter attachmentは未確認。AC-05未達。
+
+Run448後はProcmon Filter Manager candidate countに加え、canary/controlファイルが置かれたvolumeへのfilter instance attachmentをbounded・read-onlyで照合する。出力はcandidate / instance集計とtarget-volume attached booleanに限定し、raw filter name・volume pathは出さない。Node/PowerShell read差がなくても、Node `ReadFile`を必須とするAC-05 gateは緩和しない。次のWindows regressionで未知format / 上限超過もfail closedを確認する。
+
 [native Run 443](https://github.com/65537i/mail-client-plan/actions/runs/40712594438)（`7f4f905`、push / Ubuntu 24.04 / basic）はplan、Rust format / tests / clippy、frontend typecheck / buildに成功。Windows regression / PowerShell fixture / Procmon実captureはすべてskipされており、Filter Manager診断のWindows実測は未実施。
 
 [Run 434](https://github.com/65537i/mail-client-plan/actions/runs/40692872751)（`f707d9e`）は64 Node / PowerShell checksに成功。実capture registry evidence parseで停止し、control / WDIOへ到達しなかった。Registry `keys` count上限4096に対しNode patternが3桁制限だったため、4桁対応へ修正する。
