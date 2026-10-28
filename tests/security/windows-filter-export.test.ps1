@@ -97,7 +97,9 @@ $targetVolumeFixtures = @(
   "WdFilter                        4              328010        0        0x00",
   "PROCMON24                       2              385200        0        0x00"
 )
-if ((Get-ProcmonFilterManagerVolumeEvidence $targetVolumeFixtures) -cne "candidates:1;instances:2") {
+$targetVolumeEvidence = Get-ProcmonFilterManagerVolumeEvidence $targetVolumeFixtures
+if ($targetVolumeEvidence -cne "candidates:1;instances:2" -or
+  $script:filterManagerVolumeParseState -cne "valid") {
   throw "Procmon target-volume query must count its exact filter summary"
 }
 if ((Get-ProcmonFilterManagerVolumeEvidence @(
@@ -132,6 +134,12 @@ foreach ($invalidLines in $invalidVolumeInputs) {
   $rejected = $false
   try { Get-ProcmonFilterManagerVolumeEvidence $invalidLines.Lines | Out-Null } catch { $rejected = $true }
   if (-not $rejected) { throw "Unsafe Procmon target-volume inventory must be rejected" }
+}
+$unexpectedPreambleRejected = $false
+try { Get-ProcmonFilterManagerVolumeEvidence @("unexpected output") | Out-Null } catch { $unexpectedPreambleRejected = $true }
+if (-not $unexpectedPreambleRejected -or
+  $script:filterManagerVolumeParseState -cne "unexpected-preamble") {
+  throw "Filter Manager parser diagnostics must use a bounded, allowlisted shape code"
 }
 Write-Host "PASS AC-05: Filter Manager volume inventory is bounded and counts Procmon instances only"
 $registryFixtureRoot = Join-Path ([IO.Path]::GetTempPath()) ("procmon-registry-test-" + [Guid]::NewGuid().ToString("N"))

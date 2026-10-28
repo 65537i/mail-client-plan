@@ -68,6 +68,7 @@ test("AC-05: Filter Manager inventory is an independent bounded read-only driver
   assert.match(inspection, /Procmon Filter Manager candidate has an unsupported shape/);
   assert.match(inspection, /GetVolumePathName[\s\S]*\$filterManagerPath instances -v \$volumeName 2>\$null/);
   assert.match(inspection, /Get-ProcmonFilterManagerVolumeEvidence[\s\S]*SprtFtrs[\s\S]*\$instanceCount -gt 64/);
+  assert.match(inspection, /instance-list-header[\s\S]*unexpected-preamble[\s\S]*separator-shape[\s\S]*row-shape[\s\S]*PROC_MON_CAPTURE_FILTER_MANAGER_PARSE=\$script:filterManagerVolumeParseState/);
   assert.match(inspection, /\$script:stage = "query-filter-manager-filter-inventory"[\s\S]*\$script:stage = "resolve-filter-manager-target-volume"[\s\S]*\$script:stage = "query-filter-manager-instance-command"[\s\S]*\$script:stage = "parse-filter-manager-instance-output"/);
   assert.match(inspection, /\$script:filterManagerInstanceQueryExitCode = \$null[\s\S]*instances -v \$volumeName 2>\$null[\s\S]*\$script:filterManagerInstanceQueryExitCode = \$LASTEXITCODE[\s\S]*Get-ProcmonFilterManagerVolumeEvidence \$instanceLines[\s\S]*PROC_MON_CAPTURE_FILTER_MANAGER_COMMAND=exit-code:\$queryExitCode/);
   assert.doesNotMatch(inspection, /instances -f \$candidateName -v/);

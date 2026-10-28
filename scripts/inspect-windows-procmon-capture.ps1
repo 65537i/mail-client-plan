@@ -194,7 +194,9 @@ function Get-ProcmonFilterManagerEvidence {
 
 function Get-ProcmonFilterManagerVolumeEvidence {
   param([string[]]$Lines)
+  $script:filterManagerVolumeParseState = "started"
   if ($Lines.Count -eq 0 -or $Lines.Count -gt 256) {
+    $script:filterManagerVolumeParseState = if ($Lines.Count -eq 0) { "empty-output" } else { "line-limit" }
     throw "Filter Manager volume inventory exceeded its limit"
   }
   $headerSeen = $false
@@ -204,16 +206,23 @@ function Get-ProcmonFilterManagerVolumeEvidence {
   $instances = 0
   foreach ($line in $Lines) {
     if ($line -isnot [string] -or $line.Length -gt 512) {
+      $script:filterManagerVolumeParseState = "line-shape"
       throw "Filter Manager volume inventory has an unsupported shape"
     }
     if ($line -match '^\s*Filter Name\s+Num Instances\s+Altitude\s+Frame(?:\s+SprtFtrs)?\s*$') {
-      if ($headerSeen) { throw "Filter Manager volume inventory repeated its header" }
+      if ($headerSeen) {
+        $script:filterManagerVolumeParseState = "duplicate-header"
+        throw "Filter Manager volume inventory repeated its header"
+      }
       $headerSeen = $true
       $hasSupportedFeatures = $line -match '\sSprtFtrs\s*$'
       continue
     }
     if (-not $headerSeen) {
       if ([string]::IsNullOrWhiteSpace($line)) { continue }
+      $script:filterManagerVolumeParseState = if (
+        $line -match '^\s*Instance Name\s+Altitude\s+Frame\s+Volume Name\s*$'
+      ) { "instance-list-header" } else { "unexpected-preamble" }
       throw "Filter Manager volume inventory omitted its expected header"
     }
     if (-not $separatorSeen) {
@@ -223,6 +232,7 @@ function Get-ProcmonFilterManagerVolumeEvidence {
         '^\s*-{3,}\s+-{3,}\s+-{3,}\s+-{3,}\s*$'
       }
       if ($line -notmatch $separatorPattern) {
+        $script:filterManagerVolumeParseState = "separator-shape"
         throw "Filter Manager volume inventory omitted its expected separator"
       }
       $separatorSeen = $true
@@ -236,6 +246,7 @@ function Get-ProcmonFilterManagerVolumeEvidence {
         $featureColumn + '\s*$'
     )
     if (-not $match.Success) {
+      $script:filterManagerVolumeParseState = "row-shape"
       throw "Filter Manager volume inventory returned an unsupported row"
     }
     if ($match.Groups[1].Value -notmatch '^(?i:PROCMON[0-9]*)$') { continue }
@@ -246,20 +257,25 @@ function Get-ProcmonFilterManagerVolumeEvidence {
         [System.Globalization.CultureInfo]::InvariantCulture,
         [ref]$instanceCount
       )) {
+      $script:filterManagerVolumeParseState = "invalid-count"
       throw "Filter Manager volume instance count is invalid"
     }
     if ($instanceCount -gt 64) {
+      $script:filterManagerVolumeParseState = "count-limit"
       throw "Filter Manager volume instance count exceeded its limit"
     }
     $candidates++
     $instances += $instanceCount
     if ($candidates -gt 64 -or $instances -gt 4096) {
+      $script:filterManagerVolumeParseState = "inventory-limit"
       throw "Filter Manager volume candidate inventory exceeded its limit"
     }
   }
   if (-not $headerSeen -or -not $separatorSeen) {
+    $script:filterManagerVolumeParseState = "incomplete-table"
     throw "Filter Manager volume inventory is incomplete"
   }
+  $script:filterManagerVolumeParseState = "valid"
   return "candidates:$candidates;instances:$instances"
 }
 
@@ -707,6 +723,27 @@ public static class ProcmonCaptureWindows
       )
     } else { "out-of-range" }
     [Console]::Out.WriteLine("PROC_MON_CAPTURE_FILTER_MANAGER_COMMAND=exit-code:$queryExitCode")
+  }
+  if ($stage -eq "parse-filter-manager-instance-output" -and
+    $script:filterManagerVolumeParseState -in @(
+      "started",
+      "empty-output",
+      "line-limit",
+      "line-shape",
+      "duplicate-header",
+      "instance-list-header",
+      "unexpected-preamble",
+      "separator-shape",
+      "row-shape",
+      "invalid-count",
+      "count-limit",
+      "inventory-limit",
+      "incomplete-table",
+      "valid"
+    )) {
+    [Console]::Out.WriteLine(
+      "PROC_MON_CAPTURE_FILTER_MANAGER_PARSE=$script:filterManagerVolumeParseState"
+    )
   }
   $failureType = $_.Exception.GetType().Name
   if ($failureType -notin @(
