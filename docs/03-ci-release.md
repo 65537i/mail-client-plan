@@ -19,6 +19,8 @@ Windows: MSVC toolchain、WebView2、必要SDK。WebDriverを外部利用する�
 
 ### nativeの短い検証ループ
 
+Run409後はcapture終了直前の表示list件数を照会する。一意の同一PID SysListView32に限り、LVM_GETITEMCOUNT（0x1004）をSendMessageTimeoutW（flags 0x22、2秒）で送る。戻り値は0〜Int32.MaxValue、前後PID一致とclass確認を要求し、任意text・remote pointerは取得しない。WDIO後・Terminate前に20秒 / 2 KiB上限で実行、未検出はunavailable、query失敗は監査停止。件数はPML内容やpositive controlの証明には使わない。Windows回帰で合成ListViewの2件と0件を検証する。Windows実測待ち。
+
 Run406後はoffline exportの起動引数だけへ`/NoFilter`を追加した。Microsoft配布Procmon 4.12の組込helpは「Clear the filter at start up」と説明する。capture起動には適用せず`/LoadConfig`とexact filter / Drop gatesを維持する。保存済みPMLのexport結果を既存のunknown-path / sentinel / positive-control / canary検査とPML・CSVの256 MiB上限へ渡す。display filterで余分なeventを隠さず、追加pathがあれば監査失敗とする。
 
 [Run 409](https://github.com/65537i/mail-client-plan/actions/runs/40589247217)（`937e838`、manual Windows 2025 / webview）はNode60/60・PowerShell回帰、exact reload / Drop / readinessを通過し、capture / filesystem各MSAA matches:1 / checked:on / enabled:trueを再確認した。positive / excluded controlは21:54:23.544Z / .660Z、WDIO開始21:54:23.661Z / 終了21:54:35.503Z。capture 13,755 ms / PML 876,980 bytesは上限内だが、`/NoFilter`を加えたoffline exportもCSV76 bytes / positive-control全0件でfail closed。startup display filter clearだけでは欠落を解消できない。attack未実施・AC-05未達。次はcapture中のexact filterとPML内event有無を直接切り分ける。ローカルNode60/60・JS syntax・diff check成功、3OS full・最低OS実測未実施。

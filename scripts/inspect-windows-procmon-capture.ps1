@@ -1,5 +1,6 @@
 param(
-  [Parameter(Mandatory = $true)][int]$OwnerProcessId
+  [Parameter(Mandatory = $true)][int]$OwnerProcessId,
+  [switch]$CountOnly
 )
 
 $ErrorActionPreference = "Stop"
@@ -33,6 +34,31 @@ public static class ProcmonCaptureWindows
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool IsWindowVisible(IntPtr window);
+
+    [DllImport("user32.dll", EntryPoint = "SendMessageTimeoutW", ExactSpelling = true)]
+    private static extern IntPtr ReadListCount(
+        IntPtr window, uint message, UIntPtr wParam, IntPtr lParam,
+        uint flags, uint timeout, out UIntPtr result);
+
+    public static string CountListItems(IntPtr window, uint ownerProcessId)
+    {
+        uint processId;
+        if (window == IntPtr.Zero || GetWindowThreadProcessId(window, out processId) == 0 ||
+            processId != ownerProcessId)
+            throw new InvalidOperationException("List ownership is unavailable");
+        var name = new StringBuilder(256);
+        if (GetClassName(window, name, name.Capacity) == 0 || name.ToString() != "SysListView32")
+            throw new InvalidOperationException("Expected a native listview");
+        UIntPtr result;
+        if (ReadListCount(window, 0x1004, UIntPtr.Zero, IntPtr.Zero, 0x22, 2000, out result) == IntPtr.Zero)
+            throw new InvalidOperationException("List count query failed or timed out");
+        if (GetWindowThreadProcessId(window, out processId) == 0 || processId != ownerProcessId)
+            throw new InvalidOperationException("List ownership changed");
+        ulong count = result.ToUInt64();
+        if (count > Int32.MaxValue)
+            throw new InvalidOperationException("List count is outside its supported range");
+        return count.ToString(CultureInfo.InvariantCulture);
+    }
 
     [DllImport("oleacc.dll", ExactSpelling = true)]
     private static extern int AccessibleObjectFromWindow(
@@ -94,6 +120,7 @@ public static class ProcmonCaptureWindows
 
         var seen = new HashSet<IntPtr>();
         IntPtr toolbar = IntPtr.Zero;
+        IntPtr list = IntPtr.Zero;
         int toolbars = 0, lists = 0, statusbars = 0, dialogs = 0, other = 0, visible = 0;
         string failure = null;
         EnumWindowProc callback = delegate(IntPtr window, IntPtr parameter)
@@ -118,7 +145,7 @@ public static class ProcmonCaptureWindows
             switch (name.ToString())
             {
                 case "ToolbarWindow32": toolbars++; toolbar = window; break;
-                case "SysListView32": lists++; break;
+                case "SysListView32": lists++; list = window; break;
                 case "msctls_statusbar32": statusbars++; break;
                 case "#32770": dialogs++; break;
                 default: other++; break;
@@ -141,6 +168,8 @@ public static class ProcmonCaptureWindows
                 : "object:unavailable;items:0;matches:0;checked:unavailable;enabled:unavailable";
             summary += "\nPROC_MON_CAPTURE_MSAA=" + target + ";" + state;
         }
+        summary += "\nPROC_MON_CAPTURE_LIST=items:" +
+            (lists == 1 ? CountListItems(list, ownerProcessId) : "unavailable");
         return summary;
     }
 }
@@ -160,6 +189,7 @@ public static class ProcmonCaptureWindows
   $stage = "read-native-capture-children"
   $nativeChildren = [ProcmonCaptureWindows]::Inspect($handle, [uint32]$OwnerProcessId)
   [Console]::Out.WriteLine("PROC_MON_CAPTURE_NATIVE=$nativeChildren")
+  if ($CountOnly) { exit 0 }
   $visual = "unavailable"
   $windowPattern = $null
   if ($main.TryGetCurrentPattern(

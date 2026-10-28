@@ -365,6 +365,42 @@ async function captureScenario(scenario) {
     assert.equal(capture.exitCode, null, "Process Monitor capture stopped during the WebView tests");
     console.log(`Windows audit ${scenario}: WDIO finished UTC=${new Date().toISOString()}`);
 
+    const finalInspection = spawn(
+      "powershell.exe",
+      [
+        "-STA", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+        "-File", path.join(root, "scripts", "inspect-windows-procmon-capture.ps1"),
+        "-OwnerProcessId", String(capture.pid), "-CountOnly",
+      ],
+      { stdio: ["ignore", "pipe", "pipe"], windowsHide: true },
+    );
+    let finalOutput = "";
+    let finalOverflow = false;
+    finalInspection.stdout.setEncoding("utf8");
+    finalInspection.stdout.on("data", (chunk) => {
+      finalOverflow ||= finalOutput.length + chunk.length > 2048;
+      finalOutput = (finalOutput + chunk).slice(0, 2048);
+    });
+    finalInspection.stderr.resume();
+    const finalExit = waitForProcess(finalInspection);
+    const finalResult = await waitWithTimeout(finalExit, 20_000);
+    if (finalResult.timedOut) {
+      finalInspection.kill();
+      await finalExit;
+      throw new Error("Process Monitor final list inspection timed out");
+    }
+    assert(!finalResult.error && finalResult.code === 0 && !finalOverflow, "Process Monitor final list inspection failed");
+    const finalCount = [...finalOutput.matchAll(
+      /^PROC_MON_CAPTURE_LIST=items:(unavailable|0|[1-9]\d{0,9})\r?$/gm,
+    )];
+    assert(
+      finalCount.length === 1 &&
+      (finalCount[0][1] === "unavailable" || Number(finalCount[0][1]) <= 2_147_483_647),
+      "Process Monitor final list evidence is incomplete",
+    );
+    console.log(`Windows audit ${scenario}: final-list-items=${finalCount[0][1]}`);
+    assert.equal(capture.exitCode, null, "Process Monitor capture stopped during final inspection");
+
     await runProcmon(["/AcceptEula", "/Terminate"], "capture shutdown");
     const captureResult = await waitWithTimeout(captureExit, 10_000);
     assert(!captureResult.timedOut, "Process Monitor capture did not stop after termination");

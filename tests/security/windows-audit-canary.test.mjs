@@ -24,7 +24,7 @@ test("AC-05: native child inspection is ownership-scoped, bounded and metadata-o
   assert.match(inspection, /finalProcessId != ownerProcessId/);
   assert.match(inspection, /if \(failure != null\) throw new InvalidOperationException\(failure\)/);
   assert.match(inspection, /case "ToolbarWindow32": toolbars\+\+; toolbar = window; break;/);
-  assert.doesNotMatch(inspection, /GetWindowText|SendMessage|PostMessage|SetWindow/);
+  assert.doesNotMatch(inspection, /GetWindowText|PostMessage|SetWindow/);
   assert.match(driver, /nativeCounts.slice\(2\).reduce/);
   assert.match(driver, /nativeCounts\[1\] <= nativeCounts\[0\]/);
 });
@@ -35,7 +35,19 @@ test("AC-05: toolbar MSAA uses bounded read-only same-process client-object quer
   assert.match(source, /count < 0 \|\| count > 64/);
   assert.match(source, /toolbars == 1 \? ReadToolbar/);
   assert.match(source, /finally \{ Marshal.ReleaseComObject\(accessible\); \}/);
-  assert.doesNotMatch(source, /accDoDefaultAction|accSelect|set_acc|SendMessage|PostMessage/);
+  assert.doesNotMatch(source, /accDoDefaultAction|accSelect|set_acc|PostMessage/);
+});
+
+test("AC-05: final list count uses only a bounded numeric read before shutdown", async () => {
+  const [inspection, driver] = await Promise.all([
+    readFile(new URL("../../scripts/inspect-windows-procmon-capture.ps1", import.meta.url), "utf8"),
+    readFile(new URL("../../scripts/test-windows-file-access.mjs", import.meta.url), "utf8"),
+  ]);
+  assert.match(inspection, /ReadListCount\(window, 0x1004, UIntPtr.Zero, IntPtr.Zero, 0x22, 2000, out result\)/);
+  assert.match(inspection, /name.ToString\(\) != "SysListView32"/);
+  assert.match(inspection, /count > Int32.MaxValue/);
+  assert.match(inspection, /if \(\$CountOnly\) \{ exit 0 \}/);
+  assert.match(driver, /WDIO finished[\s\S]*"-CountOnly"[\s\S]*finalExit, 20_000[\s\S]*final-list-items=[\s\S]*await runProcmon\(\["\/AcceptEula", "\/Terminate"\]/);
 });
 
 test("AC-05: capture startup diagnostics classify exact known errors without exposing UI text", async () => {

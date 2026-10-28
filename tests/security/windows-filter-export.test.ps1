@@ -69,7 +69,7 @@ try {
   $nativeTestHandle = $nativeTestForm.Handle
   $nativeTestChildHandle = $nativeTestChild.Handle
   $nativeCaptureResult = [ProcmonCaptureWindows]::Inspect($nativeTestHandle, [uint32]$PID)
-  if ($nativeCaptureResult -cne "children:1;visible:0;toolbars:0;lists:0;statusbars:0;dialogs:0;other:1`nPROC_MON_CAPTURE_MSAA=capture;object:unavailable;items:0;matches:0;checked:unavailable;enabled:unavailable`nPROC_MON_CAPTURE_MSAA=filesystem;object:unavailable;items:0;matches:0;checked:unavailable;enabled:unavailable") {
+  if ($nativeCaptureResult -cne "children:1;visible:0;toolbars:0;lists:0;statusbars:0;dialogs:0;other:1`nPROC_MON_CAPTURE_MSAA=capture;object:unavailable;items:0;matches:0;checked:unavailable;enabled:unavailable`nPROC_MON_CAPTURE_MSAA=filesystem;object:unavailable;items:0;matches:0;checked:unavailable;enabled:unavailable`nPROC_MON_CAPTURE_LIST=items:unavailable") {
     throw "Native capture inspection did not classify the hidden synthetic child"
   }
   $foreignRootRejected = $false
@@ -81,6 +81,17 @@ try {
   }
   if (-not $foreignRootRejected) {
     throw "Native capture inspection must reject a foreign root"
+  }
+  $testList = [System.Windows.Forms.ListView]::new()
+  $nativeTestForm.Controls.Add($testList)
+  $testList.Items.Add("synthetic-one") | Out-Null
+  $testList.Items.Add("synthetic-two") | Out-Null
+  if ([ProcmonCaptureWindows]::CountListItems($testList.Handle, [uint32]$PID) -cne "2") {
+    throw "Native list count did not observe exactly two synthetic items"
+  }
+  $testList.Items.Clear()
+  if ([ProcmonCaptureWindows]::CountListItems($testList.Handle, [uint32]$PID) -cne "0") {
+    throw "Native list count did not observe zero synthetic items"
   }
 } finally {
   $nativeTestForm.Dispose()
