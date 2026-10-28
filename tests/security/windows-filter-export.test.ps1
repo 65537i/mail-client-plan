@@ -62,7 +62,17 @@ if (-not $invalidRootRejected) {
   throw "Native capture inspection must reject an invalid root"
 }
 Add-Type -AssemblyName System.Windows.Forms
+Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+public static class SyntheticListCount
+{
+    [DllImport("user32.dll", EntryPoint = "SendMessageW", ExactSpelling = true)]
+    public static extern IntPtr SetCount(IntPtr window, uint message, IntPtr count, IntPtr flags);
+}
+'@
 $nativeTestForm = [System.Windows.Forms.Form]::new()
+$testList = [System.Windows.Forms.NativeWindow]::new()
 try {
   $nativeTestChild = [System.Windows.Forms.TextBox]::new()
   $nativeTestForm.Controls.Add($nativeTestChild)
@@ -82,18 +92,24 @@ try {
   if (-not $foreignRootRejected) {
     throw "Native capture inspection must reject a foreign root"
   }
-  $testList = [System.Windows.Forms.ListView]::new()
-  $nativeTestForm.Controls.Add($testList)
-  $testList.Items.Add("synthetic-one") | Out-Null
-  $testList.Items.Add("synthetic-two") | Out-Null
+  $listInitializer = [System.Windows.Forms.ListView]::new()
+  $listInitializerHandle = $listInitializer.Handle
+  $listInitializer.Dispose()
+  $listParameters = [System.Windows.Forms.CreateParams]::new()
+  $listParameters.ClassName = "SysListView32"
+  $listParameters.Parent = $nativeTestHandle
+  $listParameters.Style = 0x40001000
+  $testList.CreateHandle($listParameters)
+  [SyntheticListCount]::SetCount($testList.Handle, 0x102f, [IntPtr]2, [IntPtr]::Zero) | Out-Null
   if ([ProcmonCaptureWindows]::CountListItems($testList.Handle, [uint32]$PID) -cne "2") {
     throw "Native list count did not observe exactly two synthetic items"
   }
-  $testList.Items.Clear()
+  [SyntheticListCount]::SetCount($testList.Handle, 0x102f, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null
   if ([ProcmonCaptureWindows]::CountListItems($testList.Handle, [uint32]$PID) -cne "0") {
     throw "Native list count did not observe zero synthetic items"
   }
 } finally {
+  $testList.DestroyHandle()
   $nativeTestForm.Dispose()
 }
 Write-Host "PASS AC-05: native child inspection compiles, classifies a hidden child and rejects invalid ownership"
