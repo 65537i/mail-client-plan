@@ -378,5 +378,16 @@ public static class ProcmonCaptureWindows
   }
 } catch {
   [Console]::Out.WriteLine("PROC_MON_CAPTURE_FAILED_STAGE=$stage")
+  $failureType = $_.Exception.GetType().Name
+  if ($failureType -notin @(
+      "CimException",
+      "ManagementException",
+      "InvalidOperationException",
+      "ParameterBindingException",
+      "RuntimeException"
+    )) {
+    $failureType = "Other"
+  }
+  [Console]::Out.WriteLine("PROC_MON_CAPTURE_FAILURE=$failureType")
   exit 1
 }

@@ -252,9 +252,12 @@ async function captureScenario(scenario) {
     const captureInspectionStage = captureInspectionOutput.match(
       /^PROC_MON_CAPTURE_FAILED_STAGE=([a-z-]+)\r?$/m,
     )?.[1];
+    const captureInspectionFailure = captureInspectionOutput.match(
+      /^PROC_MON_CAPTURE_FAILURE=(CimException|ManagementException|InvalidOperationException|ParameterBindingException|RuntimeException|Other)\r?$/m,
+    )?.[1];
     assert(
       !captureInspectionResult.error && captureInspectionResult.code === 0 && !captureInspectionOverflow,
-      `Process Monitor capture inspection failed${captureInspectionStage ? ` at ${captureInspectionStage}` : ""}`,
+      `Process Monitor capture inspection failed${captureInspectionStage ? ` at ${captureInspectionStage}` : ""}${captureInspectionFailure ? ` (${captureInspectionFailure})` : ""}`,
     );
     const nativeEvidence = [...captureInspectionOutput.matchAll(
       /^PROC_MON_CAPTURE_NATIVE=children:(0|[1-9]\d{0,2});visible:(0|[1-9]\d{0,2});toolbars:(0|[1-9]\d{0,2});lists:(0|[1-9]\d{0,2});statusbars:(0|[1-9]\d{0,2});dialogs:(0|[1-9]\d{0,2});other:(0|[1-9]\d{0,2})\r?$/gm,

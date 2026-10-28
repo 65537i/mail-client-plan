@@ -21,6 +21,9 @@ test("AC-05: SCM driver inventory is bounded and identifies Procmon by service n
   assert.match(inspection, /\$driver.ExitCode -isnot \[uint32\]/);
   assert.match(inspection, /if \(\$CountOnly\) \{ exit 0 \}[\s\S]*read-system-driver-inventory/);
   assert.doesNotMatch(inspection, /Start-Service|Stop-Service|Set-Service|Invoke-CimMethod|WriteLine\([^)]*driver\.(Name|PathName|State)/);
+  assert.match(inspection, /PROC_MON_CAPTURE_FAILURE=\$failureType/);
+  assert.match(inspection, /"CimException"[\s\S]*"ManagementException"[\s\S]*"InvalidOperationException"[\s\S]*"ParameterBindingException"[\s\S]*"RuntimeException"/);
+  assert.match(driver, /captureInspectionFailure[\s\S]*Process Monitor capture inspection failed/);
   assert.match(driver, /driverEvidence.length === 1[\s\S]*Number\(driverEvidence\[0\]\[1\]\) <= 1024/);
   assert.match(driver, /slice\(2, 9\).every\(\(count\) => Number\(count\) <= Number\(driverEvidence\[0\]\[1\]\)\)/);
 });
