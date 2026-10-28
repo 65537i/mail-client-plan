@@ -467,6 +467,28 @@ async function captureScenario(scenario) {
     );
     console.log(`Windows audit ${scenario}: positive-control read completed UTC=${new Date().toISOString()}`);
     await readCaptureListCount("after-positive-control", true);
+    const alternateControl = spawn(
+      "powershell.exe",
+      [
+        "-NoProfile", "-NonInteractive", "-Command",
+        "[System.IO.File]::ReadAllBytes($env:MAIL_CLIENT_FILE_CANARY) | Out-Null",
+      ],
+      {
+        env: {
+          ...process.env,
+          MAIL_CLIENT_FILE_CANARY: positiveControlPath,
+        },
+        stdio: "ignore",
+        windowsHide: true,
+      },
+    );
+    const alternateControlResult = await waitForProcess(alternateControl);
+    if (alternateControlResult.error) {
+      throw new Error("Failed to start the alternate synthetic file-read diagnostic");
+    }
+    assert.equal(alternateControlResult.code, 0, "Alternate synthetic file-read diagnostic failed");
+    console.log(`Windows audit ${scenario}: alternate-control read completed UTC=${new Date().toISOString()}`);
+    await readCaptureListCount("after-alternate-control", true);
     const excludedControl = spawn(
       process.execPath,
       [
