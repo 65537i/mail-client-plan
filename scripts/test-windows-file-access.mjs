@@ -288,7 +288,7 @@ async function captureScenario(scenario) {
     );
     console.log(`Windows audit ${scenario}: ${driverEvidence[0][0].trim()}`);
     const registryEvidence = [...captureInspectionOutput.matchAll(
-      /^PROC_MON_CAPTURE_DRIVER_REGISTRY=keys:(0|[1-9]\d{0,2});candidates:(0|[1-9]\d{0,2});image-values:(0|[1-9]\d{0,2});image-paths-present:(0|[1-9]\d{0,2})\r?$/gm,
+      /^PROC_MON_CAPTURE_DRIVER_REGISTRY=keys:(0|[1-9]\d{0,3});candidates:(0|[1-9]\d{0,2});image-candidates:(0|[1-9]\d{0,2});image-values:(0|[1-9]\d{0,2});image-paths-present:(0|[1-9]\d{0,2})\r?$/gm,
     )];
     assert(
       registryEvidence.length === 1 &&

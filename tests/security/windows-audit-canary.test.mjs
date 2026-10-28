@@ -45,6 +45,7 @@ test("AC-05: driver registry inspection is read-only, bounded and emits aggregat
   assert.match(inspection, /PROC_MON_CAPTURE_DRIVER_REGISTRY=\$registryEvidence/);
   assert.doesNotMatch(inspection, /SetValue\(|DeleteValue\(|DeleteSubKey|WriteLine\([^)]*(?:PSChildName|imagePath|expandedPath)/);
   assert.match(driver, /registryEvidence.length === 1[\s\S]*Number\(registryEvidence\[0\]\[1\]\) <= 4096/);
+  assert.match(driver, /DRIVER_REGISTRY=keys:\(0\|\[1-9\]\\d\{0,3\}\)/);
 });
 
 test("AC-05: live filter verification attaches to the capture PID and preserves its lifetime", async () => {

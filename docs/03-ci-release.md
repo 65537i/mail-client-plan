@@ -31,6 +31,8 @@ Run422後はreadiness直後のWin32_SystemDriver inventoryを名前prefix filter
 
 Run431後はHKLM CurrentControlSet\Servicesのread-only subkey inventoryを追加する。Procmonを含むキーだけを最大65件まで読み、ImagePathの生値・サービス名・キー名・パスは出力せず、有無件数と展開後pathが存在する件数だけを記録する。過剰件数・未知型はfail closed、registry keyをfinallyで閉じる。回帰は一時HKCU test key / fileを使い、読み取りとcleanupだけを検証する。Windows実測待ち。
 
+[Run 434](https://github.com/65537i/mail-client-plan/actions/runs/40692872751)（`f707d9e`）は64 Node / PowerShell checksに成功。実capture registry evidence parseで停止し、control / WDIOへ到達しなかった。Registry `keys` count上限4096に対しNode patternが3桁制限だったため、4桁対応へ修正する。
+
 Run419後は既存capture inspectionにWin32_SystemDriverのread-only inventoryを追加した。PROCMON prefixのqueryを5秒 / 最大17件取得に限定し、許容件数16を超えた場合や未知shapeは失敗する。出力はservice総数 / running / started / filesystem / exit-error件数だけで、service名・path・provider文字列は出さない。CountOnlyではqueryをskipする。既存20秒 / 2 KiB上限とpositive-control必須・exact filter・Drop gatesを維持。service Runningはevent収集正常やPML内容の証明ではない。
 
 [Run 422](https://github.com/65537i/mail-client-plan/actions/runs/40683845198)（`45bc967`、manual Windows 2025 / webview）はNode63/63・PowerShell回帰に成功した。readiness直後のWin32_SystemDriver queryはPROCMON prefix該当0件を返した。read-only inventoryが示す範囲の観測であり、driver未ロードを断定しない。exact filter / Drop / control / WDIO gateは維持したが、final list 0、capture 18,582 ms / PML 921,548 bytes / CSV76 bytes、positive-control全0件でfail closed。次はdriver登録名とSCM上の状態を独立手段で照合する。AC-05未達。
