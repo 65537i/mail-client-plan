@@ -241,6 +241,13 @@ public static class ProcmonCaptureWindows
   $nativeChildren = [ProcmonCaptureWindows]::Inspect($handle, [uint32]$OwnerProcessId)
   [Console]::Out.WriteLine("PROC_MON_CAPTURE_NATIVE=$nativeChildren")
   if ($CountOnly) { exit 0 }
+  $stage = "read-process-administrator-role"
+  $identity = [System.Security.Principal.WindowsIdentity]::GetCurrent()
+  $principal = [System.Security.Principal.WindowsPrincipal]::new($identity)
+  $administratorRole = $principal.IsInRole(
+    [System.Security.Principal.WindowsBuiltInRole]::Administrator
+  ).ToString().ToLowerInvariant()
+  [Console]::Out.WriteLine("PROC_MON_CAPTURE_ADMINISTRATOR=$administratorRole")
   $stage = "query-system-driver-inventory"
   $drivers = @(
     Get-CimInstance -ClassName Win32_SystemDriver `

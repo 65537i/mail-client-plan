@@ -25,6 +25,8 @@ Run422後はreadiness直後のWin32_SystemDriver inventoryを名前prefix filter
 
 [Run 427](https://github.com/65537i/mail-client-plan/actions/runs/40687452101)（`47ed195`）はquery後の処理で`RuntimeException`となった。取得と照合を別stageに分離し、無関係driverの未使用state fieldsの検証を除外して候補だけ検証する。
 
+[Run 429](https://github.com/65537i/mail-client-plan/actions/runs/40689098110)（`2d6e007`）は全422 system-driver entriesを照会し、Procmon service-name/image-path候補0件を記録した。次はcaptureと同じ継承tokenのAdministrators roleをread-onlyで記録し、driver登録がない状況の切り分けに使う。
+
 Run419後は既存capture inspectionにWin32_SystemDriverのread-only inventoryを追加した。PROCMON prefixのqueryを5秒 / 最大17件取得に限定し、許容件数16を超えた場合や未知shapeは失敗する。出力はservice総数 / running / started / filesystem / exit-error件数だけで、service名・path・provider文字列は出さない。CountOnlyではqueryをskipする。既存20秒 / 2 KiB上限とpositive-control必須・exact filter・Drop gatesを維持。service Runningはevent収集正常やPML内容の証明ではない。
 
 [Run 422](https://github.com/65537i/mail-client-plan/actions/runs/40683845198)（`45bc967`、manual Windows 2025 / webview）はNode63/63・PowerShell回帰に成功した。readiness直後のWin32_SystemDriver queryはPROCMON prefix該当0件を返した。read-only inventoryが示す範囲の観測であり、driver未ロードを断定しない。exact filter / Drop / control / WDIO gateは維持したが、final list 0、capture 18,582 ms / PML 921,548 bytes / CSV76 bytes、positive-control全0件でfail closed。次はdriver登録名とSCM上の状態を独立手段で照合する。AC-05未達。

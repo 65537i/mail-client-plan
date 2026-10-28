@@ -4,6 +4,7 @@
 
 ## 現在の範囲
 
+- [Run 429](https://github.com/65537i/mail-client-plan/actions/runs/40689098110)（`2d6e007`、Windows 2025 / webview）はNode63/63・PowerShell回帰に成功し、name prefixなしのWin32_SystemDriver inventory 422件を取得したが、Procmon名/image-path候補は0件。exact filter / Drop / capture・filesystem各MSAA on、WDIO成功、final-list-items=0。capture 18,882 ms / PML 918,554 bytes / CSV76 bytes、positive-control全0件で失敗しattack未実施・AC-05未達。driver登録が見つからないことを確認したが原因は未特定。次runでは現在tokenのAdministrators roleをread-only観測する。Run425/427の診断停止は修正済み。
 - [Run 427](https://github.com/65537i/mail-client-plan/actions/runs/40687452101)（`47ed195`、Windows 2025 / webview）はNode63/63・PowerShell回帰後、全driver inventoryの処理中に`RuntimeException`で停止し、positive/excluded controlとWDIO前に終了した。取得queryと結果照合を別stageに分け、無関係driverの未使用状態fieldは検証せず、Procmon候補のみ状態のshapeを確認するよう限定した。次のWindows runで停止箇所を区別する。AC-05未達。
 - [Run 425](https://github.com/65537i/mail-client-plan/actions/runs/40685914085)（`5db566d`、Windows 2025 / webview）はNode63/63・PowerShell回帰後、capture readinessで新しい全driver inventoryの`read-system-driver-inventory` stageが失敗し、positive/excluded controlとWDIO前に停止した。これは絞り込みなしのCIM照会に対する実測失敗であり、理由はまだ未観測。次runでは例外分類名のみallowlist出力し再検証する。capture設定・positive-control gateは維持、AC-05未達。
 - Run422後の限定診断: readiness直後のWin32_SystemDriver照合を名前prefix filterなしの全一覧 queryに変更。最大1025件を受け取り、1024超過・不明な型/状態は停止。サービス名`PROCMON`+数字またはimage path basenameの`procmon*.sys`に一致する候補だけを内部で数え、名前/pathは出力しない。総件数・候補数・名前一致数・image一致数と候補の状態集計のみ。空PathNameは許可、CountOnlyはquery skip。既存20秒 / 2 KiB・positive-control必須条件を維持。回帰は名前のみ・imageのみ・両方・無関係/空path・件数上限・不正shapeを検証する。Windows実測待ち・AC-05未達。
