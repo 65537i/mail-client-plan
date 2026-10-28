@@ -57,6 +57,21 @@ test("AC-05: driver registry inspection is read-only, bounded and emits aggregat
   assert.match(driver, /DRIVER_REGISTRY=keys:\(0\|\[1-9\]\\d\{0,3\}\);candidates:/);
 });
 
+test("AC-05: Filter Manager inventory is an independent bounded read-only driver observation", async () => {
+  const [inspection, driver] = await Promise.all([
+    readFile(new URL("../../scripts/inspect-windows-procmon-capture.ps1", import.meta.url), "utf8"),
+    readFile(new URL("../../scripts/test-windows-file-access.mjs", import.meta.url), "utf8"),
+  ]);
+  assert.match(inspection, /System32\\fltmc\.exe[\s\S]*\$filterManagerPath filters/);
+  assert.match(inspection, /Get-ProcmonFilterManagerEvidence[\s\S]*Lines\.Count -gt 256/);
+  assert.match(inspection, /if \(\$line -notmatch '\^\\s\*\(\?i:PROCMON\)'\) \{ continue \}/);
+  assert.match(inspection, /Procmon Filter Manager candidate has an unsupported shape/);
+  assert.match(inspection, /PROC_MON_CAPTURE_FILTER_MANAGER=\$filterManagerEvidence/);
+  assert.doesNotMatch(inspection, /fltmc\.exe\s+(?:load|unload|attach|detach)|WriteLine\([^)]*(?:\$line|\$filterManagerPath)/i);
+  assert.match(driver, /FILTER_MANAGER=candidates:\(0\|\[1-9\]\\d\{0,2\}\);instances:/);
+  assert.match(driver, /filterManagerEvidence.length === 1[\s\S]*Number\(filterManagerEvidence\[0\]\[1\]\) <= 64/);
+});
+
 test("AC-05: live filter verification attaches to the capture PID and preserves its lifetime", async () => {
   const [configuration, driver] = await Promise.all([
     readFile(new URL("../../scripts/configure-windows-procmon-filter.ps1", import.meta.url), "utf8"),

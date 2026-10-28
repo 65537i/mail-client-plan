@@ -154,6 +154,55 @@ function Get-ProcmonServiceStatusEvidence {
   return "candidates:$($Names.Count);found:$found;not-found:$notFound;running:$running;stopped:$stopped;other-states:$otherStates"
 }
 
+function Get-ProcmonFilterManagerEvidence {
+  param([string[]]$Lines)
+  if ($Lines.Count -gt 256) {
+    throw "Filter Manager inventory exceeded its limit"
+  }
+  $candidates = 0
+  $instances = 0
+  foreach ($line in $Lines) {
+    if ($line -isnot [string] -or $line.Length -gt 512) {
+      throw "Filter Manager inventory has an unsupported shape"
+    }
+    if ($line -notmatch '^\s*(?i:PROCMON)') { continue }
+    $match = [regex]::Match(
+      $line,
+      '^\s*(?i:PROCMON[0-9]*)\s+([0-9]{1,3})\s+[0-9]{1,12}(?:\.[0-9]{1,4})?\s+[0-9]{1,3}\s*$'
+    )
+    if (-not $match.Success) {
+      throw "Procmon Filter Manager candidate has an unsupported shape"
+    }
+    $instanceCount = 0
+    if (-not [int]::TryParse(
+        $match.Groups[1].Value,
+        [System.Globalization.NumberStyles]::None,
+        [System.Globalization.CultureInfo]::InvariantCulture,
+        [ref]$instanceCount
+      )) {
+      throw "Procmon Filter Manager instance count is invalid"
+    }
+    $candidates++
+    $instances += $instanceCount
+    if ($candidates -gt 64 -or $instances -gt 63936) {
+      throw "Procmon Filter Manager candidate inventory exceeded its limit"
+    }
+  }
+  return "candidates:$candidates;instances:$instances"
+}
+
+function Get-ProcmonFilterManagerSnapshot {
+  $filterManagerPath = Join-Path $env:SystemRoot "System32\fltmc.exe"
+  if (-not [IO.File]::Exists($filterManagerPath)) {
+    throw "Filter Manager query utility is unavailable"
+  }
+  $lines = @(& $filterManagerPath filters 2>$null)
+  if ($LASTEXITCODE -ne 0 -or $lines.Count -eq 0) {
+    throw "Filter Manager query failed"
+  }
+  return Get-ProcmonFilterManagerEvidence $lines
+}
+
 $stage = "load-automation"
 try {
   Add-Type -AssemblyName UIAutomationClient
@@ -378,6 +427,9 @@ public static class ProcmonCaptureWindows
   $stage = "query-procmon-service-controller"
   $serviceEvidence = Get-ProcmonServiceStatusEvidence $registryInventory.Names
   [Console]::Out.WriteLine("PROC_MON_CAPTURE_SERVICE_STATUS=$serviceEvidence")
+  $stage = "query-filter-manager-inventory"
+  $filterManagerEvidence = Get-ProcmonFilterManagerSnapshot
+  [Console]::Out.WriteLine("PROC_MON_CAPTURE_FILTER_MANAGER=$filterManagerEvidence")
   $visual = "unavailable"
   $windowPattern = $null
   if ($main.TryGetCurrentPattern(

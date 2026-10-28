@@ -37,6 +37,10 @@ Run434でregistry candidateが1件・ImagePath value 0を観測したため、�
 
 Run438後はcandidate nameを出さずに`Get-Service`でSCM statusをread-only照合する。最大64候補でfound / missing / running / stopped / other statesを記録し、存在しないserviceの既知error id以外は再throwする。権限変更・service操作・設定書込みは行わない。
 
+[Run 442](https://github.com/65537i/mail-client-plan/actions/runs/40699301813)（`52d8f3d`、Windows 2025 / webview）はNode64/64・PowerShell regressionに成功した。capture readiness直後のinventoryはsystem drivers 422 / Procmon候補0、Services registryはcandidate1 / standard-name1だがImagePath・Type・Start・Parametersは各0、SCMはfound0 / not-found1。administrator-role=true、capture startup error none、exact rules / Drop、capture・filesystem MSAA on、WDIOは成功した一方、final list 0、capture 36,560 ms / PML 972,172 bytes / CSV76 bytes、Node positive control 0件で失敗。これは有効なProcmon driver/service登録をこの観測時点で見つけられなかったことを示すが、空registry keyの由来やdriver未登録とpositive-control欠落の因果は確定しない。次は署名済みProcmon実行ファイルと同梱/展開driverの実体・起動結果を、秘密情報を出さずread-onlyかつboundedに照合する。filter、positive-control、fail-closed gatesは維持し、AC-05未達。
+
+Run442後は同じreadiness inspectionで`fltmc.exe filters`をread-only照会し、SCM / registry / WMIとは独立してFilter Managerへの登録有無を確認する。最大256行・512文字、Procmon候補64件まで、標準行形式のみを受理し、名前やraw outputは出さずcandidate / instance数のみ記録する。Node source guardとPowerShell fixtureは追加済み。Linux上のNode25/25は成功したが、PowerShell fixtureとWindows実captureは次のWindows run待ち。AC-05は未達で、capture filter・positive-control gateは変更しない。
+
 [Run 434](https://github.com/65537i/mail-client-plan/actions/runs/40692872751)（`f707d9e`）は64 Node / PowerShell checksに成功。実capture registry evidence parseで停止し、control / WDIOへ到達しなかった。Registry `keys` count上限4096に対しNode patternが3桁制限だったため、4桁対応へ修正する。
 
 [Run 436](https://github.com/65537i/mail-client-plan/actions/runs/40694611457)（`cfac6fd`）は64 Node / PowerShell checks成功後、HKLM 64-bit Services配下keys:765 / Procmon candidate:1 / ImagePath value:0を観測。control / WDIO後、positive control 0件、CSV header-onlyでfail closed。次はcandidate keyのImagePath / Type / Start valuesとParameters subkeyの存在数だけを追加し、empty / placeholder registrationかを識別する。

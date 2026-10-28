@@ -51,6 +51,38 @@ $serviceStatusFunction = $inspectionAst.Find({
 }, $true)
 if ($null -eq $serviceStatusFunction) { throw "Procmon service status formatter is missing" }
 . ([scriptblock]::Create($serviceStatusFunction.Extent.Text))
+$filterManagerFunction = $inspectionAst.Find({
+  param($node)
+  $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+    $node.Name -eq "Get-ProcmonFilterManagerEvidence"
+}, $true)
+if ($null -eq $filterManagerFunction) { throw "Procmon Filter Manager formatter is missing" }
+. ([scriptblock]::Create($filterManagerFunction.Extent.Text))
+if ((Get-ProcmonFilterManagerEvidence @()) -cne "candidates:0;instances:0") {
+  throw "Empty Filter Manager inventory must remain an empty observation"
+}
+$filterManagerFixtures = @(
+  "Filter Name                     Num Instances    Altitude    Frame",
+  "------------------------------  -------------  ------------  -----",
+  "WdFilter                        4              328010        0",
+  "PROCMON24                       2              385200        0"
+)
+if ((Get-ProcmonFilterManagerEvidence $filterManagerFixtures) -cne "candidates:1;instances:2") {
+  throw "Filter Manager inventory must identify Procmon without exposing filter names"
+}
+$invalidFilterManagerInputs = @(
+  [pscustomobject]@{ Lines = [string[]]@("PROCMON24 invalid") }
+  [pscustomobject]@{ Lines = [string[]]@("PROCMON24 1000 385200 0") }
+  [pscustomobject]@{ Lines = [string[]](@("PROCMON24 0 385200 0") * 65) }
+  [pscustomobject]@{ Lines = [string[]](@("WdFilter") * 257) }
+  [pscustomobject]@{ Lines = [string[]]@([string]::new('x', 513)) }
+)
+foreach ($invalidLines in $invalidFilterManagerInputs) {
+  $rejected = $false
+  try { Get-ProcmonFilterManagerEvidence $invalidLines.Lines | Out-Null } catch { $rejected = $true }
+  if (-not $rejected) { throw "Unsafe Filter Manager inventory must be rejected" }
+}
+Write-Host "PASS AC-05: Filter Manager inventory is read-only, bounded and counts Procmon candidates"
 $registryFixtureRoot = Join-Path ([IO.Path]::GetTempPath()) ("procmon-registry-test-" + [Guid]::NewGuid().ToString("N"))
 [IO.Directory]::CreateDirectory($registryFixtureRoot) | Out-Null
 $registryFixturePath = Join-Path $registryFixtureRoot "image.sys"

@@ -310,6 +310,16 @@ async function captureScenario(scenario) {
       "Process Monitor service controller evidence is incomplete",
     );
     console.log(`Windows audit ${scenario}: ${serviceEvidence[0][0].trim()}`);
+    const filterManagerEvidence = [...captureInspectionOutput.matchAll(
+      /^PROC_MON_CAPTURE_FILTER_MANAGER=candidates:(0|[1-9]\d{0,2});instances:(0|[1-9]\d{0,4})\r?$/gm,
+    )];
+    assert(
+      filterManagerEvidence.length === 1 &&
+      Number(filterManagerEvidence[0][1]) <= 64 &&
+      Number(filterManagerEvidence[0][2]) <= Number(filterManagerEvidence[0][1]) * 999,
+      "Process Monitor Filter Manager evidence is incomplete",
+    );
+    console.log(`Windows audit ${scenario}: ${filterManagerEvidence[0][0].trim()}`);
     for (const target of ["capture", "filesystem"]) {
       const msaa = [...captureInspectionOutput.matchAll(
         /^PROC_MON_CAPTURE_MSAA=(capture|filesystem);object:(available|unavailable);items:(0|[1-9]\d?);matches:(0|[1-9]\d?);checked:(unavailable|mixed|on|off);enabled:(unavailable|true|false)\r?$/gm,
