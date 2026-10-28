@@ -67,6 +67,8 @@ Run448後の初期実装は`GetVolumePathNameW`でtarget fileのvolume mount poi
 
 [Run 487](https://github.com/65537i/mail-client-plan/actions/runs/40774215719)（manual Windows 2025 / webview、`9469764`）はNode audit regression 65/65とWindows PowerShell filter/export fixtureに成功。実baseline監査はparse stageでfail closedし、先頭文字クラスを `text` と分類。positive control / WDIOへ未到達。語句やheading値/raw outputは記録しない。次は一般的な安全な固定語句カテゴリの診断を追加する。AC-05未達。
 
+[Run 489](https://github.com/65537i/mail-client-plan/actions/runs/40775858017)（manual Windows 2025 / webview、`78bcd12`）はNode regression 65/65、PowerShell fixture、WebViewとaudit setup checksに成功。実baseline監査はstate `volume-heading-drive-decorated-volume`でparse段階にfail closedし、positive control / WDIOへ未到達。見出しの値/raw outputは未記録。次は`Volume`固定語の後続形状をfixtureで分類し、判定を緩めずに一括でWindows検証する。AC-05未達。
+
 [Run 481](https://github.com/65537i/mail-client-plan/actions/runs/40768636277)（manual Windows 2025 / webview、`0b8e2d5`）はNode audit regression 65/65とWindows PowerShell filter/export fixtureに成功。実baseline監査はparse stageでfail closedし、allowlist修正後のstate `volume-heading-drive-prefix`を確認。target volumeと完全一致しないdrive-letter prefixであることだけを記録し、値/raw outputは未記録。positive control / WDIOへ未到達。次の切り分けとしてdrive root / path / decoratedの固定分類を追加した。Linux regression 65/65、JS syntax、`git diff --check`成功。AC-05未達。
 
 [Run 479](https://github.com/65537i/mail-client-plan/actions/runs/40767325713)（manual Windows 2025 / webview、`742d2ea`）はNode audit regression 65/65とWindows PowerShell filter/export fixtureに成功した。実baseline監査はparse stageでfail closedし、positive control / WDIOへ未到達。今回は新しいheading-state codeをPowerShell側のdiagnostic allowlistへ含め忘れ、assertionにparse stateが出なかった。state allowlistの網羅性を直接検査するNode regressionを追加し、PowerShell出力にも全stateを通す。raw outputは未記録。AC-05未達。

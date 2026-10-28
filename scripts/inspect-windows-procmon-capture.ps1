@@ -256,7 +256,19 @@ function Get-ProcmonFilterManagerVolumeEvidence {
               "volume-heading-drive-decorated-quoted"
             } elseif ($driveDecoration.Substring(0, 1) -match '^[A-Za-z]') {
               if ($driveDecoration -match '^(?i:volume)(?:\s|:)') {
-                "volume-heading-drive-decorated-volume"
+                if ($driveDecoration -match '^(?i:volume)\s+name(?:\s|:|$)') {
+                  "volume-heading-drive-decorated-volume-name"
+                } elseif ($driveDecoration -match '^(?i:volume)\s+guid(?:\s|:|$)') {
+                  "volume-heading-drive-decorated-volume-guid"
+                } elseif ($driveDecoration -match '^(?i:volume)\s+id(?:\s|:|$)') {
+                  "volume-heading-drive-decorated-volume-id"
+                } elseif ($driveDecoration -match '^(?i:volume):') {
+                  "volume-heading-drive-decorated-volume-colon"
+                } elseif ($driveDecoration -match '^(?i:volume)[\\/]') {
+                  "volume-heading-drive-decorated-volume-path"
+                } else {
+                  "volume-heading-drive-decorated-volume-other"
+                }
               } elseif ($driveDecoration -match '^(?i:device)(?:\s|:)') {
                 "volume-heading-drive-decorated-device"
               } elseif ($driveDecoration -match '^(?i:harddisk)(?:\s|:)') {
@@ -822,7 +834,12 @@ public static class ProcmonCaptureWindows
       "volume-heading-drive-decorated-parenthesis",
       "volume-heading-drive-decorated-bracket",
       "volume-heading-drive-decorated-quoted",
-      "volume-heading-drive-decorated-volume",
+      "volume-heading-drive-decorated-volume-name",
+      "volume-heading-drive-decorated-volume-guid",
+      "volume-heading-drive-decorated-volume-id",
+      "volume-heading-drive-decorated-volume-colon",
+      "volume-heading-drive-decorated-volume-path",
+      "volume-heading-drive-decorated-volume-other",
       "volume-heading-drive-decorated-device",
       "volume-heading-drive-decorated-harddisk",
       "volume-heading-drive-decorated-text",

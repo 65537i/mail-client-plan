@@ -158,7 +158,12 @@ $decoratedDriveShapeFixtures = @(
   [pscustomobject]@{ Heading = "Instances for D: [metadata]"; State = "volume-heading-drive-decorated-bracket" }
   [pscustomobject]@{ Heading = "Instances for D: 'metadata'"; State = "volume-heading-drive-decorated-quoted" }
   [pscustomobject]@{ Heading = "Instances for D: metadata"; State = "volume-heading-drive-decorated-text" }
-  [pscustomobject]@{ Heading = "Instances for D: Volume Name: value"; State = "volume-heading-drive-decorated-volume" }
+  [pscustomobject]@{ Heading = "Instances for D: Volume Name: value"; State = "volume-heading-drive-decorated-volume-name" }
+  [pscustomobject]@{ Heading = "Instances for D: Volume GUID: value"; State = "volume-heading-drive-decorated-volume-guid" }
+  [pscustomobject]@{ Heading = "Instances for D: Volume ID: value"; State = "volume-heading-drive-decorated-volume-id" }
+  [pscustomobject]@{ Heading = "Instances for D: Volume: value"; State = "volume-heading-drive-decorated-volume-colon" }
+  [pscustomobject]@{ Heading = "Instances for D: Volume\value"; State = "volume-heading-drive-decorated-volume-path" }
+  [pscustomobject]@{ Heading = "Instances for D: Volume metadata"; State = "volume-heading-drive-decorated-volume-other" }
   [pscustomobject]@{ Heading = "Instances for D: Device Name: value"; State = "volume-heading-drive-decorated-device" }
   [pscustomobject]@{ Heading = "Instances for D: Harddisk Volume"; State = "volume-heading-drive-decorated-harddisk" }
   [pscustomobject]@{ Heading = "Instances for D: 12"; State = "volume-heading-drive-decorated-numeric" }
