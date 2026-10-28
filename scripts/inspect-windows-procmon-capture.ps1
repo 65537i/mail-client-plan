@@ -255,7 +255,7 @@ function Get-ProcmonFilterManagerVolumeEvidence {
             } elseif ($driveDecoration.StartsWith("'") -or $driveDecoration.StartsWith('"')) {
               "volume-heading-drive-decorated-quoted"
             } elseif ($driveDecoration.Substring(0, 1) -match '^[A-Za-z]') {
-              if ($driveDecoration -match '^(?i:volume)(?:\s|:)') {
+              if ($driveDecoration -match '^(?i:volume)(?:\s|:|[\\/])') {
                 if ($driveDecoration -match '^(?i:volume)\s+name(?:\s|:|$)') {
                   "volume-heading-drive-decorated-volume-name"
                 } elseif ($driveDecoration -match '^(?i:volume)\s+guid(?:\s|:|$)') {

@@ -70,6 +70,9 @@ test("AC-05: Filter Manager inventory is an independent bounded read-only driver
   assert.match(inspection, /Get-ProcmonFilterManagerVolumeEvidence[\s\S]*SprtFtrs[\s\S]*\$instanceCount -gt 64/);
   assert.match(inspection, /Instances for\\s\+\(\.\+\?\)/);
   assert.match(inspection, /OrdinalIgnoreCase/);
+  assert.ok(
+    inspection.includes(String.raw`if ($driveDecoration -match '^(?i:volume)(?:\s|:|[\\/])')`),
+  );
   assert.match(inspection, /instance-list-header[\s\S]*volume-heading[\s\S]*instances-heading[\s\S]*instance-heading[\s\S]*filter-manager-heading[\s\S]*filter-heading[\s\S]*unexpected-preamble[\s\S]*separator-shape[\s\S]*row-shape[\s\S]*PROC_MON_CAPTURE_FILTER_MANAGER_PARSE=\$script:filterManagerVolumeParseState/);
   const parseStateReportingStart = inspection.indexOf(
     'if ($stage -eq "parse-filter-manager-instance-output"',
