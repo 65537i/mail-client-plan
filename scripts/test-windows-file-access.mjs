@@ -288,13 +288,13 @@ async function captureScenario(scenario) {
     );
     console.log(`Windows audit ${scenario}: ${driverEvidence[0][0].trim()}`);
     const registryEvidence = [...captureInspectionOutput.matchAll(
-      /^PROC_MON_CAPTURE_DRIVER_REGISTRY=keys:(0|[1-9]\d{0,3});candidates:(0|[1-9]\d{0,2});image-candidates:(0|[1-9]\d{0,2});image-values:(0|[1-9]\d{0,2});image-paths-present:(0|[1-9]\d{0,2})\r?$/gm,
+      /^PROC_MON_CAPTURE_DRIVER_REGISTRY=keys:(0|[1-9]\d{0,3});candidates:(0|[1-9]\d{0,2});image-value-entries:(0|[1-9]\d{0,2});image-candidates:(0|[1-9]\d{0,2});image-values:(0|[1-9]\d{0,2});image-paths-present:(0|[1-9]\d{0,2});type-values:(0|[1-9]\d{0,2});start-values:(0|[1-9]\d{0,2});parameters-keys:(0|[1-9]\d{0,2})\r?$/gm,
     )];
     assert(
       registryEvidence.length === 1 &&
       Number(registryEvidence[0][1]) <= 4096 &&
       Number(registryEvidence[0][2]) <= 64 &&
-      registryEvidence[0].slice(3, 6).every((count) => Number(count) <= Number(registryEvidence[0][2])),
+      registryEvidence[0].slice(3, 10).every((count) => Number(count) <= Number(registryEvidence[0][2])),
       "Process Monitor driver registry evidence is incomplete",
     );
     console.log(`Windows audit ${scenario}: ${registryEvidence[0][0].trim()}`);

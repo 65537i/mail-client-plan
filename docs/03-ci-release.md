@@ -29,9 +29,13 @@ Run422後はreadiness直後のWin32_SystemDriver inventoryを名前prefix filter
 
 [Run 431](https://github.com/65537i/mail-client-plan/actions/runs/40690868139)（`bb8f90b`）ではAdministrators roleがtrueでも全422 system-driver entries中のProcmon候補が0件だった。Capture/filesystem toolbar state、実capture exact filter / Drop、WDIOは成功したが表示list 0・CSV header-only・positive control 0件で監査失敗。次はSCM registryのread-only service registrationを照合する。driver未ロードやcapture errorの断定はしない。
 
-Run431後はHKLM CurrentControlSet\Servicesのread-only subkey inventoryを追加する。Procmonを含むキーだけを最大65件まで読み、ImagePathの生値・サービス名・キー名・パスは出力せず、有無件数と展開後pathが存在する件数だけを記録する。過剰件数・未知型はfail closed、registry keyをfinallyで閉じる。回帰は一時HKCU test key / fileを使い、読み取りとcleanupだけを検証する。Windows実測待ち。
+Run431後はHKLM CurrentControlSet\Servicesのread-only subkey inventoryを追加する。Procmonを含むキーだけを最大64件まで読み、ImagePathの生値・service名・key名・pathは出力せず、ImagePath存在・展開後file存在などの件数だけを記録する。過剰件数・未知型はfail closed、registry keyをfinallyで閉じる。回帰は一時HKCU test key / fileを使い、読み取りとcleanupだけを検証する。
+
+Run434でregistry candidateが1件・ImagePath value 0を観測したため、次の限定照会では候補keyに対するImagePath / Type / Start値およびParameters subkeyの存在数だけを追加し、最大128 values / subkeysを要求する。任意値・名前・pathは出力しない。
 
 [Run 434](https://github.com/65537i/mail-client-plan/actions/runs/40692872751)（`f707d9e`）は64 Node / PowerShell checksに成功。実capture registry evidence parseで停止し、control / WDIOへ到達しなかった。Registry `keys` count上限4096に対しNode patternが3桁制限だったため、4桁対応へ修正する。
+
+[Run 436](https://github.com/65537i/mail-client-plan/actions/runs/40694611457)（`cfac6fd`）は64 Node / PowerShell checks成功後、HKLM 64-bit Services配下keys:765 / Procmon candidate:1 / ImagePath value:0を観測。control / WDIO後、positive control 0件、CSV header-onlyでfail closed。次はcandidate keyのImagePath / Type / Start valuesとParameters subkeyの存在数だけを追加し、empty / placeholder registrationかを識別する。
 
 Run419後は既存capture inspectionにWin32_SystemDriverのread-only inventoryを追加した。PROCMON prefixのqueryを5秒 / 最大17件取得に限定し、許容件数16を超えた場合や未知shapeは失敗する。出力はservice総数 / running / started / filesystem / exit-error件数だけで、service名・path・provider文字列は出さない。CountOnlyではqueryをskipする。既存20秒 / 2 KiB上限とpositive-control必須・exact filter・Drop gatesを維持。service Runningはevent収集正常やPML内容の証明ではない。
 

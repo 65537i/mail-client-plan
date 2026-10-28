@@ -58,6 +58,10 @@ try {
     "$registryFixtureName\ProcMonPresent"
   )
   $presentRegistryKey.SetValue("ImagePath", $registryFixturePath, [Microsoft.Win32.RegistryValueKind]::String)
+  $presentRegistryKey.SetValue("Type", [int]2, [Microsoft.Win32.RegistryValueKind]::DWord)
+  $presentRegistryKey.SetValue("Start", [int]3, [Microsoft.Win32.RegistryValueKind]::DWord)
+  $parametersKey = $presentRegistryKey.CreateSubKey("Parameters")
+  $parametersKey.Close()
   $presentRegistryKey.Close()
   $missingRegistryKey = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey(
     "$registryFixtureName\ProcMonMissing"
@@ -67,7 +71,7 @@ try {
   $registryFixtureRootKey = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey(
     $registryFixtureName, $false
   )
-  if ((Get-ProcmonRegistryEvidence $registryFixtureRootKey) -cne "keys:2;candidates:2;image-candidates:1;image-values:1;image-paths-present:1") {
+  if ((Get-ProcmonRegistryEvidence $registryFixtureRootKey) -cne "keys:2;candidates:2;image-value-entries:1;image-candidates:1;image-values:1;image-paths-present:1;type-values:1;start-values:1;parameters-keys:1") {
     throw "Registry inventory must count candidate image paths without exposing them"
   }
   for ($index = 0; $index -lt 65; $index++) {

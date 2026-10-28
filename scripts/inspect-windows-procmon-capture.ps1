@@ -66,14 +66,27 @@ function Get-ProcmonRegistryEvidence {
     throw "Procmon registry candidate inventory exceeded its limit"
   }
   $imageCandidates = 0
+  $imageValueEntries = 0
   $imageValues = 0
   $imagePathsPresent = 0
+  $typeValues = 0
+  $startValues = 0
+  $parametersKeys = 0
   foreach ($candidate in $candidates) {
     $key = $ServicesRoot.OpenSubKey($candidate, $false)
     if ($null -eq $key) {
       throw "Procmon registry candidate disappeared during inspection"
     }
     try {
+      $valueNames = $key.GetValueNames()
+      $subKeyNames = $key.GetSubKeyNames()
+      if ($valueNames.Count -gt 128 -or $subKeyNames.Count -gt 128) {
+        throw "Procmon registry candidate exceeded its metadata limit"
+      }
+      if ($valueNames -ccontains "ImagePath") { $imageValueEntries++ }
+      if ($valueNames -ccontains "Type") { $typeValues++ }
+      if ($valueNames -ccontains "Start") { $startValues++ }
+      if ($subKeyNames -ccontains "Parameters") { $parametersKeys++ }
       $imagePath = $key.GetValue(
         "ImagePath", $null, [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames
       )
@@ -92,7 +105,7 @@ function Get-ProcmonRegistryEvidence {
       $key.Dispose()
     }
   }
-  return "keys:$($serviceNames.Count);candidates:$($candidates.Count);image-candidates:$imageCandidates;image-values:$imageValues;image-paths-present:$imagePathsPresent"
+  return "keys:$($serviceNames.Count);candidates:$($candidates.Count);image-value-entries:$imageValueEntries;image-candidates:$imageCandidates;image-values:$imageValues;image-paths-present:$imagePathsPresent;type-values:$typeValues;start-values:$startValues;parameters-keys:$parametersKeys"
 }
 
 $stage = "load-automation"

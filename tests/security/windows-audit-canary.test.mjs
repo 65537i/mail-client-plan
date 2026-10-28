@@ -41,11 +41,13 @@ test("AC-05: driver registry inspection is read-only, bounded and emits aggregat
   assert.match(inspection, /\$serviceNames \| Where-Object \{ \$_ -match '\(\?i\)procmon' \}/);
   assert.match(inspection, /\$candidates.Count -gt 64/);
   assert.match(inspection, /GetValue\(\s*"ImagePath", \$null, \[Microsoft\.Win32\.RegistryValueOptions\]::DoNotExpandEnvironmentNames/);
+  assert.match(inspection, /\$key.GetValueNames\(\)[\s\S]*-ccontains "Type"[\s\S]*-ccontains "Start"[\s\S]*-ccontains "Parameters"/);
+  assert.match(inspection, /\$valueNames.Count -gt 128 -or \$subKeyNames.Count -gt 128/);
   assert.match(inspection, /finally \{\s*\$key\.Dispose\(\)/);
   assert.match(inspection, /PROC_MON_CAPTURE_DRIVER_REGISTRY=\$registryEvidence/);
   assert.doesNotMatch(inspection, /SetValue\(|DeleteValue\(|DeleteSubKey|WriteLine\([^)]*(?:PSChildName|imagePath|expandedPath)/);
-  assert.match(driver, /registryEvidence.length === 1[\s\S]*Number\(registryEvidence\[0\]\[1\]\) <= 4096/);
-  assert.match(driver, /DRIVER_REGISTRY=keys:\(0\|\[1-9\]\\d\{0,3\}\)/);
+  assert.match(driver, /registryEvidence.length === 1[\s\S]*Number\(registryEvidence\[0\]\[1\]\) <= 4096[\s\S]*slice\(3, 10\)/);
+  assert.match(driver, /DRIVER_REGISTRY=keys:\(0\|\[1-9\]\\d\{0,3\}\);candidates:/);
 });
 
 test("AC-05: live filter verification attaches to the capture PID and preserves its lifetime", async () => {
