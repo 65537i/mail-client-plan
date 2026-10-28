@@ -33,6 +33,8 @@ Run431後はHKLM CurrentControlSet\Servicesのread-only subkey inventoryを追�
 
 Run434でregistry candidateが1件・ImagePath value 0を観測したため、次の限定照会では候補keyに対するImagePath / Type / Start値およびParameters subkeyの存在数だけを追加し、最大128 values / subkeysを要求する。任意値・名前・pathは出力しない。
 
+[Run 438](https://github.com/65537i/mail-client-plan/actions/runs/40695949571)（`2605cf8`）はHKLM Services keys:765、Procmon substring candidate:1を観測したが、そのkeyにはImagePath / Type / Start / Parametersがなく、file pathもない。候補のservice nameが標準 `PROCMON`+digits形式かどうかだけを数える追加診断を行う。
+
 [Run 434](https://github.com/65537i/mail-client-plan/actions/runs/40692872751)（`f707d9e`）は64 Node / PowerShell checksに成功。実capture registry evidence parseで停止し、control / WDIOへ到達しなかった。Registry `keys` count上限4096に対しNode patternが3桁制限だったため、4桁対応へ修正する。
 
 [Run 436](https://github.com/65537i/mail-client-plan/actions/runs/40694611457)（`cfac6fd`）は64 Node / PowerShell checks成功後、HKLM 64-bit Services配下keys:765 / Procmon candidate:1 / ImagePath value:0を観測。control / WDIO後、positive control 0件、CSV header-onlyでfail closed。次はcandidate keyのImagePath / Type / Start valuesとParameters subkeyの存在数だけを追加し、empty / placeholder registrationかを識別する。

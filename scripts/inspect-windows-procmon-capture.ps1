@@ -69,10 +69,12 @@ function Get-ProcmonRegistryEvidence {
   $imageValueEntries = 0
   $imageValues = 0
   $imagePathsPresent = 0
+  $standardNameCandidates = 0
   $typeValues = 0
   $startValues = 0
   $parametersKeys = 0
   foreach ($candidate in $candidates) {
+    if ($candidate -match '^PROCMON[0-9]*$') { $standardNameCandidates++ }
     $key = $ServicesRoot.OpenSubKey($candidate, $false)
     if ($null -eq $key) {
       throw "Procmon registry candidate disappeared during inspection"
@@ -105,7 +107,8 @@ function Get-ProcmonRegistryEvidence {
       $key.Dispose()
     }
   }
-  return "keys:$($serviceNames.Count);candidates:$($candidates.Count);image-value-entries:$imageValueEntries;image-candidates:$imageCandidates;image-values:$imageValues;image-paths-present:$imagePathsPresent;type-values:$typeValues;start-values:$startValues;parameters-keys:$parametersKeys"
+  $otherCandidates = $candidates.Count - $standardNameCandidates
+  return "keys:$($serviceNames.Count);candidates:$($candidates.Count);standard-name-candidates:$standardNameCandidates;other-candidates:$otherCandidates;image-value-entries:$imageValueEntries;image-candidates:$imageCandidates;image-values:$imageValues;image-paths-present:$imagePathsPresent;type-values:$typeValues;start-values:$startValues;parameters-keys:$parametersKeys"
 }
 
 $stage = "load-automation"
