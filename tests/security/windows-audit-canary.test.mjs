@@ -93,7 +93,14 @@ test("AC-05: Filter Manager inventory is an independent bounded read-only driver
     "volume-heading-drive-decorated-volume-name",
     "volume-heading-drive-decorated-volume-guid",
     "volume-heading-drive-decorated-volume-id",
-    "volume-heading-drive-decorated-volume-colon",
+    "volume-heading-drive-decorated-volume-colon-guid",
+    "volume-heading-drive-decorated-volume-colon-device",
+    "volume-heading-drive-decorated-volume-colon-object-manager",
+    "volume-heading-drive-decorated-volume-colon-drive",
+    "volume-heading-drive-decorated-volume-colon-empty",
+    "volume-heading-drive-decorated-volume-colon-text",
+    "volume-heading-drive-decorated-volume-colon-numeric",
+    "volume-heading-drive-decorated-volume-colon-other",
     "volume-heading-drive-decorated-volume-path",
     "volume-heading-drive-decorated-volume-other",
     "volume-heading-drive-decorated-device",
@@ -125,7 +132,7 @@ test("AC-05: Filter Manager inventory is an independent bounded read-only driver
   assert.doesNotMatch(inspection, /fltmc\.exe\s+(?:load|unload|attach|detach)|WriteLine\([^)]*(?:\$line|\$filterManagerPath|\$volumeName|\$candidateName)/i);
   assert.match(driver, /"-OwnerProcessId", String\(capture\.pid\), "-TargetPath", canaryPath/);
   assert.match(driver, /PROC_MON_CAPTURE_FILTER_MANAGER_COMMAND=exit-code:\(0\|\[1-9\]\\d\{0,2\}\|out-of-range\)/);
-  assert.match(driver, /PROC_MON_CAPTURE_FILTER_MANAGER_PARSE=\(started\|empty-output\|line-limit\|line-shape\|duplicate-header\|instance-list-header\|volume-heading\|volume-heading-drive-path\|volume-heading-drive-decorated-parenthesis\|volume-heading-drive-decorated-bracket\|volume-heading-drive-decorated-quoted\|volume-heading-drive-decorated-volume-name\|volume-heading-drive-decorated-volume-guid\|volume-heading-drive-decorated-volume-id\|volume-heading-drive-decorated-volume-colon\|volume-heading-drive-decorated-volume-path\|volume-heading-drive-decorated-volume-other\|volume-heading-drive-decorated-device\|volume-heading-drive-decorated-harddisk\|volume-heading-drive-decorated-text\|volume-heading-drive-decorated-numeric\|volume-heading-drive-decorated-path\|volume-heading-drive-decorated-punctuation\|volume-heading-drive-decorated-other\|volume-heading-drive-other\|volume-heading-guid-prefix\|volume-heading-device-prefix\|volume-heading-object-manager-prefix\|volume-heading-rooted\|volume-heading-other\|instances-heading\|instance-heading\|filter-manager-heading\|filter-heading\|unexpected-preamble\|separator-shape\|row-shape\|invalid-count\|count-limit\|inventory-limit\|incomplete-table\|valid\)/);
+  assert.match(driver, /PROC_MON_CAPTURE_FILTER_MANAGER_PARSE=\(started\|empty-output\|line-limit\|line-shape\|duplicate-header\|instance-list-header\|volume-heading\|volume-heading-drive-path\|volume-heading-drive-decorated-parenthesis\|volume-heading-drive-decorated-bracket\|volume-heading-drive-decorated-quoted\|volume-heading-drive-decorated-volume-name\|volume-heading-drive-decorated-volume-guid\|volume-heading-drive-decorated-volume-id\|volume-heading-drive-decorated-volume-colon-guid\|volume-heading-drive-decorated-volume-colon-device\|volume-heading-drive-decorated-volume-colon-object-manager\|volume-heading-drive-decorated-volume-colon-drive\|volume-heading-drive-decorated-volume-colon-empty\|volume-heading-drive-decorated-volume-colon-text\|volume-heading-drive-decorated-volume-colon-numeric\|volume-heading-drive-decorated-volume-colon-other\|volume-heading-drive-decorated-volume-path\|volume-heading-drive-decorated-volume-other\|volume-heading-drive-decorated-device\|volume-heading-drive-decorated-harddisk\|volume-heading-drive-decorated-text\|volume-heading-drive-decorated-numeric\|volume-heading-drive-decorated-path\|volume-heading-drive-decorated-punctuation\|volume-heading-drive-decorated-other\|volume-heading-drive-other\|volume-heading-guid-prefix\|volume-heading-device-prefix\|volume-heading-object-manager-prefix\|volume-heading-rooted\|volume-heading-other\|instances-heading\|instance-heading\|filter-manager-heading\|filter-heading\|unexpected-preamble\|separator-shape\|row-shape\|invalid-count\|count-limit\|inventory-limit\|incomplete-table\|valid\)/);
   assert.match(driver, /Filter Manager parse state \$\{filterManagerParseState\}/);
   assert.match(driver, /FILTER_MANAGER=candidates:\(0\|\[1-9\]\\d\{0,2\}\);instances:\(0\|\[1-9\]\\d\{0,4\}\);target-volume-attached:\(true\|false\);target-volume-instances:/);
   assert.match(driver, /filterManagerEvidence.length === 1[\s\S]*Number\(filterManagerEvidence\[0\]\[1\]\) <= 64/);

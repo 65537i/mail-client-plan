@@ -161,7 +161,14 @@ $decoratedDriveShapeFixtures = @(
   [pscustomobject]@{ Heading = "Instances for D: Volume Name: value"; State = "volume-heading-drive-decorated-volume-name" }
   [pscustomobject]@{ Heading = "Instances for D: Volume GUID: value"; State = "volume-heading-drive-decorated-volume-guid" }
   [pscustomobject]@{ Heading = "Instances for D: Volume ID: value"; State = "volume-heading-drive-decorated-volume-id" }
-  [pscustomobject]@{ Heading = "Instances for D: Volume: value"; State = "volume-heading-drive-decorated-volume-colon" }
+  [pscustomobject]@{ Heading = "Instances for D: Volume: \\?\Volume{fixture}"; State = "volume-heading-drive-decorated-volume-colon-guid" }
+  [pscustomobject]@{ Heading = "Instances for D: Volume: \Device\fixture"; State = "volume-heading-drive-decorated-volume-colon-device" }
+  [pscustomobject]@{ Heading = "Instances for D: Volume: \??\fixture"; State = "volume-heading-drive-decorated-volume-colon-object-manager" }
+  [pscustomobject]@{ Heading = "Instances for D: Volume: E:"; State = "volume-heading-drive-decorated-volume-colon-drive" }
+  [pscustomobject]@{ Heading = "Instances for D: Volume:"; State = "volume-heading-drive-decorated-volume-colon-empty" }
+  [pscustomobject]@{ Heading = "Instances for D: Volume: metadata"; State = "volume-heading-drive-decorated-volume-colon-text" }
+  [pscustomobject]@{ Heading = "Instances for D: Volume: 12"; State = "volume-heading-drive-decorated-volume-colon-numeric" }
+  [pscustomobject]@{ Heading = "Instances for D: Volume: @"; State = "volume-heading-drive-decorated-volume-colon-other" }
   [pscustomobject]@{ Heading = "Instances for D: Volume\value"; State = "volume-heading-drive-decorated-volume-path" }
   [pscustomobject]@{ Heading = "Instances for D: Volume metadata"; State = "volume-heading-drive-decorated-volume-other" }
   [pscustomobject]@{ Heading = "Instances for D: Device Name: value"; State = "volume-heading-drive-decorated-device" }
@@ -175,7 +182,7 @@ foreach ($fixture in $decoratedDriveShapeFixtures) {
   $rejected = $false
   try { Get-ProcmonFilterManagerVolumeEvidence @($fixture.Heading) "C:" | Out-Null } catch { $rejected = $true }
   if (-not $rejected -or $script:filterManagerVolumeParseState -cne $fixture.State) {
-    throw "A drive heading decoration must remain rejected and safely classified"
+    throw "A drive heading decoration must remain rejected at $($fixture.State)"
   }
 }
 $guidVolumeHeadingRejected = $false

@@ -263,7 +263,24 @@ function Get-ProcmonFilterManagerVolumeEvidence {
                 } elseif ($driveDecoration -match '^(?i:volume)\s+id(?:\s|:|$)') {
                   "volume-heading-drive-decorated-volume-id"
                 } elseif ($driveDecoration -match '^(?i:volume):') {
-                  "volume-heading-drive-decorated-volume-colon"
+                  $volumeColonRemainder = $driveDecoration.Substring(7).TrimStart()
+                  if ($volumeColonRemainder -match '^\\\\\?\\Volume\{') {
+                    "volume-heading-drive-decorated-volume-colon-guid"
+                  } elseif ($volumeColonRemainder -match '^\\Device\\') {
+                    "volume-heading-drive-decorated-volume-colon-device"
+                  } elseif ($volumeColonRemainder -match '^\\\?\?\\') {
+                    "volume-heading-drive-decorated-volume-colon-object-manager"
+                  } elseif ($volumeColonRemainder -match '^[A-Za-z]:') {
+                    "volume-heading-drive-decorated-volume-colon-drive"
+                  } elseif ($volumeColonRemainder.Length -eq 0) {
+                    "volume-heading-drive-decorated-volume-colon-empty"
+                  } elseif ($volumeColonRemainder.Substring(0, 1) -match '^[A-Za-z]') {
+                    "volume-heading-drive-decorated-volume-colon-text"
+                  } elseif ($volumeColonRemainder.Substring(0, 1) -match '^[0-9]') {
+                    "volume-heading-drive-decorated-volume-colon-numeric"
+                  } else {
+                    "volume-heading-drive-decorated-volume-colon-other"
+                  }
                 } elseif ($driveDecoration -match '^(?i:volume)[\\/]') {
                   "volume-heading-drive-decorated-volume-path"
                 } else {
@@ -837,7 +854,14 @@ public static class ProcmonCaptureWindows
       "volume-heading-drive-decorated-volume-name",
       "volume-heading-drive-decorated-volume-guid",
       "volume-heading-drive-decorated-volume-id",
-      "volume-heading-drive-decorated-volume-colon",
+      "volume-heading-drive-decorated-volume-colon-guid",
+      "volume-heading-drive-decorated-volume-colon-device",
+      "volume-heading-drive-decorated-volume-colon-object-manager",
+      "volume-heading-drive-decorated-volume-colon-drive",
+      "volume-heading-drive-decorated-volume-colon-empty",
+      "volume-heading-drive-decorated-volume-colon-text",
+      "volume-heading-drive-decorated-volume-colon-numeric",
+      "volume-heading-drive-decorated-volume-colon-other",
       "volume-heading-drive-decorated-volume-path",
       "volume-heading-drive-decorated-volume-other",
       "volume-heading-drive-decorated-device",
