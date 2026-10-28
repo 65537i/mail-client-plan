@@ -157,7 +157,11 @@ if (-not $decoratedDriveHeadingRejected -or
 $decoratedDriveShapeFixtures = @(
   [pscustomobject]@{ Heading = "Instances for D: [metadata]"; State = "volume-heading-drive-decorated-bracket" }
   [pscustomobject]@{ Heading = "Instances for D: 'metadata'"; State = "volume-heading-drive-decorated-quoted" }
-  [pscustomobject]@{ Heading = "Instances for D: metadata"; State = "volume-heading-drive-decorated-other" }
+  [pscustomobject]@{ Heading = "Instances for D: metadata"; State = "volume-heading-drive-decorated-text" }
+  [pscustomobject]@{ Heading = "Instances for D: 12"; State = "volume-heading-drive-decorated-numeric" }
+  [pscustomobject]@{ Heading = "Instances for D: \metadata"; State = "volume-heading-drive-decorated-path" }
+  [pscustomobject]@{ Heading = "Instances for D: :metadata"; State = "volume-heading-drive-decorated-punctuation" }
+  [pscustomobject]@{ Heading = "Instances for D: @metadata"; State = "volume-heading-drive-decorated-other" }
 )
 foreach ($fixture in $decoratedDriveShapeFixtures) {
   $rejected = $false

@@ -254,6 +254,14 @@ function Get-ProcmonFilterManagerVolumeEvidence {
               "volume-heading-drive-decorated-bracket"
             } elseif ($driveDecoration.StartsWith("'") -or $driveDecoration.StartsWith('"')) {
               "volume-heading-drive-decorated-quoted"
+            } elseif ($driveDecoration.Substring(0, 1) -match '^[A-Za-z]') {
+              "volume-heading-drive-decorated-text"
+            } elseif ($driveDecoration.Substring(0, 1) -match '^[0-9]') {
+              "volume-heading-drive-decorated-numeric"
+            } elseif ($driveDecoration.StartsWith("\") -or $driveDecoration.StartsWith("/")) {
+              "volume-heading-drive-decorated-path"
+            } elseif ($driveDecoration.Substring(0, 1) -match '^[:;,.]$') {
+              "volume-heading-drive-decorated-punctuation"
             } else {
               "volume-heading-drive-decorated-other"
             }
@@ -806,6 +814,10 @@ public static class ProcmonCaptureWindows
       "volume-heading-drive-decorated-parenthesis",
       "volume-heading-drive-decorated-bracket",
       "volume-heading-drive-decorated-quoted",
+      "volume-heading-drive-decorated-text",
+      "volume-heading-drive-decorated-numeric",
+      "volume-heading-drive-decorated-path",
+      "volume-heading-drive-decorated-punctuation",
       "volume-heading-drive-decorated-other",
       "volume-heading-drive-other",
       "volume-heading-guid-prefix",
