@@ -19,7 +19,9 @@ Windows: MSVC toolchain、WebView2、必要SDK。WebDriverを外部利用する�
 
 ### nativeの短い検証ループ
 
-Run419後は既存capture inspectionにWin32_SystemDriverのread-only inventoryを追加する。PROCMON prefixのqueryを5秒 / 最大17件取得に限定し、許容件数16を超えた場合や未知shapeは失敗する。出力はservice総数 / running / started / filesystem / exit-error件数だけで、service名・path・provider文字列は出さない。CountOnlyではqueryをskipする。既存20秒 / 2 KiB上限とpositive-control必須・exact filter・Drop gatesを維持。service Runningはevent収集正常やPML内容の証明ではない。Windows実測待ち。
+Run419後は既存capture inspectionにWin32_SystemDriverのread-only inventoryを追加した。PROCMON prefixのqueryを5秒 / 最大17件取得に限定し、許容件数16を超えた場合や未知shapeは失敗する。出力はservice総数 / running / started / filesystem / exit-error件数だけで、service名・path・provider文字列は出さない。CountOnlyではqueryをskipする。既存20秒 / 2 KiB上限とpositive-control必須・exact filter・Drop gatesを維持。service Runningはevent収集正常やPML内容の証明ではない。
+
+[Run 422](https://github.com/65537i/mail-client-plan/actions/runs/40683845198)（`45bc967`、manual Windows 2025 / webview）はNode63/63・PowerShell回帰に成功した。readiness直後のWin32_SystemDriver queryはPROCMON prefix該当0件を返した。read-only inventoryが示す範囲の観測であり、driver未ロードを断定しない。exact filter / Drop / control / WDIO gateは維持したが、final list 0、capture 18,582 ms / PML 921,548 bytes / CSV76 bytes、positive-control全0件でfail closed。次はdriver登録名とSCM上の状態を独立手段で照合する。AC-05未達。
 
 Run416後は実capture PIDのfilterを検証する。既存configuration helperのCaptureProcessId modeはPIDと実行ファイルpath一致を要求し、setup / export / reloadをskipして共通のforeground / filter dialog / exact rule / dialog close / Drop read verifierへ進む。attach modeではprocessを終了せず、ルール追加・削除・Drop toggleは実行しない。WDIO後・final list count前に30秒 / 8 KiB上限で呼び、exit 0と専用live verified markerを要求する。既存positive-control / canary / size gatesを維持。
 
