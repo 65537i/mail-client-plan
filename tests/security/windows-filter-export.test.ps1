@@ -37,6 +37,57 @@ $driverFixtures = @(
 if ((Get-ProcmonDriverEvidence $driverFixtures) -cne "inventory:3;candidates:2;name-matches:1;image-matches:2;running:1;started:1;filesystem:1;exit-errors:1") {
   throw "SCM driver inventory must identify Procmon candidates by service name or image path"
 }
+$registryFormatter = $inspectionAst.Find({
+  param($node)
+  $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+    $node.Name -eq "Get-ProcmonRegistryEvidence"
+}, $true)
+if ($null -eq $registryFormatter) { throw "Procmon registry formatter is missing" }
+. ([scriptblock]::Create($registryFormatter.Extent.Text))
+$registryFixtureRoot = Join-Path ([IO.Path]::GetTempPath()) ("procmon-registry-test-" + [Guid]::NewGuid().ToString("N"))
+[IO.Directory]::CreateDirectory($registryFixtureRoot) | Out-Null
+$registryFixturePath = Join-Path $registryFixtureRoot "image.sys"
+[IO.File]::WriteAllText($registryFixturePath, "synthetic driver")
+$registryFixtureName = "Software\mail-client-plan-test\" + [Guid]::NewGuid().ToString("N")
+$registryRootKey = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey($registryFixtureName)
+$missingRegistryKey = $null
+$presentRegistryKey = $null
+$registryFixtureRootKey = $null
+try {
+  $presentRegistryKey = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey(
+    "$registryFixtureName\ProcMonPresent"
+  )
+  $presentRegistryKey.SetValue("ImagePath", $registryFixturePath, [Microsoft.Win32.RegistryValueKind]::String)
+  $presentRegistryKey.Close()
+  $missingRegistryKey = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey(
+    "$registryFixtureName\ProcMonMissing"
+  )
+  $missingRegistryKey.Close()
+  $registryRootKey.Close()
+  $registryFixtureRootKey = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey(
+    $registryFixtureName, $false
+  )
+  if ((Get-ProcmonRegistryEvidence $registryFixtureRootKey) -cne "keys:2;candidates:2;image-candidates:1;image-values:1;image-paths-present:1") {
+    throw "Registry inventory must count candidate image paths without exposing them"
+  }
+  for ($index = 0; $index -lt 65; $index++) {
+    $excessKey = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey(
+      "$registryFixtureName\ProcMonCandidate$index"
+    )
+    $excessKey.Close()
+  }
+  $rejected = $false
+  try { Get-ProcmonRegistryEvidence $registryFixtureRootKey | Out-Null } catch { $rejected = $true }
+  if (-not $rejected) { throw "Oversized Procmon registry candidate inventory must be rejected" }
+  Write-Host "PASS AC-05: registry inventory counts present/missing image paths and enforces its limit"
+} finally {
+  if ($null -ne $registryFixtureRootKey) { $registryFixtureRootKey.Dispose() }
+  if ($null -ne $presentRegistryKey) { $presentRegistryKey.Dispose() }
+  if ($null -ne $missingRegistryKey) { $missingRegistryKey.Dispose() }
+  $registryRootKey.Dispose()
+  [Microsoft.Win32.Registry]::CurrentUser.DeleteSubKeyTree($registryFixtureName, $false)
+  Remove-Item -LiteralPath $registryFixtureRoot -Recurse -Force
+}
 foreach ($invalid in @(
   (@($driverFixtures[0]) * 1025),
   @([pscustomobject]@{ Name = "PROCMON24"; PathName = 1; State = "Running"; Started = $true; ServiceType = "Kernel Driver"; ExitCode = [uint32]0 }),

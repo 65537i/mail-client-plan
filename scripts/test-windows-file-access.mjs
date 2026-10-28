@@ -287,6 +287,17 @@ async function captureScenario(scenario) {
       "Process Monitor driver service evidence is incomplete",
     );
     console.log(`Windows audit ${scenario}: ${driverEvidence[0][0].trim()}`);
+    const registryEvidence = [...captureInspectionOutput.matchAll(
+      /^PROC_MON_CAPTURE_DRIVER_REGISTRY=keys:(0|[1-9]\d{0,2});candidates:(0|[1-9]\d{0,2});image-values:(0|[1-9]\d{0,2});image-paths-present:(0|[1-9]\d{0,2})\r?$/gm,
+    )];
+    assert(
+      registryEvidence.length === 1 &&
+      Number(registryEvidence[0][1]) <= 4096 &&
+      Number(registryEvidence[0][2]) <= 64 &&
+      registryEvidence[0].slice(3, 6).every((count) => Number(count) <= Number(registryEvidence[0][2])),
+      "Process Monitor driver registry evidence is incomplete",
+    );
+    console.log(`Windows audit ${scenario}: ${registryEvidence[0][0].trim()}`);
     for (const target of ["capture", "filesystem"]) {
       const msaa = [...captureInspectionOutput.matchAll(
         /^PROC_MON_CAPTURE_MSAA=(capture|filesystem);object:(available|unavailable);items:(0|[1-9]\d?);matches:(0|[1-9]\d?);checked:(unavailable|mixed|on|off);enabled:(unavailable|true|false)\r?$/gm,

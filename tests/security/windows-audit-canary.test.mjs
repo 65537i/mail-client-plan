@@ -29,6 +29,24 @@ test("AC-05: SCM driver inventory is bounded and identifies Procmon by service n
   assert.match(driver, /slice\(2, 9\).every\(\(count\) => Number\(count\) <= Number\(driverEvidence\[0\]\[1\]\)\)/);
 });
 
+test("AC-05: driver registry inspection is read-only, bounded and emits aggregate counts only", async () => {
+  const [inspection, driver] = await Promise.all([
+    readFile(new URL("../../scripts/inspect-windows-procmon-capture.ps1", import.meta.url), "utf8"),
+    readFile(new URL("../../scripts/test-windows-file-access.mjs", import.meta.url), "utf8"),
+  ]);
+  assert.match(inspection, /RegistryHive\]::LocalMachine[\s\S]*RegistryView\]::Registry64/);
+  assert.match(inspection, /SYSTEM\\CurrentControlSet\\Services/);
+  assert.match(inspection, /\$serviceNames = \$ServicesRoot\.GetSubKeyNames\(\)/);
+  assert.match(inspection, /\$serviceNames.Count -gt 4096/);
+  assert.match(inspection, /\$serviceNames \| Where-Object \{ \$_ -match '\(\?i\)procmon' \}/);
+  assert.match(inspection, /\$candidates.Count -gt 64/);
+  assert.match(inspection, /GetValue\(\s*"ImagePath", \$null, \[Microsoft\.Win32\.RegistryValueOptions\]::DoNotExpandEnvironmentNames/);
+  assert.match(inspection, /finally \{\s*\$key\.Dispose\(\)/);
+  assert.match(inspection, /PROC_MON_CAPTURE_DRIVER_REGISTRY=\$registryEvidence/);
+  assert.doesNotMatch(inspection, /SetValue\(|DeleteValue\(|DeleteSubKey|WriteLine\([^)]*(?:PSChildName|imagePath|expandedPath)/);
+  assert.match(driver, /registryEvidence.length === 1[\s\S]*Number\(registryEvidence\[0\]\[1\]\) <= 4096/);
+});
+
 test("AC-05: live filter verification attaches to the capture PID and preserves its lifetime", async () => {
   const [configuration, driver] = await Promise.all([
     readFile(new URL("../../scripts/configure-windows-procmon-filter.ps1", import.meta.url), "utf8"),

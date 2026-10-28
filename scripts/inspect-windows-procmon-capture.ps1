@@ -55,6 +55,46 @@ function Get-ProcmonDriverEvidence {
   return "inventory:$($Drivers.Count);candidates:$candidates;name-matches:$nameMatches;image-matches:$imageMatches;running:$running;started:$started;filesystem:$filesystem;exit-errors:$exitErrors"
 }
 
+function Get-ProcmonRegistryEvidence {
+  param([Microsoft.Win32.RegistryKey]$ServicesRoot)
+  $serviceNames = $ServicesRoot.GetSubKeyNames()
+  if ($serviceNames.Count -gt 4096) {
+    throw "System driver registry inventory exceeded its limit"
+  }
+  $candidates = @($serviceNames | Where-Object { $_ -match '(?i)procmon' })
+  if ($candidates.Count -gt 64) {
+    throw "Procmon registry candidate inventory exceeded its limit"
+  }
+  $imageCandidates = 0
+  $imageValues = 0
+  $imagePathsPresent = 0
+  foreach ($candidate in $candidates) {
+    $key = $ServicesRoot.OpenSubKey($candidate, $false)
+    if ($null -eq $key) {
+      throw "Procmon registry candidate disappeared during inspection"
+    }
+    try {
+      $imagePath = $key.GetValue(
+        "ImagePath", $null, [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames
+      )
+      if ($null -eq $imagePath) { continue }
+      if ($imagePath -isnot [string] -or $imagePath.Length -gt 2048) {
+        throw "Procmon registry image path has an unsupported shape"
+      }
+      $imageCandidates++
+      $imageValues++
+      $expandedPath = [Environment]::ExpandEnvironmentVariables($imagePath.Trim('"'))
+      if ([IO.Path]::IsPathRooted($expandedPath) -and
+        [IO.File]::Exists($expandedPath)) {
+        $imagePathsPresent++
+      }
+    } finally {
+      $key.Dispose()
+    }
+  }
+  return "keys:$($serviceNames.Count);candidates:$($candidates.Count);image-candidates:$imageCandidates;image-values:$imageValues;image-paths-present:$imagePathsPresent"
+}
+
 $stage = "load-automation"
 try {
   Add-Type -AssemblyName UIAutomationClient
@@ -257,6 +297,25 @@ public static class ProcmonCaptureWindows
   $stage = "classify-system-driver-inventory"
   $driverEvidence = Get-ProcmonDriverEvidence $drivers
   [Console]::Out.WriteLine("PROC_MON_CAPTURE_DRIVER=$driverEvidence")
+  $stage = "query-driver-registry-inventory"
+  $registryBase = [Microsoft.Win32.RegistryKey]::OpenBaseKey(
+    [Microsoft.Win32.RegistryHive]::LocalMachine,
+    [Microsoft.Win32.RegistryView]::Registry64
+  )
+  try {
+    $servicesRoot = $registryBase.OpenSubKey("SYSTEM\CurrentControlSet\Services", $false)
+    if ($null -eq $servicesRoot) {
+      throw "System driver registry inventory is unavailable"
+    }
+    try {
+      $registryEvidence = Get-ProcmonRegistryEvidence $servicesRoot
+    } finally {
+      $servicesRoot.Dispose()
+    }
+  } finally {
+    $registryBase.Dispose()
+  }
+  [Console]::Out.WriteLine("PROC_MON_CAPTURE_DRIVER_REGISTRY=$registryEvidence")
   $visual = "unavailable"
   $windowPattern = $null
   if ($main.TryGetCurrentPattern(
