@@ -342,7 +342,7 @@ async function captureScenario(scenario) {
       /^PROC_MON_CAPTURE_FILTER_MANAGER_COMMAND=exit-code:(0|[1-9]\d{0,2}|out-of-range)\r?$/m,
     )?.[1];
     const filterManagerParseState = captureInspectionOutput.match(
-      /^PROC_MON_CAPTURE_FILTER_MANAGER_PARSE=(started|empty-output|line-limit|line-shape|duplicate-header|instance-list-header|unexpected-preamble|separator-shape|row-shape|invalid-count|count-limit|inventory-limit|incomplete-table|valid)\r?$/m,
+      /^PROC_MON_CAPTURE_FILTER_MANAGER_PARSE=(started|empty-output|line-limit|line-shape|duplicate-header|instance-list-header|volume-heading|instances-heading|instance-heading|filter-manager-heading|filter-heading|unexpected-preamble|separator-shape|row-shape|invalid-count|count-limit|inventory-limit|incomplete-table|valid)\r?$/m,
     )?.[1];
     assert(
       !captureInspectionResult.error && captureInspectionResult.code === 0 && !captureInspectionOverflow,

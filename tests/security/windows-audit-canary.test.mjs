@@ -68,7 +68,7 @@ test("AC-05: Filter Manager inventory is an independent bounded read-only driver
   assert.match(inspection, /Procmon Filter Manager candidate has an unsupported shape/);
   assert.match(inspection, /GetVolumePathName[\s\S]*\$filterManagerPath instances -v \$volumeName 2>\$null/);
   assert.match(inspection, /Get-ProcmonFilterManagerVolumeEvidence[\s\S]*SprtFtrs[\s\S]*\$instanceCount -gt 64/);
-  assert.match(inspection, /instance-list-header[\s\S]*unexpected-preamble[\s\S]*separator-shape[\s\S]*row-shape[\s\S]*PROC_MON_CAPTURE_FILTER_MANAGER_PARSE=\$script:filterManagerVolumeParseState/);
+  assert.match(inspection, /instance-list-header[\s\S]*volume-heading[\s\S]*instances-heading[\s\S]*instance-heading[\s\S]*filter-manager-heading[\s\S]*filter-heading[\s\S]*unexpected-preamble[\s\S]*separator-shape[\s\S]*row-shape[\s\S]*PROC_MON_CAPTURE_FILTER_MANAGER_PARSE=\$script:filterManagerVolumeParseState/);
   assert.match(inspection, /\$script:stage = "query-filter-manager-filter-inventory"[\s\S]*\$script:stage = "resolve-filter-manager-target-volume"[\s\S]*\$script:stage = "query-filter-manager-instance-command"[\s\S]*\$script:stage = "parse-filter-manager-instance-output"/);
   assert.match(inspection, /\$script:filterManagerInstanceQueryExitCode = \$null[\s\S]*instances -v \$volumeName 2>\$null[\s\S]*\$script:filterManagerInstanceQueryExitCode = \$LASTEXITCODE[\s\S]*Get-ProcmonFilterManagerVolumeEvidence \$instanceLines[\s\S]*PROC_MON_CAPTURE_FILTER_MANAGER_COMMAND=exit-code:\$queryExitCode/);
   assert.doesNotMatch(inspection, /instances -f \$candidateName -v/);
@@ -77,7 +77,7 @@ test("AC-05: Filter Manager inventory is an independent bounded read-only driver
   assert.doesNotMatch(inspection, /fltmc\.exe\s+(?:load|unload|attach|detach)|WriteLine\([^)]*(?:\$line|\$filterManagerPath|\$volumeName|\$candidateName)/i);
   assert.match(driver, /"-OwnerProcessId", String\(capture\.pid\), "-TargetPath", canaryPath/);
   assert.match(driver, /PROC_MON_CAPTURE_FILTER_MANAGER_COMMAND=exit-code:\(0\|\[1-9\]\\d\{0,2\}\|out-of-range\)/);
-  assert.match(driver, /PROC_MON_CAPTURE_FILTER_MANAGER_PARSE=\(started\|empty-output\|line-limit\|line-shape\|duplicate-header\|instance-list-header\|unexpected-preamble\|separator-shape\|row-shape\|invalid-count\|count-limit\|inventory-limit\|incomplete-table\|valid\)/);
+  assert.match(driver, /PROC_MON_CAPTURE_FILTER_MANAGER_PARSE=\(started\|empty-output\|line-limit\|line-shape\|duplicate-header\|instance-list-header\|volume-heading\|instances-heading\|instance-heading\|filter-manager-heading\|filter-heading\|unexpected-preamble\|separator-shape\|row-shape\|invalid-count\|count-limit\|inventory-limit\|incomplete-table\|valid\)/);
   assert.match(driver, /Filter Manager parse state \$\{filterManagerParseState\}/);
   assert.match(driver, /FILTER_MANAGER=candidates:\(0\|\[1-9\]\\d\{0,2\}\);instances:\(0\|\[1-9\]\\d\{0,4\}\);target-volume-attached:\(true\|false\);target-volume-instances:/);
   assert.match(driver, /filterManagerEvidence.length === 1[\s\S]*Number\(filterManagerEvidence\[0\]\[1\]\) <= 64/);

@@ -220,9 +220,25 @@ function Get-ProcmonFilterManagerVolumeEvidence {
     }
     if (-not $headerSeen) {
       if ([string]::IsNullOrWhiteSpace($line)) { continue }
-      $script:filterManagerVolumeParseState = if (
-        $line -match '^\s*Instance Name\s+Altitude\s+Frame\s+Volume Name\s*$'
-      ) { "instance-list-header" } else { "unexpected-preamble" }
+      if ($line -match '^\s*Instance Name\s+Altitude\s+Frame\s+Volume Name\s*$') {
+        $script:filterManagerVolumeParseState = "instance-list-header"
+      } elseif ($line -match '^\s*Instances for volume\b') {
+        $script:filterManagerVolumeParseState = "volume-heading"
+      } elseif ($line -match '^\s*Instances for\b') {
+        $script:filterManagerVolumeParseState = "instances-heading"
+      } elseif ($line -match '^\s*Instances\b') {
+        $script:filterManagerVolumeParseState = "instances-heading"
+      } elseif ($line -match '^\s*Instance\b') {
+        $script:filterManagerVolumeParseState = "instance-heading"
+      } elseif ($line -match '^\s*Filter Manager\b') {
+        $script:filterManagerVolumeParseState = "filter-manager-heading"
+      } elseif ($line -match '^\s*Filter\b') {
+        $script:filterManagerVolumeParseState = "filter-heading"
+      } elseif ($line -match '^\s*Volume\b') {
+        $script:filterManagerVolumeParseState = "volume-heading"
+      } else {
+        $script:filterManagerVolumeParseState = "unexpected-preamble"
+      }
       throw "Filter Manager volume inventory omitted its expected header"
     }
     if (-not $separatorSeen) {
@@ -732,6 +748,9 @@ public static class ProcmonCaptureWindows
       "line-shape",
       "duplicate-header",
       "instance-list-header",
+      "volume-heading",
+      "instances-heading",
+      "filter-manager-heading",
       "unexpected-preamble",
       "separator-shape",
       "row-shape",

@@ -141,6 +141,30 @@ if (-not $unexpectedPreambleRejected -or
   $script:filterManagerVolumeParseState -cne "unexpected-preamble") {
   throw "Filter Manager parser diagnostics must use a bounded, allowlisted shape code"
 }
+$volumeHeadingRejected = $false
+try { Get-ProcmonFilterManagerVolumeEvidence @("Instances for volume C:") | Out-Null } catch { $volumeHeadingRejected = $true }
+if (-not $volumeHeadingRejected -or
+  $script:filterManagerVolumeParseState -cne "volume-heading") {
+  throw "Filter Manager volume headings must remain untrusted and safely classified"
+}
+$instancesHeadingRejected = $false
+try { Get-ProcmonFilterManagerVolumeEvidence @("Instances on volume C:") | Out-Null } catch { $instancesHeadingRejected = $true }
+if (-not $instancesHeadingRejected -or
+  $script:filterManagerVolumeParseState -cne "instances-heading") {
+  throw "Filter Manager instance headings must remain untrusted and safely classified"
+}
+$instanceHeadingRejected = $false
+try { Get-ProcmonFilterManagerVolumeEvidence @("Instance attached to volume C:") | Out-Null } catch { $instanceHeadingRejected = $true }
+if (-not $instanceHeadingRejected -or
+  $script:filterManagerVolumeParseState -cne "instance-heading") {
+  throw "Filter Manager singular instance headings must remain untrusted and safely classified"
+}
+$filterHeadingRejected = $false
+try { Get-ProcmonFilterManagerVolumeEvidence @("Filter instances on volume C:") | Out-Null } catch { $filterHeadingRejected = $true }
+if (-not $filterHeadingRejected -or
+  $script:filterManagerVolumeParseState -cne "filter-heading") {
+  throw "Filter Manager filter headings must remain untrusted and safely classified"
+}
 Write-Host "PASS AC-05: Filter Manager volume inventory is bounded and counts Procmon instances only"
 $registryFixtureRoot = Join-Path ([IO.Path]::GetTempPath()) ("procmon-registry-test-" + [Guid]::NewGuid().ToString("N"))
 [IO.Directory]::CreateDirectory($registryFixtureRoot) | Out-Null
