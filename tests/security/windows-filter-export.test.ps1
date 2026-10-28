@@ -44,6 +44,13 @@ $registryFormatter = $inspectionAst.Find({
 }, $true)
 if ($null -eq $registryFormatter) { throw "Procmon registry formatter is missing" }
 . ([scriptblock]::Create($registryFormatter.Extent.Text))
+$serviceStatusFunction = $inspectionAst.Find({
+  param($node)
+  $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+    $node.Name -eq "Get-ProcmonServiceStatusEvidence"
+}, $true)
+if ($null -eq $serviceStatusFunction) { throw "Procmon service status formatter is missing" }
+. ([scriptblock]::Create($serviceStatusFunction.Extent.Text))
 $registryFixtureRoot = Join-Path ([IO.Path]::GetTempPath()) ("procmon-registry-test-" + [Guid]::NewGuid().ToString("N"))
 [IO.Directory]::CreateDirectory($registryFixtureRoot) | Out-Null
 $registryFixturePath = Join-Path $registryFixtureRoot "image.sys"
@@ -71,8 +78,14 @@ try {
   $registryFixtureRootKey = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey(
     $registryFixtureName, $false
   )
-  if ((Get-ProcmonRegistryEvidence $registryFixtureRootKey) -cne "keys:2;candidates:2;standard-name-candidates:1;other-candidates:1;image-value-entries:1;image-candidates:1;image-values:1;image-paths-present:1;type-values:1;start-values:1;parameters-keys:1") {
+  $registryFixtureEvidence = Get-ProcmonRegistryEvidence $registryFixtureRootKey
+  if ($registryFixtureEvidence.Evidence -cne "keys:2;candidates:2;standard-name-candidates:1;other-candidates:1;image-value-entries:1;image-candidates:1;image-values:1;image-paths-present:1;type-values:1;start-values:1;parameters-keys:1" -or
+    $registryFixtureEvidence.Names.Count -ne 2) {
     throw "Registry inventory must count candidate image paths without exposing them"
+  }
+  $missingServiceName = "ProcMonSynthetic" + [Guid]::NewGuid().ToString("N")
+  if ((Get-ProcmonServiceStatusEvidence @($missingServiceName)) -cne "candidates:1;found:0;not-found:1;running:0;stopped:0;other-states:0") {
+    throw "SCM query must classify only the documented missing-service result"
   }
   for ($index = 0; $index -lt 65; $index++) {
     $excessKey = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey(

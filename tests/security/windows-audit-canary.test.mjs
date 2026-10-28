@@ -45,9 +45,15 @@ test("AC-05: driver registry inspection is read-only, bounded and emits aggregat
   assert.match(inspection, /\$key.GetValueNames\(\)[\s\S]*-ccontains "Type"[\s\S]*-ccontains "Start"[\s\S]*-ccontains "Parameters"/);
   assert.match(inspection, /\$valueNames.Count -gt 128 -or \$subKeyNames.Count -gt 128/);
   assert.match(inspection, /finally \{\s*\$key\.Dispose\(\)/);
-  assert.match(inspection, /PROC_MON_CAPTURE_DRIVER_REGISTRY=\$registryEvidence/);
+  assert.match(inspection, /PROC_MON_CAPTURE_DRIVER_REGISTRY=\$\(\$registryInventory\.Evidence\)/);
   assert.doesNotMatch(inspection, /SetValue\(|DeleteValue\(|DeleteSubKey|WriteLine\([^)]*(?:PSChildName|imagePath|expandedPath)/);
-  assert.match(driver, /registryEvidence.length === 1[\s\S]*Number\(registryEvidence\[0\]\[1\]\) <= 4096[\s\S]*slice\(3, 11\)/);
+  assert.match(driver, /registryEvidence.length === 1[\s\S]*Number\(registryEvidence\[0\]\[1\]\) <= 4096[\s\S]*slice\(3, 12\)/);
+  assert.match(inspection, /Get-Service -Name \$name -ErrorAction Stop/);
+  assert.match(inspection, /NoServiceFoundForGivenName,\*/);
+  assert.match(inspection, /PROC_MON_CAPTURE_SERVICE_STATUS=\$serviceEvidence/);
+  assert.match(driver, /serviceEvidence.length === 1[\s\S]*Number\(serviceEvidence\[0\]\[2\]\) \+ Number\(serviceEvidence\[0\]\[3\]\) === Number\(serviceEvidence\[0\]\[1\]\)/);
+  assert.match(driver, /slice\(3, 12\)\.every/);
+  assert.doesNotMatch(inspection, /WriteLine\([^)]*\$name/);
   assert.match(driver, /DRIVER_REGISTRY=keys:\(0\|\[1-9\]\\d\{0,3\}\);candidates:/);
 });
 

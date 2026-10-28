@@ -294,11 +294,22 @@ async function captureScenario(scenario) {
       registryEvidence.length === 1 &&
       Number(registryEvidence[0][1]) <= 4096 &&
       Number(registryEvidence[0][2]) <= 64 &&
-      registryEvidence[0].slice(3, 11).every((count) => Number(count) <= Number(registryEvidence[0][2])) &&
+      registryEvidence[0].slice(3, 12).every((count) => Number(count) <= Number(registryEvidence[0][2])) &&
       Number(registryEvidence[0][3]) + Number(registryEvidence[0][4]) === Number(registryEvidence[0][2]),
       "Process Monitor driver registry evidence is incomplete",
     );
     console.log(`Windows audit ${scenario}: ${registryEvidence[0][0].trim()}`);
+    const serviceEvidence = [...captureInspectionOutput.matchAll(
+      /^PROC_MON_CAPTURE_SERVICE_STATUS=candidates:(0|[1-9]\d{0,2});found:(0|[1-9]\d{0,2});not-found:(0|[1-9]\d{0,2});running:(0|[1-9]\d{0,2});stopped:(0|[1-9]\d{0,2});other-states:(0|[1-9]\d{0,2})\r?$/gm,
+    )];
+    assert(
+      serviceEvidence.length === 1 &&
+      Number(serviceEvidence[0][1]) <= 64 &&
+      Number(serviceEvidence[0][2]) + Number(serviceEvidence[0][3]) === Number(serviceEvidence[0][1]) &&
+      serviceEvidence[0].slice(4, 7).every((count) => Number(count) <= Number(serviceEvidence[0][2])),
+      "Process Monitor service controller evidence is incomplete",
+    );
+    console.log(`Windows audit ${scenario}: ${serviceEvidence[0][0].trim()}`);
     for (const target of ["capture", "filesystem"]) {
       const msaa = [...captureInspectionOutput.matchAll(
         /^PROC_MON_CAPTURE_MSAA=(capture|filesystem);object:(available|unavailable);items:(0|[1-9]\d?);matches:(0|[1-9]\d?);checked:(unavailable|mixed|on|off);enabled:(unavailable|true|false)\r?$/gm,

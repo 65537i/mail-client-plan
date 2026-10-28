@@ -73,8 +73,10 @@ function Get-ProcmonRegistryEvidence {
   $typeValues = 0
   $startValues = 0
   $parametersKeys = 0
+  $candidateNames = [System.Collections.Generic.List[string]]::new()
   foreach ($candidate in $candidates) {
     if ($candidate -match '^PROCMON[0-9]*$') { $standardNameCandidates++ }
+    $candidateNames.Add($candidate)
     $key = $ServicesRoot.OpenSubKey($candidate, $false)
     if ($null -eq $key) {
       throw "Procmon registry candidate disappeared during inspection"
@@ -108,7 +110,48 @@ function Get-ProcmonRegistryEvidence {
     }
   }
   $otherCandidates = $candidates.Count - $standardNameCandidates
-  return "keys:$($serviceNames.Count);candidates:$($candidates.Count);standard-name-candidates:$standardNameCandidates;other-candidates:$otherCandidates;image-value-entries:$imageValueEntries;image-candidates:$imageCandidates;image-values:$imageValues;image-paths-present:$imagePathsPresent;type-values:$typeValues;start-values:$startValues;parameters-keys:$parametersKeys"
+  return [pscustomobject]@{
+    Evidence = "keys:$($serviceNames.Count);candidates:$($candidates.Count);standard-name-candidates:$standardNameCandidates;other-candidates:$otherCandidates;image-value-entries:$imageValueEntries;image-candidates:$imageCandidates;image-values:$imageValues;image-paths-present:$imagePathsPresent;type-values:$typeValues;start-values:$startValues;parameters-keys:$parametersKeys"
+    Names = $candidateNames.ToArray()
+  }
+}
+
+function Get-ProcmonServiceStatusEvidence {
+  param([string[]]$Names)
+  if ($Names.Count -gt 64) {
+    throw "Procmon service status query exceeded its limit"
+  }
+  $found = 0
+  $notFound = 0
+  $running = 0
+  $stopped = 0
+  $otherStates = 0
+  foreach ($name in $Names) {
+    if ($name -notmatch '(?i)procmon' -or $name.Length -gt 256) {
+      throw "Procmon service status query has an unsupported name"
+    }
+    try {
+      $service = Get-Service -Name $name -ErrorAction Stop
+    } catch {
+      if ($_.FullyQualifiedErrorId -notlike "NoServiceFoundForGivenName,*") {
+        throw
+      }
+      $notFound++
+      continue
+    }
+    if ($null -eq $service -or $service.Status -isnot [System.ServiceProcess.ServiceControllerStatus]) {
+      throw "Procmon service controller returned an unsupported status"
+    }
+    $found++
+    if ($service.Status -eq [System.ServiceProcess.ServiceControllerStatus]::Running) {
+      $running++
+    } elseif ($service.Status -eq [System.ServiceProcess.ServiceControllerStatus]::Stopped) {
+      $stopped++
+    } else {
+      $otherStates++
+    }
+  }
+  return "candidates:$($Names.Count);found:$found;not-found:$notFound;running:$running;stopped:$stopped;other-states:$otherStates"
 }
 
 $stage = "load-automation"
@@ -324,14 +367,17 @@ public static class ProcmonCaptureWindows
       throw "System driver registry inventory is unavailable"
     }
     try {
-      $registryEvidence = Get-ProcmonRegistryEvidence $servicesRoot
+      $registryInventory = Get-ProcmonRegistryEvidence $servicesRoot
     } finally {
       $servicesRoot.Dispose()
     }
   } finally {
     $registryBase.Dispose()
   }
-  [Console]::Out.WriteLine("PROC_MON_CAPTURE_DRIVER_REGISTRY=$registryEvidence")
+  [Console]::Out.WriteLine("PROC_MON_CAPTURE_DRIVER_REGISTRY=$($registryInventory.Evidence)")
+  $stage = "query-procmon-service-controller"
+  $serviceEvidence = Get-ProcmonServiceStatusEvidence $registryInventory.Names
+  [Console]::Out.WriteLine("PROC_MON_CAPTURE_SERVICE_STATUS=$serviceEvidence")
   $visual = "unavailable"
   $windowPattern = $null
   if ($main.TryGetCurrentPattern(
