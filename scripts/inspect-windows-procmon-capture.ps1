@@ -242,16 +242,18 @@ function Get-ProcmonFilterManagerVolumeEvidence {
           $volumeHeadingSeen = $true
           continue
         }
-        $script:filterManagerVolumeParseState = if ($reportedVolume -match '^[A-Za-z]:\\?$') {
-          "volume-heading-drive"
-        } elseif ($reportedVolume -match '^\\\\\?\\Volume\{[0-9A-Fa-f]{8}(?:-[0-9A-Fa-f]{4}){3}-[0-9A-Fa-f]{12}\}\\?$') {
-          "volume-heading-guid"
-        } elseif ($reportedVolume -match '^\\Device\\HarddiskVolume[0-9]+$') {
-          "volume-heading-device"
-        } elseif ($reportedVolume -match '^[A-Za-z]:\\[A-Za-z0-9_.$ -]+(?:\\[A-Za-z0-9_.$ -]+)*\\?$') {
-          "volume-heading-mount-path"
+        $script:filterManagerVolumeParseState = if ($reportedVolume -match '^[A-Za-z]:') {
+          "volume-heading-drive-prefix"
+        } elseif ($reportedVolume -match '^\\\\\?\\Volume\{') {
+          "volume-heading-guid-prefix"
+        } elseif ($reportedVolume -match '^\\Device\\') {
+          "volume-heading-device-prefix"
+        } elseif ($reportedVolume -match '^\\\?\?\\') {
+          "volume-heading-object-manager-prefix"
+        } elseif ($reportedVolume -match '^[\\/]') {
+          "volume-heading-rooted"
         } else {
-          "volume-heading-unrecognized"
+          "volume-heading-other"
         }
         throw "Filter Manager volume heading did not match the target"
       }

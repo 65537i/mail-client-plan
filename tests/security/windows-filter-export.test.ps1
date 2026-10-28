@@ -131,28 +131,38 @@ try {
   ) "C:" | Out-Null
 } catch { $wrongVolumeHeadingRejected = $true }
 if (-not $wrongVolumeHeadingRejected -or
-  $script:filterManagerVolumeParseState -cne "volume-heading-drive") {
+  $script:filterManagerVolumeParseState -cne "volume-heading-drive-prefix") {
   throw "A mismatched target-volume heading must fail closed"
 }
 $guidVolumeHeadingRejected = $false
 try {
   Get-ProcmonFilterManagerVolumeEvidence @(
-    "Instances for \\?\Volume{12345678-1234-1234-1234-1234567890ab}\"
+    "Instances for \\?\Volume{malformed}"
   ) "C:" | Out-Null
 } catch { $guidVolumeHeadingRejected = $true }
 if (-not $guidVolumeHeadingRejected -or
-  $script:filterManagerVolumeParseState -cne "volume-heading-guid") {
-  throw "A mismatched volume-GUID heading must fail closed without exposing the GUID"
+  $script:filterManagerVolumeParseState -cne "volume-heading-guid-prefix") {
+  throw "A volume-GUID prefix must fail closed without exposing the identifier"
 }
 $deviceVolumeHeadingRejected = $false
 try {
   Get-ProcmonFilterManagerVolumeEvidence @(
-    "Instances for \Device\HarddiskVolume12"
+    "Instances for \Device\HarddiskVolume12:metadata"
   ) "C:" | Out-Null
 } catch { $deviceVolumeHeadingRejected = $true }
 if (-not $deviceVolumeHeadingRejected -or
-  $script:filterManagerVolumeParseState -cne "volume-heading-device") {
-  throw "A mismatched NT-device heading must fail closed without exposing the device name"
+  $script:filterManagerVolumeParseState -cne "volume-heading-device-prefix") {
+  throw "An NT-device prefix must fail closed without exposing the device name"
+}
+$objectManagerHeadingRejected = $false
+try {
+  Get-ProcmonFilterManagerVolumeEvidence @(
+    "Instances for \??\Volume{example}"
+  ) "C:" | Out-Null
+} catch { $objectManagerHeadingRejected = $true }
+if (-not $objectManagerHeadingRejected -or
+  $script:filterManagerVolumeParseState -cne "volume-heading-object-manager-prefix") {
+  throw "An object-manager volume prefix must fail closed without exposing the name"
 }
 $emptyInstanceOutputRejected = $false
 try { Get-ProcmonFilterManagerVolumeEvidence @() | Out-Null } catch { $emptyInstanceOutputRejected = $true }
@@ -186,7 +196,7 @@ if (-not $unexpectedPreambleRejected -or
 $volumeHeadingRejected = $false
 try { Get-ProcmonFilterManagerVolumeEvidence @("Instances for volume C:") | Out-Null } catch { $volumeHeadingRejected = $true }
 if (-not $volumeHeadingRejected -or
-  $script:filterManagerVolumeParseState -cne "volume-heading-unrecognized") {
+  $script:filterManagerVolumeParseState -cne "volume-heading-other") {
   throw "Filter Manager volume headings must remain untrusted and safely classified"
 }
 $instancesHeadingRejected = $false
