@@ -284,8 +284,10 @@ function Get-ProcmonFilterManagerSnapshot {
   $targetVolumeInstances = 0
   foreach ($candidateName in $candidateNames) {
     $script:stage = "query-filter-manager-instance-command"
+    $script:filterManagerInstanceQueryExitCode = $null
     $instanceLines = @(& $filterManagerPath instances -f $candidateName -v $volumeName 2>$null)
-    if ($LASTEXITCODE -ne 0) {
+    $script:filterManagerInstanceQueryExitCode = $LASTEXITCODE
+    if ($script:filterManagerInstanceQueryExitCode -ne 0) {
       throw "Procmon target-volume instance query failed"
     }
     $script:stage = "parse-filter-manager-instance-output"
@@ -676,6 +678,16 @@ public static class ProcmonCaptureWindows
   }
 } catch {
   [Console]::Out.WriteLine("PROC_MON_CAPTURE_FAILED_STAGE=$stage")
+  if ($null -ne $script:filterManagerInstanceQueryExitCode -and
+    $script:filterManagerInstanceQueryExitCode -ne 0) {
+    $queryExitCode = if ($script:filterManagerInstanceQueryExitCode -ge 0 -and
+      $script:filterManagerInstanceQueryExitCode -le 255) {
+      $script:filterManagerInstanceQueryExitCode.ToString(
+        [System.Globalization.CultureInfo]::InvariantCulture
+      )
+    } else { "out-of-range" }
+    [Console]::Out.WriteLine("PROC_MON_CAPTURE_FILTER_MANAGER_COMMAND=exit-code:$queryExitCode")
+  }
   $failureType = $_.Exception.GetType().Name
   if ($failureType -notin @(
       "CimException",
