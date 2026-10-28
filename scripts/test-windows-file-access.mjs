@@ -365,6 +365,42 @@ async function captureScenario(scenario) {
     assert.equal(capture.exitCode, null, "Process Monitor capture stopped during the WebView tests");
     console.log(`Windows audit ${scenario}: WDIO finished UTC=${new Date().toISOString()}`);
 
+    const liveFilter = spawn(
+      "powershell.exe",
+      [
+        "-STA", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+        "-File", path.join(root, "scripts", "configure-windows-procmon-filter.ps1"),
+        "-ProcmonPath", procmonPath, "-CanaryPath", canaryPath,
+        "-ControlPath", positiveControlPath, "-ConfigPath", filterConfig,
+        "-CaptureProcessId", String(capture.pid),
+      ],
+      { stdio: ["ignore", "pipe", "pipe"], windowsHide: true },
+    );
+    let liveFilterOutput = "";
+    liveFilter.stdout.setEncoding("utf8");
+    liveFilter.stdout.on("data", (chunk) => {
+      liveFilterOutput = appendBoundedWindowsFilterOutput(liveFilterOutput, chunk);
+    });
+    liveFilter.stderr.resume();
+    const liveFilterExit = waitForProcess(liveFilter);
+    const liveFilterResult = await waitWithTimeout(liveFilterExit, 30_000);
+    if (liveFilterResult.timedOut) {
+      liveFilter.kill();
+      await liveFilterExit;
+      throw new Error(`Process Monitor live filter verification timed out${describeWindowsFilterDiagnostics(liveFilterOutput)}`);
+    }
+    assert(
+      !liveFilterResult.error && liveFilterResult.code === 0,
+      `Process Monitor live filter verification failed${describeWindowsFilterDiagnostics(liveFilterOutput)}`,
+    );
+    assert.match(
+      liveFilterOutput,
+      /^PROC_MON_FILTER_LIVE_VERIFIED=rules:exact-two;drop:on\r?$/m,
+      "Process Monitor live filter verification evidence is missing",
+    );
+    console.log(`Windows audit ${scenario}: live-filter=rules:exact-two;drop:on`);
+    assert.equal(capture.exitCode, null, "Process Monitor capture stopped during live filter verification");
+
     const finalInspection = spawn(
       "powershell.exe",
       [

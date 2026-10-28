@@ -2,7 +2,8 @@ param(
   [Parameter(Mandatory = $true)][string]$ProcmonPath,
   [Parameter(Mandatory = $true)][string]$CanaryPath,
   [Parameter(Mandatory = $true)][string]$ControlPath,
-  [Parameter(Mandatory = $true)][string]$ConfigPath
+  [Parameter(Mandatory = $true)][string]$ConfigPath,
+  [ValidateRange(1, 2147483647)][int]$CaptureProcessId
 )
 
 $ErrorActionPreference = "Stop"
@@ -468,7 +469,14 @@ public static class ProcmonNativeMenu
 }
 
 try {
-  $process = Start-Process -FilePath $ProcmonPath -ArgumentList "/AcceptEula" -PassThru
+  if ($PSBoundParameters.ContainsKey("CaptureProcessId")) {
+    $process = [System.Diagnostics.Process]::GetProcessById($CaptureProcessId)
+    if ($process.Path -cne [IO.Path]::GetFullPath($ProcmonPath)) {
+      throw "Capture process executable does not match the requested Process Monitor"
+    }
+  } else {
+    $process = Start-Process -FilePath $ProcmonPath -ArgumentList "/AcceptEula" -PassThru
+  }
 } catch {
   Write-StartupFailure "start-procmon" $_
   exit 1
@@ -2568,6 +2576,7 @@ function Write-FocusOwnerObservation(
 }
 
 try {
+  if (-not $PSBoundParameters.ContainsKey("CaptureProcessId")) {
   Set-Stage "wait-for-input-idle"
   if (-not $process.WaitForInputIdle(10000)) {
     throw "Process Monitor UI did not become idle"
@@ -3178,6 +3187,7 @@ try {
   if (-not $process.WaitForInputIdle(10000)) {
     throw "Process Monitor configuration reload did not become idle"
   }
+  }
   Set-Stage "find-reloaded-main-window"
   $main = Wait-MainWindow $process
   Set-Stage "activate-reloaded-main-window"
@@ -3235,6 +3245,9 @@ try {
   }
   [System.Windows.Forms.SendKeys]::SendWait("{ESC}")
   Set-Stage "reloaded-filter-rules-verified"
+  if ($PSBoundParameters.ContainsKey("CaptureProcessId")) {
+    [Console]::Out.WriteLine("PROC_MON_FILTER_LIVE_VERIFIED=rules:exact-two;drop:on")
+  }
 } catch {
   [Console]::Out.WriteLine("PROC_MON_FILTER_FAILED_STAGE=$stage")
   $failureException = $_.Exception
@@ -3267,7 +3280,7 @@ try {
   [Console]::Out.WriteLine("PROC_MON_FILTER_FAILURE=$failureType")
   exit 1
 } finally {
-  if (-not $process.HasExited) {
+  if (-not $PSBoundParameters.ContainsKey("CaptureProcessId") -and -not $process.HasExited) {
     $process.CloseMainWindow() | Out-Null
     if (-not $process.WaitForExit(5000)) {
       Stop-Process -Id $process.Id -Force

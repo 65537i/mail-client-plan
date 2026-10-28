@@ -133,6 +133,15 @@ if ($parseErrors.Count -ne 0) {
   throw "Procmon configuration script has PowerShell parse errors"
 }
 $sourceText = [IO.File]::ReadAllText($source)
+if (
+  $sourceText -notmatch 'GetProcessById\(\$CaptureProcessId\)' -or
+  $sourceText -notmatch '\$process.Path -cne \[IO.Path\]::GetFullPath\(\$ProcmonPath\)' -or
+  $sourceText -notmatch 'if \(-not \$PSBoundParameters.ContainsKey\("CaptureProcessId"\)\) \{\s*Set-Stage "wait-for-input-idle"' -or
+  $sourceText -notmatch 'if \(-not \$PSBoundParameters.ContainsKey\("CaptureProcessId"\) -and -not \$process.HasExited\)' -or
+  $sourceText -notmatch 'PROC_MON_FILTER_LIVE_VERIFIED=rules:exact-two;drop:on'
+) {
+  throw "Live filter verification must skip setup and preserve the verified capture process"
+}
 if ($sourceText -notmatch '(?s)Set-Stage "wait-export-config-dialog"\s*try \{\s*\$saveControls = Wait-ConfigSaveDialog \$process \$main\s*\} catch \{\s*Write-ConfigSaveResultObservation "export-timeout" \$process \$main\s*throw\s*\}') {
   throw "Export dialog failure must retain the original failure after a read-only observation"
 }

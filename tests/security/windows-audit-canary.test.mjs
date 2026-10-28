@@ -5,6 +5,19 @@ import path from "node:path";
 import test from "node:test";
 import { createWindowsAuditCanary } from "../../scripts/windows-audit-canary.mjs";
 
+test("AC-05: live filter verification attaches to the capture PID and preserves its lifetime", async () => {
+  const [configuration, driver] = await Promise.all([
+    readFile(new URL("../../scripts/configure-windows-procmon-filter.ps1", import.meta.url), "utf8"),
+    readFile(new URL("../../scripts/test-windows-file-access.mjs", import.meta.url), "utf8"),
+  ]);
+  assert.match(configuration, /GetProcessById\(\$CaptureProcessId\)/);
+  assert.match(configuration, /\$process.Path -cne \[IO.Path\]::GetFullPath\(\$ProcmonPath\)/);
+  assert.match(configuration, /if \(-not \$PSBoundParameters.ContainsKey\("CaptureProcessId"\)\) \{\s*Set-Stage "wait-for-input-idle"/);
+  assert.match(configuration, /if \(-not \$PSBoundParameters.ContainsKey\("CaptureProcessId"\) -and -not \$process.HasExited\)/);
+  assert.match(configuration, /reloaded-filter-rules-verified"[\s\S]*PROC_MON_FILTER_LIVE_VERIFIED=rules:exact-two;drop:on/);
+  assert.match(driver, /WDIO finished[\s\S]*"-CaptureProcessId", String\(capture.pid\)[\s\S]*liveFilterExit, 30_000[\s\S]*live-filter=rules:exact-two;drop:on[\s\S]*"-CountOnly"/);
+});
+
 test("AC-05: only offline export clears display filters and all exported paths remain validated", async () => {
   const source = await readFile(new URL("../../scripts/test-windows-file-access.mjs", import.meta.url), "utf8");
   assert.equal((source.match(/"\/NoFilter"/g) ?? []).length, 1);
