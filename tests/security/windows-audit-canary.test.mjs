@@ -71,6 +71,32 @@ test("AC-05: Filter Manager inventory is an independent bounded read-only driver
   assert.match(inspection, /Instances for\\s\+\(\.\+\?\)/);
   assert.match(inspection, /OrdinalIgnoreCase/);
   assert.match(inspection, /instance-list-header[\s\S]*volume-heading[\s\S]*instances-heading[\s\S]*instance-heading[\s\S]*filter-manager-heading[\s\S]*filter-heading[\s\S]*unexpected-preamble[\s\S]*separator-shape[\s\S]*row-shape[\s\S]*PROC_MON_CAPTURE_FILTER_MANAGER_PARSE=\$script:filterManagerVolumeParseState/);
+  const parseStateReportingStart = inspection.indexOf(
+    'if ($stage -eq "parse-filter-manager-instance-output"',
+  );
+  const parseStateReportingEnd = inspection.indexOf(
+    "PROC_MON_CAPTURE_FILTER_MANAGER_PARSE=$script:filterManagerVolumeParseState",
+    parseStateReportingStart,
+  );
+  const parseStateReporting = inspection.slice(
+    parseStateReportingStart,
+    parseStateReportingEnd,
+  );
+  for (const state of [
+    "volume-heading-drive-prefix",
+    "volume-heading-guid-prefix",
+    "volume-heading-device-prefix",
+    "volume-heading-object-manager-prefix",
+    "volume-heading-rooted",
+    "volume-heading-other",
+    "instance-heading",
+    "filter-heading",
+  ]) {
+    assert.ok(
+      parseStateReporting.includes(`"${state}"`),
+      `PowerShell diagnostics must report the allowlisted state ${state}`,
+    );
+  }
   assert.match(inspection, /\$script:stage = "query-filter-manager-filter-inventory"[\s\S]*\$script:stage = "resolve-filter-manager-target-volume"[\s\S]*\$script:stage = "query-filter-manager-instance-command"[\s\S]*\$script:stage = "parse-filter-manager-instance-output"/);
   assert.match(inspection, /\$script:filterManagerInstanceQueryExitCode = \$null[\s\S]*instances -v \$volumeName 2>\$null[\s\S]*\$script:filterManagerInstanceQueryExitCode = \$LASTEXITCODE[\s\S]*Get-ProcmonFilterManagerVolumeEvidence \$instanceLines \$volumeName[\s\S]*PROC_MON_CAPTURE_FILTER_MANAGER_COMMAND=exit-code:\$queryExitCode/);
   assert.doesNotMatch(inspection, /instances -f \$candidateName -v/);
