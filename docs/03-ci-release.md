@@ -41,6 +41,8 @@ Run438後はcandidate nameを出さずに`Get-Service`でSCM statusをread-only�
 
 Run442後は同じreadiness inspectionで`fltmc.exe filters`をread-only照会し、SCM / registry / WMIとは独立してFilter Managerへの登録有無を確認する。最大256行・512文字、Procmon候補64件まで、標準行形式のみを受理し、名前やraw outputは出さずcandidate / instance数のみ記録する。Node source guardとPowerShell fixtureは追加済み。Linux上のNode25/25は成功したが、PowerShell fixtureとWindows実captureは次のWindows run待ち。AC-05は未達で、capture filter・positive-control gateは変更しない。
 
+[native Run 443](https://github.com/65537i/mail-client-plan/actions/runs/40712594438)（`7f4f905`、push / Ubuntu 24.04 / basic）はplan、Rust format / tests / clippy、frontend typecheck / buildに成功。Windows regression / PowerShell fixture / Procmon実captureはすべてskipされており、Filter Manager診断のWindows実測は未実施。
+
 [Run 434](https://github.com/65537i/mail-client-plan/actions/runs/40692872751)（`f707d9e`）は64 Node / PowerShell checksに成功。実capture registry evidence parseで停止し、control / WDIOへ到達しなかった。Registry `keys` count上限4096に対しNode patternが3桁制限だったため、4桁対応へ修正する。
 
 [Run 436](https://github.com/65537i/mail-client-plan/actions/runs/40694611457)（`cfac6fd`）は64 Node / PowerShell checks成功後、HKLM 64-bit Services配下keys:765 / Procmon candidate:1 / ImagePath value:0を観測。control / WDIO後、positive control 0件、CSV header-onlyでfail closed。次はcandidate keyのImagePath / Type / Start valuesとParameters subkeyの存在数だけを追加し、empty / placeholder registrationかを識別する。
