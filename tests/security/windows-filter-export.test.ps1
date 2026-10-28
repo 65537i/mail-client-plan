@@ -61,13 +61,13 @@ if ($null -eq $filterManagerFunction) { throw "Procmon Filter Manager formatter 
 if ((Get-ProcmonFilterManagerEvidence @()) -cne "candidates:0;instances:0") {
   throw "Empty Filter Manager inventory must remain an empty observation"
 }
-$filterInstanceFunction = $inspectionAst.Find({
+$filterVolumeFunction = $inspectionAst.Find({
   param($node)
   $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
-    $node.Name -eq "Get-ProcmonFilterInstanceEvidence"
+    $node.Name -eq "Get-ProcmonFilterManagerVolumeEvidence"
 }, $true)
-if ($null -eq $filterInstanceFunction) { throw "Procmon instance formatter is missing" }
-. ([scriptblock]::Create($filterInstanceFunction.Extent.Text))
+if ($null -eq $filterVolumeFunction) { throw "Procmon volume formatter is missing" }
+. ([scriptblock]::Create($filterVolumeFunction.Extent.Text))
 $filterManagerFixtures = @(
   "Filter Name                     Num Instances    Altitude    Frame",
   "------------------------------  -------------  ------------  -----",
@@ -76,28 +76,6 @@ $filterManagerFixtures = @(
 )
 if ((Get-ProcmonFilterManagerEvidence $filterManagerFixtures) -cne "candidates:1;instances:2") {
   throw "Filter Manager inventory must identify Procmon without exposing filter names"
-}
-$instanceHeader = "Instance Name                 Altitude        Frame    Volume Name"
-$instanceSeparator = "----------------------------- -------------  -----    ----------------"
-$targetInstanceFixtures = @(
-  $instanceHeader,
-  $instanceSeparator,
-  "PROCMON24 Instance            385200          0        C:"
-)
-if ((Get-ProcmonFilterInstanceEvidence $targetInstanceFixtures "PROCMON24") -ne 1) {
-  throw "Procmon target-volume query must count only verified instance rows"
-}
-if ((Get-ProcmonFilterInstanceEvidence @($instanceHeader, $instanceSeparator) "PROCMON24") -ne 0) {
-  throw "A valid empty target-volume query must remain unattached"
-}
-$emptyInstanceOutputRejected = $false
-try { Get-ProcmonFilterInstanceEvidence @() "PROCMON24" | Out-Null } catch { $emptyInstanceOutputRejected = $true }
-if (-not $emptyInstanceOutputRejected) {
-  throw "An empty target-volume query output must not be interpreted as unattached"
-}
-$tooManyInstanceRows = @($instanceHeader, $instanceSeparator)
-for ($index = 0; $index -lt 65; $index++) {
-  $tooManyInstanceRows += "PROCMON24 Instance 385200 0 C:"
 }
 $invalidFilterManagerInputs = @(
   [pscustomobject]@{ Lines = [string[]]@("PROCMON24 invalid") }
@@ -111,20 +89,51 @@ foreach ($invalidLines in $invalidFilterManagerInputs) {
   try { Get-ProcmonFilterManagerEvidence $invalidLines.Lines | Out-Null } catch { $rejected = $true }
   if (-not $rejected) { throw "Unsafe Filter Manager inventory must be rejected" }
 }
-$invalidInstanceInputs = @(
-  [pscustomobject]@{ Lines = [string[]]@("unexpected output") }
-  [pscustomobject]@{ Lines = [string[]]@("Instance Name Altitude Frame Invalid Volume", $instanceSeparator) }
-  [pscustomobject]@{ Lines = [string[]]@($instanceHeader, $instanceSeparator, "WdFilter Instance 328010 0 C:") }
-  [pscustomobject]@{ Lines = [string[]]@($instanceHeader, $instanceSeparator, "PROCMON24 Instance bad 0 C:") }
-  [pscustomobject]@{ Lines = [string[]]$tooManyInstanceRows }
-  [pscustomobject]@{ Lines = [string[]]@([string]::new('x', 513)) }
+$volumeHeader = "Filter Name                     Num Instances    Altitude    Frame    SprtFtrs"
+$volumeSeparator = "------------------------------  -------------  ------------  -----    --------"
+$targetVolumeFixtures = @(
+  $volumeHeader,
+  $volumeSeparator,
+  "WdFilter                        4              328010        0        0x00",
+  "PROCMON24                       2              385200        0        0x00"
 )
-foreach ($invalidLines in $invalidInstanceInputs) {
-  $rejected = $false
-  try { Get-ProcmonFilterInstanceEvidence $invalidLines.Lines "PROCMON24" | Out-Null } catch { $rejected = $true }
-  if (-not $rejected) { throw "Unsafe Procmon target-volume instance output must be rejected" }
+if ((Get-ProcmonFilterManagerVolumeEvidence $targetVolumeFixtures) -cne "candidates:1;instances:2") {
+  throw "Procmon target-volume query must count its exact filter summary"
 }
-Write-Host "PASS AC-05: Filter Manager inventory is bounded and counts target-volume instances only"
+if ((Get-ProcmonFilterManagerVolumeEvidence @(
+    "Filter Name Num Instances Altitude Frame",
+    "------------------------------ ------------- ------------ -----",
+    "PROCMON24 2 385200 0"
+  )) -cne "candidates:1;instances:2") {
+  throw "A volume summary without supported-features metadata must remain parseable"
+}
+if ((Get-ProcmonFilterManagerVolumeEvidence @($volumeHeader, $volumeSeparator)) -cne "candidates:0;instances:0") {
+  throw "A valid empty target-volume query must remain unattached"
+}
+$emptyInstanceOutputRejected = $false
+try { Get-ProcmonFilterManagerVolumeEvidence @() | Out-Null } catch { $emptyInstanceOutputRejected = $true }
+if (-not $emptyInstanceOutputRejected) {
+  throw "An empty target-volume query output must not be interpreted as unattached"
+}
+$tooManyProcmonVolumeRows = @($volumeHeader, $volumeSeparator)
+for ($index = 0; $index -lt 65; $index++) {
+  $tooManyProcmonVolumeRows += "PROCMON24 1 385200 0 0x00"
+}
+$invalidVolumeInputs = @(
+  [pscustomobject]@{ Lines = [string[]]@("unexpected output") }
+  [pscustomobject]@{ Lines = [string[]]@("Filter Name Num Instances Altitude Invalid", $volumeSeparator) }
+  [pscustomobject]@{ Lines = [string[]]@($volumeHeader, $volumeSeparator, "PROCMON24 invalid") }
+  [pscustomobject]@{ Lines = [string[]]@($volumeHeader, $volumeSeparator, "PROCMON24 65 385200 0 0x00") }
+  [pscustomobject]@{ Lines = [string[]]@($volumeHeader, $volumeSeparator, "PROCMON24 2 385200 0 invalid") }
+  [pscustomobject]@{ Lines = [string[]]@([string]::new('x', 513)) }
+  [pscustomobject]@{ Lines = [string[]]$tooManyProcmonVolumeRows }
+)
+foreach ($invalidLines in $invalidVolumeInputs) {
+  $rejected = $false
+  try { Get-ProcmonFilterManagerVolumeEvidence $invalidLines.Lines | Out-Null } catch { $rejected = $true }
+  if (-not $rejected) { throw "Unsafe Procmon target-volume inventory must be rejected" }
+}
+Write-Host "PASS AC-05: Filter Manager volume inventory is bounded and counts Procmon instances only"
 $registryFixtureRoot = Join-Path ([IO.Path]::GetTempPath()) ("procmon-registry-test-" + [Guid]::NewGuid().ToString("N"))
 [IO.Directory]::CreateDirectory($registryFixtureRoot) | Out-Null
 $registryFixturePath = Join-Path $registryFixtureRoot "image.sys"

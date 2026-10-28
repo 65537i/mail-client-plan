@@ -192,56 +192,75 @@ function Get-ProcmonFilterManagerEvidence {
   return "candidates:$candidates;instances:$instances"
 }
 
-function Get-ProcmonFilterInstanceEvidence {
-  param(
-    [string[]]$Lines,
-    [string]$FilterName
-  )
-  if ($Lines.Count -eq 0 -or $Lines.Count -gt 256 -or
-    $FilterName -notmatch '^PROCMON[0-9]*$') {
-    throw "Procmon instance query exceeded its supported shape"
+function Get-ProcmonFilterManagerVolumeEvidence {
+  param([string[]]$Lines)
+  if ($Lines.Count -eq 0 -or $Lines.Count -gt 256) {
+    throw "Filter Manager volume inventory exceeded its limit"
   }
   $headerSeen = $false
   $separatorSeen = $false
+  $hasSupportedFeatures = $false
+  $candidates = 0
   $instances = 0
   foreach ($line in $Lines) {
     if ($line -isnot [string] -or $line.Length -gt 512) {
-      throw "Procmon instance query returned an unsupported shape"
+      throw "Filter Manager volume inventory has an unsupported shape"
     }
-    if ($line -match '^\s*Instance Name\s+Altitude\s+Frame\s+Volume Name\s*$') {
-      if ($headerSeen) { throw "Procmon instance query repeated its table header" }
+    if ($line -match '^\s*Filter Name\s+Num Instances\s+Altitude\s+Frame(?:\s+SprtFtrs)?\s*$') {
+      if ($headerSeen) { throw "Filter Manager volume inventory repeated its header" }
       $headerSeen = $true
+      $hasSupportedFeatures = $line -match '\sSprtFtrs\s*$'
       continue
     }
     if (-not $headerSeen) {
       if ([string]::IsNullOrWhiteSpace($line)) { continue }
-      throw "Procmon instance query omitted its expected table header"
+      throw "Filter Manager volume inventory omitted its expected header"
     }
     if (-not $separatorSeen) {
-      if ($line -notmatch '^\s*-{3,}\s+-{3,}\s+-{3,}\s+-{3,}\s*$') {
-        throw "Procmon instance query omitted its expected table separator"
+      $separatorPattern = if ($hasSupportedFeatures) {
+        '^\s*-{3,}\s+-{3,}\s+-{3,}\s+-{3,}\s+-{3,}\s*$'
+      } else {
+        '^\s*-{3,}\s+-{3,}\s+-{3,}\s+-{3,}\s*$'
+      }
+      if ($line -notmatch $separatorPattern) {
+        throw "Filter Manager volume inventory omitted its expected separator"
       }
       $separatorSeen = $true
       continue
     }
     if ([string]::IsNullOrWhiteSpace($line)) { continue }
+    $featureColumn = if ($hasSupportedFeatures) { '\s+(0x[0-9A-Fa-f]{1,8})' } else { '' }
     $match = [regex]::Match(
       $line,
-      '^\s*([A-Za-z0-9_. -]{1,128}?)\s+([0-9]{1,12}(?:\.[0-9]{1,4})?)\s+([0-9]{1,3})\s+([A-Za-z0-9_:.\\{}-]{1,128})\s*$'
+      '^\s*(\S{1,256})\s+([0-9]{1,3})\s+[0-9]{1,12}(?:\.[0-9]{1,4})?\s+[0-9]{1,3}' +
+        $featureColumn + '\s*$'
     )
-    if (-not $match.Success -or
-      $match.Groups[1].Value -notmatch ("^(?i:" + [regex]::Escape($FilterName) + ")(?:\s|$)")) {
-      throw "Procmon instance query returned an unsupported row"
+    if (-not $match.Success) {
+      throw "Filter Manager volume inventory returned an unsupported row"
     }
-    $instances++
-    if ($instances -gt 64) {
-      throw "Procmon target-volume instance count exceeded its limit"
+    if ($match.Groups[1].Value -notmatch '^(?i:PROCMON[0-9]*)$') { continue }
+    $instanceCount = 0
+    if (-not [int]::TryParse(
+        $match.Groups[2].Value,
+        [System.Globalization.NumberStyles]::None,
+        [System.Globalization.CultureInfo]::InvariantCulture,
+        [ref]$instanceCount
+      )) {
+      throw "Filter Manager volume instance count is invalid"
+    }
+    if ($instanceCount -gt 64) {
+      throw "Filter Manager volume instance count exceeded its limit"
+    }
+    $candidates++
+    $instances += $instanceCount
+    if ($candidates -gt 64 -or $instances -gt 4096) {
+      throw "Filter Manager volume candidate inventory exceeded its limit"
     }
   }
   if (-not $headerSeen -or -not $separatorSeen) {
-    throw "Procmon instance query table is incomplete"
+    throw "Filter Manager volume inventory is incomplete"
   }
-  return $instances
+  return "candidates:$candidates;instances:$instances"
 }
 
 function Get-ProcmonFilterManagerSnapshot {
@@ -281,20 +300,21 @@ function Get-ProcmonFilterManagerSnapshot {
     $volumeName -notmatch '^(?:[A-Za-z]:|[A-Za-z]:\\[A-Za-z0-9_.$ -]+(?:\\[A-Za-z0-9_.$ -]+)*)$') {
     throw "Procmon target-volume mount point has an unsupported shape"
   }
-  $targetVolumeInstances = 0
-  foreach ($candidateName in $candidateNames) {
-    $script:stage = "query-filter-manager-instance-command"
-    $script:filterManagerInstanceQueryExitCode = $null
-    $instanceLines = @(& $filterManagerPath instances -f $candidateName -v $volumeName 2>$null)
-    $script:filterManagerInstanceQueryExitCode = $LASTEXITCODE
-    if ($script:filterManagerInstanceQueryExitCode -ne 0) {
-      throw "Procmon target-volume instance query failed"
-    }
-    $script:stage = "parse-filter-manager-instance-output"
-    $targetVolumeInstances += Get-ProcmonFilterInstanceEvidence $instanceLines $candidateName
-    if ($targetVolumeInstances -gt 4096) {
-      throw "Procmon target-volume instance inventory exceeded its limit"
-    }
+  $script:stage = "query-filter-manager-instance-command"
+  $script:filterManagerInstanceQueryExitCode = $null
+  $instanceLines = @(& $filterManagerPath instances -v $volumeName 2>$null)
+  $script:filterManagerInstanceQueryExitCode = $LASTEXITCODE
+  if ($script:filterManagerInstanceQueryExitCode -ne 0) {
+    throw "Procmon target-volume instance query failed"
+  }
+  $script:stage = "parse-filter-manager-instance-output"
+  $volumeEvidence = Get-ProcmonFilterManagerVolumeEvidence $instanceLines
+  $volumeEvidenceParts = $volumeEvidence -split ";", 2
+  $targetVolumeCandidateCount = [int]($volumeEvidenceParts[0] -replace "^candidates:", "")
+  $targetVolumeInstances = [int]($volumeEvidenceParts[1] -replace "^instances:", "")
+  if ($targetVolumeCandidateCount -gt $candidateNames.Count -or
+    $targetVolumeInstances -gt $targetVolumeCandidateCount * 64) {
+    throw "Procmon target-volume instance inventory is inconsistent"
   }
   $attached = ($targetVolumeInstances -gt 0).ToString().ToLowerInvariant()
   return "$evidence;target-volume-attached:$attached;target-volume-instances:$targetVolumeInstances"

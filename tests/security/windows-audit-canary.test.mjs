@@ -66,10 +66,11 @@ test("AC-05: Filter Manager inventory is an independent bounded read-only driver
   assert.match(inspection, /Get-ProcmonFilterManagerEvidence[\s\S]*Lines\.Count -gt 256/);
   assert.match(inspection, /if \(\$line -notmatch '\^\\s\*\(\?i:PROCMON\)'\) \{ continue \}/);
   assert.match(inspection, /Procmon Filter Manager candidate has an unsupported shape/);
-  assert.match(inspection, /GetVolumePathName[\s\S]*\$filterManagerPath instances -f \$candidateName -v \$volumeName/);
-  assert.match(inspection, /Get-ProcmonFilterInstanceEvidence[\s\S]*Lines\.Count -eq 0 -or \$Lines\.Count -gt 256[\s\S]*\$instances -gt 64/);
+  assert.match(inspection, /GetVolumePathName[\s\S]*\$filterManagerPath instances -v \$volumeName 2>\$null/);
+  assert.match(inspection, /Get-ProcmonFilterManagerVolumeEvidence[\s\S]*SprtFtrs[\s\S]*\$instanceCount -gt 64/);
   assert.match(inspection, /\$script:stage = "query-filter-manager-filter-inventory"[\s\S]*\$script:stage = "resolve-filter-manager-target-volume"[\s\S]*\$script:stage = "query-filter-manager-instance-command"[\s\S]*\$script:stage = "parse-filter-manager-instance-output"/);
-  assert.match(inspection, /foreach \(\$candidateName in \$candidateNames\) \{[\s\S]*\$script:filterManagerInstanceQueryExitCode = \$null[\s\S]*instances -f \$candidateName -v \$volumeName[\s\S]*\$script:filterManagerInstanceQueryExitCode = \$LASTEXITCODE[\s\S]*PROC_MON_CAPTURE_FILTER_MANAGER_COMMAND=exit-code:\$queryExitCode/);
+  assert.match(inspection, /\$script:filterManagerInstanceQueryExitCode = \$null[\s\S]*instances -v \$volumeName 2>\$null[\s\S]*\$script:filterManagerInstanceQueryExitCode = \$LASTEXITCODE[\s\S]*Get-ProcmonFilterManagerVolumeEvidence \$instanceLines[\s\S]*PROC_MON_CAPTURE_FILTER_MANAGER_COMMAND=exit-code:\$queryExitCode/);
+  assert.doesNotMatch(inspection, /instances -f \$candidateName -v/);
   assert.match(inspection, /target-volume-attached:\$attached;target-volume-instances:\$targetVolumeInstances/);
   assert.match(inspection, /PROC_MON_CAPTURE_FILTER_MANAGER=\$filterManagerEvidence/);
   assert.doesNotMatch(inspection, /fltmc\.exe\s+(?:load|unload|attach|detach)|WriteLine\([^)]*(?:\$line|\$filterManagerPath|\$volumeName|\$candidateName)/i);
