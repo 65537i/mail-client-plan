@@ -59,6 +59,8 @@ Run447後は同じpositive-control fileをPowerShell `[System.IO.File]::ReadAllB
 
 Run448後はProcmon Filter Manager candidate countに加え、canary/controlファイルが置かれたvolumeへのfilter instance attachmentをbounded・read-onlyで照合する。出力はcandidate / instance集計とtarget-volume attached booleanに限定し、raw filter name・volume pathは出さない。Node/PowerShell read差がなくても、Node `ReadFile`を必須とするAC-05 gateは緩和しない。次のWindows regressionで未知format / 上限超過もfail closedを確認する。
 
+Run448後の実装は`GetVolumePathNameW`でtarget fileのvolume mount pointを得て、各Procmon Filter Manager candidateへ`fltmc instances -f <candidate> -v <volume>`をread-only照会する。instance tableをstrict parseし、candidateごと64件・合計4096件まで、unknown header / row、上限超過、command failure、empty outputはfail closed。header / separatorだけのempty tableは未attachmentとして扱う。診断はcandidate / global instance countsとtarget-volume attached boolean / countだけを出し、filter name・volume path・raw outputを記録しない。PowerShell fixtureにはattached / valid-empty / no-output / malformed / candidate mismatch / count-limit casesを追加。Linux上Node AC-05回帰65/65、JS syntax、`git diff --check`成功。PowerShell 5.1 fixture・実`fltmc instances`出力形式・Windows runner動作は未検証であり、AC-05未達。
+
 [native Run 443](https://github.com/65537i/mail-client-plan/actions/runs/40712594438)（`7f4f905`、push / Ubuntu 24.04 / basic）はplan、Rust format / tests / clippy、frontend typecheck / buildに成功。Windows regression / PowerShell fixture / Procmon実captureはすべてskipされており、Filter Manager診断のWindows実測は未実施。
 
 [Run 434](https://github.com/65537i/mail-client-plan/actions/runs/40692872751)（`f707d9e`）は64 Node / PowerShell checksに成功。実capture registry evidence parseで停止し、control / WDIOへ到達しなかった。Registry `keys` count上限4096に対しNode patternが3桁制限だったため、4桁対応へ修正する。

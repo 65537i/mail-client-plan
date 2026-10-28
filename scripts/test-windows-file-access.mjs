@@ -313,7 +313,7 @@ async function captureScenario(scenario) {
       [
         "-STA", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
         "-File", path.join(root, "scripts", "inspect-windows-procmon-capture.ps1"),
-        "-OwnerProcessId", String(capture.pid),
+        "-OwnerProcessId", String(capture.pid), "-TargetPath", canaryPath,
       ],
       { stdio: ["ignore", "pipe", "pipe"], windowsHide: true },
     );
@@ -394,12 +394,15 @@ async function captureScenario(scenario) {
     );
     console.log(`Windows audit ${scenario}: ${serviceEvidence[0][0].trim()}`);
     const filterManagerEvidence = [...captureInspectionOutput.matchAll(
-      /^PROC_MON_CAPTURE_FILTER_MANAGER=candidates:(0|[1-9]\d{0,2});instances:(0|[1-9]\d{0,4})\r?$/gm,
+      /^PROC_MON_CAPTURE_FILTER_MANAGER=candidates:(0|[1-9]\d{0,2});instances:(0|[1-9]\d{0,4});target-volume-attached:(true|false);target-volume-instances:(0|[1-9]\d{0,3})\r?$/gm,
     )];
     assert(
       filterManagerEvidence.length === 1 &&
       Number(filterManagerEvidence[0][1]) <= 64 &&
-      Number(filterManagerEvidence[0][2]) <= Number(filterManagerEvidence[0][1]) * 999,
+      Number(filterManagerEvidence[0][2]) <= Number(filterManagerEvidence[0][1]) * 999 &&
+      Number(filterManagerEvidence[0][4]) <= 4096 &&
+      Number(filterManagerEvidence[0][4]) <= Number(filterManagerEvidence[0][1]) * 64 &&
+      (filterManagerEvidence[0][3] === "true") === (Number(filterManagerEvidence[0][4]) > 0),
       "Process Monitor Filter Manager evidence is incomplete",
     );
     console.log(`Windows audit ${scenario}: ${filterManagerEvidence[0][0].trim()}`);

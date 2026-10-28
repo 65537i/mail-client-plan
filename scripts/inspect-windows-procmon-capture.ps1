@@ -1,5 +1,6 @@
 param(
   [Parameter(Mandatory = $true)][int]$OwnerProcessId,
+  [string]$TargetPath,
   [switch]$CountOnly
 )
 
@@ -191,7 +192,60 @@ function Get-ProcmonFilterManagerEvidence {
   return "candidates:$candidates;instances:$instances"
 }
 
+function Get-ProcmonFilterInstanceEvidence {
+  param(
+    [string[]]$Lines,
+    [string]$FilterName
+  )
+  if ($Lines.Count -eq 0 -or $Lines.Count -gt 256 -or
+    $FilterName -notmatch '^PROCMON[0-9]*$') {
+    throw "Procmon instance query exceeded its supported shape"
+  }
+  $headerSeen = $false
+  $separatorSeen = $false
+  $instances = 0
+  foreach ($line in $Lines) {
+    if ($line -isnot [string] -or $line.Length -gt 512) {
+      throw "Procmon instance query returned an unsupported shape"
+    }
+    if ($line -match '^\s*Instance Name\s+Altitude\s+Frame\s+Volume Name\s*$') {
+      if ($headerSeen) { throw "Procmon instance query repeated its table header" }
+      $headerSeen = $true
+      continue
+    }
+    if (-not $headerSeen) {
+      if ([string]::IsNullOrWhiteSpace($line)) { continue }
+      throw "Procmon instance query omitted its expected table header"
+    }
+    if (-not $separatorSeen) {
+      if ($line -notmatch '^\s*-{3,}\s+-{3,}\s+-{3,}\s+-{3,}\s*$') {
+        throw "Procmon instance query omitted its expected table separator"
+      }
+      $separatorSeen = $true
+      continue
+    }
+    if ([string]::IsNullOrWhiteSpace($line)) { continue }
+    $match = [regex]::Match(
+      $line,
+      '^\s*([A-Za-z0-9_. -]{1,128}?)\s+([0-9]{1,12}(?:\.[0-9]{1,4})?)\s+([0-9]{1,3})\s+([A-Za-z0-9_:.\\{}-]{1,128})\s*$'
+    )
+    if (-not $match.Success -or
+      $match.Groups[1].Value -notmatch ("^(?i:" + [regex]::Escape($FilterName) + ")(?:\s|$)")) {
+      throw "Procmon instance query returned an unsupported row"
+    }
+    $instances++
+    if ($instances -gt 64) {
+      throw "Procmon target-volume instance count exceeded its limit"
+    }
+  }
+  if (-not $headerSeen -or -not $separatorSeen) {
+    throw "Procmon instance query table is incomplete"
+  }
+  return $instances
+}
+
 function Get-ProcmonFilterManagerSnapshot {
+  param([string]$Path)
   $filterManagerPath = Join-Path $env:SystemRoot "System32\fltmc.exe"
   if (-not [IO.File]::Exists($filterManagerPath)) {
     throw "Filter Manager query utility is unavailable"
@@ -200,7 +254,44 @@ function Get-ProcmonFilterManagerSnapshot {
   if ($LASTEXITCODE -ne 0 -or $lines.Count -eq 0) {
     throw "Filter Manager query failed"
   }
-  return Get-ProcmonFilterManagerEvidence $lines
+  $evidence = Get-ProcmonFilterManagerEvidence $lines
+  $candidateNames = @(
+    foreach ($line in $lines) {
+      if ($line -match '^\s*(?i:PROCMON[0-9]*)\s+') {
+        ([regex]::Match($line, '^\s*(PROCMON[0-9]*)', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)).Groups[1].Value.ToUpperInvariant()
+      }
+    }
+  )
+  if ($candidateNames.Count -gt 64) {
+    throw "Procmon Filter Manager candidate inventory exceeded its limit"
+  }
+  if ($Path -isnot [string] -or $Path.Length -eq 0 -or $Path.Length -gt 2048 -or
+    -not [IO.Path]::IsPathRooted($Path) -or -not [IO.File]::Exists($Path)) {
+    throw "Procmon target-volume path is unavailable"
+  }
+  $volumePath = [ProcmonCaptureWindows]::GetVolumePathName([IO.Path]::GetFullPath($Path))
+  if ($volumePath -isnot [string] -or $volumePath.Length -gt 260 -or
+    -not $volumePath.EndsWith("\")) {
+    throw "Procmon target-volume mount point is unsupported"
+  }
+  $volumeName = $volumePath.TrimEnd('\')
+  if ($volumeName.Length -eq 0 -or
+    $volumeName -notmatch '^(?:[A-Za-z]:|[A-Za-z]:\\[A-Za-z0-9_.$ -]+(?:\\[A-Za-z0-9_.$ -]+)*)$') {
+    throw "Procmon target-volume mount point has an unsupported shape"
+  }
+  $targetVolumeInstances = 0
+  foreach ($candidateName in $candidateNames) {
+    $instanceLines = @(& $filterManagerPath instances -f $candidateName -v $volumeName 2>$null)
+    if ($LASTEXITCODE -ne 0) {
+      throw "Procmon target-volume instance query failed"
+    }
+    $targetVolumeInstances += Get-ProcmonFilterInstanceEvidence $instanceLines $candidateName
+    if ($targetVolumeInstances -gt 4096) {
+      throw "Procmon target-volume instance inventory exceeded its limit"
+    }
+  }
+  $attached = ($targetVolumeInstances -gt 0).ToString().ToLowerInvariant()
+  return "$evidence;target-volume-attached:$attached;target-volume-instances:$targetVolumeInstances"
 }
 
 $stage = "load-automation"
@@ -234,10 +325,25 @@ public static class ProcmonCaptureWindows
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool IsWindowVisible(IntPtr window);
 
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetVolumePathName(
+        string fileName, StringBuilder volumePathName, uint bufferLength);
+
     [DllImport("user32.dll", EntryPoint = "SendMessageTimeoutW", ExactSpelling = true)]
     private static extern IntPtr ReadListCount(
         IntPtr window, uint message, UIntPtr wParam, IntPtr lParam,
         uint flags, uint timeout, out UIntPtr result);
+
+    public static string GetVolumePathName(string path)
+    {
+        if (String.IsNullOrWhiteSpace(path) || path.Length > 2048)
+            throw new InvalidOperationException("Target path is unsupported");
+        var volumePath = new StringBuilder(261);
+        if (!GetVolumePathName(path, volumePath, (uint)volumePath.Capacity))
+            throw new InvalidOperationException("Target volume mount point is unavailable");
+        return volumePath.ToString();
+    }
 
     public static string CountListItems(IntPtr window, uint ownerProcessId)
     {
@@ -428,7 +534,8 @@ public static class ProcmonCaptureWindows
   $serviceEvidence = Get-ProcmonServiceStatusEvidence $registryInventory.Names
   [Console]::Out.WriteLine("PROC_MON_CAPTURE_SERVICE_STATUS=$serviceEvidence")
   $stage = "query-filter-manager-inventory"
-  $filterManagerEvidence = Get-ProcmonFilterManagerSnapshot
+  $stage = "query-filter-manager-volume-instances"
+  $filterManagerEvidence = Get-ProcmonFilterManagerSnapshot $TargetPath
   [Console]::Out.WriteLine("PROC_MON_CAPTURE_FILTER_MANAGER=$filterManagerEvidence")
   $visual = "unavailable"
   $windowPattern = $null
