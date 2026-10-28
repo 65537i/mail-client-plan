@@ -341,9 +341,12 @@ async function captureScenario(scenario) {
     const filterManagerQueryExitCode = captureInspectionOutput.match(
       /^PROC_MON_CAPTURE_FILTER_MANAGER_COMMAND=exit-code:(0|[1-9]\d{0,2}|out-of-range)\r?$/m,
     )?.[1];
+    const filterManagerParseState = captureInspectionOutput.match(
+      /^PROC_MON_CAPTURE_FILTER_MANAGER_PARSE=(started|empty-output|line-limit|line-shape|duplicate-header|instance-list-header|unexpected-preamble|separator-shape|row-shape|invalid-count|count-limit|inventory-limit|incomplete-table|valid)\r?$/m,
+    )?.[1];
     assert(
       !captureInspectionResult.error && captureInspectionResult.code === 0 && !captureInspectionOverflow,
-      `Process Monitor capture inspection failed${captureInspectionStage ? ` at ${captureInspectionStage}` : ""}${captureInspectionFailure ? ` (${captureInspectionFailure})` : ""}${filterManagerQueryExitCode ? ` (Filter Manager command exit code ${filterManagerQueryExitCode})` : ""}`,
+      `Process Monitor capture inspection failed${captureInspectionStage ? ` at ${captureInspectionStage}` : ""}${captureInspectionFailure ? ` (${captureInspectionFailure})` : ""}${filterManagerQueryExitCode ? ` (Filter Manager command exit code ${filterManagerQueryExitCode})` : ""}${filterManagerParseState ? ` (Filter Manager parse state ${filterManagerParseState})` : ""}`,
     );
     const nativeEvidence = [...captureInspectionOutput.matchAll(
       /^PROC_MON_CAPTURE_NATIVE=children:(0|[1-9]\d{0,2});visible:(0|[1-9]\d{0,2});toolbars:(0|[1-9]\d{0,2});lists:(0|[1-9]\d{0,2});statusbars:(0|[1-9]\d{0,2});dialogs:(0|[1-9]\d{0,2});other:(0|[1-9]\d{0,2})\r?$/gm,
