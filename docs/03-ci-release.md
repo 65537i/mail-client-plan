@@ -19,6 +19,8 @@ Windows: MSVC toolchain、WebView2、必要SDK。WebDriverを外部利用する�
 
 ### nativeの短い検証ループ
 
+[Run 416](https://github.com/65537i/mail-client-plan/actions/runs/40677068346)（`1103ee0`、manual Windows 2025 / webview）はNode61/61・PowerShell回帰とnative SysListView32の2件→0件試験に成功した。export / exact reload / Drop / readinessを通過し、capture / filesystem各MSAA matches:1 / checked:on / enabled:true。positive / excluded controlは11:14:26.346Z / .468Z、WDIO開始11:14:26.468Z / 終了11:14:37.643Z。Terminate前のnative queryで`final-list-items=0`を確認したため、欠落はexport CSVだけでなくlive表示listにも現れている。ただしlist件数はPML内のevent数を証明しない。capture 13,891 ms / PML 906,222 bytesは上限内、CSV76 bytes / positive-control全0件でfail closed。attack未実施・AC-05未達。次はcapture中のexact filter / Drop状態を直接確認する。ローカルNode61/61・JS syntax・diff check成功、3OS full・最低OS実測未実施。
+
 [Run 414](https://github.com/65537i/mail-client-plan/actions/runs/40676226790)（`d405f4b`）はNode61/61・PowerShell parse後に合成listのclass guardで停止。NativeWindow経由の生成も本番の厳密classと一致しないため、試験側だけCreateWindowExW / DestroyWindowによる直接生成へ変更した。実capture未実施・本番guard変更なし。
 
 [Run 412](https://github.com/65537i/mail-client-plan/actions/runs/40674936411)（`fa0b846`、Windows 2025 / webview）はNode61/61・PowerShell parse成功後、合成WinForms ListViewのclass名が厳密なSysListView32判定に一致せず回帰試験で停止した。実capture未実施。試験側だけをnative SysListView32 / owner-data styleへ変更し、試験内LVM_SETITEMCOUNTで2→0件を設定してgetterを検証する。本番query・class guardは変更しない。Windows再検証待ち。
