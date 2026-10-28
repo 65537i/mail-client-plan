@@ -4,6 +4,7 @@
 
 ## 現在の範囲
 
+- [Run 414](https://github.com/65537i/mail-client-plan/actions/runs/40676226790)（`d405f4b`）もNode61/61・PowerShell parse後、合成list class guardで停止した。NativeWindow経由でも本番と同じclassにならないため、試験側をCreateWindowExWによる直接生成へ変更した。本番guardは維持、実capture未実施・AC-05未達。
 - [Run 412](https://github.com/65537i/mail-client-plan/actions/runs/40674936411)（`fa0b846`、Windows 2025 / webview）はNode61/61とPowerShell parseを通過したが、合成WinForms ListViewのラップされたclass名が本番用の厳密なSysListView32判定に一致せず、回帰試験で停止した。実capture未実施。本番class guardは維持し、試験側をnative SysListView32 / owner-data styleで作成し、試験内のみLVM_SETITEMCOUNTで2→0件を設定するよう修正。Windows再検証待ち・AC-05未達。
 - Run409後の限定診断: captureの同一PID / 一意のSysListView32へLVM_GETITEMCOUNTをSendMessageTimeoutW（2秒・abort-if-hung / error-on-exit）で照会。任意text・pointer転送は使わず整数だけを記録し、WDIO完了後・Terminate前に20秒 / 2 KiB上限のinspectionを追加する。表示件数はPML event数やcontrol内容の証明ではなく、既存positive-control等のgateは維持。Windows回帰に合成ListViewの2件→0件を追加。Windows実測待ち・AC-05未達。
 - [Run 409](https://github.com/65537i/mail-client-plan/actions/runs/40589247217)（`937e838`、Windows 2025 / webview）はNode60/60・PowerShell回帰とexact reload / Drop / readinessを通過。capture / filesystemは再びMSAAで一意・checked:on・enabled:true。offline exportだけに`/NoFilter`を指定してもCSV76 bytes / positive-control全0件が再現した。baseline WDIOは終了、capture 13,755 ms / PML 876,980 bytesで上限内、attack未実施・AC-05未達。表示filterのstartup clearだけでは欠落を解消できなかった。次はcapture中のexact filterとPML内のevent有無を直接切り分ける。ローカルNode60/60・syntax・diff check成功、3OS full・最低OS実測未実施。

@@ -67,12 +67,19 @@ using System;
 using System.Runtime.InteropServices;
 public static class SyntheticListCount
 {
+    [DllImport("user32.dll", EntryPoint = "CreateWindowExW", CharSet = CharSet.Unicode, ExactSpelling = true)]
+    public static extern IntPtr Create(
+        uint extendedStyle, string className, string title, uint style,
+        int x, int y, int width, int height, IntPtr parent, IntPtr menu, IntPtr instance, IntPtr parameter);
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool DestroyWindow(IntPtr window);
     [DllImport("user32.dll", EntryPoint = "SendMessageW", ExactSpelling = true)]
     public static extern IntPtr SetCount(IntPtr window, uint message, IntPtr count, IntPtr flags);
 }
 '@
 $nativeTestForm = [System.Windows.Forms.Form]::new()
-$testList = [System.Windows.Forms.NativeWindow]::new()
+$testListHandle = [IntPtr]::Zero
 try {
   $nativeTestChild = [System.Windows.Forms.TextBox]::new()
   $nativeTestForm.Controls.Add($nativeTestChild)
@@ -95,21 +102,23 @@ try {
   $listInitializer = [System.Windows.Forms.ListView]::new()
   $listInitializerHandle = $listInitializer.Handle
   $listInitializer.Dispose()
-  $listParameters = [System.Windows.Forms.CreateParams]::new()
-  $listParameters.ClassName = "SysListView32"
-  $listParameters.Parent = $nativeTestHandle
-  $listParameters.Style = 0x40001000
-  $testList.CreateHandle($listParameters)
-  [SyntheticListCount]::SetCount($testList.Handle, 0x102f, [IntPtr]2, [IntPtr]::Zero) | Out-Null
-  if ([ProcmonCaptureWindows]::CountListItems($testList.Handle, [uint32]$PID) -cne "2") {
+  $testListHandle = [SyntheticListCount]::Create(
+    0, "SysListView32", "", 0x40001000, 0, 0, 100, 100,
+    $nativeTestHandle, [IntPtr]::Zero, [IntPtr]::Zero, [IntPtr]::Zero
+  )
+  if ($testListHandle -eq [IntPtr]::Zero) { throw "Synthetic native list creation failed" }
+  [SyntheticListCount]::SetCount($testListHandle, 0x102f, [IntPtr]2, [IntPtr]::Zero) | Out-Null
+  if ([ProcmonCaptureWindows]::CountListItems($testListHandle, [uint32]$PID) -cne "2") {
     throw "Native list count did not observe exactly two synthetic items"
   }
-  [SyntheticListCount]::SetCount($testList.Handle, 0x102f, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null
-  if ([ProcmonCaptureWindows]::CountListItems($testList.Handle, [uint32]$PID) -cne "0") {
+  [SyntheticListCount]::SetCount($testListHandle, 0x102f, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null
+  if ([ProcmonCaptureWindows]::CountListItems($testListHandle, [uint32]$PID) -cne "0") {
     throw "Native list count did not observe zero synthetic items"
   }
 } finally {
-  $testList.DestroyHandle()
+  if ($testListHandle -ne [IntPtr]::Zero -and -not [SyntheticListCount]::DestroyWindow($testListHandle)) {
+    throw "Synthetic native list cleanup failed"
+  }
   $nativeTestForm.Dispose()
 }
 Write-Host "PASS AC-05: native child inspection compiles, classifies a hidden child and rejects invalid ownership"

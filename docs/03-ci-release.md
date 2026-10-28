@@ -19,6 +19,8 @@ Windows: MSVC toolchain、WebView2、必要SDK。WebDriverを外部利用する�
 
 ### nativeの短い検証ループ
 
+[Run 414](https://github.com/65537i/mail-client-plan/actions/runs/40676226790)（`d405f4b`）はNode61/61・PowerShell parse後に合成listのclass guardで停止。NativeWindow経由の生成も本番の厳密classと一致しないため、試験側だけCreateWindowExW / DestroyWindowによる直接生成へ変更した。実capture未実施・本番guard変更なし。
+
 [Run 412](https://github.com/65537i/mail-client-plan/actions/runs/40674936411)（`fa0b846`、Windows 2025 / webview）はNode61/61・PowerShell parse成功後、合成WinForms ListViewのclass名が厳密なSysListView32判定に一致せず回帰試験で停止した。実capture未実施。試験側だけをnative SysListView32 / owner-data styleへ変更し、試験内LVM_SETITEMCOUNTで2→0件を設定してgetterを検証する。本番query・class guardは変更しない。Windows再検証待ち。
 
 Run409後はcapture終了直前の表示list件数を照会する。一意の同一PID SysListView32に限り、LVM_GETITEMCOUNT（0x1004）をSendMessageTimeoutW（flags 0x22、2秒）で送る。戻り値は0〜Int32.MaxValue、前後PID一致とclass確認を要求し、任意text・remote pointerは取得しない。WDIO後・Terminate前に20秒 / 2 KiB上限で実行、未検出はunavailable、query失敗は監査停止。件数はPML内容やpositive controlの証明には使わない。Windows回帰で合成ListViewの2件と0件を検証する。Windows実測待ち。
