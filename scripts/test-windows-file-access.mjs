@@ -466,6 +466,7 @@ async function captureScenario(scenario) {
       "Node synthetic-canary positive control failed",
     );
     console.log(`Windows audit ${scenario}: positive-control read completed UTC=${new Date().toISOString()}`);
+    await readCaptureListCount("after-positive-control", true);
     const excludedControl = spawn(
       process.execPath,
       [

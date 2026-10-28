@@ -85,6 +85,7 @@ test("AC-05: live filter verification attaches to the capture PID and preserves 
   assert.match(driver, /async function verifyLiveCaptureFilter\(label\)[\s\S]*"-CaptureProcessId", String\(capture\.pid\)[\s\S]*liveFilterExit, 30_000[\s\S]*PROC_MON_FILTER_LIVE_VERIFIED=rules:exact-two;drop:on/);
   assert.match(driver, /await verifyLiveCaptureFilter\("before-controls"\)[\s\S]*const positiveControl = spawn/);
   assert.match(driver, /await readCaptureListCount\("after-controls", true\)[\s\S]*command\.send\("start"\)/);
+  assert.match(driver, /positive-control read completed[\s\S]*await readCaptureListCount\("after-positive-control", true\)[\s\S]*const excludedControl = spawn/);
   assert.match(driver, /WDIO finished[\s\S]*await verifyLiveCaptureFilter\("after-wdio"\)[\s\S]*await readCaptureListCount\("final"\)/);
 });
 

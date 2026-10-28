@@ -47,6 +47,10 @@ Run442後は同じreadiness inspectionで`fltmc.exe filters`をread-only照会�
 
 Run445後は、初回controlの前に実capture PIDへread-only live filter verificationを実行し、exact 2 Include rules / Drop onを確認する。WDIO後の既存verificationも維持し、control時点とWDIO後のfilter状態を比較可能にする。読み取り専用UI検査でありrulesは変更せず、positive-control / exact-filter / fail-closed条件は維持する。Node回帰65/65、JS syntax、diff check成功。PowerShell regressionとWindows実測待ち。
 
+[Run 446](https://github.com/65537i/mail-client-plan/actions/runs/40724408501)（`58a1584`、manual Windows 2025 / webview）はsecurity-test buildとWDIOに成功後、実capture auditのpositive-control assertionでfail closedした。readinessのFilter Manager Procmon候補1 / instances6、capture / filesystem MSAA on、known startup-error none。実capture PIDのlive filterは初回control前・WDIO後ともexact-two / Drop on。positive-control read 16:27:29.567Z、excluded control 16:27:29.704Z、after-controls-list-items=0、WDIO 16:27:30.792Z–16:27:42.048Z、final-list-items=0。capture 22,398 ms / PML 985,358 bytes / CSV76 bytes / Node `ReadFile` positive-control 0件。exact filter stateはcontrol時点でも確認できたが、control eventのlist / export欠落は続き、AC-05未達。
+
+Run446後はpositive-control read直後に、excluded-control後およびWDIO後と同じbounded CountOnly helperでlist件数を追加採取する。これにより、Node read直後のevent有無とexcluded read後のlist変化を分離する。項目本文・pathは読まず、数値のみ2 KiB / 20秒上限、unavailableはfail closed。既存positive-control、exact-filter / Drop gatesを維持する。Linux Node regression 65/65、JS syntax、diff check成功。Windows PowerShell regressionと実測待ち。
+
 [native Run 443](https://github.com/65537i/mail-client-plan/actions/runs/40712594438)（`7f4f905`、push / Ubuntu 24.04 / basic）はplan、Rust format / tests / clippy、frontend typecheck / buildに成功。Windows regression / PowerShell fixture / Procmon実captureはすべてskipされており、Filter Manager診断のWindows実測は未実施。
 
 [Run 434](https://github.com/65537i/mail-client-plan/actions/runs/40692872751)（`f707d9e`）は64 Node / PowerShell checksに成功。実capture registry evidence parseで停止し、control / WDIOへ到達しなかった。Registry `keys` count上限4096に対しNode patternが3桁制限だったため、4桁対応へ修正する。
