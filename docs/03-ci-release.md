@@ -43,6 +43,8 @@ Run442後は同じreadiness inspectionで`fltmc.exe filters`をread-only照会�
 
 [Run 444](https://github.com/65537i/mail-client-plan/actions/runs/40716755045)（`66dc3cf`、manual Windows 2025 / webview）はWindows Node回帰 / worker coordination、PowerShell configuration regression、security-test build、WDIOに成功し、最後の実capture auditでpositive control 0件のためfail closedした。readiness inspection時の`fltmc filters`はProcmon候補1 / instances6を示し、以前の「SCM / WMI / registryで候補なし」をdriver未登録に一般化する仮説を否定する。Procmon runtimeがFilter Managerへ登録されていることは観測されたが、PMLは932,300 bytesでもCSV76 bytesでheader-only、live list 0、Node `ReadFile` positive control 0。exact filter / Drop / toolbar state / startup error none / WDIO successは維持。次はfilter instanceがある状態でcapture event delivery / export経路のどこでイベントが消えるかを、gateを緩めず追加切り分ける。AC-05未達。
 
+Run444後はpositive / excluded control readの直後かつWDIO開始前に、実capture PIDのSysListView32 item countをread-only採取する。既存final countと同じbounded CountOnly inspection helperを使用し、項目本文・pathは読まない。control直後とWDIO後の数値を比べることで、event delivery不在と後段でのlist変化を区別する。control後countが取得不能なら監査をfail closedにする。Node回帰65/65・JS syntax・diff checkは成功、PowerShell regression / Windows実測は未実施。AC-05未達。
+
 [native Run 443](https://github.com/65537i/mail-client-plan/actions/runs/40712594438)（`7f4f905`、push / Ubuntu 24.04 / basic）はplan、Rust format / tests / clippy、frontend typecheck / buildに成功。Windows regression / PowerShell fixture / Procmon実captureはすべてskipされており、Filter Manager診断のWindows実測は未実施。
 
 [Run 434](https://github.com/65537i/mail-client-plan/actions/runs/40692872751)（`f707d9e`）は64 Node / PowerShell checksに成功。実capture registry evidence parseで停止し、control / WDIOへ到達しなかった。Registry `keys` count上限4096に対しNode patternが3桁制限だったため、4桁対応へ修正する。

@@ -82,7 +82,7 @@ test("AC-05: live filter verification attaches to the capture PID and preserves 
   assert.match(configuration, /if \(-not \$PSBoundParameters.ContainsKey\("CaptureProcessId"\)\) \{\s*Set-Stage "wait-for-input-idle"/);
   assert.match(configuration, /if \(-not \$PSBoundParameters.ContainsKey\("CaptureProcessId"\) -and -not \$process.HasExited\)/);
   assert.match(configuration, /reloaded-filter-rules-verified"[\s\S]*PROC_MON_FILTER_LIVE_VERIFIED=rules:exact-two;drop:on/);
-  assert.match(driver, /WDIO finished[\s\S]*"-CaptureProcessId", String\(capture.pid\)[\s\S]*liveFilterExit, 30_000[\s\S]*live-filter=rules:exact-two;drop:on[\s\S]*"-CountOnly"/);
+  assert.match(driver, /WDIO finished[\s\S]*"-CaptureProcessId", String\(capture.pid\)[\s\S]*liveFilterExit, 30_000[\s\S]*live-filter=rules:exact-two;drop:on[\s\S]*await readCaptureListCount\("final"\)/);
 });
 
 test("AC-05: only offline export clears display filters and all exported paths remain validated", async () => {
@@ -127,7 +127,9 @@ test("AC-05: final list count uses only a bounded numeric read before shutdown",
   assert.match(inspection, /name.ToString\(\) != "SysListView32"/);
   assert.match(inspection, /count > Int32.MaxValue/);
   assert.match(inspection, /if \(\$CountOnly\) \{ exit 0 \}/);
-  assert.match(driver, /WDIO finished[\s\S]*"-CountOnly"[\s\S]*finalExit, 20_000[\s\S]*final-list-items=[\s\S]*await runProcmon\(\["\/AcceptEula", "\/Terminate"\]/);
+  assert.match(driver, /await readCaptureListCount\("after-controls", true\)[\s\S]*command\.send\("start"\)/);
+  assert.match(driver, /WDIO finished[\s\S]*await readCaptureListCount\("final"\)[\s\S]*await runProcmon\(\["\/AcceptEula", "\/Terminate"\]/);
+  assert.match(driver, /output\.length \+ chunk\.length > 2048[\s\S]*waitWithTimeout\(inspectionExit, 20_000\)/);
 });
 
 test("AC-05: capture startup diagnostics classify exact known errors without exposing UI text", async () => {

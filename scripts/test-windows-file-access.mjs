@@ -49,6 +49,51 @@ async function captureScenario(scenario) {
     });
   }
 
+  async function readCaptureListCount(label, required = false) {
+    const inspection = spawn(
+      "powershell.exe",
+      [
+        "-STA", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+        "-File", path.join(root, "scripts", "inspect-windows-procmon-capture.ps1"),
+        "-OwnerProcessId", String(capture.pid), "-CountOnly",
+      ],
+      { stdio: ["ignore", "pipe", "pipe"], windowsHide: true },
+    );
+    let output = "";
+    let overflow = false;
+    inspection.stdout.setEncoding("utf8");
+    inspection.stdout.on("data", (chunk) => {
+      overflow ||= output.length + chunk.length > 2048;
+      output = (output + chunk).slice(0, 2048);
+    });
+    inspection.stderr.resume();
+    const inspectionExit = waitForProcess(inspection);
+    const inspectionResult = await waitWithTimeout(inspectionExit, 20_000);
+    if (inspectionResult.timedOut) {
+      inspection.kill();
+      await inspectionExit;
+      throw new Error(`Process Monitor ${label} list inspection timed out`);
+    }
+    assert(
+      !inspectionResult.error && inspectionResult.code === 0 && !overflow,
+      `Process Monitor ${label} list inspection failed`,
+    );
+    const counts = [...output.matchAll(
+      /^PROC_MON_CAPTURE_LIST=items:(unavailable|0|[1-9]\d{0,9})\r?$/gm,
+    )];
+    assert(
+      counts.length === 1 &&
+      (counts[0][1] === "unavailable" || Number(counts[0][1]) <= 2_147_483_647),
+      `Process Monitor ${label} list evidence is incomplete`,
+    );
+    if (required) {
+      assert.notEqual(counts[0][1], "unavailable", `Process Monitor ${label} list count is unavailable`);
+    }
+    console.log(`Windows audit ${scenario}: ${label}-list-items=${counts[0][1]}`);
+    assert.equal(capture.exitCode, null, `Process Monitor capture exited during ${label} list inspection`);
+    return counts[0][1];
+  }
+
   async function runProcmon(args, description) {
     const child = spawn(procmonPath, args, {
       stdio: "ignore",
@@ -402,6 +447,7 @@ async function captureScenario(scenario) {
     }
     assert.equal(excludedControlResult.code, 0, "Synthetic filter negative control failed");
     console.log(`Windows audit ${scenario}: excluded-control read completed UTC=${new Date().toISOString()}`);
+    await readCaptureListCount("after-controls", true);
 
     command.send("start");
     console.log(`Windows audit ${scenario}: WDIO start sent UTC=${new Date().toISOString()}`);
@@ -453,41 +499,7 @@ async function captureScenario(scenario) {
     console.log(`Windows audit ${scenario}: live-filter=rules:exact-two;drop:on`);
     assert.equal(capture.exitCode, null, "Process Monitor capture stopped during live filter verification");
 
-    const finalInspection = spawn(
-      "powershell.exe",
-      [
-        "-STA", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
-        "-File", path.join(root, "scripts", "inspect-windows-procmon-capture.ps1"),
-        "-OwnerProcessId", String(capture.pid), "-CountOnly",
-      ],
-      { stdio: ["ignore", "pipe", "pipe"], windowsHide: true },
-    );
-    let finalOutput = "";
-    let finalOverflow = false;
-    finalInspection.stdout.setEncoding("utf8");
-    finalInspection.stdout.on("data", (chunk) => {
-      finalOverflow ||= finalOutput.length + chunk.length > 2048;
-      finalOutput = (finalOutput + chunk).slice(0, 2048);
-    });
-    finalInspection.stderr.resume();
-    const finalExit = waitForProcess(finalInspection);
-    const finalResult = await waitWithTimeout(finalExit, 20_000);
-    if (finalResult.timedOut) {
-      finalInspection.kill();
-      await finalExit;
-      throw new Error("Process Monitor final list inspection timed out");
-    }
-    assert(!finalResult.error && finalResult.code === 0 && !finalOverflow, "Process Monitor final list inspection failed");
-    const finalCount = [...finalOutput.matchAll(
-      /^PROC_MON_CAPTURE_LIST=items:(unavailable|0|[1-9]\d{0,9})\r?$/gm,
-    )];
-    assert(
-      finalCount.length === 1 &&
-      (finalCount[0][1] === "unavailable" || Number(finalCount[0][1]) <= 2_147_483_647),
-      "Process Monitor final list evidence is incomplete",
-    );
-    console.log(`Windows audit ${scenario}: final-list-items=${finalCount[0][1]}`);
-    assert.equal(capture.exitCode, null, "Process Monitor capture stopped during final inspection");
+    await readCaptureListCount("final");
 
     await runProcmon(["/AcceptEula", "/Terminate"], "capture shutdown");
     const captureResult = await waitWithTimeout(captureExit, 10_000);
