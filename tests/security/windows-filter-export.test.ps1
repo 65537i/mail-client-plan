@@ -281,8 +281,12 @@ $headerShapeFixtures = @(
   [pscustomobject]@{ Header = "Filter Name Altitude Instance Name Frame SprtFtrs"; Shape = "filter-name-altitude-instance-name-frame-sprtftrs" }
   [pscustomobject]@{ Header = "Filter Volume Name Altitude Instance Name Frame"; Shape = "filter-volume-name-altitude-instance-name-frame" }
   [pscustomobject]@{ Header = "  FILTER`tAltitude  Instance Name  Frame  SprtFtrs "; Shape = "filter-altitude-instance-name-frame-sprtftrs" }
-  [pscustomobject]@{ Header = "Filter unknown-value"; Shape = "unknown" }
-  [pscustomobject]@{ Header = "Filter C:\private"; Shape = "unknown" }
+  [pscustomobject]@{ Header = "Filter unknown-value"; Shape = "filter-unknown" }
+  [pscustomobject]@{ Header = "Filter C:\private"; Shape = "filter-unknown" }
+  [pscustomobject]@{ Header = "Filter Name Private Altitude Instance Name Frame"; Shape = "filter-name-unknown-altitude-instance-name-frame" }
+  [pscustomobject]@{ Header = "Filter private Altitude other Frame"; Shape = "filter-unknown-altitude-unknown-frame" }
+  [pscustomobject]@{ Header = "Filter Name Altitude Instance Name Frame private"; Shape = "filter-name-altitude-instance-name-frame-unknown" }
+  [pscustomobject]@{ Header = ("Filter " + ("private " * 15)); Shape = ("filter" + ("-unknown" * 15)) }
   [pscustomobject]@{ Header = ("Filter " + ("Name " * 16)); Shape = "token-limit" }
   [pscustomobject]@{ Header = ("Filter " + ("Name " * 15)); Shape = ("filter" + ("-name" * 15)) }
 )

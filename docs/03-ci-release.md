@@ -2,6 +2,8 @@
 
 ## 1. ワークフロー構成
 
+[Run 504](https://github.com/65537i/mail-client-plan/actions/runs/40902953157)（`c1466cf`、Windows 2025 x64 / webview）のlive parserは`filter-heading` / header `unknown`でfail closed。positive control / WDIOへ未到達。次の診断では未知tokenのみを固定`unknown`に置換して既知列の順序を残す。11語allowlist・16 tokens上限・parser acceptance・監査ゲートは変更せず、任意語・pathは出力しない。未知列位置・複数未知列・16語・path伏字化のfixtureとreporter拒否例を一括追加。ローカルNode65/65・syntax・diff check成功、新Windows fixture / live監査は未実行。AC-05未達。
+
 [Run 502](https://github.com/65537i/mail-client-plan/actions/runs/40897036689)（`52d9440`、Windows 2025 x64 / webview）はNode65/65・PowerShell fixture成功後、live parserが`filter-heading` / heading-target `unobserved`でfail closedした。positive control / WDIOへ未到達。次は固定header語11種の順序付きsignature（最大16 tokens）だけを診断し、未知語を含む行は`unknown`、上限超過は`token-limit`とする。raw outputや任意文字列は出力せず、table acceptanceと監査ゲートは変更しない。合成fixtureに列構成・大小文字・空白・未知値・path・token上限・reset、Nodeにはreporter allowlistの正常/拒否例を追加。ローカルNode65/65・syntax・diff check成功、Windows fixture / live監査は未実行。AC-05未達。
 
 [Run 500](https://github.com/65537i/mail-client-plan/actions/runs/40894508707)（`ffe8cfc`、Windows 2025 x64 / webview）はsecurity-test build成功後、Node source regressionが64/65となり停止した。新しい複数行`String.raw`完全一致検査がCRLFを許容せず、assertion診断は`Unterminated template`を表示した。旧検査のLF成功 / CRLF失敗を再現し、LF・CRLF両方を検証する改行許容regexへ修正。parserと監査ゲートは変更せず、修正後ローカルNode65/65・syntax・diff check成功。Windows PowerShell fixture / 実監査は未実行、AC-05未達。

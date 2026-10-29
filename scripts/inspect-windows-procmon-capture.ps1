@@ -375,11 +375,7 @@ function Get-ProcmonFilterManagerVolumeEvidence {
               }
             }
           )
-          $script:filterManagerHeaderShape = if ($safeTokens -contains "unknown") {
-            "unknown"
-          } else {
-            $safeTokens -join "-"
-          }
+          $script:filterManagerHeaderShape = $safeTokens -join "-"
         }
       } elseif ($line -match '^\s*Volume\b') {
         $script:filterManagerVolumeParseState = "volume-heading"
@@ -949,7 +945,7 @@ public static class ProcmonCaptureWindows
         "PROC_MON_CAPTURE_FILTER_MANAGER_HEADING_TARGET=$script:filterManagerHeadingTarget"
       )
     }
-    if ($script:filterManagerHeaderShape -cmatch '^(?:unobserved|unknown|token-limit|(?:filter|name|num|instances|altitude|frame|sprtftrs|instance|volume|supported|features)(?:-(?:filter|name|num|instances|altitude|frame|sprtftrs|instance|volume|supported|features)){0,15})$') {
+    if ($script:filterManagerHeaderShape -cmatch '^(?:unobserved|unknown|token-limit|(?:filter|name|num|instances|altitude|frame|sprtftrs|instance|volume|supported|features|unknown)(?:-(?:filter|name|num|instances|altitude|frame|sprtftrs|instance|volume|supported|features|unknown)){0,15})$') {
       [Console]::Out.WriteLine(
         "PROC_MON_CAPTURE_FILTER_MANAGER_HEADER=$script:filterManagerHeaderShape"
       )
