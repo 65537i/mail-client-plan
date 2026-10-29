@@ -70,6 +70,10 @@ test("AC-05: Filter Manager inventory is an independent bounded read-only driver
   assert.match(inspection, /Get-ProcmonFilterManagerVolumeEvidence[\s\S]*SprtFtrs[\s\S]*\$instanceCount -gt 64/);
   assert.match(inspection, /Instances for\\s\+\(\.\+\?\)/);
   assert.match(inspection, /OrdinalIgnoreCase/);
+  assert.ok(inspection.includes(String.raw`if ($ExpectedVolume -match '^[A-Za-z]:\\?$') {
+            $expectedHeadings += "$($ExpectedVolume.Substring(0, 2)) Volume:"
+          }`));
+  assert.match(inspection, /if \(\$expectedVolumeMatches -and -not \$volumeHeadingSeen\)/);
   assert.ok(
     inspection.includes(String.raw`if ($driveDecoration -match '^(?i:volume)(?:\s|:|[\\/])')`),
   );

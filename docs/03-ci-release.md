@@ -2,6 +2,8 @@
 
 ## 1. ワークフロー構成
 
+[Run 498](https://github.com/65537i/mail-client-plan/actions/runs/40792754644)（`3d4147c`、Windows 2025 x64 / webview）のNode65/65・PowerShell fixtureは成功したが、live parserは`volume-heading-drive-decorated-volume-colon-empty` / `drive-root-match`でfail closedした。positive control / WDIOへ未到達。次の修正では、照会volumeがdrive rootである場合だけ同じdriveの固定形式`<drive>: Volume:`を完全一致（case-insensitive）で受け入れる。別drive、mount path、追加suffix、同形式または従来形式との重複は拒否する合成fixtureを追加。従来のheading・table検証、positive control、canary-negative control、WDIO gateは維持。ローカルNode65/65・JS syntax・diff check成功、PowerShell fixture / Windows実監査は未実行。AC-05未達。
+
 [Run 495 attempt 2](https://github.com/65537i/mail-client-plan/actions/runs/40789262057/attempts/2)（`844a33f`、manual Windows 2025 x64 / webview）はPowerShell configuration-export fixtureを通過し、実baseline監査のPath入力も通過した。live capture inspectionは`parse-filter-manager-instance-output` / `RuntimeException`、state `volume-heading-drive-decorated-volume-colon-empty`でfail closed。positive control / WDIOには未到達。attempt 1の入力失敗は今回再現しなかったが、原因解消とは断定しない。次はheadingのdriveと照会volumeの関係だけを固定enumで記録し、root一致 / 不一致、mount-path、missing、otherを一括検証する。値/raw outputを出さず、heading acceptanceと監査ゲートを維持。AC-05未達。
 
 | Workflow | 起動 | 必須処理 |

@@ -228,6 +228,9 @@ function Get-ProcmonFilterManagerVolumeEvidence {
         if ($ExpectedVolume -is [string] -and $ExpectedVolume.Length -gt 0 -and
           $ExpectedVolume.Length -le 260) {
           $expectedHeadings = @($ExpectedVolume, "$ExpectedVolume\")
+          if ($ExpectedVolume -match '^[A-Za-z]:\\?$') {
+            $expectedHeadings += "$($ExpectedVolume.Substring(0, 2)) Volume:"
+          }
           foreach ($expectedHeading in $expectedHeadings) {
             if ([string]::Equals(
                 $reportedVolume,

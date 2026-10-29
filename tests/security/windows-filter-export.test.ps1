@@ -186,8 +186,6 @@ foreach ($fixture in $decoratedDriveShapeFixtures) {
   }
 }
 $headingTargetFixtures = @(
-  [pscustomobject]@{ Expected = "D:"; Target = "drive-root-match" }
-  [pscustomobject]@{ Expected = "d:\"; Target = "drive-root-match" }
   [pscustomobject]@{ Expected = "C:\"; Target = "drive-root-mismatch" }
   [pscustomobject]@{ Expected = "D:\mount\"; Target = "mount-path" }
   [pscustomobject]@{ Expected = ""; Target = "missing" }
@@ -203,7 +201,44 @@ foreach ($fixture in $headingTargetFixtures) {
   if (-not $rejected -or
     $script:filterManagerVolumeParseState -cne "volume-heading-drive-decorated-volume-colon-empty" -or
     $script:filterManagerHeadingTarget -cne $fixture.Target) {
-    throw "Heading target diagnostics must classify without accepting decorated headings"
+    throw "Unsupported heading targets must remain rejected and safely classified"
+  }
+}
+$supportedVolumeHeadings = @(
+  [pscustomobject]@{ Heading = "Instances for D: Volume:"; Expected = "D:" }
+  [pscustomobject]@{ Heading = "Instances for d: Volume:"; Expected = "D:\" }
+  [pscustomobject]@{ Heading = "Instances for D: Volume:"; Expected = "d:\" }
+  [pscustomobject]@{ Heading = "Instances for D:\"; Expected = "D:" }
+)
+foreach ($fixture in $supportedVolumeHeadings) {
+  $evidence = Get-ProcmonFilterManagerVolumeEvidence @(
+    $fixture.Heading, $volumeHeader, $volumeSeparator, "PROCMON24 2 385200 0 0x00"
+  ) $fixture.Expected
+  if ($evidence -cne "candidates:1;instances:2" -or
+    $script:filterManagerVolumeParseState -cne "valid") {
+    throw "Supported headings must retain exact target-volume instance evidence"
+  }
+}
+$unsupportedVolumeHeadings = @(
+  [pscustomobject]@{ Lines = @("Instances for C: Volume:") }
+  [pscustomobject]@{ Lines = @("Instances for D: Volume: metadata") }
+  [pscustomobject]@{ Lines = @("Instances for D: Volume: E:") }
+  [pscustomobject]@{ Lines = @("Instances for D: Volume: \Device\fixture") }
+  [pscustomobject]@{ Lines = @("Instances for D:\nested Volume:") }
+  [pscustomobject]@{ Lines = @("Instances for D: Volume") }
+  [pscustomobject]@{ Lines = @("Instances for D: Volume:", "Instances for D: Volume:") }
+  [pscustomobject]@{ Lines = @("Instances for D:\", "Instances for D: Volume:") }
+  [pscustomobject]@{ Lines = @("Instances for D: Volume:", "Instances for D:\") }
+)
+foreach ($fixture in $unsupportedVolumeHeadings) {
+  $rejected = $false
+  try {
+    Get-ProcmonFilterManagerVolumeEvidence (
+      $fixture.Lines + @($volumeHeader, $volumeSeparator, "PROCMON24 2 385200 0 0x00")
+    ) "D:\" | Out-Null
+  } catch { $rejected = $true }
+  if (-not $rejected) {
+    throw "Mismatched, extended and duplicate volume headings must remain rejected"
   }
 }
 Get-ProcmonFilterManagerVolumeEvidence @($volumeHeader, $volumeSeparator) "C:" | Out-Null
