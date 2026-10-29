@@ -4,6 +4,7 @@
 
 ## 現在の範囲
 
+- [Run 504](https://github.com/65537i/mail-client-plan/actions/runs/40902953157)（`c1466cf`、manual Windows 2025 x64 / webview）をdispatch済み。固定header-token診断と関連fixtureを一括検証する。結果待ち、AC-05未達。
 - [Run 502](https://github.com/65537i/mail-client-plan/actions/runs/40897036689)（`52d9440`、manual Windows 2025 x64 / webview）はNode65/65とPowerShell fixtureに成功。live parserは`filter-heading` / heading-target `unobserved`でfail closedし、positive control / WDIOへ未到達。次の診断では固定列名11語だけを最大16 tokensの順序付きsignatureへ変換する。未知語は行全体を`unknown`、上限超過は`token-limit`とし、元のheaderや任意値を出力しない。複数列構成・大小文字・空白・未知語・path・16/17 tokens・resetの合成fixtureとNode reporter拒否テストを一括追加した。ローカルNode65/65・JS syntax・diff check成功、PowerShell / live Windows検証待ち。table acceptanceと監査ゲートは変更せず、AC-05未達。
 - Run500結果: [Run 500](https://github.com/65537i/mail-client-plan/actions/runs/40894508707)（`ffe8cfc`、Windows 2025 x64 / webview）はsecurity-test build成功後、Node回帰64/65で停止。追加した複数行source assertionがLF完全一致で、Windows checkoutのCRLFでは失敗し、Nodeのassertion診断が`Unterminated template`を表示した。旧assertionのLF成功 / CRLF失敗をローカル再現し、改行を許容する正規表現へ変更、同じsourceのLF / CRLF両形状を明示検証した。修正後Node65/65・JS syntax・diff check成功。parser実装は変更せず、PowerShell fixture / live parser / positive control / WDIOは次のWindows run待ち。AC-05未達。
 - [Run 500](https://github.com/65537i/mail-client-plan/actions/runs/40894508707)（`ffe8cfc`、manual Windows 2025 x64 / webview）をdispatchし、queuedを確認。target-bound ` Volume:` heading対応と正常系・異常系fixtureをまとめて検証する。結果待ち、AC-05未達。
