@@ -276,6 +276,32 @@ if (-not $objectManagerHeadingRejected -or
   throw "An object-manager volume prefix must fail closed without exposing the name"
 }
 $emptyInstanceOutputRejected = $false
+$headerShapeFixtures = @(
+  [pscustomobject]@{ Header = "Filter Altitude Instance Name Frame"; Shape = "filter-altitude-instance-name-frame" }
+  [pscustomobject]@{ Header = "Filter Name Altitude Instance Name Frame SprtFtrs"; Shape = "filter-name-altitude-instance-name-frame-sprtftrs" }
+  [pscustomobject]@{ Header = "Filter Volume Name Altitude Instance Name Frame"; Shape = "filter-volume-name-altitude-instance-name-frame" }
+  [pscustomobject]@{ Header = "  FILTER`tAltitude  Instance Name  Frame  SprtFtrs "; Shape = "filter-altitude-instance-name-frame-sprtftrs" }
+  [pscustomobject]@{ Header = "Filter unknown-value"; Shape = "unknown" }
+  [pscustomobject]@{ Header = "Filter C:\private"; Shape = "unknown" }
+  [pscustomobject]@{ Header = ("Filter " + ("Name " * 16)); Shape = "token-limit" }
+  [pscustomobject]@{ Header = ("Filter " + ("Name " * 15)); Shape = ("filter" + ("-name" * 15)) }
+)
+foreach ($fixture in $headerShapeFixtures) {
+  $rejected = $false
+  try {
+    Get-ProcmonFilterManagerVolumeEvidence @(
+      "Instances for D: Volume:", $fixture.Header, $volumeSeparator
+    ) "D:\" | Out-Null
+  } catch { $rejected = $true }
+  if (-not $rejected -or $script:filterManagerVolumeParseState -cne "filter-heading" -or
+    $script:filterManagerHeaderShape -cne $fixture.Shape) {
+    throw "Unsupported headers must fail closed with bounded fixed-token diagnostics"
+  }
+}
+Get-ProcmonFilterManagerVolumeEvidence @($volumeHeader, $volumeSeparator) "D:\" | Out-Null
+if ($script:filterManagerHeaderShape -cne "unobserved") {
+  throw "Header shape diagnostics must reset between queries"
+}
 try { Get-ProcmonFilterManagerVolumeEvidence @() | Out-Null } catch { $emptyInstanceOutputRejected = $true }
 if (-not $emptyInstanceOutputRejected) {
   throw "An empty target-volume query output must not be interpreted as unattached"

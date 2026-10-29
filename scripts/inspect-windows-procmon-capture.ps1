@@ -196,6 +196,7 @@ function Get-ProcmonFilterManagerVolumeEvidence {
   param([string[]]$Lines, [string]$ExpectedVolume)
   $script:filterManagerVolumeParseState = "started"
   $script:filterManagerHeadingTarget = "unobserved"
+  $script:filterManagerHeaderShape = "unobserved"
   if ($Lines.Count -eq 0 -or $Lines.Count -gt 256) {
     $script:filterManagerVolumeParseState = if ($Lines.Count -eq 0) { "empty-output" } else { "line-limit" }
     throw "Filter Manager volume inventory exceeded its limit"
@@ -353,6 +354,33 @@ function Get-ProcmonFilterManagerVolumeEvidence {
         $script:filterManagerVolumeParseState = "filter-manager-heading"
       } elseif ($line -match '^\s*Filter\b') {
         $script:filterManagerVolumeParseState = "filter-heading"
+        $headerTokens = @($line.Trim() -split '\s+')
+        $script:filterManagerHeaderShape = "token-limit"
+        if ($headerTokens.Count -le 16) {
+          $safeTokens = @(
+            foreach ($token in $headerTokens) {
+              switch ($token.ToLowerInvariant()) {
+                "filter" { "filter" }
+                "name" { "name" }
+                "num" { "num" }
+                "instances" { "instances" }
+                "altitude" { "altitude" }
+                "frame" { "frame" }
+                "sprtftrs" { "sprtftrs" }
+                "instance" { "instance" }
+                "volume" { "volume" }
+                "supported" { "supported" }
+                "features" { "features" }
+                default { "unknown" }
+              }
+            }
+          )
+          $script:filterManagerHeaderShape = if ($safeTokens -contains "unknown") {
+            "unknown"
+          } else {
+            $safeTokens -join "-"
+          }
+        }
       } elseif ($line -match '^\s*Volume\b') {
         $script:filterManagerVolumeParseState = "volume-heading"
       } else {
@@ -919,6 +947,11 @@ public static class ProcmonCaptureWindows
       )) {
       [Console]::Out.WriteLine(
         "PROC_MON_CAPTURE_FILTER_MANAGER_HEADING_TARGET=$script:filterManagerHeadingTarget"
+      )
+    }
+    if ($script:filterManagerHeaderShape -cmatch '^(?:unobserved|unknown|token-limit|(?:filter|name|num|instances|altitude|frame|sprtftrs|instance|volume|supported|features)(?:-(?:filter|name|num|instances|altitude|frame|sprtftrs|instance|volume|supported|features)){0,15})$') {
+      [Console]::Out.WriteLine(
+        "PROC_MON_CAPTURE_FILTER_MANAGER_HEADER=$script:filterManagerHeaderShape"
       )
     }
   }

@@ -145,6 +145,19 @@ test("AC-05: Filter Manager inventory is an independent bounded read-only driver
   assert.match(inspection, /"unobserved", "missing", "drive-root-match", "drive-root-mismatch", "mount-path", "other"[\s\S]*PROC_MON_CAPTURE_FILTER_MANAGER_HEADING_TARGET=\$script:filterManagerHeadingTarget/);
   assert.match(driver, /HEADING_TARGET=\(unobserved\|missing\|drive-root-match\|drive-root-mismatch\|mount-path\|other\)/);
   assert.match(driver, /Filter Manager heading target \$\{filterManagerHeadingTarget\}/);
+  assert.match(inspection, /\$script:filterManagerHeaderShape = "unobserved"/);
+  assert.match(inspection, /\$headerTokens.Count -le 16/);
+  assert.match(inspection, /default \{ "unknown" \}[\s\S]*\$safeTokens -contains "unknown"/);
+  assert.match(inspection, /PROC_MON_CAPTURE_FILTER_MANAGER_HEADER=\$script:filterManagerHeaderShape/);
+  const headerPatternSource = driver.match(/\^PROC_MON_CAPTURE_FILTER_MANAGER_HEADER=[^\n]+(?=\/m,)/)?.[0];
+  assert.ok(headerPatternSource, "Header reporter must have an anchored allowlist");
+  const headerPattern = new RegExp(headerPatternSource, "m");
+  for (const shape of ["unobserved", "unknown", "token-limit", "filter-altitude-instance-name-frame-sprtftrs", `filter${"-name".repeat(15)}`]) {
+    assert.match(`PROC_MON_CAPTURE_FILTER_MANAGER_HEADER=${shape}\r\n`, headerPattern);
+  }
+  for (const shape of ["filter-private", "Filter", "filter-C:\\private", `filter${"-name".repeat(16)}`, "filter;secret"]) {
+    assert.doesNotMatch(`PROC_MON_CAPTURE_FILTER_MANAGER_HEADER=${shape}\n`, headerPattern);
+  }
   assert.match(driver, /FILTER_MANAGER=candidates:\(0\|\[1-9\]\\d\{0,2\}\);instances:\(0\|\[1-9\]\\d\{0,4\}\);target-volume-attached:\(true\|false\);target-volume-instances:/);
   assert.match(driver, /filterManagerEvidence.length === 1[\s\S]*Number\(filterManagerEvidence\[0\]\[1\]\) <= 64/);
   assert.match(driver, /Number\(filterManagerEvidence\[0\]\[4\]\) <= Number\(filterManagerEvidence\[0\]\[1\]\) \* 64/);
