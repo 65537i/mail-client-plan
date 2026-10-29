@@ -2,6 +2,8 @@
 
 ## 1. ワークフロー構成
 
+[Run 506 attempt 1](https://github.com/65537i/mail-client-plan/actions/runs/40905977859/attempts/1)（`c24070d`、Windows 2025 x64 / webview）はNode回帰65/65成功。実監査は`wait-export-config-dialog`で停止し、scan windows / file-names / save-buttons各0、timeout観測はsame-process-dialogs:1、save:1、cancel:1だった。ダイアログ検出失敗の原因は未確定であり、header診断 / positive control / WDIOへ未到達。同じcommitのWindows jobをdebug loggingなしで1回再実行する。コード・監査ゲート変更なし、AC-05未達。
+
 [Run 504](https://github.com/65537i/mail-client-plan/actions/runs/40902953157)（`c1466cf`、Windows 2025 x64 / webview）のlive parserは`filter-heading` / header `unknown`でfail closed。positive control / WDIOへ未到達。次の診断では未知tokenのみを固定`unknown`に置換して既知列の順序を残す。11語allowlist・16 tokens上限・parser acceptance・監査ゲートは変更せず、任意語・pathは出力しない。未知列位置・複数未知列・16語・path伏字化のfixtureとreporter拒否例を一括追加。ローカルNode65/65・syntax・diff check成功、新Windows fixture / live監査は未実行。AC-05未達。
 
 [Run 502](https://github.com/65537i/mail-client-plan/actions/runs/40897036689)（`52d9440`、Windows 2025 x64 / webview）はNode65/65・PowerShell fixture成功後、live parserが`filter-heading` / heading-target `unobserved`でfail closedした。positive control / WDIOへ未到達。次は固定header語11種の順序付きsignature（最大16 tokens）だけを診断し、未知語を含む行は`unknown`、上限超過は`token-limit`とする。raw outputや任意文字列は出力せず、table acceptanceと監査ゲートは変更しない。合成fixtureに列構成・大小文字・空白・未知値・path・token上限・reset、Nodeにはreporter allowlistの正常/拒否例を追加。ローカルNode65/65・syntax・diff check成功、Windows fixture / live監査は未実行。AC-05未達。

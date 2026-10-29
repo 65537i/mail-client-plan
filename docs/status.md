@@ -4,6 +4,7 @@
 
 ## 現在の範囲
 
+- Run506 attempt 1結果: [Run 506](https://github.com/65537i/mail-client-plan/actions/runs/40905977859/attempts/1)（`c24070d`、Windows 2025 x64 / webview）はNode65/65成功後、実監査の`wait-export-config-dialog`でfail closed。dialog scanはwindows / file-names / save-buttons各0、timeout観測はsame-process-dialogs:1・save:1・cancel:1だったが、検出条件不一致の原因は未確定。header診断 / positive control / WDIOへ未到達。同一commitのWindows jobだけをdebug loggingなしで1回再実行した。コード・監査ゲートは変更せず、結果待ち・AC-05未達。
 - [Run 506](https://github.com/65537i/mail-client-plan/actions/runs/40905977859)（`c24070d`、manual Windows 2025 x64 / webview）をdispatch済み。未知header語の値を出さず列位置だけ残す診断と合成fixtureを一括検証する。結果待ち、AC-05未達。
 - Run504結果: [Run 504](https://github.com/65537i/mail-client-plan/actions/runs/40902953157)（`c1466cf`、Windows 2025 x64 / webview）はlive parserで`filter-heading` / header `unknown`となりfail closed。positive control / WDIOへ未到達。行全体をunknownにする診断では既知列の順序まで失われるため、未知tokenだけを固定`unknown`へ置換する。既存11語allowlist・16 tokens上限・未知値非出力・table acceptanceを維持。未知列の先頭/中間/末尾・複数列・最大16語・path伏字化を合成fixtureでまとめて検査し、reporterの上限超過/任意文字列拒否も追加。ローカルNode65/65・JS syntax・diff check成功。新PowerShell fixtureとlive Windows監査は未実行、AC-05未達。
 - [Run 504](https://github.com/65537i/mail-client-plan/actions/runs/40902953157)（`c1466cf`、manual Windows 2025 x64 / webview）をdispatch済み。固定header-token診断と関連fixtureを一括検証する。結果待ち、AC-05未達。
