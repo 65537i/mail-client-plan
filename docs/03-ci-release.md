@@ -2,6 +2,8 @@
 
 ## 1. ワークフロー構成
 
+[Run 506 attempt 2](https://github.com/65537i/mail-client-plan/actions/runs/40905977859/attempts/2)（`c24070d`、Windows 2025 x64 / webview）は設定export後、live parserで`filter-heading` / signature `filter-altitude-instance-name-frame-sprtftrs-unknown`を記録しfail closed。positive control / WDIO未到達。次は状態/flags列の固定語`vlstatus` / `status` / `flags`を診断allowlistへ追加する。値非出力・token上限・未知値伏字化とtable acceptanceは維持。PowerShell合成fixtureとNodeの両reporter正例/拒否例を追加し、ローカルNode65/65・syntax・diff check成功。Windows fixtureとlive監査は次run待ち。AC-05未達。
+
 [Run 506 attempt 1](https://github.com/65537i/mail-client-plan/actions/runs/40905977859/attempts/1)（`c24070d`、Windows 2025 x64 / webview）はNode回帰65/65成功。実監査は`wait-export-config-dialog`で停止し、scan windows / file-names / save-buttons各0、timeout観測はsame-process-dialogs:1、save:1、cancel:1だった。ダイアログ検出失敗の原因は未確定であり、header診断 / positive control / WDIOへ未到達。同じcommitのWindows jobをdebug loggingなしで1回再実行する。コード・監査ゲート変更なし、AC-05未達。
 
 [Run 504](https://github.com/65537i/mail-client-plan/actions/runs/40902953157)（`c1466cf`、Windows 2025 x64 / webview）のlive parserは`filter-heading` / header `unknown`でfail closed。positive control / WDIOへ未到達。次の診断では未知tokenのみを固定`unknown`に置換して既知列の順序を残す。11語allowlist・16 tokens上限・parser acceptance・監査ゲートは変更せず、任意語・pathは出力しない。未知列位置・複数未知列・16語・path伏字化のfixtureとreporter拒否例を一括追加。ローカルNode65/65・syntax・diff check成功、新Windows fixture / live監査は未実行。AC-05未達。

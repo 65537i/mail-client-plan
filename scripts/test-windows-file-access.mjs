@@ -348,7 +348,7 @@ async function captureScenario(scenario) {
       /^PROC_MON_CAPTURE_FILTER_MANAGER_HEADING_TARGET=(unobserved|missing|drive-root-match|drive-root-mismatch|mount-path|other)\r?$/m,
     )?.[1];
     const filterManagerHeaderShape = captureInspectionOutput.match(
-      /^PROC_MON_CAPTURE_FILTER_MANAGER_HEADER=(unobserved|unknown|token-limit|(?:filter|name|num|instances|altitude|frame|sprtftrs|instance|volume|supported|features|unknown)(?:-(?:filter|name|num|instances|altitude|frame|sprtftrs|instance|volume|supported|features|unknown)){0,15})\r?$/m,
+      /^PROC_MON_CAPTURE_FILTER_MANAGER_HEADER=(unobserved|unknown|token-limit|(?:filter|name|num|instances|altitude|frame|sprtftrs|instance|volume|supported|features|vlstatus|status|flags|unknown)(?:-(?:filter|name|num|instances|altitude|frame|sprtftrs|instance|volume|supported|features|vlstatus|status|flags|unknown)){0,15})\r?$/m,
     )?.[1];
     assert(
       !captureInspectionResult.error && captureInspectionResult.code === 0 && !captureInspectionOverflow,

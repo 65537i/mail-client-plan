@@ -371,6 +371,9 @@ function Get-ProcmonFilterManagerVolumeEvidence {
                 "volume" { "volume" }
                 "supported" { "supported" }
                 "features" { "features" }
+                "vlstatus" { "vlstatus" }
+                "status" { "status" }
+                "flags" { "flags" }
                 default { "unknown" }
               }
             }
@@ -945,7 +948,7 @@ public static class ProcmonCaptureWindows
         "PROC_MON_CAPTURE_FILTER_MANAGER_HEADING_TARGET=$script:filterManagerHeadingTarget"
       )
     }
-    if ($script:filterManagerHeaderShape -cmatch '^(?:unobserved|unknown|token-limit|(?:filter|name|num|instances|altitude|frame|sprtftrs|instance|volume|supported|features|unknown)(?:-(?:filter|name|num|instances|altitude|frame|sprtftrs|instance|volume|supported|features|unknown)){0,15})$') {
+    if ($script:filterManagerHeaderShape -cmatch '^(?:unobserved|unknown|token-limit|(?:filter|name|num|instances|altitude|frame|sprtftrs|instance|volume|supported|features|vlstatus|status|flags|unknown)(?:-(?:filter|name|num|instances|altitude|frame|sprtftrs|instance|volume|supported|features|vlstatus|status|flags|unknown)){0,15})$') {
       [Console]::Out.WriteLine(
         "PROC_MON_CAPTURE_FILTER_MANAGER_HEADER=$script:filterManagerHeaderShape"
       )

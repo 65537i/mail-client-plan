@@ -152,6 +152,19 @@ test("AC-05: Filter Manager inventory is an independent bounded read-only driver
   const headerPatternSource = driver.match(/\^PROC_MON_CAPTURE_FILTER_MANAGER_HEADER=[^\n]+(?=\/m,)/)?.[0];
   assert.ok(headerPatternSource, "Header reporter must have an anchored allowlist");
   const headerPattern = new RegExp(headerPatternSource, "m");
+  const powerShellHeaderPattern = inspection.match(/\$script:filterManagerHeaderShape -cmatch '([^'\r\n]+)'/)?.[1];
+  assert.ok(powerShellHeaderPattern, "PowerShell reporter must have an anchored allowlist");
+  const powerShellHeaderRegex = new RegExp(powerShellHeaderPattern);
+  for (const token of ["vlstatus", "status", "flags"]) {
+    assert.ok(inspection.includes(`"${token}" { "${token}" }`));
+    const shape = `filter-altitude-instance-name-frame-sprtftrs-${token}`;
+    assert.match(shape, powerShellHeaderRegex);
+    assert.match(`PROC_MON_CAPTURE_FILTER_MANAGER_HEADER=${shape}\r\n`, headerPattern);
+    for (const suffix of ["extra", ":private", "=private"]) {
+      assert.doesNotMatch(`${shape}${suffix}`, powerShellHeaderRegex);
+      assert.doesNotMatch(`PROC_MON_CAPTURE_FILTER_MANAGER_HEADER=${shape}${suffix}\n`, headerPattern);
+    }
+  }
   for (const shape of ["unobserved", "unknown", "token-limit", "filter-altitude-instance-name-frame-sprtftrs", "filter-name-unknown-altitude-instance-name-frame", "filter-unknown-altitude-unknown-frame", `filter${"-unknown".repeat(15)}`, `filter${"-name".repeat(15)}`]) {
     assert.match(`PROC_MON_CAPTURE_FILTER_MANAGER_HEADER=${shape}\r\n`, headerPattern);
   }

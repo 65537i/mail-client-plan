@@ -277,6 +277,11 @@ if (-not $objectManagerHeadingRejected -or
 }
 $emptyInstanceOutputRejected = $false
 $headerShapeFixtures = @(
+  [pscustomobject]@{ Header = "Filter Altitude Instance Name Frame SprtFtrs VlStatus"; Shape = "filter-altitude-instance-name-frame-sprtftrs-vlstatus" }
+  [pscustomobject]@{ Header = "Filter Altitude Instance Name Frame SprtFtrs Status"; Shape = "filter-altitude-instance-name-frame-sprtftrs-status" }
+  [pscustomobject]@{ Header = "Filter Altitude Instance Name Frame SprtFtrs Flags"; Shape = "filter-altitude-instance-name-frame-sprtftrs-flags" }
+  [pscustomobject]@{ Header = "Filter`tVLSTATUS Status FLAGS private"; Shape = "filter-vlstatus-status-flags-unknown" }
+  [pscustomobject]@{ Header = "Filter VlStatusExtra Status: Flags=private"; Shape = "filter-unknown-unknown-unknown" }
   [pscustomobject]@{ Header = "Filter Altitude Instance Name Frame"; Shape = "filter-altitude-instance-name-frame" }
   [pscustomobject]@{ Header = "Filter Name Altitude Instance Name Frame SprtFtrs"; Shape = "filter-name-altitude-instance-name-frame-sprtftrs" }
   [pscustomobject]@{ Header = "Filter Volume Name Altitude Instance Name Frame"; Shape = "filter-volume-name-altitude-instance-name-frame" }
