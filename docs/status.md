@@ -4,6 +4,7 @@
 
 ## 現在の範囲
 
+- [Run 509](https://github.com/65537i/mail-client-plan/actions/runs/40910081223)（`df89d0b`、manual Windows 2025 x64 / webview）をdispatch済み。固定status列token診断と合成fixtureを一括検証する。結果待ち、AC-05未達。
 - Run506 attempt 2結果: [Run 506 attempt 2](https://github.com/65537i/mail-client-plan/actions/runs/40905977859/attempts/2)（`c24070d`、Windows 2025 x64 / webview）は設定exportを通過し、live parserの`filter-heading` / signature `filter-altitude-instance-name-frame-sprtftrs-unknown`でfail closed。末尾1語が未識別、positive control / WDIOへ未到達。次の限定診断では固定語`vlstatus` / `status` / `flags`だけを追加し、未知token伏字化・16語上限・table acceptanceを維持する。大小文字・token suffix偽装・未知値混在のPowerShell fixtureと両reporter allowlistの正常/拒否例を一括追加。ローカルNode65/65・JS syntax・diff check成功。新PowerShell fixture / live Windows監査は未実行、AC-05未達。
 - Run506 attempt 1結果: [Run 506](https://github.com/65537i/mail-client-plan/actions/runs/40905977859/attempts/1)（`c24070d`、Windows 2025 x64 / webview）はNode65/65成功後、実監査の`wait-export-config-dialog`でfail closed。dialog scanはwindows / file-names / save-buttons各0、timeout観測はsame-process-dialogs:1・save:1・cancel:1だったが、検出条件不一致の原因は未確定。header診断 / positive control / WDIOへ未到達。同一commitのWindows jobだけをdebug loggingなしで1回再実行した。コード・監査ゲートは変更せず、結果待ち・AC-05未達。
 - [Run 506](https://github.com/65537i/mail-client-plan/actions/runs/40905977859)（`c24070d`、manual Windows 2025 x64 / webview）をdispatch済み。未知header語の値を出さず列位置だけ残す診断と合成fixtureを一括検証する。結果待ち、AC-05未達。
