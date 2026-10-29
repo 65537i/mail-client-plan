@@ -4,6 +4,7 @@
 
 ## 現在の範囲
 
+- [Run 506](https://github.com/65537i/mail-client-plan/actions/runs/40905977859)（`c24070d`、manual Windows 2025 x64 / webview）をdispatch済み。未知header語の値を出さず列位置だけ残す診断と合成fixtureを一括検証する。結果待ち、AC-05未達。
 - Run504結果: [Run 504](https://github.com/65537i/mail-client-plan/actions/runs/40902953157)（`c1466cf`、Windows 2025 x64 / webview）はlive parserで`filter-heading` / header `unknown`となりfail closed。positive control / WDIOへ未到達。行全体をunknownにする診断では既知列の順序まで失われるため、未知tokenだけを固定`unknown`へ置換する。既存11語allowlist・16 tokens上限・未知値非出力・table acceptanceを維持。未知列の先頭/中間/末尾・複数列・最大16語・path伏字化を合成fixtureでまとめて検査し、reporterの上限超過/任意文字列拒否も追加。ローカルNode65/65・JS syntax・diff check成功。新PowerShell fixtureとlive Windows監査は未実行、AC-05未達。
 - [Run 504](https://github.com/65537i/mail-client-plan/actions/runs/40902953157)（`c1466cf`、manual Windows 2025 x64 / webview）をdispatch済み。固定header-token診断と関連fixtureを一括検証する。結果待ち、AC-05未達。
 - [Run 502](https://github.com/65537i/mail-client-plan/actions/runs/40897036689)（`52d9440`、manual Windows 2025 x64 / webview）はNode65/65とPowerShell fixtureに成功。live parserは`filter-heading` / heading-target `unobserved`でfail closedし、positive control / WDIOへ未到達。次の診断では固定列名11語だけを最大16 tokensの順序付きsignatureへ変換する。未知語は行全体を`unknown`、上限超過は`token-limit`とし、元のheaderや任意値を出力しない。複数列構成・大小文字・空白・未知語・path・16/17 tokens・resetの合成fixtureとNode reporter拒否テストを一括追加した。ローカルNode65/65・JS syntax・diff check成功、PowerShell / live Windows検証待ち。table acceptanceと監査ゲートは変更せず、AC-05未達。
