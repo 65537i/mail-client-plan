@@ -195,6 +195,7 @@ function Get-ProcmonFilterManagerEvidence {
 function Get-ProcmonFilterManagerVolumeEvidence {
   param([string[]]$Lines, [string]$ExpectedVolume)
   $script:filterManagerVolumeParseState = "started"
+  $script:filterManagerHeadingTarget = "unobserved"
   if ($Lines.Count -eq 0 -or $Lines.Count -gt 256) {
     $script:filterManagerVolumeParseState = if ($Lines.Count -eq 0) { "empty-output" } else { "line-limit" }
     throw "Filter Manager volume inventory exceeded its limit"
@@ -243,6 +244,23 @@ function Get-ProcmonFilterManagerVolumeEvidence {
           continue
         }
         $script:filterManagerVolumeParseState = if ($reportedVolume -match '^[A-Za-z]:') {
+          $script:filterManagerHeadingTarget = if ([string]::IsNullOrEmpty($ExpectedVolume)) {
+            "missing"
+          } elseif ($ExpectedVolume -match '^[A-Za-z]:\\?$') {
+            if ([string]::Equals(
+                $reportedVolume.Substring(0, 2),
+                $ExpectedVolume.Substring(0, 2),
+                [System.StringComparison]::OrdinalIgnoreCase
+              )) {
+              "drive-root-match"
+            } else {
+              "drive-root-mismatch"
+            }
+          } elseif ($ExpectedVolume -match '^[A-Za-z]:\\') {
+            "mount-path"
+          } else {
+            "other"
+          }
           $driveRemainder = $reportedVolume.Substring(2)
           if ($driveRemainder -match '^[\\/]') {
             "volume-heading-drive-path"
@@ -893,6 +911,13 @@ public static class ProcmonCaptureWindows
     [Console]::Out.WriteLine(
       "PROC_MON_CAPTURE_FILTER_MANAGER_PARSE=$script:filterManagerVolumeParseState"
     )
+    if ($script:filterManagerHeadingTarget -in @(
+        "unobserved", "missing", "drive-root-match", "drive-root-mismatch", "mount-path", "other"
+      )) {
+      [Console]::Out.WriteLine(
+        "PROC_MON_CAPTURE_FILTER_MANAGER_HEADING_TARGET=$script:filterManagerHeadingTarget"
+      )
+    }
   }
   $failureType = $_.Exception.GetType().Name
   if ($failureType -notin @(

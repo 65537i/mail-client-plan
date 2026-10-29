@@ -185,6 +185,31 @@ foreach ($fixture in $decoratedDriveShapeFixtures) {
     throw "A drive heading decoration must remain rejected at $($fixture.State)"
   }
 }
+$headingTargetFixtures = @(
+  [pscustomobject]@{ Expected = "D:"; Target = "drive-root-match" }
+  [pscustomobject]@{ Expected = "d:\"; Target = "drive-root-match" }
+  [pscustomobject]@{ Expected = "C:\"; Target = "drive-root-mismatch" }
+  [pscustomobject]@{ Expected = "D:\mount\"; Target = "mount-path" }
+  [pscustomobject]@{ Expected = ""; Target = "missing" }
+  [pscustomobject]@{ Expected = "\\?\Volume{fixture}\"; Target = "other" }
+)
+foreach ($fixture in $headingTargetFixtures) {
+  $rejected = $false
+  try {
+    Get-ProcmonFilterManagerVolumeEvidence @(
+      "Instances for D: Volume:", $volumeHeader, $volumeSeparator
+    ) $fixture.Expected | Out-Null
+  } catch { $rejected = $true }
+  if (-not $rejected -or
+    $script:filterManagerVolumeParseState -cne "volume-heading-drive-decorated-volume-colon-empty" -or
+    $script:filterManagerHeadingTarget -cne $fixture.Target) {
+    throw "Heading target diagnostics must classify without accepting decorated headings"
+  }
+}
+Get-ProcmonFilterManagerVolumeEvidence @($volumeHeader, $volumeSeparator) "C:" | Out-Null
+if ($script:filterManagerHeadingTarget -cne "unobserved") {
+  throw "Heading target diagnostics must reset between queries"
+}
 $guidVolumeHeadingRejected = $false
 try {
   Get-ProcmonFilterManagerVolumeEvidence @(
