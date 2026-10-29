@@ -2,6 +2,8 @@
 
 ## 1. ワークフロー構成
 
+[Run 511](https://github.com/65537i/mail-client-plan/actions/runs/40912334277)（`6773ec5`、Windows 2025 x64 / webview）はNode65/65・PowerShell fixture成功後、live parserの`row-shape` / `text-number-text-text-number-text`でfail closed。positive control / WDIO未到達。次の診断では6列separatorの位置で切り出した各列をempty / hex / digits8 / integer / decimal / barehex / legacy / word / wordsだけに分類する。tabや範囲外の非空白は固定layoutコードとし、任意値・名前・pathは出力しない。これはseparator相対の形式観測であり、実際の列内容や受理可能性の証明ではない。空欄・末尾空白省略・複数語・左右寄せ・indent・layout異常・resetと両reporter拒否例を一括追加。ローカルNode65/65・syntax・diff check成功、新PowerShell fixture / live Windows監査は次run待ち。parser acceptanceと全監査ゲートは維持、AC-05未達。
+
 [Run 509](https://github.com/65537i/mail-client-plan/actions/runs/40910081223)（`df89d0b`、Windows 2025 x64 / webview）はlive parserでexact header signature `filter-altitude-instance-name-frame-sprtftrs-vlstatus`を確認したが、旧集計表parserは`filter-heading`でfail closed。positive control / WDIO未到達。次の修正では6列instance tableを別schemaとして認識し、各filterのunique instanceを数える。数値/hex列と列数を検証し、重複・未知status・異常な無関係row・混在header・64 instances/filter超過を拒否する。未対応rowの診断は最大16 tokensのtext / number / hexのみで値を出さない。正常/異常系PowerShell fixtureとNode reporter拒否例を一括追加。ローカルNode65/65・syntax・diff check成功、Windows fixture / live監査は次run待ち。AC-05未達。
 
 [Run 506 attempt 2](https://github.com/65537i/mail-client-plan/actions/runs/40905977859/attempts/2)（`c24070d`、Windows 2025 x64 / webview）は設定export後、live parserで`filter-heading` / signature `filter-altitude-instance-name-frame-sprtftrs-unknown`を記録しfail closed。positive control / WDIO未到達。次は状態/flags列の固定語`vlstatus` / `status` / `flags`を診断allowlistへ追加する。値非出力・token上限・未知値伏字化とtable acceptanceは維持。PowerShell合成fixtureとNodeの両reporter正例/拒否例を追加し、ローカルNode65/65・syntax・diff check成功。Windows fixtureとlive監査は次run待ち。AC-05未達。

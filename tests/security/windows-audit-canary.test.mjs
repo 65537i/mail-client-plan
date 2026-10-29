@@ -155,6 +155,33 @@ test("AC-05: Filter Manager inventory is an independent bounded read-only driver
   for (const shape of ["private", "text-private", `text${"-text".repeat(16)}`, "text;secret"]) {
     assert.doesNotMatch(`PROC_MON_CAPTURE_FILTER_MANAGER_ROW=${shape}\n`, rowPattern);
   }
+  assert.match(inspection, /\$script:filterManagerColumnShape = "unobserved"/);
+  assert.match(inspection, /\$instanceColumns = @\(\[regex\]::Matches\(\$line, '-\{3,\}'\)\)/);
+  assert.match(driver, /Filter Manager columns \$\{filterManagerColumnShape\}/);
+  const columnPatternSource = driver.match(/\^PROC_MON_CAPTURE_FILTER_MANAGER_COLUMNS=[^\n]+(?=\/m,)/)?.[0];
+  const powerShellColumnPattern = inspection.match(/\$script:filterManagerColumnShape -cmatch '([^'\r\n]+)'/)?.[1];
+  assert.ok(columnPatternSource);
+  assert.ok(powerShellColumnPattern);
+  const columnPattern = new RegExp(columnPatternSource, "m");
+  const powerShellColumnRegex = new RegExp(powerShellColumnPattern);
+  for (const shape of [
+    "unobserved", "layout", "word-integer-words-integer-digits8-empty",
+    "word-decimal-word-legacy-barehex-hex",
+    "word-word-words-word-hex-word", "word-empty-empty-empty-empty-empty",
+  ]) {
+    assert.match(shape, powerShellColumnRegex);
+    for (const newline of ["\n", "\r\n"]) {
+      assert.match(`PROC_MON_CAPTURE_FILTER_MANAGER_COLUMNS=${shape}${newline}`, columnPattern);
+    }
+  }
+  for (const shape of [
+    "private", "word-integer-words-integer-digits8-private", "word-word",
+    `word${"-word".repeat(6)}`, "word-integer-words-integer-digits8-empty;private",
+    "C:\\private", "WORD-integer-words-integer-digits8-empty",
+  ]) {
+    assert.doesNotMatch(shape, powerShellColumnRegex);
+    assert.doesNotMatch(`PROC_MON_CAPTURE_FILTER_MANAGER_COLUMNS=${shape}\n`, columnPattern);
+  }
   assert.match(inspection, /\$script:filterManagerHeaderShape = "unobserved"/);
   assert.match(inspection, /\$headerTokens.Count -le 16/);
   assert.match(inspection, /default \{ "unknown" \}[\s\S]*\$script:filterManagerHeaderShape = \$safeTokens -join "-"/);

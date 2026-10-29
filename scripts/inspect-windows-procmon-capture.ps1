@@ -198,6 +198,7 @@ function Get-ProcmonFilterManagerVolumeEvidence {
   $script:filterManagerHeadingTarget = "unobserved"
   $script:filterManagerHeaderShape = "unobserved"
   $script:filterManagerRowShape = "unobserved"
+  $script:filterManagerColumnShape = "unobserved"
   if ($Lines.Count -eq 0 -or $Lines.Count -gt 256) {
     $script:filterManagerVolumeParseState = if ($Lines.Count -eq 0) { "empty-output" } else { "line-limit" }
     throw "Filter Manager volume inventory exceeded its limit"
@@ -207,6 +208,7 @@ function Get-ProcmonFilterManagerVolumeEvidence {
   $volumeHeadingSeen = $false
   $hasSupportedFeatures = $false
   $instanceTable = $false
+  $instanceColumns = @()
   $instanceNames = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
   $filterInstanceCounts = @{}
   $candidates = 0
@@ -406,6 +408,9 @@ function Get-ProcmonFilterManagerVolumeEvidence {
         throw "Filter Manager volume inventory omitted its expected separator"
       }
       $separatorSeen = $true
+      if ($instanceTable) {
+        $instanceColumns = @([regex]::Matches($line, '-{3,}'))
+      }
       continue
     }
     if ([string]::IsNullOrWhiteSpace($line)) { continue }
@@ -419,6 +424,33 @@ function Get-ProcmonFilterManagerVolumeEvidence {
     $match = [regex]::Match($line, $rowPattern)
     if (-not $match.Success) {
       $script:filterManagerVolumeParseState = "row-shape"
+      if ($instanceTable -and $instanceColumns.Count -eq 6) {
+        $script:filterManagerColumnShape = "layout"
+        $columnStart = $instanceColumns[0].Index
+        $columnEnd = $instanceColumns[5].Index + $instanceColumns[5].Length
+        if (-not $line.Contains("`t") -and
+          ($columnStart -eq 0 -or [string]::IsNullOrWhiteSpace($line.Substring(0, [Math]::Min($columnStart, $line.Length)))) -and
+          ($line.Length -le $columnEnd -or [string]::IsNullOrWhiteSpace($line.Substring($columnEnd)))) {
+          $script:filterManagerColumnShape = (@(
+            for ($columnIndex = 0; $columnIndex -lt 6; $columnIndex++) {
+              $start = $instanceColumns[$columnIndex].Index
+              $end = if ($columnIndex -lt 5) { $instanceColumns[$columnIndex + 1].Index } else { $columnEnd }
+              $value = if ($line.Length -le $start) { "" } else {
+                $line.Substring($start, [Math]::Min($end, $line.Length) - $start).Trim()
+              }
+              if ($value.Length -eq 0) { "empty" }
+              elseif ($value -cmatch '^0x[0-9A-Fa-f]{1,8}$') { "hex" }
+              elseif ($value -cmatch '^[0-9]{8}$') { "digits8" }
+              elseif ($value -cmatch '^[0-9]{1,12}$') { "integer" }
+              elseif ($value -cmatch '^[0-9]{1,12}\.[0-9]{1,4}$') { "decimal" }
+              elseif ($value -cmatch '^[0-9A-Fa-f]{1,8}$') { "barehex" }
+              elseif ($value -cmatch '^<Legacy>$') { "legacy" }
+              elseif ($value -cmatch '^\S+$') { "word" }
+              else { "words" }
+            }
+          ) -join "-")
+        }
+      }
       $rowTokens = @($line.Trim() -split '\s+')
       $script:filterManagerRowShape = "token-limit"
       if ($rowTokens.Count -le 16) {
@@ -1001,6 +1033,10 @@ public static class ProcmonCaptureWindows
   if ($stage -eq "parse-filter-manager-instance-output" -and
     $script:filterManagerRowShape -cmatch '^(?:unobserved|token-limit|(?:text|hex|number)(?:-(?:text|hex|number)){0,15})$') {
     [Console]::Out.WriteLine("PROC_MON_CAPTURE_FILTER_MANAGER_ROW=$script:filterManagerRowShape")
+  }
+  if ($stage -eq "parse-filter-manager-instance-output" -and
+    $script:filterManagerColumnShape -cmatch '^(?:unobserved|layout|(?:empty|hex|digits8|integer|decimal|barehex|legacy|word|words)(?:-(?:empty|hex|digits8|integer|decimal|barehex|legacy|word|words)){5})$') {
+    [Console]::Out.WriteLine("PROC_MON_CAPTURE_FILTER_MANAGER_COLUMNS=$script:filterManagerColumnShape")
   }
   $failureType = $_.Exception.GetType().Name
   if ($failureType -notin @(

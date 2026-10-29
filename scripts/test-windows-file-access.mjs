@@ -353,9 +353,12 @@ async function captureScenario(scenario) {
     const filterManagerRowShape = captureInspectionOutput.match(
       /^PROC_MON_CAPTURE_FILTER_MANAGER_ROW=(unobserved|token-limit|(?:text|hex|number)(?:-(?:text|hex|number)){0,15})\r?$/m,
     )?.[1];
+    const filterManagerColumnShape = captureInspectionOutput.match(
+      /^PROC_MON_CAPTURE_FILTER_MANAGER_COLUMNS=(unobserved|layout|(?:empty|hex|digits8|integer|decimal|barehex|legacy|word|words)(?:-(?:empty|hex|digits8|integer|decimal|barehex|legacy|word|words)){5})\r?$/m,
+    )?.[1];
     assert(
       !captureInspectionResult.error && captureInspectionResult.code === 0 && !captureInspectionOverflow,
-      `Process Monitor capture inspection failed${captureInspectionStage ? ` at ${captureInspectionStage}` : ""}${captureInspectionFailure ? ` (${captureInspectionFailure})` : ""}${filterManagerQueryExitCode ? ` (Filter Manager command exit code ${filterManagerQueryExitCode})` : ""}${filterManagerParseState ? ` (Filter Manager parse state ${filterManagerParseState})` : ""}${filterManagerHeadingTarget ? ` (Filter Manager heading target ${filterManagerHeadingTarget})` : ""}${filterManagerHeaderShape ? ` (Filter Manager header ${filterManagerHeaderShape})` : ""}${filterManagerRowShape ? ` (Filter Manager row ${filterManagerRowShape})` : ""}`,
+      `Process Monitor capture inspection failed${captureInspectionStage ? ` at ${captureInspectionStage}` : ""}${captureInspectionFailure ? ` (${captureInspectionFailure})` : ""}${filterManagerQueryExitCode ? ` (Filter Manager command exit code ${filterManagerQueryExitCode})` : ""}${filterManagerParseState ? ` (Filter Manager parse state ${filterManagerParseState})` : ""}${filterManagerHeadingTarget ? ` (Filter Manager heading target ${filterManagerHeadingTarget})` : ""}${filterManagerHeaderShape ? ` (Filter Manager header ${filterManagerHeaderShape})` : ""}${filterManagerRowShape ? ` (Filter Manager row ${filterManagerRowShape})` : ""}${filterManagerColumnShape ? ` (Filter Manager columns ${filterManagerColumnShape})` : ""}`,
     );
     const nativeEvidence = [...captureInspectionOutput.matchAll(
       /^PROC_MON_CAPTURE_NATIVE=children:(0|[1-9]\d{0,2});visible:(0|[1-9]\d{0,2});toolbars:(0|[1-9]\d{0,2});lists:(0|[1-9]\d{0,2});statusbars:(0|[1-9]\d{0,2});dialogs:(0|[1-9]\d{0,2});other:(0|[1-9]\d{0,2})\r?$/gm,

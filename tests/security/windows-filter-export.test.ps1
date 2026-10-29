@@ -326,6 +326,60 @@ foreach ($fixture in $rowShapeFixtures) {
 }
 Get-ProcmonFilterManagerVolumeEvidence @($instanceHeader, $instanceSeparator) "D:" | Out-Null
 if ($script:filterManagerRowShape -cne "unobserved") { throw "Row diagnostics must reset" }
+$columnSeparator = ("-" * 20) + " " + ("-" * 13) + " " + ("-" * 32) + " " +
+  ("-" * 7) + " " + ("-" * 8) + " " + ("-" * 8)
+$columnFixtures = @(
+  [pscustomobject]@{ Values = @("Unrelated", "328010", "private instance", "0", "00000003", ""); Shape = "word-integer-words-integer-digits8-empty" }
+  [pscustomobject]@{ Values = @("Unrelated", "328010.5", "private", "<Legacy>", "0000000f", "0x00"); Shape = "word-decimal-word-legacy-barehex-hex" }
+  [pscustomobject]@{ Values = @("C:\private", "invalid", "private instance", "unknown", "0x03", "private"); Shape = "word-word-words-word-hex-word" }
+  [pscustomobject]@{ Values = @("Unrelated", "", "", "", "", ""); Shape = "word-empty-empty-empty-empty-empty" }
+)
+foreach ($fixture in $columnFixtures) {
+  $row = "{0,-20} {1,-13} {2,-32} {3,-7} {4,-8} {5,-8}" -f $fixture.Values
+  foreach ($variant in @($row, $row.TrimEnd())) {
+    $rejected = $false
+    try {
+      Get-ProcmonFilterManagerVolumeEvidence @($instanceHeader, $columnSeparator, $variant) "D:" | Out-Null
+    } catch { $rejected = $true }
+    if (-not $rejected -or $script:filterManagerColumnShape -cne $fixture.Shape) {
+      throw "Separator-relative column diagnostics must redact values and preserve empty fields"
+    }
+  }
+}
+foreach ($row in @(
+    ("private`t" + (" " * 100)),
+    ((" " * $columnSeparator.Length) + "private")
+  )) {
+  $rejected = $false
+  try {
+    Get-ProcmonFilterManagerVolumeEvidence @($instanceHeader, $columnSeparator, $row) "D:" | Out-Null
+  } catch { $rejected = $true }
+  if (-not $rejected -or $script:filterManagerColumnShape -cne "layout") {
+    throw "Unsupported column layouts must remain rejected without value output"
+  }
+}
+foreach ($fixture in @(
+    [pscustomobject]@{
+      Separator = "  $columnSeparator"
+      Row = "x " + ("{0,-20} {1,-13} {2,-32} {3,-7} {4,-8} {5,-8}" -f @("Unrelated", "328010", "private instance", "0", "00000003", ""))
+      Shape = "layout"
+    }
+    [pscustomobject]@{
+      Separator = "  $columnSeparator"
+      Row = "  " + ("{0,-20} {1,13} {2,-32} {3,7} {4,8} {5,8}" -f @("Unrelated", "328010", "private instance", "0", "00000003", ""))
+      Shape = "word-integer-words-integer-digits8-empty"
+    }
+  )) {
+  $rejected = $false
+  try {
+    Get-ProcmonFilterManagerVolumeEvidence @($instanceHeader, $fixture.Separator, $fixture.Row) "D:" | Out-Null
+  } catch { $rejected = $true }
+  if (-not $rejected -or $script:filterManagerColumnShape -cne $fixture.Shape) {
+    throw "Column diagnostics must handle indentation and right alignment without accepting rows"
+  }
+}
+Get-ProcmonFilterManagerVolumeEvidence @($instanceHeader, $columnSeparator) "D:" | Out-Null
+if ($script:filterManagerColumnShape -cne "unobserved") { throw "Column diagnostics must reset" }
 $headerShapeFixtures = @(
   [pscustomobject]@{ Header = "Filter Altitude Instance Name Frame SprtFtrs Status"; Shape = "filter-altitude-instance-name-frame-sprtftrs-status" }
   [pscustomobject]@{ Header = "Filter Altitude Instance Name Frame SprtFtrs Flags"; Shape = "filter-altitude-instance-name-frame-sprtftrs-flags" }
