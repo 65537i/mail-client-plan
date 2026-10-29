@@ -145,6 +145,16 @@ test("AC-05: Filter Manager inventory is an independent bounded read-only driver
   assert.match(inspection, /"unobserved", "missing", "drive-root-match", "drive-root-mismatch", "mount-path", "other"[\s\S]*PROC_MON_CAPTURE_FILTER_MANAGER_HEADING_TARGET=\$script:filterManagerHeadingTarget/);
   assert.match(driver, /HEADING_TARGET=\(unobserved\|missing\|drive-root-match\|drive-root-mismatch\|mount-path\|other\)/);
   assert.match(driver, /Filter Manager heading target \$\{filterManagerHeadingTarget\}/);
+  assert.match(inspection, /\$instanceTable = \$line -match '\\sVlStatus\\s\*\$'/);
+  assert.match(inspection, /if \(\$instanceTable\)[\s\S]*\$instanceNames.Add\(\$instanceKey\)[\s\S]*\$filterInstanceCounts\[\$filterName\]\+\+[\s\S]*-gt 64/);
+  assert.match(inspection, /PROC_MON_CAPTURE_FILTER_MANAGER_ROW=\$script:filterManagerRowShape/);
+  const rowPatternSource = driver.match(/\^PROC_MON_CAPTURE_FILTER_MANAGER_ROW=[^\n]+(?=\/m,)/)?.[0];
+  assert.ok(rowPatternSource);
+  const rowPattern = new RegExp(rowPatternSource, "m");
+  assert.match("PROC_MON_CAPTURE_FILTER_MANAGER_ROW=text-number-text-number-hex-text\r\n", rowPattern);
+  for (const shape of ["private", "text-private", `text${"-text".repeat(16)}`, "text;secret"]) {
+    assert.doesNotMatch(`PROC_MON_CAPTURE_FILTER_MANAGER_ROW=${shape}\n`, rowPattern);
+  }
   assert.match(inspection, /\$script:filterManagerHeaderShape = "unobserved"/);
   assert.match(inspection, /\$headerTokens.Count -le 16/);
   assert.match(inspection, /default \{ "unknown" \}[\s\S]*\$script:filterManagerHeaderShape = \$safeTokens -join "-"/);

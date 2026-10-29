@@ -276,8 +276,57 @@ if (-not $objectManagerHeadingRejected -or
   throw "An object-manager volume prefix must fail closed without exposing the name"
 }
 $emptyInstanceOutputRejected = $false
+$instanceHeader = "Filter Altitude Instance Name Frame SprtFtrs VlStatus"
+$instanceSeparator = "-------- -------- -------- ----- -------- --------"
+$instanceRows = @(
+  "WdFilter 328010 unrelated 0 0x00 0"
+  "PROCMON24 385200 first 0 0x03 0x00"
+  "procmon24 385200.5 second 0 0x03 0"
+  "PROCMON25 385201 third 1 0x01 0"
+)
+if ((Get-ProcmonFilterManagerVolumeEvidence (
+      @("Instances for D: Volume:", $instanceHeader, $instanceSeparator) + $instanceRows
+    ) "D:") -cne "candidates:2;instances:3") {
+  throw "Instance rows must count distinct filters and individual instances separately"
+}
+if ((Get-ProcmonFilterManagerVolumeEvidence @(
+      $instanceHeader, $instanceSeparator
+    ) "D:") -cne "candidates:0;instances:0") {
+  throw "An empty instance table must remain unattached"
+}
+$invalidInstanceTables = @(
+  [pscustomobject]@{ Lines = @($instanceHeader, $instanceHeader, $instanceSeparator) }
+  [pscustomobject]@{ Lines = @($instanceHeader, $volumeSeparator) }
+  [pscustomobject]@{ Lines = @($instanceHeader, $instanceSeparator, "PROCMON24 385200 first 0 invalid 0") }
+  [pscustomobject]@{ Lines = @($instanceHeader, $instanceSeparator, "Unrelated invalid") }
+  [pscustomobject]@{ Lines = @($instanceHeader, $instanceSeparator, "PROCMON24 385200 first 0 0x03 private") }
+  [pscustomobject]@{ Lines = @($instanceHeader, $instanceSeparator, "PROCMON24 385200 first 0 0x03 0 extra") }
+  [pscustomobject]@{ Lines = @($instanceHeader, $instanceSeparator, "PROCMON24 385200 first 0 0x03 0", "procmon24 385200 FIRST 0 0x03 0") }
+  [pscustomobject]@{ Lines = @($instanceHeader, $instanceSeparator, $volumeHeader) }
+  [pscustomobject]@{ Lines = @($instanceHeader, $instanceSeparator) + @(1..65 | ForEach-Object { "PROCMON24 385200 instance$_ 0 0x03 0" }) }
+)
+foreach ($fixture in $invalidInstanceTables) {
+  $rejected = $false
+  try { Get-ProcmonFilterManagerVolumeEvidence $fixture.Lines "D:" | Out-Null } catch { $rejected = $true }
+  if (-not $rejected) { throw "Malformed or oversized instance tables must fail closed" }
+}
+$rowShapeFixtures = @(
+  [pscustomobject]@{ Row = "PROCMON24 385200 private 0 0x03 unsupported"; Shape = "text-number-text-number-hex-text" }
+  [pscustomobject]@{ Row = "Unrelated C:\private"; Shape = "text-text" }
+  [pscustomobject]@{ Row = ("private " * 17); Shape = "token-limit" }
+)
+foreach ($fixture in $rowShapeFixtures) {
+  $rejected = $false
+  try {
+    Get-ProcmonFilterManagerVolumeEvidence @($instanceHeader, $instanceSeparator, $fixture.Row) "D:" | Out-Null
+  } catch { $rejected = $true }
+  if (-not $rejected -or $script:filterManagerRowShape -cne $fixture.Shape) {
+    throw "Unsupported row diagnostics must contain only bounded token classes"
+  }
+}
+Get-ProcmonFilterManagerVolumeEvidence @($instanceHeader, $instanceSeparator) "D:" | Out-Null
+if ($script:filterManagerRowShape -cne "unobserved") { throw "Row diagnostics must reset" }
 $headerShapeFixtures = @(
-  [pscustomobject]@{ Header = "Filter Altitude Instance Name Frame SprtFtrs VlStatus"; Shape = "filter-altitude-instance-name-frame-sprtftrs-vlstatus" }
   [pscustomobject]@{ Header = "Filter Altitude Instance Name Frame SprtFtrs Status"; Shape = "filter-altitude-instance-name-frame-sprtftrs-status" }
   [pscustomobject]@{ Header = "Filter Altitude Instance Name Frame SprtFtrs Flags"; Shape = "filter-altitude-instance-name-frame-sprtftrs-flags" }
   [pscustomobject]@{ Header = "Filter`tVLSTATUS Status FLAGS private"; Shape = "filter-vlstatus-status-flags-unknown" }

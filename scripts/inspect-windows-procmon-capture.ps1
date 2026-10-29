@@ -197,6 +197,7 @@ function Get-ProcmonFilterManagerVolumeEvidence {
   $script:filterManagerVolumeParseState = "started"
   $script:filterManagerHeadingTarget = "unobserved"
   $script:filterManagerHeaderShape = "unobserved"
+  $script:filterManagerRowShape = "unobserved"
   if ($Lines.Count -eq 0 -or $Lines.Count -gt 256) {
     $script:filterManagerVolumeParseState = if ($Lines.Count -eq 0) { "empty-output" } else { "line-limit" }
     throw "Filter Manager volume inventory exceeded its limit"
@@ -205,6 +206,9 @@ function Get-ProcmonFilterManagerVolumeEvidence {
   $separatorSeen = $false
   $volumeHeadingSeen = $false
   $hasSupportedFeatures = $false
+  $instanceTable = $false
+  $instanceNames = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+  $filterInstanceCounts = @{}
   $candidates = 0
   $instances = 0
   foreach ($line in $Lines) {
@@ -212,12 +216,14 @@ function Get-ProcmonFilterManagerVolumeEvidence {
       $script:filterManagerVolumeParseState = "line-shape"
       throw "Filter Manager volume inventory has an unsupported shape"
     }
-    if ($line -match '^\s*Filter Name\s+Num Instances\s+Altitude\s+Frame(?:\s+SprtFtrs)?\s*$') {
+    if ($line -match '^\s*Filter Name\s+Num Instances\s+Altitude\s+Frame(?:\s+SprtFtrs)?\s*$' -or
+      $line -match '^\s*Filter\s+Altitude\s+Instance Name\s+Frame\s+SprtFtrs\s+VlStatus\s*$') {
       if ($headerSeen) {
         $script:filterManagerVolumeParseState = "duplicate-header"
         throw "Filter Manager volume inventory repeated its header"
       }
       $headerSeen = $true
+      $instanceTable = $line -match '\sVlStatus\s*$'
       $hasSupportedFeatures = $line -match '\sSprtFtrs\s*$'
       continue
     }
@@ -388,7 +394,9 @@ function Get-ProcmonFilterManagerVolumeEvidence {
       throw "Filter Manager volume inventory omitted its expected header"
     }
     if (-not $separatorSeen) {
-      $separatorPattern = if ($hasSupportedFeatures) {
+      $separatorPattern = if ($instanceTable) {
+        '^\s*-{3,}\s+-{3,}\s+-{3,}\s+-{3,}\s+-{3,}\s+-{3,}\s*$'
+      } elseif ($hasSupportedFeatures) {
         '^\s*-{3,}\s+-{3,}\s+-{3,}\s+-{3,}\s+-{3,}\s*$'
       } else {
         '^\s*-{3,}\s+-{3,}\s+-{3,}\s+-{3,}\s*$'
@@ -402,16 +410,52 @@ function Get-ProcmonFilterManagerVolumeEvidence {
     }
     if ([string]::IsNullOrWhiteSpace($line)) { continue }
     $featureColumn = if ($hasSupportedFeatures) { '\s+(0x[0-9A-Fa-f]{1,8})' } else { '' }
-    $match = [regex]::Match(
-      $line,
+    $rowPattern = if ($instanceTable) {
+      '^\s*(\S{1,256})\s+[0-9]{1,12}(?:\.[0-9]{1,4})?\s+(\S{1,256})\s+[0-9]{1,3}\s+0x[0-9A-Fa-f]{1,8}\s+(?:0x[0-9A-Fa-f]{1,8}|[0-9]{1,10})\s*$'
+    } else {
       '^\s*(\S{1,256})\s+([0-9]{1,3})\s+[0-9]{1,12}(?:\.[0-9]{1,4})?\s+[0-9]{1,3}' +
         $featureColumn + '\s*$'
-    )
+    }
+    $match = [regex]::Match($line, $rowPattern)
     if (-not $match.Success) {
       $script:filterManagerVolumeParseState = "row-shape"
+      $rowTokens = @($line.Trim() -split '\s+')
+      $script:filterManagerRowShape = "token-limit"
+      if ($rowTokens.Count -le 16) {
+        $script:filterManagerRowShape = (@(
+          foreach ($token in $rowTokens) {
+            if ($token -cmatch '^0x[0-9A-Fa-f]{1,8}$') { "hex" }
+            elseif ($token -cmatch '^[0-9]{1,12}(?:\.[0-9]{1,4})?$') { "number" }
+            else { "text" }
+          }
+        ) -join "-")
+      }
       throw "Filter Manager volume inventory returned an unsupported row"
     }
     if ($match.Groups[1].Value -notmatch '^(?i:PROCMON[0-9]*)$') { continue }
+    if ($instanceTable) {
+      $filterName = $match.Groups[1].Value
+      $instanceKey = "$filterName`n$($match.Groups[2].Value)"
+      if (-not $instanceNames.Add($instanceKey)) {
+        $script:filterManagerVolumeParseState = "row-shape"
+        throw "Filter Manager volume inventory repeated an instance"
+      }
+      if (-not $filterInstanceCounts.ContainsKey($filterName)) {
+        $filterInstanceCounts[$filterName] = 0
+        $candidates++
+      }
+      $filterInstanceCounts[$filterName]++
+      if ($filterInstanceCounts[$filterName] -gt 64) {
+        $script:filterManagerVolumeParseState = "count-limit"
+        throw "Filter Manager volume instance count exceeded its limit"
+      }
+      $instances++
+      if ($candidates -gt 64 -or $instances -gt 4096) {
+        $script:filterManagerVolumeParseState = "inventory-limit"
+        throw "Filter Manager volume candidate inventory exceeded its limit"
+      }
+      continue
+    }
     $instanceCount = 0
     if (-not [int]::TryParse(
         $match.Groups[2].Value,
@@ -953,6 +997,10 @@ public static class ProcmonCaptureWindows
         "PROC_MON_CAPTURE_FILTER_MANAGER_HEADER=$script:filterManagerHeaderShape"
       )
     }
+  }
+  if ($stage -eq "parse-filter-manager-instance-output" -and
+    $script:filterManagerRowShape -cmatch '^(?:unobserved|token-limit|(?:text|hex|number)(?:-(?:text|hex|number)){0,15})$') {
+    [Console]::Out.WriteLine("PROC_MON_CAPTURE_FILTER_MANAGER_ROW=$script:filterManagerRowShape")
   }
   $failureType = $_.Exception.GetType().Name
   if ($failureType -notin @(

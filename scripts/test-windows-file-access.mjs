@@ -350,9 +350,12 @@ async function captureScenario(scenario) {
     const filterManagerHeaderShape = captureInspectionOutput.match(
       /^PROC_MON_CAPTURE_FILTER_MANAGER_HEADER=(unobserved|unknown|token-limit|(?:filter|name|num|instances|altitude|frame|sprtftrs|instance|volume|supported|features|vlstatus|status|flags|unknown)(?:-(?:filter|name|num|instances|altitude|frame|sprtftrs|instance|volume|supported|features|vlstatus|status|flags|unknown)){0,15})\r?$/m,
     )?.[1];
+    const filterManagerRowShape = captureInspectionOutput.match(
+      /^PROC_MON_CAPTURE_FILTER_MANAGER_ROW=(unobserved|token-limit|(?:text|hex|number)(?:-(?:text|hex|number)){0,15})\r?$/m,
+    )?.[1];
     assert(
       !captureInspectionResult.error && captureInspectionResult.code === 0 && !captureInspectionOverflow,
-      `Process Monitor capture inspection failed${captureInspectionStage ? ` at ${captureInspectionStage}` : ""}${captureInspectionFailure ? ` (${captureInspectionFailure})` : ""}${filterManagerQueryExitCode ? ` (Filter Manager command exit code ${filterManagerQueryExitCode})` : ""}${filterManagerParseState ? ` (Filter Manager parse state ${filterManagerParseState})` : ""}${filterManagerHeadingTarget ? ` (Filter Manager heading target ${filterManagerHeadingTarget})` : ""}${filterManagerHeaderShape ? ` (Filter Manager header ${filterManagerHeaderShape})` : ""}`,
+      `Process Monitor capture inspection failed${captureInspectionStage ? ` at ${captureInspectionStage}` : ""}${captureInspectionFailure ? ` (${captureInspectionFailure})` : ""}${filterManagerQueryExitCode ? ` (Filter Manager command exit code ${filterManagerQueryExitCode})` : ""}${filterManagerParseState ? ` (Filter Manager parse state ${filterManagerParseState})` : ""}${filterManagerHeadingTarget ? ` (Filter Manager heading target ${filterManagerHeadingTarget})` : ""}${filterManagerHeaderShape ? ` (Filter Manager header ${filterManagerHeaderShape})` : ""}${filterManagerRowShape ? ` (Filter Manager row ${filterManagerRowShape})` : ""}`,
     );
     const nativeEvidence = [...captureInspectionOutput.matchAll(
       /^PROC_MON_CAPTURE_NATIVE=children:(0|[1-9]\d{0,2});visible:(0|[1-9]\d{0,2});toolbars:(0|[1-9]\d{0,2});lists:(0|[1-9]\d{0,2});statusbars:(0|[1-9]\d{0,2});dialogs:(0|[1-9]\d{0,2});other:(0|[1-9]\d{0,2})\r?$/gm,
