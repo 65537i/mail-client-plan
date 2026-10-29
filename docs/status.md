@@ -4,6 +4,7 @@
 
 ## 現在の範囲
 
+- [Run 500](https://github.com/65537i/mail-client-plan/actions/runs/40894508707)（`ffe8cfc`、manual Windows 2025 x64 / webview）をdispatchし、queuedを確認。target-bound ` Volume:` heading対応と正常系・異常系fixtureをまとめて検証する。結果待ち、AC-05未達。
 - Run498結果: [Run 498](https://github.com/65537i/mail-client-plan/actions/runs/40792754644)（`3d4147c`、Windows 2025 x64 / webview）はNode回帰65/65とPowerShell fixtureを通過。実監査は`volume-heading-drive-decorated-volume-colon-empty` / heading-target `drive-root-match`でfail closedし、positive control / WDIOへ未到達。これを受けて照会対象がdrive rootの場合だけ、同じdrive + 固定suffix ` Volume:`をcase-insensitive完全一致で受理する。mount-path / 別drive / 追加suffix / 重複headingは拒否し、従来のexact headingとtable検証を維持する。関連Node65/65、JS syntax、`git diff --check`成功。PowerShell未導入のため新fixtureの実行とlive parserは次のWindows検証待ち。AC-05未達。
 - [Run 498](https://github.com/65537i/mail-client-plan/actions/runs/40792754644)（`3d4147c`、manual Windows 2025 x64 / webview）を共有ブラウザーからdispatch済み。上記heading-target診断と合成fixtureを一括検証する。結果待ちであり、AC-05成功とは扱わない。
 - heading-target診断のローカル検証: 関連Node回帰65/65、`node --check scripts/test-windows-file-access.mjs`、`git diff --check`成功。PowerShell fixtureとlive Windows監査は次のWindows 2025 / webview実行で確認する。root一致という診断だけではheadingを受理せず、positive control / WDIO gateも変更しない。
