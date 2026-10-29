@@ -4,6 +4,7 @@
 
 ## 現在の範囲
 
+- [Run 498](https://github.com/65537i/mail-client-plan/actions/runs/40792754644)（`3d4147c`、manual Windows 2025 x64 / webview）を共有ブラウザーからdispatch済み。上記heading-target診断と合成fixtureを一括検証する。結果待ちであり、AC-05成功とは扱わない。
 - heading-target診断のローカル検証: 関連Node回帰65/65、`node --check scripts/test-windows-file-access.mjs`、`git diff --check`成功。PowerShell fixtureとlive Windows監査は次のWindows 2025 / webview実行で確認する。root一致という診断だけではheadingを受理せず、positive control / WDIO gateも変更しない。
 - [Run 495 attempt 2](https://github.com/65537i/mail-client-plan/actions/runs/40789262057/attempts/2)（同じ`844a33f`）はPath入力を通過し、PowerShell fixture成功後、live parserの`volume-heading-drive-decorated-volume-colon-empty`でfail closed。attempt 1の入力失敗は再現しなかったが原因は未確定。positive control / WDIOへ未到達で、AC-05未達。次の限定診断はheadingのdrive部分と照会volumeの関係を固定enum（drive-root一致 / 不一致、mount-path、missing、other）で記録する。case-insensitive root照合、末尾backslash、異なるdrive、mount path、空値、GUID、query間のresetを合成fixtureで検証し、raw volumeやheadingを出力せず、heading acceptanceは維持する。
 - Windows一括検証: [Run 495](https://github.com/65537i/mail-client-plan/actions/runs/40789262057)（`844a33f`、manual Windows 2025 x64 / webview、attempt 1）はsecurity-test build（7m12s）、Node回帰65/65、PowerShell configuration-export fixtureに成功。実baseline監査は`set-filter-path-value`で失敗し、foreground gateはpassed、input gateはfailedだった。既存24 rulesの削除とwritable ValuePattern確認は通過したが、現診断ではkeyboard-focus拒否と入力値不一致を区別できず、原因は未確定。新しいheading parser、positive control、WDIOへ未到達。同じcommitのWindows jobだけをdebug loggingなしで1回再実行する。監査ゲートは変更せず、AC-05未達。
