@@ -1,9 +1,10 @@
 # 開発状況
 
-更新日: 2026-10-29
+更新日: 2026-10-30
 
 ## 現在の範囲
 
+- ローカルDebian 12 / arm64のユーザー領域にPowerShell 7.6.9、GitHub CLI 2.23.0、strace 6.1、GNOME Keyring 42.1 / secret-toolを署名済みAPT packageから導入。PowerShell構文解析とFilter Manager volume fixture、window分類の6合成例は成功。PowerShell全fixtureはLinuxにWindows Registryがなく停止したため未完了であり、Windows PowerShell / UIを代替しない。straceは無害な子processのsyscall取得に成功し、独立D-Bus sessionのSecret Serviceは合成値の保存 / 読出に成功。これらは実WebView監査や実資格情報ストアの検証ではない。GitHub CLIは未認証、AC-05未達。
 - Run513のUIA window-discovery不一致を次回1回のWindows runで切り分ける診断を追加。timeout時に同一 / 他プロセス、handle欠落、main window、disabled、offscreen、duplicate handle、eligibleを各上限付き件数だけ出し、window名・handle値・パス等は出さない。分類関数のPowerShell fixtureとNode reporterの安全性fixtureを追加。ローカルNode66/66・構文・diff check成功。Windows PowerShell / UI実行は未確認。受理条件・owner制約・監査gateを維持、AC-05未達。
 - Run513結果: [Run 513](https://github.com/65537i/mail-client-plan/actions/runs/40915270414)（`2c16493`、Windows 2025 x64 / webview）はNode65/65と新PowerShell fixtureを通過。実監査は`wait-export-config-dialog`で停止し、Filter Managerのlive parser / positive control / WDIOへ未到達。保存dialog scanはwindows / file-names / save-buttons各0だった一方、timeout observationではsame-process-dialogs:1（Save:1 / Cancel:1 / Close:1）、foreground `procmon-other`、other-process-windows:1。プロセス所有権条件を緩めず、このUIA window-discovery不一致は未解決として保留する。Run506 attempt 1にも同じstageがあったがattempt 2では通過しており、原因確定・修正済みとは扱わない。AC-05未達。
 - [Run 513](https://github.com/65537i/mail-client-plan/actions/runs/40915270414)（`2c16493`、manual Windows 2025 x64 / webview）をdispatchしqueuedを確認。separator相対の6列形式診断と合成fixtureを一括検証する。
