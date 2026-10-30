@@ -384,6 +384,22 @@ test("AC-05: configuration save diagnostics expose only bounded control counts",
   }
 });
 
+test("AC-05: configuration save timeout classifies UIA window discovery without values", () => {
+  const diagnostics =
+    "PROC_MON_FILTER_SAVE_DIALOG_DIAGNOSTICS=same-process:1;other-process:1;no-handle:0;main-window:0;disabled:0;offscreen:0;duplicate-handle:0;eligible:1";
+  assert.equal(
+    describeWindowsFilterDiagnostics(diagnostics),
+    "; config-save-dialog-diagnostics=same-process:1;other-process:1;no-handle:0;main-window:0;disabled:0;offscreen:0;duplicate-handle:0;eligible:1",
+  );
+  for (const unsafe of [
+    diagnostics.replace("same-process:1", "same-process:10000"),
+    diagnostics.replace("offscreen:0", "offscreen:C:\\private"),
+    `${diagnostics};title:private`,
+  ]) {
+    assert.equal(describeWindowsFilterDiagnostics(unsafe), "");
+  }
+});
+
 test("AC-05: Windows filter diagnostics retain only snapshot handoff state", () => {
   const output = [
     "PROC_MON_FILTER_FAILURE=InvalidOperationException",

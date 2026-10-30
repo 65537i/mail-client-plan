@@ -1353,6 +1353,22 @@ function Get-UniqueConfigSaveDialogMatch([System.Collections.IList]$Candidates) 
   return $null
 }
 
+function Get-ConfigSaveWindowDisposition(
+  [int]$WindowProcessId,
+  [int]$ExpectedProcessId,
+  [int]$WindowHandle,
+  [int]$MainWindowHandle,
+  [bool]$IsEnabled,
+  [bool]$IsOffscreen
+) {
+  if ($WindowProcessId -ne $ExpectedProcessId) { return "other-process" }
+  if ($WindowHandle -eq 0) { return "no-handle" }
+  if ($WindowHandle -eq $MainWindowHandle) { return "main-window" }
+  if (-not $IsEnabled) { return "disabled" }
+  if ($IsOffscreen) { return "offscreen" }
+  return "eligible"
+}
+
 function Wait-ConfigSaveDialog(
   [System.Diagnostics.Process]$Process,
   [System.Windows.Automation.AutomationElement]$MainWindow,
@@ -1394,15 +1410,48 @@ function Wait-ConfigSaveDialog(
     $dialogMatches = [System.Collections.Generic.List[object]]::new()
     $fileNameCount = 0
     $saveCount = 0
+    $windowCounts = @{
+      sameProcess = 0
+      otherProcess = 0
+      noHandle = 0
+      mainWindow = 0
+      disabled = 0
+      offscreen = 0
+      duplicateHandle = 0
+      eligible = 0
+    }
+    $mainWindowHandle = $MainWindow.Current.NativeWindowHandle
     foreach ($window in @($windows) + @($embeddedWindows)) {
       $state = $window.Current
-      if ($state.ProcessId -ne $Process.Id -or
-        $state.NativeWindowHandle -eq 0 -or
-        $state.NativeWindowHandle -eq $MainWindow.Current.NativeWindowHandle -or
-        -not $state.IsEnabled -or $state.IsOffscreen -or
-        -not $seenHandles.Add($state.NativeWindowHandle)) {
+      $disposition = Get-ConfigSaveWindowDisposition `
+        $state.ProcessId $Process.Id $state.NativeWindowHandle `
+        $mainWindowHandle $state.IsEnabled $state.IsOffscreen
+      if ($disposition -eq "other-process") {
+        $windowCounts.otherProcess++
         continue
       }
+      $windowCounts.sameProcess++
+      if ($disposition -eq "no-handle") {
+        $windowCounts.noHandle++
+        continue
+      }
+      if ($disposition -eq "main-window") {
+        $windowCounts.mainWindow++
+        continue
+      }
+      if ($disposition -eq "disabled") {
+        $windowCounts.disabled++
+        continue
+      }
+      if ($disposition -eq "offscreen") {
+        $windowCounts.offscreen++
+        continue
+      }
+      if (-not $seenHandles.Add($state.NativeWindowHandle)) {
+        $windowCounts.duplicateHandle++
+        continue
+      }
+      $windowCounts.eligible++
       $fileNames = $window.FindAll(
         [System.Windows.Automation.TreeScope]::Descendants, $fileNameCondition
       )
@@ -1423,6 +1472,9 @@ function Wait-ConfigSaveDialog(
   } while ([DateTime]::UtcNow -lt $deadline)
   [Console]::Out.WriteLine(
     "PROC_MON_FILTER_SAVE_DIALOG_SCAN=windows:$([Math]::Min($seenHandles.Count, 9999));file-names:$([Math]::Min($fileNameCount, 9999));save-buttons:$([Math]::Min($saveCount, 9999))"
+  )
+  [Console]::Out.WriteLine(
+    "PROC_MON_FILTER_SAVE_DIALOG_DIAGNOSTICS=same-process:$([Math]::Min($windowCounts.sameProcess, 9999));other-process:$([Math]::Min($windowCounts.otherProcess, 9999));no-handle:$([Math]::Min($windowCounts.noHandle, 9999));main-window:$([Math]::Min($windowCounts.mainWindow, 9999));disabled:$([Math]::Min($windowCounts.disabled, 9999));offscreen:$([Math]::Min($windowCounts.offscreen, 9999));duplicate-handle:$([Math]::Min($windowCounts.duplicateHandle, 9999));eligible:$([Math]::Min($windowCounts.eligible, 9999))"
   )
   throw "Process Monitor configuration save dialog did not expose unique file controls"
 }

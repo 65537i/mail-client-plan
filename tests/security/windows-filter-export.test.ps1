@@ -779,6 +779,7 @@ $functions = $ast.FindAll({
       "Get-ConfigFilterPathEvidence",
       "Get-LoadedFilterRuleEvidence",
       "Get-UniqueConfigSaveDialogMatch",
+      "Get-ConfigSaveWindowDisposition",
       "Wait-ProcessMenu",
       "Wait-KeyboardFocus",
       "ConvertTo-SendKeysLiteral"
@@ -789,6 +790,21 @@ if ($functions.Count -ne 9) {
 }
 foreach ($function in $functions) {
   . ([scriptblock]::Create($function.Extent.Text))
+}
+
+$windowDispositionCases = @(
+  [pscustomobject]@{ Arguments = @(20, 10, 200, 100, $true, $false); Expected = "other-process" }
+  [pscustomobject]@{ Arguments = @(10, 10, 0, 100, $true, $false); Expected = "no-handle" }
+  [pscustomobject]@{ Arguments = @(10, 10, 100, 100, $true, $false); Expected = "main-window" }
+  [pscustomobject]@{ Arguments = @(10, 10, 200, 100, $false, $false); Expected = "disabled" }
+  [pscustomobject]@{ Arguments = @(10, 10, 200, 100, $true, $true); Expected = "offscreen" }
+  [pscustomobject]@{ Arguments = @(10, 10, 200, 100, $true, $false); Expected = "eligible" }
+)
+foreach ($fixture in $windowDispositionCases) {
+  $windowDispositionArguments = $fixture.Arguments
+  if ((Get-ConfigSaveWindowDisposition @windowDispositionArguments) -cne $fixture.Expected) {
+    throw "Configuration save window disposition must classify only bounded UIA state"
+  }
 }
 
 $noDialog = Get-UniqueConfigSaveDialogMatch ([System.Collections.ArrayList]::new())

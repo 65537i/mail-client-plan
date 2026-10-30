@@ -101,6 +101,15 @@ export function describeWindowsFilterDiagnostics(output) {
     );
   }
 
+  const saveDialogDiagnostics = output.match(
+    /^PROC_MON_FILTER_SAVE_DIALOG_DIAGNOSTICS=same-process:(\d{1,4});other-process:(\d{1,4});no-handle:(\d{1,4});main-window:(\d{1,4});disabled:(\d{1,4});offscreen:(\d{1,4});duplicate-handle:(\d{1,4});eligible:(\d{1,4})\r?$/m,
+  );
+  if (saveDialogDiagnostics) {
+    diagnostics.push(
+      `config-save-dialog-diagnostics=same-process:${saveDialogDiagnostics[1]};other-process:${saveDialogDiagnostics[2]};no-handle:${saveDialogDiagnostics[3]};main-window:${saveDialogDiagnostics[4]};disabled:${saveDialogDiagnostics[5]};offscreen:${saveDialogDiagnostics[6]};duplicate-handle:${saveDialogDiagnostics[7]};eligible:${saveDialogDiagnostics[8]}`,
+    );
+  }
+
   for (const match of output.matchAll(
     /^PROC_MON_FILTER_CONFIG_FILE=observation:(initial|final);state:(missing|undersized|ready)\r?$/gm,
   )) {
