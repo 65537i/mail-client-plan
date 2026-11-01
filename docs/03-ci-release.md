@@ -2,6 +2,8 @@
 
 ## 1. ワークフロー構成
 
+[Run 515](https://github.com/65537i/mail-client-plan/actions/runs/41135493794)（`9556149`、Windows 2025 x64 / webview）はconfiguration-export fixtureで停止し、実監査は未到達。追加したwindow分類関数を含む抽出対象10個に対して期待数9が残っていた不整合を10へ修正。ローカルPowerShellでfixtureの実際の抽出式・個数検査・6分類例を実行して成功。Windows全fixture / live UIの検証は次run待ち。監査ゲート変更なし、AC-05未達。
+
 Run513で得た`wait-export-config-dialog`停止の切り分け用に、UIA windowをプロセス所有者 / native handle有無 / main window / enabled / offscreenで分類し、duplicate / eligible件数と併せて上限付きの固定形式だけを出す診断を追加した。window名・handle値・path・例外値は出力しない。PowerShell fixtureで全分類、Node reporterで正常値・上限超過・任意値拒否を検査する。ローカルNode66/66、構文、diff check成功。Windows UI / PowerShell fixtureでの検証は次run待ち。filter設定・監査ゲート・所有権制約は変更しない。
 
 [Run 513](https://github.com/65537i/mail-client-plan/actions/runs/40915270414)（`2c16493`、Windows 2025 x64 / webview）はNode65/65と更新したPowerShell fixtureを通過したが、実監査は`wait-export-config-dialog`で停止し、live Filter Manager parser / positive control / WDIOへ未到達。dialog scanのeligible windows / file-name controls / save buttonsは各0。timeout observationはsame-process-dialogs:1（Save:1 / Cancel:1 / Close:1）、foreground `procmon-other`、other-process-windows:1を示した。dialog ownership / UIA discovery不一致の原因は未解決。process ownership条件や監査ゲートは緩めず、同じstageがRun506 attempt 1でも発生しattempt 2で通過した事実を記録する。修正済み・AC-05成功とは扱わない。

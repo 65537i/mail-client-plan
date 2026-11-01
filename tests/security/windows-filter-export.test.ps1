@@ -785,7 +785,7 @@ $functions = $ast.FindAll({
       "ConvertTo-SendKeysLiteral"
     )
 }, $true)
-if ($functions.Count -ne 9) {
+if ($functions.Count -ne 10) {
   throw "Expected the configuration file observation functions"
 }
 foreach ($function in $functions) {
