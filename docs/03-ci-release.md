@@ -2,6 +2,8 @@
 
 ## 1. ワークフロー構成
 
+[Run 517](https://github.com/65537i/mail-client-plan/actions/runs/41304809374)（`7cb3a2e`、Windows 2025 x64 / webview）はconfiguration exportを通過し、live Filter Manager parserの`row-shape`（列診断`word-integer-words-integer-barehex-empty`）で停止。`fltmc instances -v`の固定幅出力（空白入りInstance Name、`0x`無しSprtFtrs、空VlStatus）をseparator列位置で検証する受理経路を追加し、越境・タブ・未知値はfail closedのまま。
+
 [Run 515](https://github.com/65537i/mail-client-plan/actions/runs/41135493794)（`9556149`、Windows 2025 x64 / webview）はconfiguration-export fixtureで停止し、実監査は未到達。追加したwindow分類関数を含む抽出対象10個に対して期待数9が残っていた不整合を10へ修正。ローカルPowerShellでfixtureの実際の抽出式・個数検査・6分類例を実行して成功。Windows全fixture / live UIの検証は次run待ち。監査ゲート変更なし、AC-05未達。
 
 Run513で得た`wait-export-config-dialog`停止の切り分け用に、UIA windowをプロセス所有者 / native handle有無 / main window / enabled / offscreenで分類し、duplicate / eligible件数と併せて上限付きの固定形式だけを出す診断を追加した。window名・handle値・path・例外値は出力しない。PowerShell fixtureで全分類、Node reporterで正常値・上限超過・任意値拒否を検査する。ローカルNode66/66、構文、diff check成功。Windows UI / PowerShell fixtureでの検証は次run待ち。filter設定・監査ゲート・所有権制約は変更しない。

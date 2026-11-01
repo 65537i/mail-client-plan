@@ -329,7 +329,7 @@ if ($script:filterManagerRowShape -cne "unobserved") { throw "Row diagnostics mu
 $columnSeparator = ("-" * 20) + " " + ("-" * 13) + " " + ("-" * 32) + " " +
   ("-" * 7) + " " + ("-" * 8) + " " + ("-" * 8)
 $columnFixtures = @(
-  [pscustomobject]@{ Values = @("Unrelated", "328010", "private instance", "0", "00000003", ""); Shape = "word-integer-words-integer-digits8-empty" }
+  [pscustomobject]@{ Values = @("Unrelated", "328010", "private instance", "0", "00000003", "private"); Shape = "word-integer-words-integer-digits8-word" }
   [pscustomobject]@{ Values = @("Unrelated", "328010.5", "private", "<Legacy>", "0000000f", "0x00"); Shape = "word-decimal-word-legacy-barehex-hex" }
   [pscustomobject]@{ Values = @("C:\private", "invalid", "private instance", "unknown", "0x03", "private"); Shape = "word-word-words-word-hex-word" }
   [pscustomobject]@{ Values = @("Unrelated", "", "", "", "", ""); Shape = "word-empty-empty-empty-empty-empty" }
@@ -366,8 +366,8 @@ foreach ($fixture in @(
     }
     [pscustomobject]@{
       Separator = "  $columnSeparator"
-      Row = "  " + ("{0,-20} {1,13} {2,-32} {3,7} {4,8} {5,8}" -f @("Unrelated", "328010", "private instance", "0", "00000003", ""))
-      Shape = "word-integer-words-integer-digits8-empty"
+      Row = "  " + ("{0,-20} {1,13} {2,-32} {3,7} {4,8} {5,8}" -f @("Unrelated", "328010", "private instance", "0", "00000003", "private"))
+      Shape = "word-integer-words-integer-digits8-word"
     }
   )) {
   $rejected = $false
@@ -380,6 +380,55 @@ foreach ($fixture in @(
 }
 Get-ProcmonFilterManagerVolumeEvidence @($instanceHeader, $columnSeparator) "D:" | Out-Null
 if ($script:filterManagerColumnShape -cne "unobserved") { throw "Column diagnostics must reset" }
+$fixedWidthRows = @(
+  ,@("WdFilter", "328010", "WdFilter Instance", "0", "0000000f", "")
+  ,@("PROCMON24", "385200", "Process Monitor 24 Instance", "0", "0000000f", "")
+  ,@("procmon24", "385200", "Process Monitor 24 Second", "0", "00000003", "0x00")
+  ,@("PROCMON25", "385201.5", "Process Monitor 25 Instance", "1", "0x01", "0")
+)
+foreach ($format in @(
+    "{0,-20} {1,-13} {2,-32} {3,-7} {4,-8} {5,-8}",
+    "{0,-20} {1,13} {2,-32} {3,7} {4,8} {5,8}"
+  )) {
+  foreach ($trim in @($false, $true)) {
+    $rows = @(foreach ($values in $fixedWidthRows) {
+        $row = $format -f $values
+        if ($trim) { $row.TrimEnd() } else { $row }
+      })
+    if ((Get-ProcmonFilterManagerVolumeEvidence (
+          @("Instances for D: Volume:", $instanceHeader, $columnSeparator) + $rows
+        ) "D:") -cne "candidates:2;instances:3") {
+      throw "Fixed-width fltmc instance rows must be counted without exposing names"
+    }
+  }
+}
+$fixedWidthInvalidRows = @(
+  ("{0,-20} {1,-13} {2,-32} {3,-7} {4,-8} {5,-8}" -f @("PROCMON24", "385200", "", "0", "0000000f", ""))
+  ("{0,-20} {1,-13} {2,-32} {3,-7} {4,-8} {5,-8}" -f @("PROCMON24", "385200", "private", "x", "0000000f", ""))
+  ("{0,-20} {1,-13} {2,-32} {3,-7} {4,-8} {5,-8}" -f @("PROCMON24", "385200", "private", "0", "000000001", ""))
+  ("{0,-20} {1,-13} {2,-32} {3,-7} {4,-8} {5,-8}" -f @("PROCMON24", "385200", "private", "0", "0000000f", "Detached"))
+  ("{0,-20} {1,-13} {2} {3,-7} {4,-8} {5,-8}" -f @("PROCMON24", "385200", ("p" * 33), "0", "0000000f", ""))
+  ("{0,-20} {1,-13} {2,-32} {3,-7} {4,-8} {5,-8}" -f @("PROCMON24", "385200", "private`tname", "0", "0000000f", ""))
+  ("{0,-20} {1,-13} {2,-32} {3,-7} {4,-8} {5,-8} extra" -f @("PROCMON24", "385200", "private", "0", "0000000f", ""))
+)
+foreach ($row in $fixedWidthInvalidRows) {
+  $rejected = $false
+  try {
+    Get-ProcmonFilterManagerVolumeEvidence @($instanceHeader, $columnSeparator, $row) "D:" | Out-Null
+  } catch { $rejected = $true }
+  if (-not $rejected -or $script:filterManagerVolumeParseState -cne "row-shape") {
+    throw "Malformed fixed-width instance rows must fail closed"
+  }
+}
+$duplicateFixedWidthRejected = $false
+try {
+  Get-ProcmonFilterManagerVolumeEvidence @(
+    $instanceHeader, $columnSeparator,
+    ("{0,-20} {1,-13} {2,-32} {3,-7} {4,-8} {5,-8}" -f @("PROCMON24", "385200", "Same Instance", "0", "0000000f", "")),
+    ("{0,-20} {1,-13} {2,-32} {3,-7} {4,-8} {5,-8}" -f @("procmon24", "385200", "same instance", "0", "0000000f", ""))
+  ) "D:" | Out-Null
+} catch { $duplicateFixedWidthRejected = $true }
+if (-not $duplicateFixedWidthRejected) { throw "Duplicate fixed-width instances must fail closed" }
 $headerShapeFixtures = @(
   [pscustomobject]@{ Header = "Filter Altitude Instance Name Frame SprtFtrs Status"; Shape = "filter-altitude-instance-name-frame-sprtftrs-status" }
   [pscustomobject]@{ Header = "Filter Altitude Instance Name Frame SprtFtrs Flags"; Shape = "filter-altitude-instance-name-frame-sprtftrs-flags" }

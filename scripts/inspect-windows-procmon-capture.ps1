@@ -422,22 +422,55 @@ function Get-ProcmonFilterManagerVolumeEvidence {
         $featureColumn + '\s*$'
     }
     $match = [regex]::Match($line, $rowPattern)
-    if (-not $match.Success) {
+    $rowFilterName = $null
+    $rowInstanceName = $null
+    if ($match.Success) {
+      $rowFilterName = $match.Groups[1].Value
+      $rowInstanceName = $match.Groups[2].Value
+    }
+    $columnValues = $null
+    if (-not $match.Success -and $instanceTable -and $instanceColumns.Count -eq 6) {
+      $columnStart = $instanceColumns[0].Index
+      $columnEnd = $instanceColumns[5].Index + $instanceColumns[5].Length
+      $columnBoundariesClear = $true
+      for ($columnIndex = 1; $columnIndex -lt 6; $columnIndex++) {
+        $boundary = $instanceColumns[$columnIndex].Index - 1
+        if ($line.Length -gt $boundary -and -not [char]::IsWhiteSpace($line[$boundary])) {
+          $columnBoundariesClear = $false
+        }
+      }
+      if (-not $line.Contains("`t") -and
+        ($columnStart -eq 0 -or [string]::IsNullOrWhiteSpace($line.Substring(0, [Math]::Min($columnStart, $line.Length)))) -and
+        ($line.Length -le $columnEnd -or [string]::IsNullOrWhiteSpace($line.Substring($columnEnd)))) {
+        $columnValues = @(
+          for ($columnIndex = 0; $columnIndex -lt 6; $columnIndex++) {
+            $start = $instanceColumns[$columnIndex].Index
+            $end = if ($columnIndex -lt 5) { $instanceColumns[$columnIndex + 1].Index } else { $columnEnd }
+            if ($line.Length -le $start) { "" } else {
+              $line.Substring($start, [Math]::Min($end, $line.Length) - $start).Trim()
+            }
+          }
+        )
+        # fltmc pads instance names containing spaces and prints SprtFtrs without 0x.
+        if ($columnBoundariesClear -and
+          $columnValues[0] -cmatch '^\S{1,256}$' -and
+          $columnValues[1] -cmatch '^[0-9]{1,12}(?:\.[0-9]{1,4})?$' -and
+          $columnValues[2] -cmatch '^\S(?:[^\t]{0,254}\S)?$' -and
+          $columnValues[3] -cmatch '^[0-9]{1,3}$' -and
+          $columnValues[4] -cmatch '^(?:0x)?[0-9A-Fa-f]{1,8}$' -and
+          $columnValues[5] -cmatch '^(?:(?:0x)?[0-9A-Fa-f]{1,8})?$') {
+          $rowFilterName = $columnValues[0]
+          $rowInstanceName = $columnValues[2]
+        }
+      }
+    }
+    if ($null -eq $rowFilterName) {
       $script:filterManagerVolumeParseState = "row-shape"
       if ($instanceTable -and $instanceColumns.Count -eq 6) {
         $script:filterManagerColumnShape = "layout"
-        $columnStart = $instanceColumns[0].Index
-        $columnEnd = $instanceColumns[5].Index + $instanceColumns[5].Length
-        if (-not $line.Contains("`t") -and
-          ($columnStart -eq 0 -or [string]::IsNullOrWhiteSpace($line.Substring(0, [Math]::Min($columnStart, $line.Length)))) -and
-          ($line.Length -le $columnEnd -or [string]::IsNullOrWhiteSpace($line.Substring($columnEnd)))) {
+        if ($null -ne $columnValues) {
           $script:filterManagerColumnShape = (@(
-            for ($columnIndex = 0; $columnIndex -lt 6; $columnIndex++) {
-              $start = $instanceColumns[$columnIndex].Index
-              $end = if ($columnIndex -lt 5) { $instanceColumns[$columnIndex + 1].Index } else { $columnEnd }
-              $value = if ($line.Length -le $start) { "" } else {
-                $line.Substring($start, [Math]::Min($end, $line.Length) - $start).Trim()
-              }
+            foreach ($value in $columnValues) {
               if ($value.Length -eq 0) { "empty" }
               elseif ($value -cmatch '^0x[0-9A-Fa-f]{1,8}$') { "hex" }
               elseif ($value -cmatch '^[0-9]{8}$') { "digits8" }
@@ -464,10 +497,10 @@ function Get-ProcmonFilterManagerVolumeEvidence {
       }
       throw "Filter Manager volume inventory returned an unsupported row"
     }
-    if ($match.Groups[1].Value -notmatch '^(?i:PROCMON[0-9]*)$') { continue }
+    if ($rowFilterName -notmatch '^(?i:PROCMON[0-9]*)$') { continue }
     if ($instanceTable) {
-      $filterName = $match.Groups[1].Value
-      $instanceKey = "$filterName`n$($match.Groups[2].Value)"
+      $filterName = $rowFilterName
+      $instanceKey = "$filterName`n$rowInstanceName"
       if (-not $instanceNames.Add($instanceKey)) {
         $script:filterManagerVolumeParseState = "row-shape"
         throw "Filter Manager volume inventory repeated an instance"
