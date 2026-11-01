@@ -415,30 +415,39 @@ function Get-ProcmonFilterManagerVolumeEvidence {
     }
     if ([string]::IsNullOrWhiteSpace($line)) { continue }
     $featureColumn = if ($hasSupportedFeatures) { '\s+(0x[0-9A-Fa-f]{1,8})' } else { '' }
-    $rowPattern = if ($instanceTable) {
-      '^\s*(\S{1,256})\s+[0-9]{1,12}(?:\.[0-9]{1,4})?\s+(\S{1,256})\s+[0-9]{1,3}\s+0x[0-9A-Fa-f]{1,8}\s+(?:0x[0-9A-Fa-f]{1,8}|[0-9]{1,10})\s*$'
-    } else {
-      '^\s*(\S{1,256})\s+([0-9]{1,3})\s+[0-9]{1,12}(?:\.[0-9]{1,4})?\s+[0-9]{1,3}' +
-        $featureColumn + '\s*$'
-    }
-    $match = [regex]::Match($line, $rowPattern)
     $rowFilterName = $null
-    $rowInstanceName = $null
-    if ($match.Success) {
-      $rowFilterName = $match.Groups[1].Value
-      $rowInstanceName = $match.Groups[2].Value
-    }
-    $columnValues = $null
-    if (-not $match.Success -and $instanceTable -and $instanceColumns.Count -eq 6) {
-      $columnStart = $instanceColumns[0].Index
-      $columnEnd = $instanceColumns[5].Index + $instanceColumns[5].Length
-      $columnBoundariesClear = $true
-      for ($columnIndex = 1; $columnIndex -lt 6; $columnIndex++) {
-        $boundary = $instanceColumns[$columnIndex].Index - 1
-        if ($line.Length -gt $boundary -and -not [char]::IsWhiteSpace($line[$boundary])) {
-          $columnBoundariesClear = $false
+    $rowInstanceKey = $null
+    if ($instanceTable) {
+      # fltmc widens columns for long instance names, so trailing fields are anchored by token order.
+      $rowTokens = @($line.Trim() -split ' +')
+      if (-not $line.Contains("`t") -and $rowTokens.Count -ge 5 -and $rowTokens.Count -le 40 -and
+        $rowTokens[0] -cmatch '^\S{1,256}$' -and
+        $rowTokens[1] -cmatch '^[0-9]{1,12}(?:\.[0-9]{1,4})?$') {
+        $flagPattern = '^(?:0x)?[0-9A-Fa-f]{1,8}$'
+        $last = $rowTokens.Count - 1
+        $withoutStatus = $rowTokens[$last - 1] -cmatch '^[0-9]{1,3}$' -and
+          $rowTokens[$last] -cmatch $flagPattern
+        $withStatus = $rowTokens.Count -ge 6 -and
+          $rowTokens[$last - 2] -cmatch '^[0-9]{1,3}$' -and
+          $rowTokens[$last - 1] -cmatch $flagPattern -and
+          $rowTokens[$last] -cmatch $flagPattern
+        $instanceText = ($rowTokens[2..$last] -join ' ')
+        if (($withoutStatus -or $withStatus) -and $instanceText.Length -le 512) {
+          $rowFilterName = $rowTokens[0]
+          $rowInstanceKey = $instanceText
         }
       }
+    } else {
+      $featureColumn = if ($hasSupportedFeatures) { '\s+(0x[0-9A-Fa-f]{1,8})' } else { '' }
+      $rowPattern = '^\s*(\S{1,256})\s+([0-9]{1,3})\s+[0-9]{1,12}(?:\.[0-9]{1,4})?\s+[0-9]{1,3}' +
+        $featureColumn + '\s*$'
+      $match = [regex]::Match($line, $rowPattern)
+      if ($match.Success) { $rowFilterName = $match.Groups[1].Value }
+    }
+    $columnValues = $null
+    if ($null -eq $rowFilterName -and $instanceTable -and $instanceColumns.Count -eq 6) {
+      $columnStart = $instanceColumns[0].Index
+      $columnEnd = $instanceColumns[5].Index + $instanceColumns[5].Length
       if (-not $line.Contains("`t") -and
         ($columnStart -eq 0 -or [string]::IsNullOrWhiteSpace($line.Substring(0, [Math]::Min($columnStart, $line.Length)))) -and
         ($line.Length -le $columnEnd -or [string]::IsNullOrWhiteSpace($line.Substring($columnEnd)))) {
@@ -451,17 +460,6 @@ function Get-ProcmonFilterManagerVolumeEvidence {
             }
           }
         )
-        # fltmc pads instance names containing spaces and prints SprtFtrs without 0x.
-        if ($columnBoundariesClear -and
-          $columnValues[0] -cmatch '^\S{1,256}$' -and
-          $columnValues[1] -cmatch '^[0-9]{1,12}(?:\.[0-9]{1,4})?$' -and
-          $columnValues[2] -cmatch '^\S(?:[^\t]{0,254}\S)?$' -and
-          $columnValues[3] -cmatch '^[0-9]{1,3}$' -and
-          $columnValues[4] -cmatch '^(?:0x)?[0-9A-Fa-f]{1,8}$' -and
-          $columnValues[5] -cmatch '^(?:(?:0x)?[0-9A-Fa-f]{1,8})?$') {
-          $rowFilterName = $columnValues[0]
-          $rowInstanceName = $columnValues[2]
-        }
       }
     }
     if ($null -eq $rowFilterName) {
@@ -500,7 +498,7 @@ function Get-ProcmonFilterManagerVolumeEvidence {
     if ($rowFilterName -notmatch '^(?i:PROCMON[0-9]*)$') { continue }
     if ($instanceTable) {
       $filterName = $rowFilterName
-      $instanceKey = "$filterName`n$rowInstanceName"
+      $instanceKey = "$filterName`n$rowInstanceKey"
       if (-not $instanceNames.Add($instanceKey)) {
         $script:filterManagerVolumeParseState = "row-shape"
         throw "Filter Manager volume inventory repeated an instance"

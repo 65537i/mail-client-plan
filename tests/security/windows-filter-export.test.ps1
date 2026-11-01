@@ -402,12 +402,23 @@ foreach ($format in @(
     }
   }
 }
+$shiftedRows = @(
+  ("{0,-20} {1,-13} {2} {3,-7} {4,-8} {5,-8}" -f @("PROCMON24", "385200", "Process Monitor 24 Instance With A Long Name", "0", "0000000f", ""))
+  ("{0,-20} {1,-13} {2} {3} {4} {5}" -f @("PROCMON24", "385200", "Process Monitor 24 Second Instance Long Name", "0", "00000003", "0x00"))
+  ("{0,-20} {1,-13} {2,-32} {3,-7} {4,-8} {5,-8}" -f @("Unrelated", "328010", "Unrelated Instance 2", "0", "0000000f", ""))
+)
+if ((Get-ProcmonFilterManagerVolumeEvidence (
+      @($instanceHeader, $columnSeparator) + $shiftedRows
+    ) "D:") -cne "candidates:1;instances:2") {
+  throw "Instance names wider than their column must shift later fields without breaking parsing"
+}
 $fixedWidthInvalidRows = @(
   ("{0,-20} {1,-13} {2,-32} {3,-7} {4,-8} {5,-8}" -f @("PROCMON24", "385200", "", "0", "0000000f", ""))
   ("{0,-20} {1,-13} {2,-32} {3,-7} {4,-8} {5,-8}" -f @("PROCMON24", "385200", "private", "x", "0000000f", ""))
   ("{0,-20} {1,-13} {2,-32} {3,-7} {4,-8} {5,-8}" -f @("PROCMON24", "385200", "private", "0", "000000001", ""))
   ("{0,-20} {1,-13} {2,-32} {3,-7} {4,-8} {5,-8}" -f @("PROCMON24", "385200", "private", "0", "0000000f", "Detached"))
-  ("{0,-20} {1,-13} {2} {3,-7} {4,-8} {5,-8}" -f @("PROCMON24", "385200", ("p" * 33), "0", "0000000f", ""))
+  ("{0,-20} {1,-13} {2,-32} {3,-7} {4,-8} {5,-8}" -f @("PROCMON24", "385200.12345", "private", "0", "0000000f", ""))
+  ("{0,-20} {1,-13} {2,-32} {3,-7} {4,-8} {5,-8}" -f @("PROCMON24", "385200", "private", "0", "0000000f 0x00", "0x00"))
   ("{0,-20} {1,-13} {2,-32} {3,-7} {4,-8} {5,-8}" -f @("PROCMON24", "385200", "private`tname", "0", "0000000f", ""))
   ("{0,-20} {1,-13} {2,-32} {3,-7} {4,-8} {5,-8} extra" -f @("PROCMON24", "385200", "private", "0", "0000000f", ""))
 )
