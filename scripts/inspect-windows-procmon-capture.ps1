@@ -431,7 +431,12 @@ function Get-ProcmonFilterManagerVolumeEvidence {
           $rowTokens[$last - 2] -cmatch '^[0-9]{1,3}$' -and
           $rowTokens[$last - 1] -cmatch $flagPattern -and
           $rowTokens[$last] -cmatch $flagPattern
-        $instanceText = ($rowTokens[2..$last] -join ' ')
+        $instanceNameEnd = if ($withStatus) { $last - 3 } else { $last - 2 }
+        $instanceText = if ($instanceNameEnd -ge 2) {
+          $rowTokens[2..$instanceNameEnd] -join ' '
+        } else {
+          ""
+        }
         if (($withoutStatus -or $withStatus) -and $instanceText.Length -le 512) {
           $rowFilterName = $rowTokens[0]
           $rowInstanceKey = $instanceText

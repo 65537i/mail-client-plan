@@ -440,6 +440,17 @@ try {
   ) "D:" | Out-Null
 } catch { $duplicateFixedWidthRejected = $true }
 if (-not $duplicateFixedWidthRejected) { throw "Duplicate fixed-width instances must fail closed" }
+$duplicateChangedMetadataRejected = $false
+try {
+  Get-ProcmonFilterManagerVolumeEvidence @(
+    $instanceHeader, $columnSeparator,
+    ("{0,-20} {1,-13} {2,-32} {3,-7} {4,-8} {5,-8}" -f @("PROCMON24", "385200", "Same Instance", "0", "0000000f", "0")),
+    ("{0,-20} {1,-13} {2,-32} {3,-7} {4,-8} {5,-8}" -f @("procmon24", "385200", "same instance", "1", "00000003", "1"))
+  ) "D:" | Out-Null
+} catch { $duplicateChangedMetadataRejected = $true }
+if (-not $duplicateChangedMetadataRejected) {
+  throw "Duplicate instances must fail closed when frame or flags differ"
+}
 $headerShapeFixtures = @(
   [pscustomobject]@{ Header = "Filter Altitude Instance Name Frame SprtFtrs Status"; Shape = "filter-altitude-instance-name-frame-sprtftrs-status" }
   [pscustomobject]@{ Header = "Filter Altitude Instance Name Frame SprtFtrs Flags"; Shape = "filter-altitude-instance-name-frame-sprtftrs-flags" }

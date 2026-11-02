@@ -4,6 +4,7 @@
 
 ## 現在の範囲
 
+- ローカルでWindows Procmon監査の回帰を確認し、Process Monitor CSV / filter診断のNode 66/66成功、PowerShell Filter Manager volume parser fixture成功。fixtureはWindows Registry依存部より前で成功するため、Linux上でのPowerShell全試験とは扱わない。調査で、instance重複キーがframe / feature / status値を含み、属性だけ異なる同一instanceを重複計上し得ることを確認。末尾列を除いたinstance名で重複判定する修正と回帰fixtureを追加した。Windows実行・GitHub Actionsはこの修正後にまとめて実施予定、AC-05未達。
 - [Run 519](https://github.com/65537i/mail-client-plan/actions/runs/41306084970)（`272554e`、manual Windows 2025 x64 / webview）でRun 517の短いinstance行は通過したが、列幅を超える長いInstance Name行で`row-shape`停止（列診断`word-integer-words-words-integer-barehex`、token `text-number-text-text-number-text-number-text`）。`fltmc`は長い値で後続列を右へずらすため列位置解析をやめ、先頭Filter / Altitudeと末尾Frame / SprtFtrs（`0x`有無） / 任意VlStatusをtoken順で固定する文法へ置換した。タブ・token数超過・未知値・重複instanceはfail closed、名前や値は出力しない。ローカル: PowerShell 7.6.9でRegistry依存部より前のfixture全通過（Registry部はLinux非対応で未実行）、Node 77/77、diff check成功。Windows実機検証は次Runで実施、AC-05未達。
 - [Run 517](https://github.com/65537i/mail-client-plan/actions/runs/41304809374)（`7cb3a2e`）はconfiguration export（保存dialog含む）を通過し、live Filter Manager parserで`row-shape`停止（列診断`word-integer-words-integer-barehex-empty`: 空白入りInstance Name、`0x`無しSprtFtrs、空VlStatus）。
 - GitHub CLI認証完了、保留中commitはorigin/mainへ反映済み。[Run 515](https://github.com/65537i/mail-client-plan/actions/runs/41135493794)（`9556149`、Windows 2025 x64 / webview）はconfiguration-export fixtureの関数抽出数検査で停止。window分類関数追加後の実数10に対して期待数9が残っていたため10へ修正した。ローカルPowerShellで実際の抽出式・期待数検査・6分類fixtureを実行し成功。Windows全fixture / live監査は次run待ち、AC-05未達。
