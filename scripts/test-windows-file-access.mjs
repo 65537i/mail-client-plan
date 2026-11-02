@@ -88,6 +88,10 @@ async function captureScenario(scenario) {
     );
     if (required) {
       assert.notEqual(counts[0][1], "unavailable", `Process Monitor ${label} list count is unavailable`);
+      assert(
+        Number(counts[0][1]) > 0,
+        `Process Monitor ${label} did not observe any captured events`,
+      );
     }
     console.log(`Windows audit ${scenario}: ${label}-list-items=${counts[0][1]}`);
     assert.equal(capture.exitCode, null, `Process Monitor capture exited during ${label} list inspection`);

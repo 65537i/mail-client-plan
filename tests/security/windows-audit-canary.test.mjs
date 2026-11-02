@@ -229,6 +229,7 @@ test("AC-05: live filter verification attaches to the capture PID and preserves 
   assert.match(driver, /positive-control read completed[\s\S]*await readCaptureListCount\("after-positive-control", true\)[\s\S]*const excludedControl = spawn/);
   assert.match(driver, /const alternateControl = spawn\(\s*"powershell\.exe"[\s\S]*\[System\.IO\.File\]::ReadAllBytes\(\$env:MAIL_CLIENT_FILE_CANARY\)[\s\S]*MAIL_CLIENT_FILE_CANARY: positiveControlPath[\s\S]*await readCaptureListCount\("after-alternate-control", true\)[\s\S]*const excludedControl = spawn/);
   assert.match(driver, /WDIO finished[\s\S]*await verifyLiveCaptureFilter\("after-wdio"\)[\s\S]*await readCaptureListCount\("final"\)/);
+  assert.match(driver, /if \(required\) \{\s*assert\.notEqual\(counts\[0\]\[1\], "unavailable"[\s\S]*Number\(counts\[0\]\[1\]\) > 0/);
 });
 
 test("AC-05: only offline export clears display filters and all exported paths remain validated", async () => {
