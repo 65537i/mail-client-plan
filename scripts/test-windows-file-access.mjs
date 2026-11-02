@@ -8,6 +8,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import {
   decodeWindowsFileTrace,
   inspectWindowsFileTrace,
+  summarizeWindowsFileTrace,
 } from "./windows-file-trace.mjs";
 import { createWindowsAuditCanary } from "./windows-audit-canary.mjs";
 import {
@@ -22,6 +23,7 @@ assert(process.env.MAIL_CLIENT_PROCMON_PATH, "MAIL_CLIENT_PROCMON_PATH is requir
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const procmonPath = path.resolve(process.env.MAIL_CLIENT_PROCMON_PATH);
+let unfilteredCaptureProbeVerified = false;
 
 async function captureScenario(scenario) {
   const temporaryDirectory = await mkdtemp(path.join(os.tmpdir(), "mail-client-file-audit-"));
@@ -154,6 +156,94 @@ async function captureScenario(scenario) {
     assert.equal(result.code, 0, `Process Monitor ${description} exited unsuccessfully`);
   }
 
+  async function runNodePositiveControl(description) {
+    const positiveControl = spawn(
+      process.execPath,
+      [
+        "-e",
+        "require('node:fs').readFileSync(process.env.MAIL_CLIENT_FILE_CANARY)",
+      ],
+      {
+        env: {
+          ...process.env,
+          MAIL_CLIENT_FILE_CANARY: positiveControlPath,
+        },
+        stdio: "ignore",
+        windowsHide: true,
+      },
+    );
+    const result = await waitForProcess(positiveControl);
+    if (result.error) {
+      throw new Error(`Failed to start the ${description} Node positive control`);
+    }
+    assert.equal(result.code, 0, `${description} Node positive control failed`);
+    console.log(`Windows audit ${scenario}: ${description} Node positive control completed UTC=${new Date().toISOString()}`);
+  }
+
+  async function verifyUnfilteredCaptureProbe() {
+    const probeBackingFile = path.join(temporaryDirectory, "unfiltered-probe.pml");
+    const probeCsvFile = path.join(temporaryDirectory, "unfiltered-probe.csv");
+    const probe = spawn(
+      procmonPath,
+      [
+        "/AcceptEula",
+        "/Quiet",
+        "/NoFilter",
+        "/BackingFile",
+        probeBackingFile,
+      ],
+      { stdio: "ignore", windowsHide: true },
+    );
+    const probeExit = waitForProcess(probe);
+    try {
+      assert(probe.pid, "Process Monitor unfiltered probe did not start");
+      await runProcmon(["/AcceptEula", "/WaitForIdle"], "unfiltered probe readiness");
+      assert.equal(probe.exitCode, null, "Process Monitor unfiltered probe exited during startup");
+      await access(probeBackingFile);
+      await runNodePositiveControl("unfiltered probe");
+      await runProcmon(["/AcceptEula", "/Terminate"], "unfiltered probe shutdown");
+      const probeResult = await waitWithTimeout(probeExit, 10_000);
+      assert(!probeResult.timedOut, "Process Monitor unfiltered probe did not stop");
+      if (probeResult.error) throw new Error("Process Monitor unfiltered probe failed while shutting down");
+
+      const backingStats = await stat(probeBackingFile);
+      assert(backingStats.size > 0, "Process Monitor unfiltered probe produced an empty capture");
+      assert(
+        backingStats.size <= 64 * 1024 * 1024,
+        "Process Monitor unfiltered probe exceeded the 64 MiB safety limit",
+      );
+      await runProcmon(
+        ["/AcceptEula", "/Quiet", "/NoFilter", "/OpenLog", probeBackingFile, "/SaveAs", probeCsvFile],
+        "unfiltered probe CSV export",
+      );
+      const csvStats = await stat(probeCsvFile);
+      assert(csvStats.size > 0, "Process Monitor unfiltered probe produced an empty CSV export");
+      assert(
+        csvStats.size <= 64 * 1024 * 1024,
+        "Process Monitor unfiltered probe CSV exceeded the 64 MiB safety limit",
+      );
+      const trace = decodeWindowsFileTrace(await readFile(probeCsvFile));
+      const control = summarizeWindowsFileTrace(trace, positiveControlPath).canaryEvents.filter(
+        ({ processName, operation }) =>
+          processName.toLowerCase() === "node.exe" && operation === "ReadFile",
+      );
+      assert(
+        control.length > 0,
+        "Unfiltered Process Monitor probe did not record the Node positive-control ReadFile",
+      );
+      console.log(
+        `Windows audit ${scenario}: unfiltered-probe=positive-control-readfile:${control.length};pml-bytes:${backingStats.size};csv-bytes:${csvStats.size}`,
+      );
+    } finally {
+      if (probe.pid && probe.exitCode === null && probe.signalCode === null) {
+        await runProcmon(["/AcceptEula", "/Terminate"], "unfiltered probe cleanup");
+        const probeResult = await waitWithTimeout(probeExit, 10_000);
+        assert(!probeResult.timedOut, "Process Monitor unfiltered probe cleanup timed out");
+        if (probeResult.error) throw new Error("Process Monitor unfiltered probe cleanup failed");
+      }
+    }
+  }
+
   let capture;
   let captureExit;
   let command;
@@ -170,6 +260,10 @@ async function captureScenario(scenario) {
     console.log(`Windows audit ${scenario}: canary flushed and closed UTC=${canaryCreatedAt}; bytes=${canaryStats.size}`);
     await writeFile(positiveControlPath, "Synthetic Process Monitor positive control.\n");
     await writeFile(excludedPath, "Synthetic Process Monitor filter negative control.\n");
+    if (!unfilteredCaptureProbeVerified) {
+      await verifyUnfilteredCaptureProbe();
+      unfilteredCaptureProbeVerified = true;
+    }
     const filterSetup = spawn(
       "powershell.exe",
       [
@@ -466,31 +560,7 @@ async function captureScenario(scenario) {
 
     await verifyLiveCaptureFilter("before-controls");
 
-    const positiveControl = spawn(
-      process.execPath,
-      [
-        "-e",
-        "require('node:fs').readFileSync(process.env.MAIL_CLIENT_FILE_CANARY)",
-      ],
-      {
-        env: {
-          ...process.env,
-          MAIL_CLIENT_FILE_CANARY: positiveControlPath,
-        },
-        stdio: "ignore",
-        windowsHide: true,
-      },
-    );
-    const positiveControlResult = await waitForProcess(positiveControl);
-    if (positiveControlResult.error) {
-      throw new Error("Failed to start the synthetic-canary positive control");
-    }
-    assert.equal(
-      positiveControlResult.code,
-      0,
-      "Node synthetic-canary positive control failed",
-    );
-    console.log(`Windows audit ${scenario}: positive-control read completed UTC=${new Date().toISOString()}`);
+    await runNodePositiveControl("exact-path audit");
     await readCaptureListCount("after-positive-control", true);
     const alternateControl = spawn(
       "powershell.exe",

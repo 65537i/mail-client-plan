@@ -224,17 +224,19 @@ test("AC-05: live filter verification attaches to the capture PID and preserves 
   assert.match(configuration, /if \(-not \$PSBoundParameters.ContainsKey\("CaptureProcessId"\) -and -not \$process.HasExited\)/);
   assert.match(configuration, /reloaded-filter-rules-verified"[\s\S]*PROC_MON_FILTER_LIVE_VERIFIED=rules:exact-two;drop:on/);
   assert.match(driver, /async function verifyLiveCaptureFilter\(label\)[\s\S]*"-CaptureProcessId", String\(capture\.pid\)[\s\S]*liveFilterExit, 30_000[\s\S]*PROC_MON_FILTER_LIVE_VERIFIED=rules:exact-two;drop:on/);
-  assert.match(driver, /await verifyLiveCaptureFilter\("before-controls"\)[\s\S]*const positiveControl = spawn/);
+  assert.match(driver, /await verifyLiveCaptureFilter\("before-controls"\)[\s\S]*await runNodePositiveControl\("exact-path audit"\)/);
   assert.match(driver, /await readCaptureListCount\("after-controls", true\)[\s\S]*command\.send\("start"\)/);
-  assert.match(driver, /positive-control read completed[\s\S]*await readCaptureListCount\("after-positive-control", true\)[\s\S]*const excludedControl = spawn/);
+  assert.match(driver, /await runNodePositiveControl\("exact-path audit"\)[\s\S]*await readCaptureListCount\("after-positive-control", true\)[\s\S]*const excludedControl = spawn/);
   assert.match(driver, /const alternateControl = spawn\(\s*"powershell\.exe"[\s\S]*\[System\.IO\.File\]::ReadAllBytes\(\$env:MAIL_CLIENT_FILE_CANARY\)[\s\S]*MAIL_CLIENT_FILE_CANARY: positiveControlPath[\s\S]*await readCaptureListCount\("after-alternate-control", true\)[\s\S]*const excludedControl = spawn/);
   assert.match(driver, /WDIO finished[\s\S]*await verifyLiveCaptureFilter\("after-wdio"\)[\s\S]*await readCaptureListCount\("final"\)/);
   assert.match(driver, /if \(required\) \{\s*assert\.notEqual\(counts\[0\]\[1\], "unavailable"[\s\S]*Number\(counts\[0\]\[1\]\) > 0/);
 });
 
-test("AC-05: only offline export clears display filters and all exported paths remain validated", async () => {
+test("AC-05: unfiltered probe stays separate from strict capture and exported paths remain validated", async () => {
   const source = await readFile(new URL("../../scripts/test-windows-file-access.mjs", import.meta.url), "utf8");
-  assert.equal((source.match(/"\/NoFilter"/g) ?? []).length, 1);
+  assert.equal((source.match(/"\/NoFilter"/g) ?? []).length, 3);
+  assert.match(source, /async function verifyUnfilteredCaptureProbe\(\)[\s\S]*"\/NoFilter"[\s\S]*64 \* 1024 \* 1024[\s\S]*positive-control-readfile:/);
+  assert.match(source, /if \(!unfilteredCaptureProbeVerified\) \{\s*await verifyUnfilteredCaptureProbe\(\);\s*unfilteredCaptureProbeVerified = true;\s*\}[\s\S]*"\/LoadConfig",\s*filterConfig,\s*"\/BackingFile",\s*backingFile/);
   assert.match(source, /\["\/AcceptEula", "\/Quiet", "\/NoFilter", "\/OpenLog", backingFile, "\/SaveAs", csvFile\]/);
   assert.match(source, /capture = spawn\([\s\S]*"\/LoadConfig",\s*filterConfig,\s*"\/BackingFile",\s*backingFile/);
   assert.match(source, /CSV export[\s\S]*csvStats.size <= 256 \* 1024 \* 1024[\s\S]*inspectWindowsFileTrace\(trace, canaryPath, positiveControlPath, excludedPath\)/);
@@ -328,7 +330,7 @@ test("AC-05: capture inspection is bounded, read-only and precedes control reads
   assert.match(inspection, /\$toggle = "unavailable"/);
   assert.match(inspection, /PROC_MON_CAPTURE_FAILED_STAGE=\$stage/);
   assert.doesNotMatch(inspection, /Invoke\(|Toggle\(|Select\(|SendKeys|SetFocus|SetForegroundWindow|WriteLine\([^)]*(?:Name|Exception)/);
-  assert.match(driver, /capture readiness[\s\S]*inspect-windows-procmon-capture.ps1[\s\S]*captureInspectionExit, 20_000[\s\S]*captureInspectionOverflow[\s\S]*evidence.length, 1[\s\S]*const positiveControl = spawn/);
+  assert.match(driver, /capture readiness[\s\S]*inspect-windows-procmon-capture.ps1[\s\S]*captureInspectionExit, 20_000[\s\S]*captureInspectionOverflow[\s\S]*nativeEvidence.length, 1[\s\S]*await verifyLiveCaptureFilter\("before-controls"\)[\s\S]*await runNodePositiveControl\("exact-path audit"\)/);
   assert.match(driver, /slice\(0, 2048\)/);
 });
 
@@ -336,7 +338,7 @@ test("AC-05: capture readiness precedes both controls and WDIO without a fixed s
   const source = await readFile(new URL("../../scripts/test-windows-file-access.mjs", import.meta.url), "utf8");
   assert.match(
     source,
-    /captureExit = waitForProcess\(capture\);[\s\S]*await runProcmon\(\["\/AcceptEula", "\/WaitForIdle"\], "capture readiness"\);[\s\S]*assert.equal\(capture.exitCode, null,[\s\S]*await access\(backingFile\);[\s\S]*const positiveControl = spawn\([\s\S]*positiveControlResult.code,[\s\S]*const excludedControl = spawn\([\s\S]*excludedControlResult.code,[\s\S]*command.send\("start"\)/,
+    /captureExit = waitForProcess\(capture\);[\s\S]*await runProcmon\(\["\/AcceptEula", "\/WaitForIdle"\], "capture readiness"\);[\s\S]*assert.equal\(capture.exitCode, null,[\s\S]*await access\(backingFile\);[\s\S]*await runNodePositiveControl\("exact-path audit"\);[\s\S]*await readCaptureListCount\("after-positive-control", true\);[\s\S]*const excludedControl = spawn\([\s\S]*excludedControlResult.code,[\s\S]*command.send\("start"\)/,
   );
   assert.doesNotMatch(source, /setTimeout\(resolve, 1500\)/);
   assert.match(source, /waitWithTimeout\(childExit, 20_000\)/);
