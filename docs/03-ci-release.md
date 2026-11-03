@@ -2,6 +2,8 @@
 
 ## 1. ワークフロー構成
 
+[Run 41598534727](https://github.com/65537i/mail-client-plan/actions/runs/41598534727)（`b95f64d`、Windows 2025 x64 / webview）はCountOnly修正後のstrict baselineでpositive-control exact `ReadFile` 1件、canary event 0件、PML 1,054,161 bytes / CSV 3,185 bytesを記録。excluded-controlがlist countを増やさず、WDIOとbaseline後のfilter再確認も成功。attack captureはscenario再設定時に`find-main-window` / `InvalidOperationException`で停止し未実施。修正検証はbaselineまで、AC-05未達。
+
 [Run 41593740921](https://github.com/65537i/mail-client-plan/actions/runs/41593740921)（`966b10b`、Windows 2025 x64 / webview）はpreflightとunfiltered probeのexact-path positive controlに成功したが、strict list-only inspectorにvolume引数がなく、CountOnly終了前のvolume必須検証で停止。stageは初期値`compile-native-capture-helper`のままで、Add-Type失敗を意味していなかった。export / canary gate / attackへ未到達、AC-05未達。
 
 失敗stageは初期値のまま出力されており、Add-Type失敗の証拠ではなかった。list-only inspectorにvolume引数がなく、その必須検証が`-CountOnly`の早期終了より前だったことが原因。count-only経路をnative list countだけで終了させ、Filter Managerのfull inspectionでのみvolumeを要求するよう修正した。
