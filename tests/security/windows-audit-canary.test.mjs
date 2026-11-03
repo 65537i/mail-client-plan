@@ -289,17 +289,17 @@ test("AC-05: final list count uses only a bounded numeric read before shutdown",
   assert.match(inspection, /ReadListCount\(window, 0x1004, UIntPtr.Zero, IntPtr.Zero, 0x22, 2000, out result\)/);
   assert.match(inspection, /name.ToString\(\) != "SysListView32"/);
   assert.match(inspection, /count > Int32.MaxValue/);
+  const countOnlyStart = inspection.indexOf("if ($CountOnly) { exit 0 }");
+  const filterManagerSnapshotStart = inspection.indexOf("Get-ProcmonFilterManagerSnapshot $TargetVolumePath");
+  assert(countOnlyStart >= 0 && filterManagerSnapshotStart > countOnlyStart);
+  assert.match(inspection, /\$nativeChildren = \[ProcmonCaptureWindows\]::Inspect[\s\S]*if \(\$CountOnly\) \{ exit 0 \}/);
+  assert.match(driver, /"-OwnerProcessId", String\(owner\.pid\), "-CountOnly"/);
   assert.match(inspection, /if \(\$CountOnly\) \{ exit 0 \}/);
   assert.match(driver, /await readCaptureListCount\("after-controls", true\)[\s\S]*command\.send\("start"\)/);
   assert.match(driver, /WDIO finished[\s\S]*await readCaptureListCount\("final"\)[\s\S]*await runProcmon\(\["\/AcceptEula", "\/Terminate"\]/);
   assert.match(driver, /output\.length \+ chunk\.length > 2048[\s\S]*waitWithTimeout\(inspectionExit, 20_000\)/);
   assert.match(driver, /PROC_MON_CAPTURE_FAILED_STAGE=\(\[a-z\]\[a-z0-9-\]\{0,63\}\)[\s\S]*PROC_MON_CAPTURE_FAILURE=\(CimException\|ManagementException\|InvalidOperationException\|ParameterBindingException\|RuntimeException\|Other\)/);
-  assert.match(inspection, /PROC_MON_CAPTURE_FAILURE_ID=\$failureId/);
-  assert.match(inspection, /\$failureRecord\.FullyQualifiedErrorId -match '\^\(\[A-Za-z\]\[A-Za-z0-9_\.-\]\{0,63\}\)\(\?:,\|\$\)'/);
-  assert.match(inspection, /PROC_MON_CAPTURE_COMPILER_CODES=\$compilerCodeSummary/);
-  assert.match(driver, /PROC_MON_CAPTURE_FAILURE_ID=\(\[A-Z\]\[A-Z0-9_\]\{0,63\}\|unavailable\)/);
-  assert.match(driver, /PROC_MON_CAPTURE_COMPILER_CODES=\(none\|CS\[0-9\]\{4\}\(\?:,CS\[0-9\]\{4\}\)\{0,7\}\)/);
-  assert.match(driver, /stage:\$\{failureStage\};failure:\$\{failureType\};failure-id:\$\{failureId\};compiler-codes:\$\{compilerCodeSummary\}/);
+  assert.match(driver, /stage:\$\{failureStage\};failure:\$\{failureType\}/);
 });
 
 test("AC-05: capture startup diagnostics classify exact known errors without exposing UI text", async () => {
