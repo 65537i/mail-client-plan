@@ -95,16 +95,25 @@ export function summarizeWindowsFileTrace(traceOutput, canaryPath) {
   const canaryEvents = [];
   const canaryDiagnostics = [];
   const observedPaths = new Set();
+  let eventCount = 0;
+  let nodeProcessEvents = 0;
+  let nodeReadFileEvents = 0;
 
   for (const fields of records) {
     assert.equal(fields.length, headers.length, "Process Monitor CSV row has an unexpected column count");
     const processName = fields[processColumn].trim();
+    const operation = fields[operationColumn].trim();
+    eventCount += 1;
+    if (processName.toLowerCase() === "node.exe") {
+      nodeProcessEvents += 1;
+      if (operation === "ReadFile") nodeReadFileEvents += 1;
+    }
     const eventPath = normalizeWindowsPath(fields[pathColumn]);
     if (eventPath) observedPaths.add(eventPath);
     if (eventPath === normalizedCanaryPath) {
       canaryEvents.push({
         processName,
-        operation: fields[operationColumn].trim(),
+        operation,
       });
       if (canaryDiagnostics.length < 10) {
         const time = timeColumn === undefined ? "" : fields[timeColumn].trim();
@@ -120,7 +129,14 @@ export function summarizeWindowsFileTrace(traceOutput, canaryPath) {
     }
   }
 
-  return { canaryEvents, canaryDiagnostics, observedPaths };
+  return {
+    canaryEvents,
+    canaryDiagnostics,
+    observedPaths,
+    eventCount,
+    nodeProcessEvents,
+    nodeReadFileEvents,
+  };
 }
 
 export function inspectWindowsFileTrace(traceOutput, canaryPath, positiveControlPath, excludedPath) {

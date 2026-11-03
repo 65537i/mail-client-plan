@@ -164,6 +164,9 @@ test("AC-05: canary diagnostics expose only bounded allowlisted metadata", () =>
   const event = `"10:02:03.1234567","System","4","CreateFileMapping","${canaryPath}","SUCCESS","SyncType: SyncTypeCreateSection, PageProtection: PAGE_READONLY, Offset: 0, Length: 42, File: C:\\private\\secret, Token: synthetic-secret"\r\n`;
   const summary = summarizeWindowsFileTrace(header + event.repeat(12), canaryPath);
   assert.equal(summary.canaryEvents.length, 12);
+  assert.equal(summary.eventCount, 12);
+  assert.equal(summary.nodeProcessEvents, 0);
+  assert.equal(summary.nodeReadFileEvents, 0);
   assert.equal(summary.canaryDiagnostics.length, 10);
   assert.deepEqual(summary.canaryDiagnostics[0], {
     time: "10:02:03.1234567",
@@ -180,6 +183,16 @@ test("AC-05: canary diagnostics expose only bounded allowlisted metadata", () =>
   assert(!diagnostic.includes("synthetic-secret"));
   assert(!diagnostic.includes(canaryPath));
   assert.throws(() => verify(header + controlEvent + event), /1 unexpected event/);
+});
+
+test("AC-05: trace summary counts Node ReadFile events", () => {
+  const unrelatedEvent =
+    '"10:00:00.0000001","node.exe","100","ReadFile","C:\\private\\unrelated.txt","SUCCESS",""\r\n';
+  const summary = summarizeWindowsFileTrace(header + controlEvent + unrelatedEvent, controlPath);
+  assert.equal(summary.eventCount, 2);
+  assert.equal(summary.canaryEvents.length, 1);
+  assert.equal(summary.nodeProcessEvents, 2);
+  assert.equal(summary.nodeReadFileEvents, 2);
 });
 
 test("AC-05: malformed rows fail rather than hiding canary events", () => {

@@ -235,7 +235,9 @@ test("AC-05: live filter verification attaches to the capture PID and preserves 
 test("AC-05: unfiltered probe stays separate from strict capture and exported paths remain validated", async () => {
   const source = await readFile(new URL("../../scripts/test-windows-file-access.mjs", import.meta.url), "utf8");
   assert.equal((source.match(/"\/NoFilter"/g) ?? []).length, 3);
-  assert.match(source, /async function verifyUnfilteredCaptureProbe\(\)[\s\S]*"\/NoFilter"[\s\S]*64 \* 1024 \* 1024[\s\S]*positive-control-readfile:/);
+  assert.match(source, /async function verifyUnfilteredCaptureProbe\(\)[\s\S]*"\/NoFilter"[\s\S]*readCaptureListCount\("unfiltered-probe", false, probe\)/);
+  assert.match(source, /backingStats\.size <= 64 \* 1024 \* 1024[\s\S]*csvStats\.size <= 64 \* 1024 \* 1024/);
+  assert.match(source, /events:\$\{summary\.eventCount\}[\s\S]*Unfiltered Process Monitor probe did not record the Node positive-control ReadFile/);
   assert.match(source, /if \(!unfilteredCaptureProbeVerified\) \{\s*await verifyUnfilteredCaptureProbe\(\);\s*unfilteredCaptureProbeVerified = true;\s*\}[\s\S]*"\/LoadConfig",\s*filterConfig,\s*"\/BackingFile",\s*backingFile/);
   assert.match(source, /\["\/AcceptEula", "\/Quiet", "\/NoFilter", "\/OpenLog", backingFile, "\/SaveAs", csvFile\]/);
   assert.match(source, /capture = spawn\([\s\S]*"\/LoadConfig",\s*filterConfig,\s*"\/BackingFile",\s*backingFile/);

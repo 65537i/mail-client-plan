@@ -51,13 +51,14 @@ async function captureScenario(scenario) {
     });
   }
 
-  async function readCaptureListCount(label, required = false) {
+  async function readCaptureListCount(label, required = false, owner = capture) {
+    assert(owner?.pid, `Process Monitor ${label} list inspection owner is unavailable`);
     const inspection = spawn(
       "powershell.exe",
       [
         "-STA", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
         "-File", path.join(root, "scripts", "inspect-windows-procmon-capture.ps1"),
-        "-OwnerProcessId", String(capture.pid), "-CountOnly",
+        "-OwnerProcessId", String(owner.pid), "-CountOnly",
       ],
       { stdio: ["ignore", "pipe", "pipe"], windowsHide: true },
     );
@@ -96,7 +97,7 @@ async function captureScenario(scenario) {
       );
     }
     console.log(`Windows audit ${scenario}: ${label}-list-items=${counts[0][1]}`);
-    assert.equal(capture.exitCode, null, `Process Monitor capture exited during ${label} list inspection`);
+    assert.equal(owner.exitCode, null, `Process Monitor ${label} list inspection owner exited`);
     return counts[0][1];
   }
 
@@ -201,6 +202,7 @@ async function captureScenario(scenario) {
       assert.equal(probe.exitCode, null, "Process Monitor unfiltered probe exited during startup");
       await access(probeBackingFile);
       await runNodePositiveControl("unfiltered probe");
+      const probeListCount = await readCaptureListCount("unfiltered-probe", false, probe);
       await runProcmon(["/AcceptEula", "/Terminate"], "unfiltered probe shutdown");
       const probeResult = await waitWithTimeout(probeExit, 10_000);
       assert(!probeResult.timedOut, "Process Monitor unfiltered probe did not stop");
@@ -223,16 +225,17 @@ async function captureScenario(scenario) {
         "Process Monitor unfiltered probe CSV exceeded the 64 MiB safety limit",
       );
       const trace = decodeWindowsFileTrace(await readFile(probeCsvFile));
-      const control = summarizeWindowsFileTrace(trace, positiveControlPath).canaryEvents.filter(
+      const summary = summarizeWindowsFileTrace(trace, positiveControlPath);
+      const control = summary.canaryEvents.filter(
         ({ processName, operation }) =>
           processName.toLowerCase() === "node.exe" && operation === "ReadFile",
       );
+      console.log(
+        `Windows audit ${scenario}: unfiltered-probe-list-items:${probeListCount};events:${summary.eventCount};control-path-events:${summary.canaryEvents.length};node-events:${summary.nodeProcessEvents};node-readfile-events:${summary.nodeReadFileEvents};pml-bytes:${backingStats.size};csv-bytes:${csvStats.size}`,
+      );
       assert(
         control.length > 0,
-        "Unfiltered Process Monitor probe did not record the Node positive-control ReadFile",
-      );
-      console.log(
-        `Windows audit ${scenario}: unfiltered-probe=positive-control-readfile:${control.length};pml-bytes:${backingStats.size};csv-bytes:${csvStats.size}`,
+        `Unfiltered Process Monitor probe did not record the Node positive-control ReadFile (events:${summary.eventCount};control-path-events:${summary.canaryEvents.length};node-events:${summary.nodeProcessEvents};node-readfile-events:${summary.nodeReadFileEvents})`,
       );
     } finally {
       if (probe.pid && probe.exitCode === null && probe.signalCode === null) {
