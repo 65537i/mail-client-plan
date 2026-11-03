@@ -2,6 +2,8 @@
 
 ## 1. ワークフロー構成
 
+[Run 41586859978](https://github.com/65537i/mail-client-plan/actions/runs/41586859978)（`bebca81`、Windows 2025 x64 / webview）はNoFilter probeで49,764 eventsをexport。control basename一致10件（Drive形式）、Node `ReadFile` basename一致1件に対し、full pathとexpected parent一致はいずれも0。Procmon list inspectorはnonzeroでunavailable。次はpath値非出力のparent suffix component一致数を追加する。strict監査未到達、AC-05未達。
+
 [Run 41585920539](https://github.com/65537i/mail-client-plan/actions/runs/41585920539)（`a0ed7ad`、Windows 2025 x64 / webview）は`/NoFilter` probeでPML 26,021,500 bytes / CSV 9,275,358 bytes、50,730 events、Node `ReadFile` 15件をexportした。control exact path一致は0件だが、basename一致は10件、そのうちNode `ReadFile` basename一致は1件。control file access自体は記録された一方、CSV Path全体が期待pathと異なる。live list inspectionはnonzeroでunavailable。次はpath値をログへ出さずparent一致とDrive / device / UNC / otherの固定分類件数を追加し、差分の位置を特定する。strict監査未到達、AC-05未達。
 
 [Run 41554219735](https://github.com/65537i/mail-client-plan/actions/runs/41554219735)（`f3f9978`、Windows 2025 x64 / webview）はsecurity-test build / setup / configuration exportを通過。probe live list inspectionはnonzeroだったため`unavailable`として継続し、一時PML 28,533,140 bytes / CSV 8,178,893 bytesから44,416 events、Node events 1,486 / `ReadFile` 11を集計した。期待するcontrol exact path eventは0。capture/export全体は動作するが、期待pathとの一致は確認できず、strict監査は未到達。pathはログに含めず、次はcontrolのbasename一致数を追加してalias / path mismatchの可能性を区別する。

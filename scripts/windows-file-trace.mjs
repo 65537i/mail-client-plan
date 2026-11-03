@@ -105,6 +105,13 @@ export function summarizeWindowsFileTrace(traceOutput, canaryPath) {
   let nodeReadFileCanaryFileNameEvents = 0;
   let nodeReadFileCanaryFileNameParentEvents = 0;
   const canaryFileNamePathKinds = { drive: 0, device: 0, unc: 0, other: 0 };
+  const canaryFileNameParentSuffixMatches = {
+    none: 0,
+    one: 0,
+    two: 0,
+    three: 0,
+    fourOrMore: 0,
+  };
 
   for (const fields of records) {
     assert.equal(fields.length, headers.length, "Process Monitor CSV row has an unexpected column count");
@@ -116,6 +123,27 @@ export function summarizeWindowsFileTrace(traceOutput, canaryPath) {
       canaryFileNameEvents += 1;
       const parentMatches = path.win32.dirname(eventPath) === canaryParentPath;
       if (parentMatches) canaryFileNameParentEvents += 1;
+      const eventParentSegments = path.win32.dirname(eventPath).split("\\").filter(Boolean);
+      const expectedParentSegments = canaryParentPath.split("\\").filter(Boolean);
+      let commonParentSuffixLength = 0;
+      while (
+        commonParentSuffixLength < eventParentSegments.length &&
+        commonParentSuffixLength < expectedParentSegments.length &&
+        eventParentSegments[eventParentSegments.length - commonParentSuffixLength - 1] ===
+          expectedParentSegments[expectedParentSegments.length - commonParentSuffixLength - 1]
+      ) {
+        commonParentSuffixLength += 1;
+      }
+      const suffixBucket = commonParentSuffixLength === 0
+        ? "none"
+        : commonParentSuffixLength === 1
+          ? "one"
+          : commonParentSuffixLength === 2
+            ? "two"
+            : commonParentSuffixLength === 3
+              ? "three"
+              : "fourOrMore";
+      canaryFileNameParentSuffixMatches[suffixBucket] += 1;
       const pathKind = /^\\\\/.test(eventPath)
         ? "unc"
         : /^\\device\\/i.test(eventPath)
@@ -173,6 +201,7 @@ export function summarizeWindowsFileTrace(traceOutput, canaryPath) {
     nodeReadFileCanaryFileNameEvents,
     nodeReadFileCanaryFileNameParentEvents,
     canaryFileNamePathKinds,
+    canaryFileNameParentSuffixMatches,
   };
 }
 

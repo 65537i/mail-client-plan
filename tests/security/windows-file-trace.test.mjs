@@ -172,6 +172,9 @@ test("AC-05: canary diagnostics expose only bounded allowlisted metadata", () =>
   assert.equal(summary.nodeReadFileCanaryFileNameEvents, 0);
   assert.equal(summary.nodeReadFileCanaryFileNameParentEvents, 0);
   assert.deepEqual(summary.canaryFileNamePathKinds, { drive: 12, device: 0, unc: 0, other: 0 });
+  assert.deepEqual(summary.canaryFileNameParentSuffixMatches, {
+    none: 0, one: 0, two: 0, three: 0, fourOrMore: 12,
+  });
   assert.equal(summary.canaryDiagnostics.length, 10);
   assert.deepEqual(summary.canaryDiagnostics[0], {
     time: "10:02:03.1234567",
@@ -214,6 +217,9 @@ test("AC-05: trace summary diagnoses matching filenames without treating them as
   assert.equal(summary.nodeReadFileCanaryFileNameEvents, 1);
   assert.equal(summary.nodeReadFileCanaryFileNameParentEvents, 0);
   assert.deepEqual(summary.canaryFileNamePathKinds, { drive: 1, device: 0, unc: 0, other: 0 });
+  assert.deepEqual(summary.canaryFileNameParentSuffixMatches, {
+    none: 1, one: 0, two: 0, three: 0, fourOrMore: 0,
+  });
 });
 
 test("AC-05: malformed rows fail rather than hiding canary events", () => {
