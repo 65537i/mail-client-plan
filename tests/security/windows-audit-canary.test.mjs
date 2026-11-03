@@ -252,7 +252,7 @@ test("AC-05: Procmon main-window activation verifies its process-owned foregroun
   assert.ok(mainWindowDiscovery, "Procmon main-window discovery helper is missing");
   assert.match(
     mainWindowDiscovery,
-    /\$mainHandle = \$Process\.MainWindowHandle[\s\S]*FromHandle\(\$mainHandle\)[\s\S]*\$candidate\.Current\.ProcessId -eq \$Process\.Id[\s\S]*RootElement\.FindAll[\s\S]*NativeWindowHandle -eq \$mainHandle[\s\S]*return \$window[\s\S]*return \$mainWindowHandleElement/,
+    /\$mainHandle = \$Process\.MainWindowHandle[\s\S]*FromHandle\(\$mainHandle\)[\s\S]*\$candidate\.Current\.ProcessId -eq \$Process\.Id[\s\S]*RootElement\.FindAll[\s\S]*\$window\.FindFirst\([\s\S]*\$filterMenuCondition[\s\S]*\$menuItem\.Current\.ProcessId -eq \$Process\.Id[\s\S]*selection:filter-menu-root[\s\S]*return \$filterMenuWindow[\s\S]*return \$mainHandleRootElement/,
   );
   const initialActivation = configuration.match(
     /Set-Stage "find-main-window"[\s\S]*?Set-Stage "find-filter-menu"/,

@@ -1485,6 +1485,15 @@ function Wait-MainWindow([System.Diagnostics.Process]$Process, [int]$TimeoutSeco
     [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
     [System.Windows.Automation.ControlType]::Window
   )
+  $filterMenuCondition = [System.Windows.Automation.AndCondition]::new(
+    [System.Windows.Automation.PropertyCondition]::new(
+      [System.Windows.Automation.AutomationElement]::NameProperty, "Filter"
+    ),
+    [System.Windows.Automation.PropertyCondition]::new(
+      [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+      [System.Windows.Automation.ControlType]::MenuItem
+    )
+  )
   $rootWindowCount = 0
   $ownedWindowCount = 0
   $mainHandleAvailable = $false
@@ -1495,7 +1504,9 @@ function Wait-MainWindow([System.Diagnostics.Process]$Process, [int]$TimeoutSeco
   try {
     do {
       $mainWindowHandleElement = $null
+      $mainHandleRootElement = $null
       $firstOwnedWindow = $null
+      $filterMenuWindow = $null
       $scanPhase = "refresh-process"
       $Process.Refresh()
       $scanPhase = "check-process"
@@ -1523,24 +1534,49 @@ function Wait-MainWindow([System.Diagnostics.Process]$Process, [int]$TimeoutSeco
         $scanPhase = "read-uia-window-owner"
         if ($window.Current.ProcessId -eq $Process.Id) {
           $ownedWindowCount++
-          if (
-            $mainHandleAvailable -and
-            [IntPtr]$window.Current.NativeWindowHandle -eq $mainHandle
-          ) {
-            $windowFound = $true
-            return $window
+          if ($mainHandleAvailable -and
+            [IntPtr]$window.Current.NativeWindowHandle -eq $mainHandle) {
+            $mainHandleRootElement = $window
           }
           if ($null -eq $firstOwnedWindow) {
             $firstOwnedWindow = $window
           }
+          $menuItem = $window.FindFirst(
+            [System.Windows.Automation.TreeScope]::Descendants,
+            $filterMenuCondition
+          )
+          if ($null -ne $menuItem -and $menuItem.Current.ProcessId -eq $Process.Id) {
+            $filterMenuWindow = $window
+            break
+          }
         }
+      }
+      if ($null -ne $filterMenuWindow) {
+        $windowFound = $true
+        [Console]::Out.WriteLine(
+          "PROC_MON_FILTER_MAIN_WINDOW=selection:filter-menu-root;root-windows:$([Math]::Min($rootWindowCount, 9999));uia-owned-windows:$([Math]::Min($ownedWindowCount, 9999));main-handle:$(if ($mainHandleAvailable) { 'available' } else { 'unavailable' });filter-menu:present"
+        )
+        return $filterMenuWindow
+      }
+      if ($null -ne $mainHandleRootElement) {
+        $windowFound = $true
+        [Console]::Out.WriteLine(
+          "PROC_MON_FILTER_MAIN_WINDOW=selection:main-handle-root;root-windows:$([Math]::Min($rootWindowCount, 9999));uia-owned-windows:$([Math]::Min($ownedWindowCount, 9999));main-handle:available;filter-menu:absent"
+        )
+        return $mainHandleRootElement
       }
       if ($null -ne $mainWindowHandleElement) {
         $windowFound = $true
+        [Console]::Out.WriteLine(
+          "PROC_MON_FILTER_MAIN_WINDOW=selection:from-handle;root-windows:$([Math]::Min($rootWindowCount, 9999));uia-owned-windows:$([Math]::Min($ownedWindowCount, 9999));main-handle:available;filter-menu:absent"
+        )
         return $mainWindowHandleElement
       }
       if ($null -ne $firstOwnedWindow) {
         $windowFound = $true
+        [Console]::Out.WriteLine(
+          "PROC_MON_FILTER_MAIN_WINDOW=selection:first-owned;root-windows:$([Math]::Min($rootWindowCount, 9999));uia-owned-windows:$([Math]::Min($ownedWindowCount, 9999));main-handle:$(if ($mainHandleAvailable) { 'available' } else { 'unavailable' });filter-menu:absent"
+        )
         return $firstOwnedWindow
       }
       $scanPhase = "wait"

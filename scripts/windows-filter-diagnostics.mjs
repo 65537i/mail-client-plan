@@ -156,6 +156,19 @@ export function describeWindowsFilterDiagnostics(output) {
     diagnostics.push(`filter-shortcut-foreground-gate=${shortcutForegroundGate}`);
   }
 
+  const mainWindowSelection = output.match(
+    /^PROC_MON_FILTER_MAIN_WINDOW=selection:(filter-menu-root|main-handle-root|from-handle|first-owned);root-windows:(\d{1,4});uia-owned-windows:(\d{1,4});main-handle:(available|unavailable);filter-menu:(present|absent)\r?$/m,
+  );
+  if (
+    mainWindowSelection &&
+    Number(mainWindowSelection[2]) <= 9999 &&
+    Number(mainWindowSelection[3]) <= Number(mainWindowSelection[2])
+  ) {
+    diagnostics.push(
+      `main-window-selection=${mainWindowSelection[1]};root-windows:${mainWindowSelection[2]};uia-owned-windows:${mainWindowSelection[3]};main-handle:${mainWindowSelection[4]};filter-menu:${mainWindowSelection[5]}`,
+    );
+  }
+
   if (/^PROC_MON_FILTER_MENU_OPEN_FALLBACK=filter-dialog-shortcut\r?$/m.test(output)) {
     diagnostics.push("filter-menu-open-fallback=filter-dialog-shortcut");
   }

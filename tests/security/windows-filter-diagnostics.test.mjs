@@ -526,6 +526,18 @@ test("AC-05: configuration save observations expose states, not paths or dialog 
     "",
   );
   assert.equal(
+    describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_MAIN_WINDOW=selection:filter-menu-root;root-windows:4;uia-owned-windows:1;main-handle:available;filter-menu:present",
+    ),
+    "; main-window-selection=filter-menu-root;root-windows:4;uia-owned-windows:1;main-handle:available;filter-menu:present",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_MAIN_WINDOW=selection:filter-menu-root;root-windows:1;uia-owned-windows:2;main-handle:available;filter-menu:present",
+    ),
+    "",
+  );
+  assert.equal(
     describeWindowsFilterDiagnostics("PROC_MON_FILTER_RELOAD_MAIN_FOREGROUND=gate:passed"),
     "; reload-main-foreground-gate=passed",
   );
