@@ -1809,6 +1809,14 @@ function Wait-FilterDialog([System.Diagnostics.Process]$Process, [System.Windows
   $embeddedMaxToolbarCount = 0
   $embeddedMaxOtherCount = 0
   $embeddedItemsTruncated = $false
+  $focusedWindowCount = 0
+  $focusedOwnedWindowCount = 0
+  $focusedWindowHandleCount = 0
+  $focusedNativeOwnerCount = 0
+  $focusedDistinctRuntimeIdCount = 0
+  $focusedResetCount = 0
+  $focusedMaxComboCount = 0
+  $focusedMaxEditCount = 0
   $windowCondition = [System.Windows.Automation.PropertyCondition]::new(
     [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
     [System.Windows.Automation.ControlType]::Window
@@ -1837,6 +1845,14 @@ function Wait-FilterDialog([System.Diagnostics.Process]$Process, [System.Windows
     $embeddedMaxToolbarCount = 0
     $embeddedMaxOtherCount = 0
     $embeddedItemsTruncated = $false
+    $focusedWindowCount = 0
+    $focusedOwnedWindowCount = 0
+    $focusedWindowHandleCount = 0
+    $focusedNativeOwnerCount = 0
+    $focusedDistinctRuntimeIdCount = 0
+    $focusedResetCount = 0
+    $focusedMaxComboCount = 0
+    $focusedMaxEditCount = 0
     $windows = [System.Windows.Automation.AutomationElement]::RootElement.FindAll(
       [System.Windows.Automation.TreeScope]::Children,
       $windowCondition
@@ -1863,6 +1879,19 @@ function Wait-FilterDialog([System.Diagnostics.Process]$Process, [System.Windows
     for ($level = 0; $null -ne $focusedElement -and $level -lt 8; $level++) {
       $focusedState = $focusedElement.Current
       $focusedHandle = [IntPtr]$focusedState.NativeWindowHandle
+      if ($focusedState.ControlType -eq [System.Windows.Automation.ControlType]::Window) {
+        $focusedWindowCount++
+        if ($focusedState.ProcessId -eq $Process.Id) {
+          $focusedOwnedWindowCount++
+        }
+      }
+      if (
+        $focusedState.ControlType -eq [System.Windows.Automation.ControlType]::Window -and
+        $focusedState.ProcessId -eq $Process.Id -and
+        $focusedHandle -ne [IntPtr]::Zero
+      ) {
+        $focusedWindowHandleCount++
+      }
       if (
         $focusedState.ControlType -eq [System.Windows.Automation.ControlType]::Window -and
         $focusedState.ProcessId -eq $Process.Id -and
@@ -1870,25 +1899,34 @@ function Wait-FilterDialog([System.Diagnostics.Process]$Process, [System.Windows
         $focusedHandle -ne [IntPtr]$MainWindow.Current.NativeWindowHandle -and
         [ProcmonNativeMenu]::GetWindowProcessId($focusedHandle) -eq $Process.Id
       ) {
+        $focusedNativeOwnerCount++
+        $focusedRuntimeId = $focusedElement.GetRuntimeId() -join ","
+        $mainRuntimeId = $MainWindow.GetRuntimeId() -join ","
+        if ($focusedRuntimeId -cne $mainRuntimeId) {
+          $focusedDistinctRuntimeIdCount++
+        }
+        $focusedCombos = $focusedElement.FindAll(
+          [System.Windows.Automation.TreeScope]::Descendants,
+          [System.Windows.Automation.PropertyCondition]::new(
+            [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+            [System.Windows.Automation.ControlType]::ComboBox
+          )
+        )
+        $focusedEdits = $focusedElement.FindAll(
+          [System.Windows.Automation.TreeScope]::Descendants,
+          [System.Windows.Automation.PropertyCondition]::new(
+            [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+            [System.Windows.Automation.ControlType]::Edit
+          )
+        )
+        $focusedMaxComboCount = [Math]::Max($focusedMaxComboCount, $focusedCombos.Count)
+        $focusedMaxEditCount = [Math]::Max($focusedMaxEditCount, $focusedEdits.Count)
         $focusedReset = $focusedElement.FindFirst(
           [System.Windows.Automation.TreeScope]::Descendants,
           $resetCondition
         )
         if ($null -ne $focusedReset) {
-          $focusedCombos = $focusedElement.FindAll(
-            [System.Windows.Automation.TreeScope]::Descendants,
-            [System.Windows.Automation.PropertyCondition]::new(
-              [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
-              [System.Windows.Automation.ControlType]::ComboBox
-            )
-          )
-          $focusedEdits = $focusedElement.FindAll(
-            [System.Windows.Automation.TreeScope]::Descendants,
-            [System.Windows.Automation.PropertyCondition]::new(
-              [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
-              [System.Windows.Automation.ControlType]::Edit
-            )
-          )
+          $focusedResetCount++
           if ($focusedCombos.Count -ge 3 -and $focusedEdits.Count -ge 1) {
             $comboCount = [Math]::Min($focusedCombos.Count, 9999)
             $editCount = [Math]::Min($focusedEdits.Count, 9999)
@@ -2005,6 +2043,9 @@ function Wait-FilterDialog([System.Diagnostics.Process]$Process, [System.Windows
     }
     Start-Sleep -Milliseconds 100
   } while ([DateTime]::UtcNow -lt $deadline)
+  [Console]::Out.WriteLine(
+    "PROC_MON_FILTER_DIALOG_FOCUS_SCAN=windows:$([Math]::Min($focusedWindowCount, 9999));owned:$([Math]::Min($focusedOwnedWindowCount, 9999));handled:$([Math]::Min($focusedWindowHandleCount, 9999));native-owned:$([Math]::Min($focusedNativeOwnerCount, 9999));distinct-runtime-id:$([Math]::Min($focusedDistinctRuntimeIdCount, 9999));reset:$([Math]::Min($focusedResetCount, 9999));max-combos:$([Math]::Min($focusedMaxComboCount, 9999));max-edits:$([Math]::Min($focusedMaxEditCount, 9999))"
+  )
   [Console]::Out.WriteLine(
     "PROC_MON_FILTER_DIALOG_EMBEDDED_SCAN=main-reset:$($mainResetPresent.ToString().ToLowerInvariant());windows:$([Math]::Min($embeddedWindowCount, 9999));owned:$([Math]::Min($embeddedOwnedWindowCount, 9999));handled:$([Math]::Min($embeddedWindowHandleCount, 9999));distinct-runtime-id:$([Math]::Min($embeddedDistinctRuntimeIdCount, 9999));reset:$([Math]::Min($embeddedResetCount, 9999));layout:$([Math]::Min($embeddedLayoutCount, 9999));max-items:$embeddedMaxItemCount;max-combos:$embeddedMaxComboCount;max-edits:$embeddedMaxEditCount;max-buttons:$embeddedMaxButtonCount;max-texts:$embeddedMaxTextCount;max-custom:$embeddedMaxCustomCount;max-panes:$embeddedMaxPaneCount;max-windows:$embeddedMaxWindowCount;max-menus:$embeddedMaxMenuCount;max-menu-items:$embeddedMaxMenuItemCount;max-toolbars:$embeddedMaxToolbarCount;max-other:$embeddedMaxOtherCount;items-truncated:$($embeddedItemsTruncated.ToString().ToLowerInvariant())"
   )

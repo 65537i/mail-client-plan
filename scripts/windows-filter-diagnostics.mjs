@@ -101,6 +101,22 @@ export function describeWindowsFilterDiagnostics(output) {
     );
   }
 
+  const focusedDialogScan = output.match(
+    /^PROC_MON_FILTER_DIALOG_FOCUS_SCAN=windows:(\d{1,4});owned:(\d{1,4});handled:(\d{1,4});native-owned:(\d{1,4});distinct-runtime-id:(\d{1,4});reset:(\d{1,4});max-combos:(\d{1,4});max-edits:(\d{1,4})\r?$/m,
+  );
+  if (
+    focusedDialogScan &&
+    Number(focusedDialogScan[2]) <= Number(focusedDialogScan[1]) &&
+    Number(focusedDialogScan[3]) <= Number(focusedDialogScan[2]) &&
+    Number(focusedDialogScan[4]) <= Number(focusedDialogScan[3]) &&
+    Number(focusedDialogScan[5]) <= Number(focusedDialogScan[3]) &&
+    Number(focusedDialogScan[6]) <= Number(focusedDialogScan[4])
+  ) {
+    diagnostics.push(
+      `filter-dialog-focus-scan=windows:${focusedDialogScan[1]};owned:${focusedDialogScan[2]};handled:${focusedDialogScan[3]};native-owned:${focusedDialogScan[4]};distinct-runtime-id:${focusedDialogScan[5]};reset:${focusedDialogScan[6]};max-combos:${focusedDialogScan[7]};max-edits:${focusedDialogScan[8]}`,
+    );
+  }
+
   const saveDialogScan = output.match(
     /^PROC_MON_FILTER_SAVE_DIALOG_SCAN=windows:(\d{1,4});file-names:(\d{1,4});save-buttons:(\d{1,4})\r?$/m,
   );

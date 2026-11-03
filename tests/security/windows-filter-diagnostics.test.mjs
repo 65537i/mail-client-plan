@@ -81,6 +81,25 @@ test("AC-05: Windows filter diagnostics identify focused-window dialog discovery
   );
 });
 
+test("AC-05: Windows filter diagnostics retain bounded focused-window ownership and layout counts", () => {
+  const scan = "PROC_MON_FILTER_DIALOG_FOCUS_SCAN="
+    + "windows:2;owned:2;handled:2;native-owned:2;distinct-runtime-id:1;"
+    + "reset:2;max-combos:0;max-edits:0";
+  assert.equal(
+    describeWindowsFilterDiagnostics(scan),
+    "; filter-dialog-focus-scan=windows:2;owned:2;handled:2;native-owned:2;"
+      + "distinct-runtime-id:1;reset:2;max-combos:0;max-edits:0",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(scan.replace("owned:2", "owned:3")),
+    "",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(`${scan};path=C:\\private\\mail`),
+    "",
+  );
+});
+
 test("AC-05: Windows filter diagnostics omit arbitrary names and exception details", () => {
   const output = [
     "PROC_MON_FILTER_MENU_STATE=enabled:yes;offscreen:false;keyboard-focusable:true",

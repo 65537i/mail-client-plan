@@ -2,6 +2,8 @@
 
 ## 1. ワークフロー構成
 
+[Run 41622789769](https://github.com/65537i/mail-client-plan/actions/runs/41622789769)（`484eccb`、Windows 2025 x64 / webview）はbaseline `wait-filter-dialog-shortcut`で停止し、strict capture未実施。foreground / shortcut gateは成功、Filter menuは不在。Ctrl+L後のfocus ownerは`procmon-other`、treeは`Pane>Window>Window>Pane`。desktop scanはProcmon window 1 / non-main 0 / Reset false。MainWindow配下ではWindow 2 / owned 2 / handled 2 / distinct RuntimeId 1 / Reset 2だが、layout 0・ComboBox 0・Edit 0（最大24要素、Pane 23 / Window 1）で、追加したfocused-window経路もdialog layoutを確認できなかった。unfiltered probeのpositive controlは成功したがstrict監査の証拠ではない。後続の診断としてfocused ancestor Window群のbounded owner / handle / Reset / 最大layout件数を追加し、ローカル56/56・PowerShell parse・`git diff --check`成功。Windows再実行待ち、AC-05未達。
+
 [Run 41621487431](https://github.com/65537i/mail-client-plan/actions/runs/41621487431)（`e27fd08`、Windows 2025 x64 / webview）はbaseline `wait-filter-dialog-shortcut`で停止。Ctrl+L後のfocus ownerはProcmon別window (`procmon-other`) で、focused UIA treeは`Pane>Window>Pane`。desktop-rootとMainWindow descendantの探索に加え、focused owner Windowについても厳格なPID / HWND / Reset / layout gateを満たす場合だけ受理する探索経路を追加した。ローカル55/55・PowerShell parse成功、Windows再実行待ち。AC-05未達。
 
 [Run 41619963101](https://github.com/65537i/mail-client-plan/actions/runs/41619963101)（`f34acf9`、Windows 2025 x64 / webview）はbaseline `wait-filter-dialog-shortcut`で停止。候補UIA subtreeはPane 23 / Window 1で、ComboBox・Editなどのfilter control typeを含まず、filter dialog discoveryは未成立。strict capture未実施、AC-05未達。次runではCtrl+L後のbounded focus stateとownerを観測する。

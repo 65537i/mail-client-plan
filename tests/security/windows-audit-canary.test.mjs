@@ -305,6 +305,10 @@ test("AC-05: Procmon main-window activation verifies its process-owned foregroun
   );
   assert.match(
     configuration,
+    /PROC_MON_FILTER_DIALOG_FOCUS_SCAN=windows:[\s\S]*focusedNativeOwnerCount[\s\S]*focusedDistinctRuntimeIdCount[\s\S]*focusedResetCount[\s\S]*focusedMaxComboCount[\s\S]*focusedMaxEditCount/,
+  );
+  assert.match(
+    configuration,
     /PROC_MON_FILTER_DIALOG_EMBEDDED_SCAN=main-reset:[\s\S]*embeddedWindowCount[\s\S]*embeddedDistinctRuntimeIdCount[\s\S]*embeddedLayoutCount[\s\S]*embeddedMaxComboCount[\s\S]*embeddedMaxEditCount/,
   );
   assert.match(
