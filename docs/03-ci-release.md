@@ -2,6 +2,8 @@
 
 ## 1. ワークフロー構成
 
+[Run 41591457283](https://github.com/65537i/mail-client-plan/actions/runs/41591457283)（`fda0df2`、Windows 2025 x64 / webview）はpreflightとunfiltered probe exact-path positive controlに成功。strict設定 / target-volume attached後、list inspectorが`compile-native-capture-helper` / `RuntimeException`で停止しexport / canary gateへ未到達。次runで許可済みAdd-TypeエラーIDを収集する。AC-05未達。
+
 [Run 41590295035](https://github.com/65537i/mail-client-plan/actions/runs/41590295035)（`8e480d6`、Windows 2025 x64 / webview）はcapture前のtarget-volume解決に成功し、別NoFilter probeでpositive-control exact-path Node `ReadFile`を記録した。strict baselineでもexact-two path rules / Drop Filtered Events / target-volume attachedを確認したが、positive control直後の必須list inspectorがnonzeroで停止し、strict CSV export / canary判定 / attackへ未到達。list inspectorの失敗理由はまだ特定できていないため、次runでallowlist済みstage / exception種別だけを診断出力する。AC-05未達。
 
 [Run 41588739037](https://github.com/65537i/mail-client-plan/actions/runs/41588739037)（`8a7c2cc`、Windows 2025 x64 / webview）はworkspace一時pathによりunfiltered probeとstrict baselineのNode `ReadFile` exact-path positive controlを検出し、baseline WDIOとfilter再確認も成功した。一方baseline CSVのcanary event 13件でfail closedし、attack未実施。診断は`powershell.exe`イベント10件を示し、capture中のcapture-inspection scriptがcanaryに`File.Exists` / volume解決処理を行う実装を特定した。次はvolume解決をcapture開始前に実施し、live inspectionではvolume文字列のみ使用する。AC-05未達。

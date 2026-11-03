@@ -93,14 +93,18 @@ async function captureScenario(scenario) {
       const failureTypes = [...output.matchAll(
         /^PROC_MON_CAPTURE_FAILURE=(CimException|ManagementException|InvalidOperationException|ParameterBindingException|RuntimeException|Other)\r?$/gm,
       )];
+      const failureIds = [...output.matchAll(
+        /^PROC_MON_CAPTURE_FAILURE_ID=([A-Z][A-Z0-9_]{0,63}|unavailable)\r?$/gm,
+      )];
       const failureStage = failedStages.length === 1 ? failedStages[0][1] : "unavailable";
       const failureType = failureTypes.length === 1 ? failureTypes[0][1] : "unavailable";
+      const failureId = failureIds.length === 1 ? failureIds[0][1] : "unavailable";
       if (!allowUnavailable) {
-        console.log(`Windows audit ${scenario}: ${label}-list-inspection=failed;reason:${reason};stage:${failureStage};failure:${failureType}`);
+        console.log(`Windows audit ${scenario}: ${label}-list-inspection=failed;reason:${reason};stage:${failureStage};failure:${failureType};failure-id:${failureId}`);
         throw new Error(`Process Monitor ${label} list inspection failed (${reason})`);
       }
       assert.equal(owner.exitCode, null, `Process Monitor ${label} list inspection owner exited`);
-      console.log(`Windows audit ${scenario}: ${label}-list-items=unavailable;inspection=${reason};stage:${failureStage};failure:${failureType}`);
+      console.log(`Windows audit ${scenario}: ${label}-list-items=unavailable;inspection=${reason};stage:${failureStage};failure:${failureType};failure-id:${failureId}`);
       return "unavailable";
     }
 
