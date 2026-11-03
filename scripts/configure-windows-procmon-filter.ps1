@@ -1858,6 +1858,50 @@ function Wait-FilterDialog([System.Diagnostics.Process]$Process, [System.Windows
         return $window
       }
     }
+    $focusedElement = [System.Windows.Automation.AutomationElement]::FocusedElement
+    $focusedTreeWalker = [System.Windows.Automation.TreeWalker]::ControlViewWalker
+    for ($level = 0; $null -ne $focusedElement -and $level -lt 8; $level++) {
+      $focusedState = $focusedElement.Current
+      $focusedHandle = [IntPtr]$focusedState.NativeWindowHandle
+      if (
+        $focusedState.ControlType -eq [System.Windows.Automation.ControlType]::Window -and
+        $focusedState.ProcessId -eq $Process.Id -and
+        $focusedHandle -ne [IntPtr]::Zero -and
+        $focusedHandle -ne [IntPtr]$MainWindow.Current.NativeWindowHandle -and
+        [ProcmonNativeMenu]::GetWindowProcessId($focusedHandle) -eq $Process.Id
+      ) {
+        $focusedReset = $focusedElement.FindFirst(
+          [System.Windows.Automation.TreeScope]::Descendants,
+          $resetCondition
+        )
+        if ($null -ne $focusedReset) {
+          $focusedCombos = $focusedElement.FindAll(
+            [System.Windows.Automation.TreeScope]::Descendants,
+            [System.Windows.Automation.PropertyCondition]::new(
+              [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+              [System.Windows.Automation.ControlType]::ComboBox
+            )
+          )
+          $focusedEdits = $focusedElement.FindAll(
+            [System.Windows.Automation.TreeScope]::Descendants,
+            [System.Windows.Automation.PropertyCondition]::new(
+              [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+              [System.Windows.Automation.ControlType]::Edit
+            )
+          )
+          if ($focusedCombos.Count -ge 3 -and $focusedEdits.Count -ge 1) {
+            $comboCount = [Math]::Min($focusedCombos.Count, 9999)
+            $editCount = [Math]::Min($focusedEdits.Count, 9999)
+            [Console]::Out.WriteLine("PROC_MON_FILTER_DIALOG_DISCOVERY=focused-window")
+            [Console]::Out.WriteLine(
+              "PROC_MON_FILTER_DIALOG_LAYOUT=combos:$comboCount;edits:$editCount"
+            )
+            return $focusedElement
+          }
+        }
+      }
+      $focusedElement = $focusedTreeWalker.GetParent($focusedElement)
+    }
     $mainReset = $MainWindow.FindFirst(
       [System.Windows.Automation.TreeScope]::Descendants,
       $resetCondition

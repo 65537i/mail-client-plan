@@ -636,8 +636,11 @@ export function describeWindowsFilterDiagnostics(output) {
     diagnostics.push(`filter-dialog-desktop-reset-owner=${desktopResetOwner}`);
   }
 
-  if (/^PROC_MON_FILTER_DIALOG_DISCOVERY=embedded-window\r?$/m.test(output)) {
-    diagnostics.push("filter-dialog-discovery=embedded-window");
+  const dialogDiscovery = output.match(
+    /^PROC_MON_FILTER_DIALOG_DISCOVERY=(embedded-window|focused-window)\r?$/m,
+  )?.[1];
+  if (dialogDiscovery) {
+    diagnostics.push(`filter-dialog-discovery=${dialogDiscovery}`);
   }
 
   const dialogLayout = output.match(

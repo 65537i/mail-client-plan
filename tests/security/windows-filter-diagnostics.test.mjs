@@ -72,6 +72,15 @@ test("AC-05: Windows filter diagnostics retain only allowlisted UIA and native m
   );
 });
 
+test("AC-05: Windows filter diagnostics identify focused-window dialog discovery", () => {
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_DIALOG_DISCOVERY=focused-window",
+    ),
+    "; filter-dialog-discovery=focused-window",
+  );
+});
+
 test("AC-05: Windows filter diagnostics omit arbitrary names and exception details", () => {
   const output = [
     "PROC_MON_FILTER_MENU_STATE=enabled:yes;offscreen:false;keyboard-focusable:true",
