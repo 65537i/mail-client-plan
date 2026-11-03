@@ -2,6 +2,8 @@
 
 ## 1. ワークフロー構成
 
+[Run 41552786078](https://github.com/65537i/mail-client-plan/actions/runs/41552786078)（`0037067`、Windows 2025 x64 / webview）はsecurity-test buildとaudit setup / worker coordinationを通過したが、`/NoFilter` probeのNode positive control後、任意のlive list inspectionがnonzero終了しCSV export前に停止した。これはprobe capture結果を判定できる証拠ではない。次はlist inspection失敗を明示的unavailableとして記録し、bounded PML / CSV export集計まで継続する。
+
 [Run 41541551636](https://github.com/65537i/mail-client-plan/actions/runs/41541551636)（`f1fa981`、Windows 2025 x64 / webview）はsecurity-test build、Windows audit setup / worker coordination、configuration exportを通過したが、strict exact-path監査前の一時`/NoFilter` capture probeもNode positive-control `ReadFile`をexport CSVで検出できず停止した。これはPMC exact-path条件だけでは説明できないが、probe時点ではPML / CSV event総数やProcmon live list件数を出しておらず、capture不作動・export・path解析のどこで欠落するか未特定。次回はlive list countと、pathを含まないCSV event / Node / control-path集計を出し、別々の証拠として比較する。probe結果はAC-05証拠にせず、strict gateとAC-05未達を維持する。
 
 [Run 519](https://github.com/65537i/mail-client-plan/actions/runs/41306084970)（Windows 2025 x64 / webview）は長いInstance Nameで後続列がずれた行により`row-shape`停止。instance行はtoken順（先頭Filter / Altitude、末尾Frame / SprtFtrs / 任意VlStatus）で検証する方式へ変更した。

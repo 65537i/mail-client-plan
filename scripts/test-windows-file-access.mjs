@@ -51,8 +51,17 @@ async function captureScenario(scenario) {
     });
   }
 
-  async function readCaptureListCount(label, required = false, owner = capture) {
+  async function readCaptureListCount(label, required = false, owner = capture, allowUnavailable = false) {
     assert(owner?.pid, `Process Monitor ${label} list inspection owner is unavailable`);
+    function reportUnavailable(reason) {
+      if (!allowUnavailable) {
+        throw new Error(`Process Monitor ${label} list inspection failed (${reason})`);
+      }
+      assert.equal(owner.exitCode, null, `Process Monitor ${label} list inspection owner exited`);
+      console.log(`Windows audit ${scenario}: ${label}-list-items=unavailable;inspection=${reason}`);
+      return "unavailable";
+    }
+
     const inspection = spawn(
       "powershell.exe",
       [
@@ -75,20 +84,27 @@ async function captureScenario(scenario) {
     if (inspectionResult.timedOut) {
       inspection.kill();
       await inspectionExit;
-      throw new Error(`Process Monitor ${label} list inspection timed out`);
+      if (!allowUnavailable) throw new Error(`Process Monitor ${label} list inspection timed out`);
+      return reportUnavailable("timeout");
     }
-    assert(
-      !inspectionResult.error && inspectionResult.code === 0 && !overflow,
-      `Process Monitor ${label} list inspection failed`,
-    );
+    const inspectionFailure = inspectionResult.error
+      ? "start-failed"
+      : overflow
+        ? "output-overflow"
+        : inspectionResult.code !== 0
+          ? "nonzero-exit"
+          : undefined;
+    if (inspectionFailure) {
+      return reportUnavailable(inspectionFailure);
+    }
     const counts = [...output.matchAll(
       /^PROC_MON_CAPTURE_LIST=items:(unavailable|0|[1-9]\d{0,9})\r?$/gm,
     )];
-    assert(
-      counts.length === 1 &&
-      (counts[0][1] === "unavailable" || Number(counts[0][1]) <= 2_147_483_647),
-      `Process Monitor ${label} list evidence is incomplete`,
-    );
+    const countValid = counts.length === 1 &&
+      (counts[0][1] === "unavailable" || Number(counts[0][1]) <= 2_147_483_647);
+    if (!countValid) {
+      return reportUnavailable("invalid-evidence");
+    }
     if (required) {
       assert.notEqual(counts[0][1], "unavailable", `Process Monitor ${label} list count is unavailable`);
       assert(
@@ -202,7 +218,7 @@ async function captureScenario(scenario) {
       assert.equal(probe.exitCode, null, "Process Monitor unfiltered probe exited during startup");
       await access(probeBackingFile);
       await runNodePositiveControl("unfiltered probe");
-      const probeListCount = await readCaptureListCount("unfiltered-probe", false, probe);
+      const probeListCount = await readCaptureListCount("unfiltered-probe", false, probe, true);
       await runProcmon(["/AcceptEula", "/Terminate"], "unfiltered probe shutdown");
       const probeResult = await waitWithTimeout(probeExit, 10_000);
       assert(!probeResult.timedOut, "Process Monitor unfiltered probe did not stop");
