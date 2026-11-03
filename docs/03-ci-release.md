@@ -2,6 +2,8 @@
 
 ## 1. ワークフロー構成
 
+[Run 41616704672](https://github.com/65537i/mail-client-plan/actions/runs/41616704672)（`ecfb7ab`、Windows 2025 x64 / webview）はbaseline `wait-filter-dialog-shortcut`で停止。Resetを含む候補Windowは2件ともProcmon-owned・nonzero HWND、うち1件はdistinct RuntimeIdだが、ComboBox / Editは両方0件でlayout不一致。strict capture未実施、AC-05未達。次runでは候補子要素数とButton / Text / Custom / otherの分類数のみ追加する。
+
 [Run 41615181557](https://github.com/65537i/mail-client-plan/actions/runs/41615181557)（`da9dff7`、Windows 2025 x64 / webview）はRuntimeId識別変更後もbaseline `wait-filter-dialog-shortcut`で停止し、strict capture未実施。既存のbounded diagnosticは同じ値を再現し、どのembedded Window candidateが除外されたかは分からない。次runではowner / handle / RuntimeId / Reset / layoutの集計だけを追加し、値やUI名を出さず切り分ける。ローカルfocused tests 54/54、PowerShell parse、diff check成功。AC-05未達。
 
 [Run 41613665606](https://github.com/65537i/mail-client-plan/actions/runs/41613665606)（`ea55ec4`、Windows 2025 x64 / webview）はbaseline setupの`wait-filter-dialog-shortcut`で失敗し、strict capture未実施。bounded UIA evidenceではReset controlが`procmon-main` window hierarchy内にある一方、non-main owned windowは0件だった。Procmon PID、非zero HWND、Reset control、および3 ComboBox / 1 Editのlayout確認を保持し、MainWindowとは異なるUIA RuntimeIdを持つembedded Windowを候補として扱う。ローカルfocused tests 53/53とPowerShell parseは成功、Windows再実行待ち。AC-05未達。
