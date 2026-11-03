@@ -163,6 +163,19 @@ test("AC-05: Windows native menu diagnostics retain bounded command counts only"
   );
   assert.equal(
     describeWindowsFilterDiagnostics(
+      line.replace("source:main", "source:all-top-level")
+        .replace("state:ready", "state:partial")
+        .replace("items:18", "items:0")
+        .replace("event:1", "event:0")
+        .replace("filter:1", "filter:0")
+        .replace("filter-command:1", "filter-command:0")
+        .replace("unreadable:0", "unreadable:1"),
+    ),
+    "; filter-native-menu-all-top-level=state:partial;menus:3;items:0;event:0;filter:0;"
+      + "filter-command:0;unreadable:1",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(
       line.replace("source:main", "source:focused-root"),
     ),
     "; filter-native-menu-focused-root=state:ready;menus:3;items:18;event:1;filter:1;"

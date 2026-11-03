@@ -257,7 +257,7 @@ export function describeWindowsFilterDiagnostics(output) {
       && events <= items
       && filters <= items
       && commands <= items
-      && unreadable <= items
+      && unreadable <= menus + items
       && (state !== "ready" || unreadable === 0)
       && (state !== "partial" || unreadable > 0)
     ) {

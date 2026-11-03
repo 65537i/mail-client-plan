@@ -2382,8 +2382,8 @@ function Write-ProcmonNativeMenuSummary(
         $menus++
         $itemCount = [ProcmonNativeMenu]::GetMenuItemCount([IntPtr]$candidate.Handle)
         if ($itemCount -lt 0) {
-          $state = "read-failed"
-          break
+          $unreadableItems++
+          continue
         }
         if ($itemCount -gt 64 -or $items + $itemCount -gt 256) {
           $state = "over-limit"

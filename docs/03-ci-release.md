@@ -2,6 +2,8 @@
 
 ## 1. ワークフロー構成
 
+[Run 41677409576](https://github.com/65537i/mail-client-plan/actions/runs/41677409576)（`82c3d2d`、Windows 2025 x64 / webview）はsecurity-test buildとNode 78/78、Windows audit setup / worker coordination、configuration export waitに成功したが、baseline `wait-filter-dialog-shortcut`で停止しstrict capture未実施。全Procmon top-level windowのnative menu集計は4 handle中最初のGetMenuItemCount失敗で停止し、Filter commandの有無は判定できなかった。次runはread errorのmenuのみskipして残りをboundedに走査する。dialog受理条件は変更しない。
+
 [Run 41675402073](https://github.com/65537i/mail-client-plan/actions/runs/41675402073)（`7608934`、Windows 2025 x64 / webview）はsecurity-test buildとNode 78/78、Windows audit setup / worker coordination、configuration export waitに成功したが、baseline `wait-filter-dialog-shortcut`で失敗しstrict capture未実施。native-window fallbackでvisible Procmon-owned window 1件を調査したが、Reset 1 / ComboBox 0 / Edit 0で受理条件を満たさない。次runは全Procmon top-level native menuのbounded集計のみ追加し、filter dialog受理条件は変更しない。
 
 [Run 41673115729](https://github.com/65537i/mail-client-plan/actions/runs/41673115729)（`011f6e1`、Windows 2025 x64 / webview）はsecurity-test buildとNode 76/76、Windows audit setup / worker coordination、configuration export waitに成功したが、baseline `wait-filter-dialog-shortcut`で失敗しstrict capture未実施。native `EnumWindows`はProcmon top-level window 11件（main 1 / other 10 / visible 2 / native menus 4）を示す一方、UIA desktop scanはProcmon window 1件のみ。この差を調べるため、visibleなProcmon-owned HWNDをUIA `FromHandle`で探索する経路を追加した。受理は同一PID / non-main HWND / Window control / visible・enabled / distinct RuntimeId / Reset / 3 ComboBox / 1 Editすべて成立する場合に限り、ローカルfocused tests 62/62・PowerShell parse成功。Windows runtime未確認。
