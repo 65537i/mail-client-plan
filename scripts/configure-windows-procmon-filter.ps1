@@ -2635,6 +2635,7 @@ try {
   }
   Set-Stage "find-main-window"
   $main = Wait-MainWindow $process
+  Set-Stage "focus-main-window"
   $main.SetFocus()
   Set-Stage "find-filter-menu"
   $filterMenuCondition = [System.Windows.Automation.AndCondition]::new(

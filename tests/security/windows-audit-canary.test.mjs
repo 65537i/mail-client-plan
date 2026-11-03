@@ -241,6 +241,17 @@ test("AC-05: live filter verification attaches to the capture PID and preserves 
   assert.match(driver, /if \(required\) \{\s*assert\.notEqual\(counts\[0\]\[1\], "unavailable"[\s\S]*Number\(counts\[0\]\[1\]\) > 0/);
 });
 
+test("AC-05: Procmon main-window discovery and focus failures have distinct stages", async () => {
+  const configuration = await readFile(
+    new URL("../../scripts/configure-windows-procmon-filter.ps1", import.meta.url),
+    "utf8",
+  );
+  assert.match(
+    configuration,
+    /Set-Stage "find-main-window"\s+\$main = Wait-MainWindow \$process\s+Set-Stage "focus-main-window"\s+\$main\.SetFocus\(\)/,
+  );
+});
+
 test("AC-05: unfiltered probe stays separate from strict capture and exported paths remain validated", async () => {
   const source = await readFile(new URL("../../scripts/test-windows-file-access.mjs", import.meta.url), "utf8");
   assert.equal((source.match(/"\/NoFilter"/g) ?? []).length, 3);
