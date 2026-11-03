@@ -4,6 +4,8 @@
 
 [Run 41593740921](https://github.com/65537i/mail-client-plan/actions/runs/41593740921)（`966b10b`、Windows 2025 x64 / webview）はpreflightとunfiltered probeのexact-path positive controlに成功したが、strict capture後の必須list inspectorが`compile-native-capture-helper` / `RuntimeException`で停止しexport / canary gate / attackへ未到達。failure-IDも`unavailable`。根本原因は未特定、AC-05未達。
 
+helper compile失敗の再調査用に、例外文を記録せずRoslyn compiler error codeのみを上限付きで抽出する診断を追加した。
+
 [Run 41592522785](https://github.com/65537i/mail-client-plan/actions/runs/41592522785)（`f33e691`、Windows 2025 x64 / webview）もlist-only inspectorが`compile-native-capture-helper` / `RuntimeException`で失敗し、strict exportへ未到達。エラーIDはAdd-Type限定形に一致せず`unavailable`だったため、次runで制限文字の先頭識別子を分類する。AC-05未達。
 
 [Run 41591457283](https://github.com/65537i/mail-client-plan/actions/runs/41591457283)（`fda0df2`、Windows 2025 x64 / webview）はpreflightとunfiltered probe exact-path positive controlに成功。strict設定 / target-volume attached後、list inspectorが`compile-native-capture-helper` / `RuntimeException`で停止しexport / canary gateへ未到達。次runで許可済みAdd-TypeエラーIDを収集する。AC-05未達。

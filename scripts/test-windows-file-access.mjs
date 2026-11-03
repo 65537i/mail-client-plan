@@ -96,15 +96,19 @@ async function captureScenario(scenario) {
       const failureIds = [...output.matchAll(
         /^PROC_MON_CAPTURE_FAILURE_ID=([A-Z][A-Z0-9_]{0,63}|unavailable)\r?$/gm,
       )];
+      const compilerCodes = [...output.matchAll(
+        /^PROC_MON_CAPTURE_COMPILER_CODES=(none|CS[0-9]{4}(?:,CS[0-9]{4}){0,7})\r?$/gm,
+      )];
       const failureStage = failedStages.length === 1 ? failedStages[0][1] : "unavailable";
       const failureType = failureTypes.length === 1 ? failureTypes[0][1] : "unavailable";
       const failureId = failureIds.length === 1 ? failureIds[0][1] : "unavailable";
+      const compilerCodeSummary = compilerCodes.length === 1 ? compilerCodes[0][1] : "unavailable";
       if (!allowUnavailable) {
-        console.log(`Windows audit ${scenario}: ${label}-list-inspection=failed;reason:${reason};stage:${failureStage};failure:${failureType};failure-id:${failureId}`);
+        console.log(`Windows audit ${scenario}: ${label}-list-inspection=failed;reason:${reason};stage:${failureStage};failure:${failureType};failure-id:${failureId};compiler-codes:${compilerCodeSummary}`);
         throw new Error(`Process Monitor ${label} list inspection failed (${reason})`);
       }
       assert.equal(owner.exitCode, null, `Process Monitor ${label} list inspection owner exited`);
-      console.log(`Windows audit ${scenario}: ${label}-list-items=unavailable;inspection=${reason};stage:${failureStage};failure:${failureType};failure-id:${failureId}`);
+      console.log(`Windows audit ${scenario}: ${label}-list-items=unavailable;inspection=${reason};stage:${failureStage};failure:${failureType};failure-id:${failureId};compiler-codes:${compilerCodeSummary}`);
       return "unavailable";
     }
 
@@ -503,6 +507,9 @@ async function captureScenario(scenario) {
     const captureInspectionFailure = captureInspectionOutput.match(
       /^PROC_MON_CAPTURE_FAILURE=(CimException|ManagementException|InvalidOperationException|ParameterBindingException|RuntimeException|Other)\r?$/m,
     )?.[1];
+    const captureInspectionCompilerCodes = captureInspectionOutput.match(
+      /^PROC_MON_CAPTURE_COMPILER_CODES=(none|CS[0-9]{4}(?:,CS[0-9]{4}){0,7})\r?$/m,
+    )?.[1];
     const filterManagerQueryExitCode = captureInspectionOutput.match(
       /^PROC_MON_CAPTURE_FILTER_MANAGER_COMMAND=exit-code:(0|[1-9]\d{0,2}|out-of-range)\r?$/m,
     )?.[1];
@@ -523,7 +530,7 @@ async function captureScenario(scenario) {
     )?.[1];
     assert(
       !captureInspectionResult.error && captureInspectionResult.code === 0 && !captureInspectionOverflow,
-      `Process Monitor capture inspection failed${captureInspectionStage ? ` at ${captureInspectionStage}` : ""}${captureInspectionFailure ? ` (${captureInspectionFailure})` : ""}${filterManagerQueryExitCode ? ` (Filter Manager command exit code ${filterManagerQueryExitCode})` : ""}${filterManagerParseState ? ` (Filter Manager parse state ${filterManagerParseState})` : ""}${filterManagerHeadingTarget ? ` (Filter Manager heading target ${filterManagerHeadingTarget})` : ""}${filterManagerHeaderShape ? ` (Filter Manager header ${filterManagerHeaderShape})` : ""}${filterManagerRowShape ? ` (Filter Manager row ${filterManagerRowShape})` : ""}${filterManagerColumnShape ? ` (Filter Manager columns ${filterManagerColumnShape})` : ""}`,
+      `Process Monitor capture inspection failed${captureInspectionStage ? ` at ${captureInspectionStage}` : ""}${captureInspectionFailure ? ` (${captureInspectionFailure})` : ""}${captureInspectionCompilerCodes ? ` (compiler codes ${captureInspectionCompilerCodes})` : ""}${filterManagerQueryExitCode ? ` (Filter Manager command exit code ${filterManagerQueryExitCode})` : ""}${filterManagerParseState ? ` (Filter Manager parse state ${filterManagerParseState})` : ""}${filterManagerHeadingTarget ? ` (Filter Manager heading target ${filterManagerHeadingTarget})` : ""}${filterManagerHeaderShape ? ` (Filter Manager header ${filterManagerHeaderShape})` : ""}${filterManagerRowShape ? ` (Filter Manager row ${filterManagerRowShape})` : ""}${filterManagerColumnShape ? ` (Filter Manager columns ${filterManagerColumnShape})` : ""}`,
     );
     const nativeEvidence = [...captureInspectionOutput.matchAll(
       /^PROC_MON_CAPTURE_NATIVE=children:(0|[1-9]\d{0,2});visible:(0|[1-9]\d{0,2});toolbars:(0|[1-9]\d{0,2});lists:(0|[1-9]\d{0,2});statusbars:(0|[1-9]\d{0,2});dialogs:(0|[1-9]\d{0,2});other:(0|[1-9]\d{0,2})\r?$/gm,

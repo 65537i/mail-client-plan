@@ -1011,6 +1011,7 @@ public static class ProcmonCaptureWindows
     )
   }
 } catch {
+  $failureRecord = $_
   [Console]::Out.WriteLine("PROC_MON_CAPTURE_FAILED_STAGE=$stage")
   if ($null -ne $script:filterManagerInstanceQueryExitCode -and
     $script:filterManagerInstanceQueryExitCode -ne 0) {
@@ -1098,7 +1099,7 @@ public static class ProcmonCaptureWindows
     $script:filterManagerColumnShape -cmatch '^(?:unobserved|layout|(?:empty|hex|digits8|integer|decimal|barehex|legacy|word|words)(?:-(?:empty|hex|digits8|integer|decimal|barehex|legacy|word|words)){5})$') {
     [Console]::Out.WriteLine("PROC_MON_CAPTURE_FILTER_MANAGER_COLUMNS=$script:filterManagerColumnShape")
   }
-  $failureType = $_.Exception.GetType().Name
+  $failureType = $failureRecord.Exception.GetType().Name
   if ($failureType -notin @(
       "CimException",
       "ManagementException",
@@ -1110,9 +1111,35 @@ public static class ProcmonCaptureWindows
   }
   [Console]::Out.WriteLine("PROC_MON_CAPTURE_FAILURE=$failureType")
   $failureId = "unavailable"
-  if ($_.FullyQualifiedErrorId -match '^([A-Za-z][A-Za-z0-9_.-]{0,63})(?:,|$)') {
+  if ($failureRecord.FullyQualifiedErrorId -match '^([A-Za-z][A-Za-z0-9_.-]{0,63})(?:,|$)') {
     $failureId = $Matches[1]
   }
   [Console]::Out.WriteLine("PROC_MON_CAPTURE_FAILURE_ID=$failureId")
+  $failureMessages = [System.Collections.Generic.List[string]]::new()
+  $exception = $failureRecord.Exception
+  for ($depth = 0; $null -ne $exception -and $depth -lt 4; $depth++) {
+    $failureMessages.Add($exception.Message)
+    $exception = $exception.InnerException
+  }
+  if ($null -ne $failureRecord.ErrorDetails -and
+    $failureRecord.ErrorDetails.Message -is [string]) {
+    $failureMessages.Add($failureRecord.ErrorDetails.Message)
+  }
+  $compilerCodes = [System.Collections.Generic.List[string]]::new()
+  foreach ($message in $failureMessages) {
+    foreach ($match in [regex]::Matches($message, '(?<![A-Z0-9])CS[0-9]{4}(?![0-9])')) {
+      if (-not $compilerCodes.Contains($match.Value)) {
+        $compilerCodes.Add($match.Value)
+        if ($compilerCodes.Count -ge 8) { break }
+      }
+    }
+    if ($compilerCodes.Count -ge 8) { break }
+  }
+  $compilerCodeSummary = if ($compilerCodes.Count -eq 0) {
+    "none"
+  } else {
+    $compilerCodes -join ","
+  }
+  [Console]::Out.WriteLine("PROC_MON_CAPTURE_COMPILER_CODES=$compilerCodeSummary")
   exit 1
 }
