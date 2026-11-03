@@ -258,10 +258,26 @@ test("AC-05: Procmon main-window activation verifies its process-owned foregroun
     configuration,
     /function Set-VerifiedProcmonMainWindowForeground[\s\S]*\$Window\.Current\.ProcessId -eq \$Process\.Id[\s\S]*GetWindowProcessId\(\$windowHandle\) -eq \$Process\.Id[\s\S]*SetForegroundWindow\(\$windowHandle\)[\s\S]*\$foregroundHandle -eq \$windowHandle[\s\S]*GetWindowProcessId\(\$foregroundHandle\) -eq \$Process\.Id/,
   );
-  assert.doesNotMatch(initialActivation, /\$main\.SetFocus\(\)/);
+  assert.doesNotMatch(configuration, /\$main\.SetFocus\(\)/);
+  assert.match(
+    configuration,
+    /Set-Stage "focus-main-for-drop-filtered-events"\s+Set-VerifiedProcmonMainWindowForeground \$main \$process "MAIN"/,
+  );
+  assert.match(
+    configuration,
+    /Set-Stage "activate-main-before-export"\s+Set-VerifiedProcmonMainWindowForeground \$main \$process "MAIN"/,
+  );
   assert.match(
     configuration,
     /Set-Stage "activate-reloaded-main-window"\s+Set-VerifiedProcmonMainWindowForeground \$main \$process "RELOAD_MAIN"/,
+  );
+  assert.match(
+    configuration,
+    /if \(\$null -eq \$menu -or \$menu\.Current\.ProcessId -ne \$process\.Id\) \{\s+Set-Stage "fallback-open-filter-dialog-shortcut"[\s\S]*GetWindowProcessId\(\$currentForegroundHandle\) -eq \$process\.Id[\s\S]*PROC_MON_FILTER_SHORTCUT_FOREGROUND=gate:\$shortcutForegroundGate[\s\S]*SendWait\("\^l"\)[\s\S]*Wait-FilterDialog \$process \$main/,
+  );
+  assert.match(
+    configuration,
+    /Get-LoadedFilterRuleEvidence \$filterRows \$CanaryPath \$ControlPath|Get-LoadedFilterRuleEvidence \$.*CanaryPath \$ControlPath/,
   );
 });
 

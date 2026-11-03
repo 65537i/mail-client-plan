@@ -142,11 +142,22 @@ export function describeWindowsFilterDiagnostics(output) {
     diagnostics.push(`config-save-final-foreground-gate=${saveFinalForegroundGate}`);
   }
 
-  const mainForegroundGate = output.match(
-    /^PROC_MON_FILTER_MAIN_FOREGROUND=gate:(passed|failed)\r?$/m,
-  )?.[1];
+  const mainForegroundGate = [...output.matchAll(
+    /^PROC_MON_FILTER_MAIN_FOREGROUND=gate:(passed|failed)\r?$/gm,
+  )].at(-1)?.[1];
   if (mainForegroundGate) {
     diagnostics.push(`main-foreground-gate=${mainForegroundGate}`);
+  }
+
+  const shortcutForegroundGate = output.match(
+    /^PROC_MON_FILTER_SHORTCUT_FOREGROUND=gate:(passed|failed)\r?$/m,
+  )?.[1];
+  if (shortcutForegroundGate) {
+    diagnostics.push(`filter-shortcut-foreground-gate=${shortcutForegroundGate}`);
+  }
+
+  if (/^PROC_MON_FILTER_MENU_OPEN_FALLBACK=filter-dialog-shortcut\r?$/m.test(output)) {
+    diagnostics.push("filter-menu-open-fallback=filter-dialog-shortcut");
   }
 
   const reloadMainForegroundGate = output.match(

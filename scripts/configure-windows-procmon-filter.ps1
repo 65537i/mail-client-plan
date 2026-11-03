@@ -2760,72 +2760,93 @@ try {
   Set-Stage "verify-menu-focus-snapshot"
   Write-FocusSnapshotObservation "caller" $focusSnapshot
   Set-Stage "resolve-open-filter-menu"
+  $filterDialog = $null
   if ($null -eq $menu -or $menu.Current.ProcessId -ne $process.Id) {
-    throw "Process Monitor did not expose its own open Filter menu"
-  }
-  if ($focusSnapshot["ControlType"] -ne "ControlType.Menu") {
-    Write-MenuItemsObservation "after-open" $menu
-  }
-  Set-Stage "enumerate-filter-menu-items"
-  $menuItems = $menu.FindAll(
-    [System.Windows.Automation.TreeScope]::Children,
-    [System.Windows.Automation.Condition]::TrueCondition
-  )
-  $menuItemCount = [Math]::Min($menuItems.Count, 9999)
-  $filterCommands = [System.Collections.Generic.List[System.Windows.Automation.AutomationElement]]::new()
-  foreach ($item in $menuItems) {
-    Set-Stage "read-filter-menu-item"
-    $itemState = $item.Current
-    Set-Stage "match-filter-menu-item"
-    if ($itemState.Name -eq "Filter..." -and
-      $itemState.ControlType.ProgrammaticName -eq "ControlType.MenuItem") {
-      $filterCommands.Add($item)
+    Set-Stage "fallback-open-filter-dialog-shortcut"
+    Set-VerifiedProcmonMainWindowForeground $main $process "MAIN"
+    $mainWindowHandle = [IntPtr]$main.Current.NativeWindowHandle
+    $currentForegroundHandle = [ProcmonNativeMenu]::GetForegroundWindow()
+    $shortcutForegroundGate = if (
+      $currentForegroundHandle -eq $mainWindowHandle -and
+      [ProcmonNativeMenu]::GetWindowProcessId($currentForegroundHandle) -eq $process.Id
+    ) { "passed" } else { "failed" }
+    [Console]::Out.WriteLine(
+      "PROC_MON_FILTER_SHORTCUT_FOREGROUND=gate:$shortcutForegroundGate"
+    )
+    if ($shortcutForegroundGate -ne "passed") {
+      throw "Process Monitor main window lost foreground before the Filter shortcut"
     }
+    [Console]::Out.WriteLine(
+      "PROC_MON_FILTER_MENU_OPEN_FALLBACK=filter-dialog-shortcut"
+    )
+    [System.Windows.Forms.SendKeys]::SendWait("^l")
+    Set-Stage "wait-filter-dialog-shortcut"
+    $filterDialog = Wait-FilterDialog $process $main
+  } else {
+    if ($focusSnapshot["ControlType"] -ne "ControlType.Menu") {
+      Write-MenuItemsObservation "after-open" $menu
+    }
+    Set-Stage "enumerate-filter-menu-items"
+    $menuItems = $menu.FindAll(
+      [System.Windows.Automation.TreeScope]::Children,
+      [System.Windows.Automation.Condition]::TrueCondition
+    )
+    $menuItemCount = [Math]::Min($menuItems.Count, 9999)
+    $filterCommands = [System.Collections.Generic.List[System.Windows.Automation.AutomationElement]]::new()
+    foreach ($item in $menuItems) {
+      Set-Stage "read-filter-menu-item"
+      $itemState = $item.Current
+      Set-Stage "match-filter-menu-item"
+      if ($itemState.Name -eq "Filter..." -and
+        $itemState.ControlType.ProgrammaticName -eq "ControlType.MenuItem") {
+        $filterCommands.Add($item)
+      }
+    }
+    Set-Stage "verify-filter-command-count"
+    $filterMatchCount = [Math]::Min($filterCommands.Count, 9999)
+    [Console]::Out.WriteLine(
+      "PROC_MON_FILTER_COMMAND_MATCH=items:$menuItemCount;matches:$filterMatchCount"
+    )
+    if ($filterCommands.Count -ne 1) {
+      throw "Process Monitor open menu did not expose one Filter command"
+    }
+    $filterCommand = $filterCommands[0]
+    Set-Stage "read-filter-command-state"
+    $filterCommandState = $filterCommand.Current
+    Set-Stage "probe-filter-command-patterns"
+    $filterInvokePattern = $null
+    $hasFilterInvokePattern = $filterCommand.TryGetCurrentPattern(
+      [System.Windows.Automation.InvokePattern]::Pattern,
+      [ref]$filterInvokePattern
+    )
+    $filterSelectionPattern = $null
+    $hasFilterSelectionPattern = $filterCommand.TryGetCurrentPattern(
+      [System.Windows.Automation.SelectionItemPattern]::Pattern,
+      [ref]$filterSelectionPattern
+    )
+    [Console]::Out.WriteLine(
+      "PROC_MON_FILTER_COMMAND_PATTERNS=invoke:$($hasFilterInvokePattern.ToString().ToLowerInvariant());selection-item:$($hasFilterSelectionPattern.ToString().ToLowerInvariant())"
+    )
+    Set-Stage "validate-filter-command-state"
+    if (-not $filterCommandState.IsEnabled -or
+      $filterCommandState.IsOffscreen -or
+      -not $filterCommandState.IsKeyboardFocusable -or
+      -not $hasFilterInvokePattern) {
+      throw "Process Monitor Filter command is not available through its InvokePattern"
+    }
+    Set-Stage "focus-filter-command"
+    $filterCommand.SetFocus()
+    Set-Stage "observe-filter-command-focus"
+    Write-FocusObservation "filter-command" | Out-Null
+    [Console]::Out.WriteLine("PROC_MON_FILTER_COMMAND_ACTIVATION=invoke-pattern")
+    Set-Stage "invoke-filter-command"
+    $filterInvokePattern.Invoke()
+    Set-Stage "observe-dialog-focus"
+    Write-FocusObservation "after-command-invoke" | Out-Null
+    Write-FocusOwnerObservation "after-command-invoke" $process $main
+    Set-Stage "wait-filter-dialog"
+    $filterDialog = Wait-FilterDialog $process $main
   }
-  Set-Stage "verify-filter-command-count"
-  $filterMatchCount = [Math]::Min($filterCommands.Count, 9999)
-  [Console]::Out.WriteLine(
-    "PROC_MON_FILTER_COMMAND_MATCH=items:$menuItemCount;matches:$filterMatchCount"
-  )
-  if ($filterCommands.Count -ne 1) {
-    throw "Process Monitor open menu did not expose one Filter command"
-  }
-  $filterCommand = $filterCommands[0]
-  Set-Stage "read-filter-command-state"
-  $filterCommandState = $filterCommand.Current
-  Set-Stage "probe-filter-command-patterns"
-  $filterInvokePattern = $null
-  $hasFilterInvokePattern = $filterCommand.TryGetCurrentPattern(
-    [System.Windows.Automation.InvokePattern]::Pattern,
-    [ref]$filterInvokePattern
-  )
-  $filterSelectionPattern = $null
-  $hasFilterSelectionPattern = $filterCommand.TryGetCurrentPattern(
-    [System.Windows.Automation.SelectionItemPattern]::Pattern,
-    [ref]$filterSelectionPattern
-  )
-  [Console]::Out.WriteLine(
-    "PROC_MON_FILTER_COMMAND_PATTERNS=invoke:$($hasFilterInvokePattern.ToString().ToLowerInvariant());selection-item:$($hasFilterSelectionPattern.ToString().ToLowerInvariant())"
-  )
-  Set-Stage "validate-filter-command-state"
-  if (-not $filterCommandState.IsEnabled -or
-    $filterCommandState.IsOffscreen -or
-    -not $filterCommandState.IsKeyboardFocusable -or
-    -not $hasFilterInvokePattern) {
-    throw "Process Monitor Filter command is not available through its InvokePattern"
-  }
-  Set-Stage "focus-filter-command"
-  $filterCommand.SetFocus()
-  Set-Stage "observe-filter-command-focus"
-  Write-FocusObservation "filter-command" | Out-Null
-  [Console]::Out.WriteLine("PROC_MON_FILTER_COMMAND_ACTIVATION=invoke-pattern")
-  Set-Stage "invoke-filter-command"
-  $filterInvokePattern.Invoke()
-  Set-Stage "observe-dialog-focus"
-  Write-FocusObservation "after-command-invoke" | Out-Null
-  Write-FocusOwnerObservation "after-command-invoke" $process $main
-  Set-Stage "wait-filter-dialog"
-  $filterDialog = Wait-FilterDialog $process $main
   Set-Stage "reset-existing-filters"
   $reset = Wait-Element $filterDialog ([System.Windows.Automation.PropertyCondition]::new(
     [System.Windows.Automation.AutomationElement]::NameProperty, "Reset"
@@ -2844,7 +2865,7 @@ try {
   $ok.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
 
   Set-Stage "focus-main-for-drop-filtered-events"
-  $main.SetFocus()
+  Set-VerifiedProcmonMainWindowForeground $main $process "MAIN"
   Set-Stage "find-filter-menu-for-drop-filtered-events"
   $filterMenu = Wait-Element $main ([System.Windows.Automation.AndCondition]::new(
     [System.Windows.Automation.PropertyCondition]::new(
@@ -3080,7 +3101,8 @@ try {
 
   Set-Stage "save-filter"
   [System.Windows.Forms.SendKeys]::SendWait("{ESC}")
-  $main.SetFocus()
+  Set-Stage "activate-main-before-export"
+  Set-VerifiedProcmonMainWindowForeground $main $process "MAIN"
   Set-Stage "open-file-menu-for-export"
   [System.Windows.Forms.SendKeys]::SendWait("%f")
   Set-Stage "resolve-file-menu-for-export"
