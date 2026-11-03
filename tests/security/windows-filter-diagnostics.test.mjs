@@ -100,6 +100,29 @@ test("AC-05: Windows filter diagnostics retain bounded focused-window ownership 
   );
 });
 
+test("AC-05: Windows shortcut diagnostics retain only classified GUI focus ownership", () => {
+  const output = [
+    "PROC_MON_FILTER_SHORTCUT_GUI_FOCUS=phase:before;available:true;active:procmon-main;focus:procmon-other",
+    "PROC_MON_FILTER_SHORTCUT_GUI_FOCUS=phase:after;available:true;active:procmon-main;focus:none",
+    "PROC_MON_FILTER_SHORTCUT_GUI_FOCUS=phase:before;available:false;active:unavailable;focus:unavailable",
+    "PROC_MON_FILTER_SHORTCUT_GUI_FOCUS=phase:after;available:true;active:unavailable;focus:procmon-main",
+    "PROC_MON_FILTER_SHORTCUT_GUI_FOCUS=phase:after;available:false;active:unavailable;focus:procmon-main",
+  ].join("\n");
+  assert.equal(
+    describeWindowsFilterDiagnostics(output),
+    "; filter-shortcut-gui-focus=before;available:true;active:procmon-main;focus:procmon-other"
+      + "; filter-shortcut-gui-focus=after;available:true;active:procmon-main;focus:none"
+      + "; filter-shortcut-gui-focus=before;available:false;active:unavailable;focus:unavailable"
+      + "; filter-shortcut-gui-focus=after;available:true;active:unavailable;focus:procmon-main",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_SHORTCUT_GUI_FOCUS=phase:before;available:false;active:unavailable;focus:procmon-main",
+    ),
+    "",
+  );
+});
+
 test("AC-05: Windows filter diagnostics omit arbitrary names and exception details", () => {
   const output = [
     "PROC_MON_FILTER_MENU_STATE=enabled:yes;offscreen:false;keyboard-focusable:true",

@@ -289,6 +289,14 @@ test("AC-05: Procmon main-window activation verifies its process-owned foregroun
   );
   assert.match(
     configuration,
+    /ReadFocusSnapshot\(IntPtr window\)[\s\S]*GetGUIThreadInfo\(threadId, ref info\)[\s\S]*function Get-ProcmonFocusHandleClass[\s\S]*GetWindowProcessId\(\$Handle\)[\s\S]*function Write-ShortcutGuiFocusObservation[\s\S]*ReadFocusSnapshot\(\$MainWindowHandle\)/,
+  );
+  assert.match(
+    configuration,
+    /function Open-FilterDialogByShortcut[\s\S]*Write-ShortcutGuiFocusObservation "before" \$Process \$mainWindowHandle[\s\S]*SendWait\("\^l"\)[\s\S]*Write-ShortcutGuiFocusObservation "after" \$Process \$mainWindowHandle/,
+  );
+  assert.match(
+    configuration,
     /\$candidateRuntimeId = \$candidateWindow\.GetRuntimeId\(\) -join ","[\s\S]*\$mainRuntimeId = \$MainWindow\.GetRuntimeId\(\) -join ","[\s\S]*\$distinctRuntimeId = \$candidateRuntimeId -cne \$mainRuntimeId/,
   );
   assert.match(

@@ -181,6 +181,20 @@ export function describeWindowsFilterDiagnostics(output) {
     diagnostics.push(`filter-shortcut-foreground-gate=${shortcutForegroundGate}`);
   }
 
+  for (const match of output.matchAll(
+    /^PROC_MON_FILTER_SHORTCUT_GUI_FOCUS=phase:(before|after);available:(true|false);active:(procmon-main|procmon-other|other-process|none|unavailable);focus:(procmon-main|procmon-other|other-process|none|unavailable)\r?$/gm,
+  )) {
+    const [, phase, available, active, focus] = match;
+    if (
+      available === "true"
+      || (active === "unavailable" && focus === "unavailable")
+    ) {
+      diagnostics.push(
+        `filter-shortcut-gui-focus=${phase};available:${available};active:${active};focus:${focus}`,
+      );
+    }
+  }
+
   const mainWindowSelection = output.match(
     /^PROC_MON_FILTER_MAIN_WINDOW=selection:(filter-menu-root|main-handle-root|from-handle|first-owned);root-windows:(\d{1,4});uia-owned-windows:(\d{1,4});main-handle:(available|unavailable);filter-menu:(present|absent)\r?$/m,
   );

@@ -136,6 +136,13 @@ public static class ProcmonNativeMenu
         public bool IsEnabled { get; set; }
     }
 
+    public sealed class FocusSnapshot
+    {
+        public bool Available { get; set; }
+        public IntPtr ActiveWindow { get; set; }
+        public IntPtr FocusWindow { get; set; }
+    }
+
     [DllImport("user32.dll", ExactSpelling = true, SetLastError = true)]
     public static extern IntPtr GetMenu(IntPtr hWnd);
 
@@ -159,6 +166,34 @@ public static class ProcmonNativeMenu
         return GetWindowThreadProcessId(hWnd, out processId) == 0
             ? 0
             : processId > int.MaxValue ? 0 : (int)processId;
+    }
+
+    public static FocusSnapshot ReadFocusSnapshot(IntPtr window)
+    {
+        uint processId;
+        var threadId = GetWindowThreadProcessId(window, out processId);
+        var snapshot = new FocusSnapshot
+        {
+            Available = false,
+            ActiveWindow = IntPtr.Zero,
+            FocusWindow = IntPtr.Zero
+        };
+        if (threadId == 0)
+        {
+            return snapshot;
+        }
+        var info = new GuiThreadInfo
+        {
+            cbSize = (uint)Marshal.SizeOf(typeof(GuiThreadInfo))
+        };
+        if (!GetGUIThreadInfo(threadId, ref info))
+        {
+            return snapshot;
+        }
+        snapshot.Available = true;
+        snapshot.ActiveWindow = info.hwndActive;
+        snapshot.FocusWindow = info.hwndFocus;
+        return snapshot;
     }
 
     [DllImport("user32.dll", ExactSpelling = true, SetLastError = true)]
@@ -1668,7 +1703,9 @@ function Open-FilterDialogByShortcut(
   [Console]::Out.WriteLine(
     "PROC_MON_FILTER_MENU_OPEN_FALLBACK=filter-dialog-shortcut"
   )
+  Write-ShortcutGuiFocusObservation "before" $Process $mainWindowHandle
   [System.Windows.Forms.SendKeys]::SendWait("^l")
+  Write-ShortcutGuiFocusObservation "after" $Process $mainWindowHandle
   Write-FocusObservation "after-filter-dialog-shortcut" | Out-Null
   Write-FocusOwnerObservation "after-filter-dialog-shortcut" $Process $MainWindow
   Set-Stage "wait-filter-dialog-shortcut"
@@ -2925,6 +2962,44 @@ function Write-FocusOwnerObservation(
   }
   $suffix = if ($null -eq $reason) { "" } else { ";reason:$reason" }
   [Console]::Out.WriteLine("PROC_MON_FILTER_FOCUS_OWNER=$Phase;owner:$owner$suffix")
+}
+
+function Get-ProcmonFocusHandleClass(
+  [System.IntPtr]$Handle,
+  [System.Diagnostics.Process]$Process,
+  [System.IntPtr]$MainWindowHandle
+) {
+  if ($Handle -eq [IntPtr]::Zero) {
+    return "none"
+  }
+  $ownerProcessId = [ProcmonNativeMenu]::GetWindowProcessId($Handle)
+  if ($ownerProcessId -eq $Process.Id) {
+    if ($Handle -eq $MainWindowHandle) {
+      return "procmon-main"
+    }
+    return "procmon-other"
+  }
+  if ($ownerProcessId -gt 0) {
+    return "other-process"
+  }
+  return "unavailable"
+}
+
+function Write-ShortcutGuiFocusObservation(
+  [ValidateSet("before", "after")][string]$Phase,
+  [System.Diagnostics.Process]$Process,
+  [System.IntPtr]$MainWindowHandle
+) {
+  $snapshot = [ProcmonNativeMenu]::ReadFocusSnapshot($MainWindowHandle)
+  $active = "unavailable"
+  $focus = "unavailable"
+  if ($snapshot.Available) {
+    $active = Get-ProcmonFocusHandleClass $snapshot.ActiveWindow $Process $MainWindowHandle
+    $focus = Get-ProcmonFocusHandleClass $snapshot.FocusWindow $Process $MainWindowHandle
+  }
+  [Console]::Out.WriteLine(
+    "PROC_MON_FILTER_SHORTCUT_GUI_FOCUS=phase:$Phase;available:$($snapshot.Available.ToString().ToLowerInvariant());active:$active;focus:$focus"
+  )
 }
 
 try {
