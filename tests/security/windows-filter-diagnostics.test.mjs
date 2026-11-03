@@ -249,6 +249,38 @@ test("AC-05: Windows native window UIA diagnostics require consistent bounded co
   );
 });
 
+test("AC-05: Windows accessible menu diagnostics retain exact bounded label counts", () => {
+  const line = "PROC_MON_FILTER_ACCESSIBLE_MENU="
+    + "state:ready;windows:4;readable:4;unreadable:0;items:28;event:4;"
+    + "filter:3;filter-command:1;truncated:false";
+  assert.equal(
+    describeWindowsFilterDiagnostics(line),
+    "; filter-accessible-menu=state:ready;windows:4;readable:4;unreadable:0;"
+      + "items:28;event:4;filter:3;filter-command:1;truncated:false",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      line.replace("state:ready", "state:partial")
+        .replace("readable:4", "readable:3")
+        .replace("unreadable:0", "unreadable:1")
+        .replace("items:28", "items:20")
+        .replace("event:4", "event:0")
+        .replace("filter:3", "filter:0")
+        .replace("filter-command:1", "filter-command:0"),
+    ),
+    "; filter-accessible-menu=state:partial;windows:4;readable:3;unreadable:1;"
+      + "items:20;event:0;filter:0;filter-command:0;truncated:false",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(line.replace("items:28", "items:257")),
+    "",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(`${line};name=C:\\private`),
+    "",
+  );
+});
+
 test("AC-05: Windows filter diagnostics omit arbitrary names and exception details", () => {
   const output = [
     "PROC_MON_FILTER_MENU_STATE=enabled:yes;offscreen:false;keyboard-focusable:true",

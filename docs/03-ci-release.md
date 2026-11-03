@@ -2,6 +2,8 @@
 
 ## 1. ワークフロー構成
 
+[Run 41679281913](https://github.com/65537i/mail-client-plan/actions/runs/41679281913)（`76ff6b9`、Windows 2025 x64 / webview）はsecurity-test buildとNode 78/78、Windows audit setup / worker coordination、configuration export waitに成功したが、baseline `wait-filter-dialog-shortcut`で失敗しstrict capture未実施。native menuのbounded集計はstate partial / menu 1 / unreadable 1 / item 0となり、Filter command有無は未確定。後続run向けに同一PIDを再検証して既存MSAA `OBJID_MENU`経由の固定ラベル件数を読む診断を追加した。dialog受理条件・入力操作は変更しない。ローカルfocused tests 63/63・PowerShell parse成功、Windows runtime未確認。
+
 [Run 41677409576](https://github.com/65537i/mail-client-plan/actions/runs/41677409576)（`82c3d2d`、Windows 2025 x64 / webview）はsecurity-test buildとNode 78/78、Windows audit setup / worker coordination、configuration export waitに成功したが、baseline `wait-filter-dialog-shortcut`で停止しstrict capture未実施。全Procmon top-level windowのnative menu集計は4 handle中最初のGetMenuItemCount失敗で停止し、Filter commandの有無は判定できなかった。次runはread errorのmenuのみskipして残りをboundedに走査する。dialog受理条件は変更しない。
 
 [Run 41675402073](https://github.com/65537i/mail-client-plan/actions/runs/41675402073)（`7608934`、Windows 2025 x64 / webview）はsecurity-test buildとNode 78/78、Windows audit setup / worker coordination、configuration export waitに成功したが、baseline `wait-filter-dialog-shortcut`で失敗しstrict capture未実施。native-window fallbackでvisible Procmon-owned window 1件を調査したが、Reset 1 / ComboBox 0 / Edit 0で受理条件を満たさない。次runは全Procmon top-level native menuのbounded集計のみ追加し、filter dialog受理条件は変更しない。

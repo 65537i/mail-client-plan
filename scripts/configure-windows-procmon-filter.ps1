@@ -132,6 +132,9 @@ public static class ProcmonNativeMenu
         public bool AccessibleAvailable { get; set; }
         public int ItemCount { get; set; }
         public int MatchCount { get; set; }
+        public int EventCount { get; set; }
+        public int FilterCount { get; set; }
+        public int FilterCommandCount { get; set; }
         public string ReadFailure { get; set; }
         public string CheckState { get; set; }
         public bool IsEnabled { get; set; }
@@ -379,6 +382,98 @@ public static class ProcmonNativeMenu
             snapshot.ReadFailure = "none";
             snapshot.CheckState = (matchState & CheckedState) != 0 ? "on" : "off";
             snapshot.IsEnabled = (matchState & UnavailableState) == 0;
+            return snapshot;
+        }
+        catch (COMException)
+        {
+            snapshot.ReadFailure = "child-read-failed";
+            return snapshot;
+        }
+    }
+
+    public static AccessibleMenuSnapshot ReadAccessibleFilterMenuSummary(
+        IntPtr menuWindow,
+        uint expectedProcessId
+    )
+    {
+        var snapshot = new AccessibleMenuSnapshot
+        {
+            ReadFailure = "window-unavailable",
+            CheckState = "unavailable"
+        };
+        uint menuProcessId;
+        if (GetWindowThreadProcessId(menuWindow, out menuProcessId) == 0)
+        {
+            return snapshot;
+        }
+        snapshot.ProcessKnown = true;
+        if (menuProcessId != expectedProcessId)
+        {
+            snapshot.ReadFailure = "process-mismatch";
+            return snapshot;
+        }
+        snapshot.ProcessSame = true;
+
+        var interfaceId = new Guid("618736E0-3C3D-11CF-810C-00AA00389B71");
+        Accessibility.IAccessible accessibleObject;
+        var result = AccessibleObjectFromWindow(
+            menuWindow,
+            unchecked((uint)AccessibleMenuObjectId),
+            ref interfaceId,
+            out accessibleObject
+        );
+        if (result != 0 || accessibleObject == null)
+        {
+            snapshot.ReadFailure = "object-unavailable";
+            return snapshot;
+        }
+        snapshot.AccessibleAvailable = true;
+
+        try
+        {
+            var itemCount = accessibleObject.accChildCount;
+            if (itemCount < 0 || itemCount > MaximumAccessibleMenuItems)
+            {
+                snapshot.ReadFailure = itemCount < 0 ? "count-invalid" : "count-limit";
+                return snapshot;
+            }
+            snapshot.ItemCount = itemCount;
+            for (var childId = 1; childId <= itemCount; childId++)
+            {
+                var child = (object)childId;
+                var name = accessibleObject.get_accName(child) ?? string.Empty;
+                var roleValue = accessibleObject.get_accRole(child);
+                int role;
+                if (!TryGetInteger(roleValue, out role))
+                {
+                    snapshot.ReadFailure = "child-read-failed";
+                    return snapshot;
+                }
+                if (role != MenuItemRole)
+                {
+                    continue;
+                }
+
+                var normalizedName = name.Replace("&", "");
+                var acceleratorIndex = normalizedName.IndexOf('\t');
+                if (acceleratorIndex >= 0)
+                {
+                    normalizedName = normalizedName.Substring(0, acceleratorIndex);
+                }
+                switch (normalizedName.Trim())
+                {
+                    case "Event":
+                        snapshot.EventCount++;
+                        break;
+                    case "Filter":
+                        snapshot.FilterCount++;
+                        break;
+                    case "Filter...":
+                        snapshot.FilterCommandCount++;
+                        break;
+                }
+            }
+            snapshot.ReadFailure = "none";
             return snapshot;
         }
         catch (COMException)
@@ -2442,6 +2537,51 @@ function Write-ProcmonNativeMenuSummary(
   )
 }
 
+function Write-ProcmonAccessibleMenuSummary(
+  [IntPtr[]]$WindowHandles,
+  [System.Diagnostics.Process]$Process
+) {
+  $menuWindowCount = 0
+  $readableWindowCount = 0
+  $unreadableWindowCount = 0
+  $itemCount = 0
+  $eventCount = 0
+  $filterCount = 0
+  $filterCommandCount = 0
+  $windowLimit = [Math]::Min($WindowHandles.Length, 256)
+  $truncated = $WindowHandles.Length -gt 256
+  for ($index = 0; $index -lt $windowLimit; $index++) {
+    $handle = [IntPtr]$WindowHandles[$index]
+    if ([ProcmonNativeMenu]::GetMenu($handle) -eq [IntPtr]::Zero) {
+      continue
+    }
+    $menuWindowCount++
+    $snapshot = [ProcmonNativeMenu]::ReadAccessibleFilterMenuSummary(
+      $handle,
+      [uint32]$Process.Id
+    )
+    if (-not $snapshot.ProcessSame -or -not $snapshot.AccessibleAvailable -or $snapshot.ReadFailure -ne "none") {
+      $unreadableWindowCount++
+      continue
+    }
+    $readableWindowCount++
+    $itemCount += $snapshot.ItemCount
+    $eventCount += $snapshot.EventCount
+    $filterCount += $snapshot.FilterCount
+    $filterCommandCount += $snapshot.FilterCommandCount
+  }
+  $state = if ($menuWindowCount -eq 0) {
+    "unavailable"
+  } elseif ($unreadableWindowCount -gt 0) {
+    "partial"
+  } else {
+    "ready"
+  }
+  [Console]::Out.WriteLine(
+    "PROC_MON_FILTER_ACCESSIBLE_MENU=state:$state;windows:$menuWindowCount;readable:$readableWindowCount;unreadable:$unreadableWindowCount;items:$itemCount;event:$eventCount;filter:$filterCount;filter-command:$filterCommandCount;truncated:$($truncated.ToString().ToLowerInvariant())"
+  )
+}
+
 function Find-ProcmonNativeFilterDialog(
   [System.Diagnostics.Process]$Process,
   [System.IntPtr]$MainWindowHandle
@@ -2451,6 +2591,7 @@ function Find-ProcmonNativeFilterDialog(
     -WindowHandles $handles `
     -Process $Process `
     -Source "all-top-level"
+  Write-ProcmonAccessibleMenuSummary $handles $Process
   $windowCount = [Math]::Min($handles.Length, 256)
   $mainWindowCount = 0
   $otherWindowCount = 0

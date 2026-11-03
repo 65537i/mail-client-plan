@@ -226,6 +226,39 @@ export function describeWindowsFilterDiagnostics(output) {
     }
   }
 
+  const accessibleMenu = output.match(
+    /^PROC_MON_FILTER_ACCESSIBLE_MENU=state:(ready|partial|unavailable);windows:(\d{1,3});readable:(\d{1,3});unreadable:(\d{1,3});items:(\d{1,5});event:(\d{1,5});filter:(\d{1,5});filter-command:(\d{1,5});truncated:(true|false)\r?$/m,
+  );
+  if (accessibleMenu) {
+    const [, state, rawWindows, rawReadable, rawUnreadable, rawItems, rawEvents, rawFilters, rawCommands, truncated] = accessibleMenu;
+    const [windows, readable, unreadable, items, events, filters, commands] = [
+      rawWindows,
+      rawReadable,
+      rawUnreadable,
+      rawItems,
+      rawEvents,
+      rawFilters,
+      rawCommands,
+    ].map(Number);
+    if (
+      windows <= 256
+      && readable + unreadable === windows
+      && items <= readable * 64
+      && events <= items
+      && filters <= items
+      && commands <= items
+      && (
+        (windows === 0 && state === "unavailable")
+        || (windows > 0 && unreadable === 0 && state === "ready")
+        || (windows > 0 && unreadable > 0 && state === "partial")
+      )
+    ) {
+      diagnostics.push(
+        `filter-accessible-menu=state:${state};windows:${windows};readable:${readable};unreadable:${unreadable};items:${items};event:${events};filter:${filters};filter-command:${commands};truncated:${truncated}`,
+      );
+    }
+  }
+
   const mainWindowSelection = output.match(
     /^PROC_MON_FILTER_MAIN_WINDOW=selection:(filter-menu-root|main-handle-root|from-handle|first-owned);root-windows:(\d{1,4});uia-owned-windows:(\d{1,4});main-handle:(available|unavailable);filter-menu:(present|absent)\r?$/m,
   );
