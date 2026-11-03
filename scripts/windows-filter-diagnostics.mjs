@@ -814,7 +814,7 @@ export function describeWindowsFilterDiagnostics(output) {
   }
 
   for (const match of output.matchAll(
-    /^PROC_MON_FILTER_FOCUS_OWNER=(after-command-invoke|after-save-enter);owner:(procmon-main|procmon-other|other-process|no-window|unavailable)(?:;reason:(ElementNotAvailableException|InvalidOperationException|COMException|Other))?\r?$/gm,
+    /^PROC_MON_FILTER_FOCUS_OWNER=(after-command-invoke|after-filter-dialog-shortcut|after-save-enter);owner:(procmon-main|procmon-other|other-process|no-window|unavailable)(?:;reason:(ElementNotAvailableException|InvalidOperationException|COMException|Other))?\r?$/gm,
   )) {
     const reason = match[3] ? `;reason:${match[3]}` : "";
     diagnostics.push(`focus-owner-${match[1]}=${match[2]}${reason}`);
@@ -884,7 +884,7 @@ export function describeWindowsFilterDiagnostics(output) {
     }
   }
   for (const match of output.matchAll(
-    /^PROC_MON_FILTER_FOCUSED_CONTROL=(after-open|after-home|filter-command|after-enter|after-invoke|after-click|after-command-invoke|after-reload-filter-dialog-shortcut|after-reload-menu-(?:expand|select|legacy-ia|pointer|invoke|access-key|keyboard-event|keyboard-filter));focused:(none|unavailable)\r?$/gm,
+    /^PROC_MON_FILTER_FOCUSED_CONTROL=(after-open|after-home|filter-command|after-enter|after-invoke|after-click|after-command-invoke|after-filter-dialog-shortcut|after-reload-filter-dialog-shortcut|after-reload-menu-(?:expand|select|legacy-ia|pointer|invoke|access-key|keyboard-event|keyboard-filter));focused:(none|unavailable)\r?$/gm,
   )) {
     focusObservations.push({
       index: match.index,
@@ -892,7 +892,7 @@ export function describeWindowsFilterDiagnostics(output) {
     });
   }
   for (const match of output.matchAll(
-    /^PROC_MON_FILTER_FOCUSED_CONTROL=(after-open|after-home|filter-command|after-enter|after-invoke|after-click|after-command-invoke|after-reload-filter-dialog-shortcut|after-reload-menu-(?:expand|select|legacy-ia|pointer|invoke|access-key|keyboard-event|keyboard-filter));type:(MenuBar|Menu|MenuItem|Window|Pane|ToolBar|Button|Text|Edit|Other);name:(Event|FileMenu|Filter|FilterCommand|SaveFilterCommand|ExportConfigCommand|MenuBar|ProcessMonitor|Other);offscreen:(true|false);keyboard-focusable:(true|false);tree=([A-Za-z:>]+)\r?$/gm,
+    /^PROC_MON_FILTER_FOCUSED_CONTROL=(after-open|after-home|filter-command|after-enter|after-invoke|after-click|after-command-invoke|after-filter-dialog-shortcut|after-reload-filter-dialog-shortcut|after-reload-menu-(?:expand|select|legacy-ia|pointer|invoke|access-key|keyboard-event|keyboard-filter));type:(MenuBar|Menu|MenuItem|Window|Pane|ToolBar|Button|Text|Edit|Other);name:(Event|FileMenu|Filter|FilterCommand|SaveFilterCommand|ExportConfigCommand|MenuBar|ProcessMonitor|Other);offscreen:(true|false);keyboard-focusable:(true|false);tree=([A-Za-z:>]+)\r?$/gm,
   )) {
     const nodes = match[6].split(">");
     if (

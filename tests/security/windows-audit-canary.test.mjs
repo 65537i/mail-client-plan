@@ -285,7 +285,7 @@ test("AC-05: Procmon main-window activation verifies its process-owned foregroun
   );
   assert.match(
     configuration,
-    /function Open-FilterDialogByShortcut[\s\S]*Set-VerifiedProcmonMainWindowForeground \$MainWindow \$Process "MAIN"[\s\S]*GetWindowProcessId\(\$currentForegroundHandle\) -eq \$Process\.Id[\s\S]*PROC_MON_FILTER_SHORTCUT_FOREGROUND=gate:\$shortcutForegroundGate[\s\S]*SendWait\("\^l"\)[\s\S]*Wait-FilterDialog \$Process \$MainWindow/,
+    /function Open-FilterDialogByShortcut[\s\S]*Set-VerifiedProcmonMainWindowForeground \$MainWindow \$Process "MAIN"[\s\S]*GetWindowProcessId\(\$currentForegroundHandle\) -eq \$Process\.Id[\s\S]*PROC_MON_FILTER_SHORTCUT_FOREGROUND=gate:\$shortcutForegroundGate[\s\S]*SendWait\("\^l"\)[\s\S]*Write-FocusObservation "after-filter-dialog-shortcut"[\s\S]*Write-FocusOwnerObservation "after-filter-dialog-shortcut" \$Process \$MainWindow[\s\S]*Wait-FilterDialog \$Process \$MainWindow/,
   );
   assert.match(
     configuration,

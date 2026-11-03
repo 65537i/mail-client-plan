@@ -1669,6 +1669,8 @@ function Open-FilterDialogByShortcut(
     "PROC_MON_FILTER_MENU_OPEN_FALLBACK=filter-dialog-shortcut"
   )
   [System.Windows.Forms.SendKeys]::SendWait("^l")
+  Write-FocusObservation "after-filter-dialog-shortcut" | Out-Null
+  Write-FocusOwnerObservation "after-filter-dialog-shortcut" $Process $MainWindow
   Set-Stage "wait-filter-dialog-shortcut"
   Wait-FilterDialog $Process $MainWindow
 }

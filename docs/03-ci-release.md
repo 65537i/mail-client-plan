@@ -2,6 +2,8 @@
 
 ## 1. ワークフロー構成
 
+[Run 41619963101](https://github.com/65537i/mail-client-plan/actions/runs/41619963101)（`f34acf9`、Windows 2025 x64 / webview）はbaseline `wait-filter-dialog-shortcut`で停止。候補UIA subtreeはPane 23 / Window 1で、ComboBox・Editなどのfilter control typeを含まず、filter dialog discoveryは未成立。strict capture未実施、AC-05未達。次runではCtrl+L後のbounded focus stateとownerを観測する。
+
 [Run 41618700656](https://github.com/65537i/mail-client-plan/actions/runs/41618700656)（`5215aef`、Windows 2025 x64 / webview）はbaseline `wait-filter-dialog-shortcut`で停止。Resetを含む候補Window 2件のdescendants最大24件は、ComboBox / Edit / Button / Text / Customが各0件で、24件は未分類ControlTypeだった。strict capture未実施、AC-05未達。次runではPane / Window / Menu / MenuItem / ToolBarの固定件数を追加してUIA treeの種類を切り分ける。
 
 [Run 41616704672](https://github.com/65537i/mail-client-plan/actions/runs/41616704672)（`ecfb7ab`、Windows 2025 x64 / webview）はbaseline `wait-filter-dialog-shortcut`で停止。Resetを含む候補Windowは2件ともProcmon-owned・nonzero HWND、うち1件はdistinct RuntimeIdだが、ComboBox / Editは両方0件でlayout不一致。strict capture未実施、AC-05未達。次runでは候補子要素数とButton / Text / Custom / otherの分類数のみ追加する。

@@ -261,6 +261,7 @@ test("AC-05: Windows filter diagnostics retain safe focused-control observations
     "PROC_MON_FILTER_FOCUSED_CONTROL=after-invoke;type:Button;name:Other;offscreen:false;keyboard-focusable:true;tree=Button:Other>Window:ProcessMonitor",
     "PROC_MON_FILTER_FOCUSED_CONTROL=after-invoke;type:Text;name:C:\\private\\mail;offscreen:false;keyboard-focusable:true;tree=Text:Other",
     "PROC_MON_FILTER_FOCUSED_CONTROL=after-command-invoke;type:Window;name:ProcessMonitor;offscreen:false;keyboard-focusable:false;tree=Window:ProcessMonitor",
+    "PROC_MON_FILTER_FOCUSED_CONTROL=after-filter-dialog-shortcut;type:Pane;name:Other;offscreen:false;keyboard-focusable:false;tree=Pane:Other>Window:ProcessMonitor",
     "PROC_MON_FILTER_FOCUSED_CONTROL=after-reload-menu-invoke;type:MenuItem;name:Filter;offscreen:false;keyboard-focusable:true;tree=MenuItem:Filter>Menu:Other",
     "PROC_MON_FILTER_FOCUSED_CONTROL=after-reload-menu-invoke;type:Button;name:C:\\private\\mail;offscreen:false;keyboard-focusable:true;tree=Button:Other",
     "PROC_MON_FILTER_FOCUSED_CONTROL=after-reload-menu-expand;type:Button;name:Other;offscreen:false;keyboard-focusable:true;tree=Button:Other>Window:ProcessMonitor",
@@ -281,6 +282,7 @@ test("AC-05: Windows filter diagnostics retain safe focused-control observations
       + "; focus-after-invoke=Window:ProcessMonitor;offscreen:false;keyboard-focusable:false;tree=Window:ProcessMonitor"
       + "; focus-after-invoke=Button:Other;offscreen:false;keyboard-focusable:true;tree=Button:Other>Window:ProcessMonitor"
       + "; focus-after-command-invoke=Window:ProcessMonitor;offscreen:false;keyboard-focusable:false;tree=Window:ProcessMonitor"
+      + "; focus-after-filter-dialog-shortcut=Pane:Other;offscreen:false;keyboard-focusable:false;tree=Pane:Other>Window:ProcessMonitor"
       + "; focus-after-reload-menu-invoke=MenuItem:Filter;offscreen:false;keyboard-focusable:true;tree=MenuItem:Filter>Menu:Other"
       + "; focus-after-reload-menu-expand=Button:Other;offscreen:false;keyboard-focusable:true;tree=Button:Other>Window:ProcessMonitor"
       + "; focus-after-reload-menu-select=Button:Other;offscreen:false;keyboard-focusable:true;tree=Button:Other>Window:ProcessMonitor"
@@ -741,6 +743,7 @@ test("AC-05: Windows filter diagnostics retain safe dialog ownership state", () 
       "PROC_MON_FILTER_DIALOG_DESKTOP_RESET_OWNER=other-process",
       "PROC_MON_FILTER_DIALOG_RESET_TREE=Button>Pane>Window",
       "PROC_MON_FILTER_FOCUS_OWNER=after-command-invoke;owner:other-process",
+      "PROC_MON_FILTER_FOCUS_OWNER=after-filter-dialog-shortcut;owner:procmon-main",
       "PROC_MON_FILTER_FOCUS_OWNER=after-command-invoke;owner:unavailable;reason:COMException",
       "PROC_MON_FILTER_FOCUS_OWNER=after-command-invoke;owner:other-process;reason:C:\\private\\mail",
       "PROC_MON_FILTER_FOCUS_OWNER=after-save-enter;owner:procmon-main",
@@ -751,6 +754,7 @@ test("AC-05: Windows filter diagnostics retain safe dialog ownership state", () 
     "; filter-dialog-desktop-reset-owner=other-process"
       + "; filter-dialog-reset-tree=Button>Pane>Window"
       + "; focus-owner-after-command-invoke=other-process"
+      + "; focus-owner-after-filter-dialog-shortcut=procmon-main"
       + "; focus-owner-after-command-invoke=unavailable;reason:COMException"
       + "; focus-owner-after-save-enter=procmon-main"
       + "; focus-owner-after-save-enter=procmon-other"
