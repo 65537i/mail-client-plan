@@ -714,6 +714,27 @@ test("AC-05: Windows filter diagnostics retain bounded dialog scan counts", () =
   );
 });
 
+test("AC-05: Windows embedded-dialog diagnostics retain bounded UIA counts only", () => {
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_DIALOG_EMBEDDED_SCAN=main-reset:true;windows:2;owned:2;handled:2;distinct-runtime-id:1;reset:2;layout:1;max-combos:3;max-edits:1",
+    ),
+    "; filter-dialog-embedded-scan=main-reset:true;windows:2;owned:2;handled:2;distinct-runtime-id:1;reset:2;layout:1;max-combos:3;max-edits:1",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_DIALOG_EMBEDDED_SCAN=main-reset:true;windows:20000;owned:2;handled:2;distinct-runtime-id:1;reset:2;layout:1;max-combos:3;max-edits:1",
+    ),
+    "",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_DIALOG_EMBEDDED_SCAN=main-reset:true;windows:2;owned:2;handled:2;distinct-runtime-id:1;reset:2;layout:1;max-combos:3;max-edits:1;path:C:\\private",
+    ),
+    "",
+  );
+});
+
 test("AC-05: Windows filter diagnostics retain safe dialog ownership state", () => {
   assert.equal(
     describeWindowsFilterDiagnostics([

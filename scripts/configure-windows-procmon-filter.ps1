@@ -1787,6 +1787,15 @@ function Wait-FilterDialog([System.Diagnostics.Process]$Process, [System.Windows
   $resetControlPresent = $false
   $desktopResetOwner = "none"
   $desktopResetTree = [System.Collections.Generic.List[string]]::new()
+  $mainResetPresent = $false
+  $embeddedWindowCount = 0
+  $embeddedOwnedWindowCount = 0
+  $embeddedWindowHandleCount = 0
+  $embeddedDistinctRuntimeIdCount = 0
+  $embeddedResetCount = 0
+  $embeddedLayoutCount = 0
+  $embeddedMaxComboCount = 0
+  $embeddedMaxEditCount = 0
   $windowCondition = [System.Windows.Automation.PropertyCondition]::new(
     [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
     [System.Windows.Automation.ControlType]::Window
@@ -1796,6 +1805,14 @@ function Wait-FilterDialog([System.Diagnostics.Process]$Process, [System.Windows
     "Reset"
   )
   do {
+    $embeddedWindowCount = 0
+    $embeddedOwnedWindowCount = 0
+    $embeddedWindowHandleCount = 0
+    $embeddedDistinctRuntimeIdCount = 0
+    $embeddedResetCount = 0
+    $embeddedLayoutCount = 0
+    $embeddedMaxComboCount = 0
+    $embeddedMaxEditCount = 0
     $windows = [System.Windows.Automation.AutomationElement]::RootElement.FindAll(
       [System.Windows.Automation.TreeScope]::Children,
       $windowCondition
@@ -1826,50 +1843,78 @@ function Wait-FilterDialog([System.Diagnostics.Process]$Process, [System.Windows
       $candidateWindow = $mainReset
       for ($level = 0; $null -ne $candidateWindow -and $level -lt 8; $level++) {
         $candidateState = $candidateWindow.Current
-        $candidateRuntimeId = $candidateWindow.GetRuntimeId() -join ","
-        $mainRuntimeId = $MainWindow.GetRuntimeId() -join ","
-        if (
-          $candidateState.ControlType -eq [System.Windows.Automation.ControlType]::Window -and
-          $candidateState.ProcessId -eq $Process.Id -and
-          $candidateState.NativeWindowHandle -ne 0 -and
-          $candidateRuntimeId -cne $mainRuntimeId
-        ) {
-          $candidateCombos = $candidateWindow.FindAll(
-            [System.Windows.Automation.TreeScope]::Descendants,
-            [System.Windows.Automation.PropertyCondition]::new(
-              [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
-              [System.Windows.Automation.ControlType]::ComboBox
-            )
-          )
-          $candidateEdits = $candidateWindow.FindAll(
-            [System.Windows.Automation.TreeScope]::Descendants,
-            [System.Windows.Automation.PropertyCondition]::new(
-              [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
-              [System.Windows.Automation.ControlType]::Edit
-            )
-          )
+        if ($candidateState.ControlType -eq [System.Windows.Automation.ControlType]::Window) {
+          $embeddedWindowCount++
+          if ($candidateState.ProcessId -eq $Process.Id) {
+            $embeddedOwnedWindowCount++
+          }
           if (
-            $null -ne $candidateWindow.FindFirst(
+            $candidateState.ProcessId -eq $Process.Id -and
+            $candidateState.NativeWindowHandle -ne 0
+          ) {
+            $embeddedWindowHandleCount++
+            $candidateRuntimeId = $candidateWindow.GetRuntimeId() -join ","
+            $mainRuntimeId = $MainWindow.GetRuntimeId() -join ","
+            $distinctRuntimeId = $candidateRuntimeId -cne $mainRuntimeId
+            if ($distinctRuntimeId) {
+              $embeddedDistinctRuntimeIdCount++
+            }
+            $candidateReset = $candidateWindow.FindFirst(
               [System.Windows.Automation.TreeScope]::Descendants,
               $resetCondition
-            ) -and
-            $candidateCombos.Count -ge 3 -and
-            $candidateEdits.Count -ge 1
-          ) {
-            $comboCount = [Math]::Min($candidateCombos.Count, 9999)
-            $editCount = [Math]::Min($candidateEdits.Count, 9999)
-            [Console]::Out.WriteLine("PROC_MON_FILTER_DIALOG_DISCOVERY=embedded-window")
-            [Console]::Out.WriteLine(
-              "PROC_MON_FILTER_DIALOG_LAYOUT=combos:$comboCount;edits:$editCount"
             )
-            return $candidateWindow
+            if ($null -ne $candidateReset) {
+              $embeddedResetCount++
+              $candidateCombos = $candidateWindow.FindAll(
+                [System.Windows.Automation.TreeScope]::Descendants,
+                [System.Windows.Automation.PropertyCondition]::new(
+                  [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+                  [System.Windows.Automation.ControlType]::ComboBox
+                )
+              )
+              $candidateEdits = $candidateWindow.FindAll(
+                [System.Windows.Automation.TreeScope]::Descendants,
+                [System.Windows.Automation.PropertyCondition]::new(
+                  [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+                  [System.Windows.Automation.ControlType]::Edit
+                )
+              )
+              $embeddedMaxComboCount = [Math]::Max(
+                $embeddedMaxComboCount,
+                [Math]::Min($candidateCombos.Count, 9999)
+              )
+              $embeddedMaxEditCount = [Math]::Max(
+                $embeddedMaxEditCount,
+                [Math]::Min($candidateEdits.Count, 9999)
+              )
+              $hasEmbeddedLayout = $candidateCombos.Count -ge 3 -and $candidateEdits.Count -ge 1
+              if ($hasEmbeddedLayout) {
+                $embeddedLayoutCount++
+              }
+              if (
+                $distinctRuntimeId -and
+                $hasEmbeddedLayout
+              ) {
+                $comboCount = [Math]::Min($candidateCombos.Count, 9999)
+                $editCount = [Math]::Min($candidateEdits.Count, 9999)
+                [Console]::Out.WriteLine("PROC_MON_FILTER_DIALOG_DISCOVERY=embedded-window")
+                [Console]::Out.WriteLine(
+                  "PROC_MON_FILTER_DIALOG_LAYOUT=combos:$comboCount;edits:$editCount"
+                )
+                return $candidateWindow
+              }
+            }
           }
         }
         $candidateWindow = $treeWalker.GetParent($candidateWindow)
       }
+      $mainResetPresent = $true
     }
     Start-Sleep -Milliseconds 100
   } while ([DateTime]::UtcNow -lt $deadline)
+  [Console]::Out.WriteLine(
+    "PROC_MON_FILTER_DIALOG_EMBEDDED_SCAN=main-reset:$($mainResetPresent.ToString().ToLowerInvariant());windows:$([Math]::Min($embeddedWindowCount, 9999));owned:$([Math]::Min($embeddedOwnedWindowCount, 9999));handled:$([Math]::Min($embeddedWindowHandleCount, 9999));distinct-runtime-id:$([Math]::Min($embeddedDistinctRuntimeIdCount, 9999));reset:$([Math]::Min($embeddedResetCount, 9999));layout:$([Math]::Min($embeddedLayoutCount, 9999));max-combos:$embeddedMaxComboCount;max-edits:$embeddedMaxEditCount"
+  )
   foreach ($window in $windows) {
     $reset = $window.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $resetCondition)
     if ($null -ne $reset) {

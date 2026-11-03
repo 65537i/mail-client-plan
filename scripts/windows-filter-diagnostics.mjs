@@ -92,6 +92,15 @@ export function describeWindowsFilterDiagnostics(output) {
     );
   }
 
+  const embeddedDialogScan = output.match(
+    /^PROC_MON_FILTER_DIALOG_EMBEDDED_SCAN=main-reset:(true|false);windows:(\d{1,4});owned:(\d{1,4});handled:(\d{1,4});distinct-runtime-id:(\d{1,4});reset:(\d{1,4});layout:(\d{1,4});max-combos:(\d{1,4});max-edits:(\d{1,4})\r?$/m,
+  );
+  if (embeddedDialogScan) {
+    diagnostics.push(
+      `filter-dialog-embedded-scan=main-reset:${embeddedDialogScan[1]};windows:${embeddedDialogScan[2]};owned:${embeddedDialogScan[3]};handled:${embeddedDialogScan[4]};distinct-runtime-id:${embeddedDialogScan[5]};reset:${embeddedDialogScan[6]};layout:${embeddedDialogScan[7]};max-combos:${embeddedDialogScan[8]};max-edits:${embeddedDialogScan[9]}`,
+    );
+  }
+
   const saveDialogScan = output.match(
     /^PROC_MON_FILTER_SAVE_DIALOG_SCAN=windows:(\d{1,4});file-names:(\d{1,4});save-buttons:(\d{1,4})\r?$/m,
   );
