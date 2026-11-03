@@ -2,6 +2,8 @@
 
 ## 1. ワークフロー構成
 
+[Run 41592522785](https://github.com/65537i/mail-client-plan/actions/runs/41592522785)（`f33e691`、Windows 2025 x64 / webview）もlist-only inspectorが`compile-native-capture-helper` / `RuntimeException`で失敗し、strict exportへ未到達。エラーIDはAdd-Type限定形に一致せず`unavailable`だったため、次runで制限文字の先頭識別子を分類する。AC-05未達。
+
 [Run 41591457283](https://github.com/65537i/mail-client-plan/actions/runs/41591457283)（`fda0df2`、Windows 2025 x64 / webview）はpreflightとunfiltered probe exact-path positive controlに成功。strict設定 / target-volume attached後、list inspectorが`compile-native-capture-helper` / `RuntimeException`で停止しexport / canary gateへ未到達。次runで許可済みAdd-TypeエラーIDを収集する。AC-05未達。
 
 [Run 41590295035](https://github.com/65537i/mail-client-plan/actions/runs/41590295035)（`8e480d6`、Windows 2025 x64 / webview）はcapture前のtarget-volume解決に成功し、別NoFilter probeでpositive-control exact-path Node `ReadFile`を記録した。strict baselineでもexact-two path rules / Drop Filtered Events / target-volume attachedを確認したが、positive control直後の必須list inspectorがnonzeroで停止し、strict CSV export / canary判定 / attackへ未到達。list inspectorの失敗理由はまだ特定できていないため、次runでallowlist済みstage / exception種別だけを診断出力する。AC-05未達。

@@ -1110,8 +1110,7 @@ public static class ProcmonCaptureWindows
   }
   [Console]::Out.WriteLine("PROC_MON_CAPTURE_FAILURE=$failureType")
   $failureId = "unavailable"
-  if ($_.FullyQualifiedErrorId -match
-    '^([A-Z][A-Z0-9_]{0,63}),Microsoft\.PowerShell\.Commands\.AddTypeCommand$') {
+  if ($_.FullyQualifiedErrorId -match '^([A-Za-z][A-Za-z0-9_.-]{0,63})(?:,|$)') {
     $failureId = $Matches[1]
   }
   [Console]::Out.WriteLine("PROC_MON_CAPTURE_FAILURE_ID=$failureId")
