@@ -2,6 +2,8 @@
 
 ## 1. ワークフロー構成
 
+[Run 41590295035](https://github.com/65537i/mail-client-plan/actions/runs/41590295035)（`8e480d6`、Windows 2025 x64 / webview）はcapture前のtarget-volume解決に成功し、別NoFilter probeでpositive-control exact-path Node `ReadFile`を記録した。strict baselineでもexact-two path rules / Drop Filtered Events / target-volume attachedを確認したが、positive control直後の必須list inspectorがnonzeroで停止し、strict CSV export / canary判定 / attackへ未到達。list inspectorの失敗理由はまだ特定できていないため、次runでallowlist済みstage / exception種別だけを診断出力する。AC-05未達。
+
 [Run 41588739037](https://github.com/65537i/mail-client-plan/actions/runs/41588739037)（`8a7c2cc`、Windows 2025 x64 / webview）はworkspace一時pathによりunfiltered probeとstrict baselineのNode `ReadFile` exact-path positive controlを検出し、baseline WDIOとfilter再確認も成功した。一方baseline CSVのcanary event 13件でfail closedし、attack未実施。診断は`powershell.exe`イベント10件を示し、capture中のcapture-inspection scriptがcanaryに`File.Exists` / volume解決処理を行う実装を特定した。次はvolume解決をcapture開始前に実施し、live inspectionではvolume文字列のみ使用する。AC-05未達。
 
 [Run 41587731505](https://github.com/65537i/mail-client-plan/actions/runs/41587731505)（`3b094b7`、Windows 2025 x64 / webview）はcontrol basename一致10件がDrive形式、expected parent一致0だが、parent末尾4以上のcomponent一致を示した。pathの値は出力しておらず、共通末尾の手前のroot / prefix差が疑われる。次の診断ではOS temp directory aliasを避けてrepository workspace配下へ合成ファイルを作り、exact-path gateを保持してprobeと実監査を行う。

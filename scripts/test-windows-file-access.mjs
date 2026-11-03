@@ -87,11 +87,20 @@ async function captureScenario(scenario) {
   async function readCaptureListCount(label, required = false, owner = capture, allowUnavailable = false) {
     assert(owner?.pid, `Process Monitor ${label} list inspection owner is unavailable`);
     function reportUnavailable(reason) {
+      const failedStages = [...output.matchAll(
+        /^PROC_MON_CAPTURE_FAILED_STAGE=([a-z][a-z0-9-]{0,63})\r?$/gm,
+      )];
+      const failureTypes = [...output.matchAll(
+        /^PROC_MON_CAPTURE_FAILURE=(CimException|ManagementException|InvalidOperationException|ParameterBindingException|RuntimeException|Other)\r?$/gm,
+      )];
+      const failureStage = failedStages.length === 1 ? failedStages[0][1] : "unavailable";
+      const failureType = failureTypes.length === 1 ? failureTypes[0][1] : "unavailable";
       if (!allowUnavailable) {
+        console.log(`Windows audit ${scenario}: ${label}-list-inspection=failed;reason:${reason};stage:${failureStage};failure:${failureType}`);
         throw new Error(`Process Monitor ${label} list inspection failed (${reason})`);
       }
       assert.equal(owner.exitCode, null, `Process Monitor ${label} list inspection owner exited`);
-      console.log(`Windows audit ${scenario}: ${label}-list-items=unavailable;inspection=${reason}`);
+      console.log(`Windows audit ${scenario}: ${label}-list-items=unavailable;inspection=${reason};stage:${failureStage};failure:${failureType}`);
       return "unavailable";
     }
 
