@@ -1494,6 +1494,8 @@ function Wait-MainWindow([System.Diagnostics.Process]$Process, [int]$TimeoutSeco
   $foregroundOwner = "unavailable"
   try {
     do {
+      $mainWindowHandleElement = $null
+      $firstOwnedWindow = $null
       $scanPhase = "refresh-process"
       $Process.Refresh()
       $scanPhase = "check-process"
@@ -1506,10 +1508,9 @@ function Wait-MainWindow([System.Diagnostics.Process]$Process, [int]$TimeoutSeco
       $mainHandleAvailable = $mainHandle -ne [IntPtr]::Zero
       if ($mainHandleAvailable) {
         $scanPhase = "read-main-window-owner"
-        $mainWindow = [System.Windows.Automation.AutomationElement]::FromHandle($mainHandle)
-        if ($mainWindow.Current.ProcessId -eq $Process.Id) {
-          $windowFound = $true
-          return $mainWindow
+        $candidate = [System.Windows.Automation.AutomationElement]::FromHandle($mainHandle)
+        if ($candidate.Current.ProcessId -eq $Process.Id) {
+          $mainWindowHandleElement = $candidate
         }
       }
       $scanPhase = "enumerate-uia-windows"
@@ -1522,9 +1523,25 @@ function Wait-MainWindow([System.Diagnostics.Process]$Process, [int]$TimeoutSeco
         $scanPhase = "read-uia-window-owner"
         if ($window.Current.ProcessId -eq $Process.Id) {
           $ownedWindowCount++
-          $windowFound = $true
-          return $window
+          if (
+            $mainHandleAvailable -and
+            [IntPtr]$window.Current.NativeWindowHandle -eq $mainHandle
+          ) {
+            $windowFound = $true
+            return $window
+          }
+          if ($null -eq $firstOwnedWindow) {
+            $firstOwnedWindow = $window
+          }
         }
+      }
+      if ($null -ne $mainWindowHandleElement) {
+        $windowFound = $true
+        return $mainWindowHandleElement
+      }
+      if ($null -ne $firstOwnedWindow) {
+        $windowFound = $true
+        return $firstOwnedWindow
       }
       $scanPhase = "wait"
       Start-Sleep -Milliseconds 100
