@@ -171,6 +171,31 @@ test("AC-05: Windows native menu diagnostics retain bounded command counts only"
   );
 });
 
+test("AC-05: Windows native window diagnostics retain consistent bounded counts", () => {
+  const line = "PROC_MON_FILTER_NATIVE_WINDOWS="
+    + "state:ready;windows:3;main:1;other:2;visible:2;menus:0;truncated:false";
+  assert.equal(
+    describeWindowsFilterDiagnostics(line),
+    "; filter-native-windows=windows:3;main:1;other:2;visible:2;menus:0;truncated:false",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      line.replace("main:1", "main:2"),
+    ),
+    "",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      line.replace("windows:3", "windows:257").replace("other:2", "other:256"),
+    ),
+    "",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(`${line};handle=0x1234`),
+    "",
+  );
+});
+
 test("AC-05: Windows filter diagnostics omit arbitrary names and exception details", () => {
   const output = [
     "PROC_MON_FILTER_MENU_STATE=enabled:yes;offscreen:false;keyboard-focusable:true",

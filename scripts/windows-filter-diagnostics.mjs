@@ -236,6 +236,30 @@ export function describeWindowsFilterDiagnostics(output) {
     }
   }
 
+  const nativeWindows = output.match(
+    /^PROC_MON_FILTER_NATIVE_WINDOWS=state:ready;windows:(\d{1,3});main:(\d{1,3});other:(\d{1,3});visible:(\d{1,3});menus:(\d{1,3});truncated:(true|false)\r?$/m,
+  );
+  if (nativeWindows) {
+    const [, rawWindows, rawMain, rawOther, rawVisible, rawMenus, truncated] = nativeWindows;
+    const [windows, main, other, visible, menus] = [
+      rawWindows,
+      rawMain,
+      rawOther,
+      rawVisible,
+      rawMenus,
+    ].map(Number);
+    if (
+      windows <= 256
+      && main + other === windows
+      && visible <= windows
+      && menus <= windows
+    ) {
+      diagnostics.push(
+        `filter-native-windows=windows:${windows};main:${main};other:${other};visible:${visible};menus:${menus};truncated:${truncated}`,
+      );
+    }
+  }
+
   if (/^PROC_MON_FILTER_MENU_OPEN_FALLBACK=filter-dialog-shortcut\r?$/m.test(output)) {
     diagnostics.push("filter-menu-open-fallback=filter-dialog-shortcut");
   }

@@ -147,6 +147,12 @@ public static class ProcmonNativeMenu
     [DllImport("user32.dll", ExactSpelling = true, SetLastError = true)]
     public static extern IntPtr GetMenu(IntPtr hWnd);
 
+    private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+
+    [DllImport("user32.dll", ExactSpelling = true, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool EnumWindows(EnumWindowsProc callback, IntPtr lParam);
+
     [DllImport("user32.dll", ExactSpelling = true, SetLastError = true)]
     private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
 
@@ -170,6 +176,28 @@ public static class ProcmonNativeMenu
         return GetWindowThreadProcessId(hWnd, out processId) == 0
             ? 0
             : processId > int.MaxValue ? 0 : (int)processId;
+    }
+
+    public static IntPtr[] GetProcessTopLevelWindows(int processId, int maximum)
+    {
+        if (processId <= 0 || maximum < 1 || maximum > 257)
+            throw new ArgumentOutOfRangeException();
+        var windows = new System.Collections.Generic.List<IntPtr>();
+        EnumWindowsProc callback = (hWnd, lParam) =>
+        {
+            uint ownerProcessId;
+            if (
+                GetWindowThreadProcessId(hWnd, out ownerProcessId) != 0 &&
+                ownerProcessId == (uint)processId
+            )
+            {
+                windows.Add(hWnd);
+                return windows.Count < maximum;
+            }
+            return true;
+        };
+        EnumWindows(callback, IntPtr.Zero);
+        return windows.ToArray();
     }
 
     public static FocusSnapshot ReadFocusSnapshot(IntPtr window)
@@ -2118,6 +2146,8 @@ function Wait-FilterDialog([System.Diagnostics.Process]$Process, [System.Windows
   if ($desktopResetTree.Count -gt 0) {
     [Console]::Out.WriteLine("PROC_MON_FILTER_DIALOG_RESET_TREE=$($desktopResetTree -join '>')")
   }
+  Write-ProcmonNativeWindowSummary `
+    $Process ([IntPtr]$MainWindow.Current.NativeWindowHandle)
   throw "Process Monitor filter dialog did not expose its Reset control"
 }
 
@@ -2394,6 +2424,36 @@ function Write-ProcmonNativeMenuSummary(
   }
   [Console]::Out.WriteLine(
     "PROC_MON_FILTER_NATIVE_MENU=source:$Source;state:$state;menus:$([Math]::Min($menus, 99));items:$([Math]::Min($items, 999));event:$([Math]::Min($eventMatches, 99));filter:$([Math]::Min($filterMatches, 99));filter-command:$([Math]::Min($filterCommandMatches, 99));unreadable:$([Math]::Min($unreadableItems, 999))"
+  )
+}
+
+function Write-ProcmonNativeWindowSummary(
+  [System.Diagnostics.Process]$Process,
+  [System.IntPtr]$MainWindowHandle
+) {
+  [IntPtr[]]$handles = [ProcmonNativeMenu]::GetProcessTopLevelWindows($Process.Id, 257)
+  $windowCount = [Math]::Min($handles.Length, 256)
+  $mainWindowCount = 0
+  $otherWindowCount = 0
+  $visibleWindowCount = 0
+  $menuHandleCount = 0
+  $truncated = $handles.Length -gt 256
+  for ($index = 0; $index -lt $windowCount; $index++) {
+    $handle = [IntPtr]$handles[$index]
+    if ($handle -eq $MainWindowHandle) {
+      $mainWindowCount++
+    } else {
+      $otherWindowCount++
+    }
+    if ([ProcmonNativeMenu]::IsWindowVisible($handle)) {
+      $visibleWindowCount++
+    }
+    if ([ProcmonNativeMenu]::GetMenu($handle) -ne [IntPtr]::Zero) {
+      $menuHandleCount++
+    }
+  }
+  [Console]::Out.WriteLine(
+    "PROC_MON_FILTER_NATIVE_WINDOWS=state:ready;windows:$windowCount;main:$mainWindowCount;other:$otherWindowCount;visible:$visibleWindowCount;menus:$menuHandleCount;truncated:$($truncated.ToString().ToLowerInvariant())"
   )
 }
 

@@ -267,6 +267,10 @@ test("AC-05: Procmon main-window activation verifies its process-owned foregroun
     /function Write-ProcmonNativeMenuSummary[\s\S]*GetWindowProcessId\(\$MainWindowHandle\) -ne \$Process\.Id[\s\S]*GetMenu\(\$MainWindowHandle\)[\s\S]*GetMenuItemCount[\s\S]*ReadItem[\s\S]*"Event" \{ \$eventMatches\+\+ \}[\s\S]*"Filter" \{ \$filterMatches\+\+ \}[\s\S]*"Filter\.\.\." \{ \$filterCommandMatches\+\+ \}[\s\S]*PROC_MON_FILTER_NATIVE_MENU=/,
   );
   assert.match(
+    configuration,
+    /EnumWindows\(EnumWindowsProc callback, IntPtr lParam\)[\s\S]*GetProcessTopLevelWindows\(int processId, int maximum\)[\s\S]*maximum > 257[\s\S]*function Write-ProcmonNativeWindowSummary[\s\S]*GetProcessTopLevelWindows\(\$Process\.Id, 257\)[\s\S]*\$windowCount = \[Math\]::Min\(\$handles\.Length, 256\)[\s\S]*PROC_MON_FILTER_NATIVE_WINDOWS=/,
+  );
+  assert.match(
     initialActivation,
     /Set-Stage "find-filter-menu"\s+Write-ProcmonNativeMenuSummary[\s\S]*Wait-Element \$main \$filterMenuCondition/,
   );

@@ -2,6 +2,8 @@
 
 ## 1. ワークフロー構成
 
+[Run 41671094199](https://github.com/65537i/mail-client-plan/actions/runs/41671094199)（`58b1741`、Windows 2025 x64 / webview）はsecurity-test buildとNode 75/75、Windows audit setup / worker coordination、configuration export waitに成功したが、baseline `wait-filter-dialog-shortcut`で失敗しstrict capture未実施。main windowとfocused Procmon rootのnative menu handleはいずれもunavailable。focus rootはProcmon別windowだがFilter commandは検出されず、UIA layoutはComboBox / Edit 0。次runで`EnumWindows`により対象PIDのtop-level window数・可視数・menu handle数を最大257件で集計し、UIA desktop scanとの違いを調べる。HWND値やwindow textは出さず、入力操作とstrict gateは変更しない。
+
 [Run 41669095218](https://github.com/65537i/mail-client-plan/actions/runs/41669095218)（`90e1d40`、Windows 2025 x64 / webview）はsecurity-test buildとNode 75/75、Windows audit setup / worker coordination、configuration export waitに成功したが、baseline `wait-filter-dialog-shortcut`で失敗しstrict capture未実施。native main menu handleはunavailable。Ctrl+L直後はGUIThreadInfo active / focusともmainだが、10秒後のfocused UIA Windowとnative rootはともにProcmon別window。候補layoutはComboBox / Edit 0。次runはそのProcmon-owned rootのnative menuを件数のみで読む。入力操作とstrict gateは変更しない。AC-05未達。
 
 [Run 41633765048](https://github.com/65537i/mail-client-plan/actions/runs/41633765048)（`222959b`、Windows 2025 x64 / webview）はsecurity-test buildとNode 74/74、Windows audit setup / worker coordination、configuration export waitに成功したが、baseline `wait-filter-dialog-shortcut`で失敗しstrict capture未実施。native menu handleはunavailableでEvent / Filter command件数は0。Ctrl+L直後のGUIThreadInfo active / focusはともにmainだが、10秒後のfocused UIA WindowはProcmon別windowで、候補layoutはComboBox / Edit 0。次runはfocused UIA Windowに対応するnative rootのowner classだけを追加し、操作・strict gateを変更せず切り分ける。AC-05未達。
