@@ -14,6 +14,8 @@
 
 [Run 41610361398](https://github.com/65537i/mail-client-plan/actions/runs/41610361398)（Windows 2025 x64 / webview）でもbaseline setupが`find-filter-menu`で停止。Process.MainWindowHandleベース選択は再現性のある退行のため、Filter menu UIA childを持つPID-owned root windowを優先する。
 
+[Run 41611959604](https://github.com/65537i/mail-client-plan/actions/runs/41611959604)（Windows 2025 x64 / webview）ではroot-windows 2 / owned-windows 1 / main-handle-root / Filter menu absentをbounded diagnosticsで確認。初期menuが存在しない場合にも、foreground owner確認後のCtrl+L fallbackを適用する。
+
 [Run 41601180416](https://github.com/65537i/mail-client-plan/actions/runs/41601180416)（Windows 2025 x64 / webview）でもstrict baselineはpositive-control `ReadFile` 1件・canary event 0件を通過。attack側のvolume preflight後、Procmon filter再設定が3回目も`find-main-window` / `InvalidOperationException`で停止し、attack capture未実施。AC-05未達。
 
 [Run 41599783724](https://github.com/65537i/mail-client-plan/actions/runs/41599783724)（Windows 2025 x64 / webview）はRun 41598534727と同様にstrict baseline positive control / canary zero / WDIO gateを通過。attack側のProcmon再設定が再び`find-main-window` / `InvalidOperationException`で停止し、attack未実施。原因切り分けと両strict capture完了は未達、AC-05未達。

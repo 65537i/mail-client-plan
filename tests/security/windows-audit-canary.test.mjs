@@ -281,7 +281,15 @@ test("AC-05: Procmon main-window activation verifies its process-owned foregroun
   );
   assert.match(
     configuration,
-    /if \(\$null -eq \$menu -or \$menu\.Current\.ProcessId -ne \$process\.Id\) \{\s+Set-Stage "fallback-open-filter-dialog-shortcut"[\s\S]*GetWindowProcessId\(\$currentForegroundHandle\) -eq \$process\.Id[\s\S]*PROC_MON_FILTER_SHORTCUT_FOREGROUND=gate:\$shortcutForegroundGate[\s\S]*SendWait\("\^l"\)[\s\S]*Wait-FilterDialog \$process \$main/,
+    /\$filterMenu = Wait-Element \$main \$filterMenuCondition 5 -AllowMissing\s+\$filterDialog = \$null\s+if \(\$null -eq \$filterMenu[\s\S]*Open-FilterDialogByShortcut \$main \$process/,
+  );
+  assert.match(
+    configuration,
+    /function Open-FilterDialogByShortcut[\s\S]*Set-VerifiedProcmonMainWindowForeground \$MainWindow \$Process "MAIN"[\s\S]*GetWindowProcessId\(\$currentForegroundHandle\) -eq \$Process\.Id[\s\S]*PROC_MON_FILTER_SHORTCUT_FOREGROUND=gate:\$shortcutForegroundGate[\s\S]*SendWait\("\^l"\)[\s\S]*Wait-FilterDialog \$Process \$MainWindow/,
+  );
+  assert.match(
+    configuration,
+    /if \(\$null -eq \$menu -or \$menu\.Current\.ProcessId -ne \$process\.Id\) \{\s+\$filterDialog = Open-FilterDialogByShortcut \$main \$process/,
   );
   assert.match(
     configuration,

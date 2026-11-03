@@ -552,13 +552,19 @@ function Write-ConfigOutputObservation([string]$Phase, [string]$Path) {
   )
 }
 
-function Wait-Element([System.Windows.Automation.AutomationElement]$Root, [System.Windows.Automation.Condition]$Condition, [int]$TimeoutSeconds = 10) {
+function Wait-Element(
+  [System.Windows.Automation.AutomationElement]$Root,
+  [System.Windows.Automation.Condition]$Condition,
+  [int]$TimeoutSeconds = 10,
+  [switch]$AllowMissing
+) {
   $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
   do {
     $element = $Root.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $Condition)
     if ($null -ne $element) { return $element }
     Start-Sleep -Milliseconds 100
   } while ([DateTime]::UtcNow -lt $deadline)
+  if ($AllowMissing) { return $null }
   throw "Timed out waiting for a Process Monitor UI control"
 }
 
@@ -1639,6 +1645,32 @@ function Set-VerifiedProcmonMainWindowForeground(
   if ($foregroundGate -ne "passed") {
     throw "Process Monitor $DiagnosticName window did not become the foreground window"
   }
+}
+
+function Open-FilterDialogByShortcut(
+  [System.Windows.Automation.AutomationElement]$MainWindow,
+  [System.Diagnostics.Process]$Process
+) {
+  Set-Stage "fallback-open-filter-dialog-shortcut"
+  Set-VerifiedProcmonMainWindowForeground $MainWindow $Process "MAIN"
+  $mainWindowHandle = [IntPtr]$MainWindow.Current.NativeWindowHandle
+  $currentForegroundHandle = [ProcmonNativeMenu]::GetForegroundWindow()
+  $shortcutForegroundGate = if (
+    $currentForegroundHandle -eq $mainWindowHandle -and
+    [ProcmonNativeMenu]::GetWindowProcessId($currentForegroundHandle) -eq $Process.Id
+  ) { "passed" } else { "failed" }
+  [Console]::Out.WriteLine(
+    "PROC_MON_FILTER_SHORTCUT_FOREGROUND=gate:$shortcutForegroundGate"
+  )
+  if ($shortcutForegroundGate -ne "passed") {
+    throw "Process Monitor main window lost foreground before the Filter shortcut"
+  }
+  [Console]::Out.WriteLine(
+    "PROC_MON_FILTER_MENU_OPEN_FALLBACK=filter-dialog-shortcut"
+  )
+  [System.Windows.Forms.SendKeys]::SendWait("^l")
+  Set-Stage "wait-filter-dialog-shortcut"
+  Wait-FilterDialog $Process $MainWindow
 }
 
 function Wait-ProcessMenu(
@@ -2734,7 +2766,11 @@ try {
       [System.Windows.Automation.ControlType]::MenuItem
     )
   )
-  $filterMenu = Wait-Element $main $filterMenuCondition 5
+  $filterMenu = Wait-Element $main $filterMenuCondition 5 -AllowMissing
+  $filterDialog = $null
+  if ($null -eq $filterMenu -or $filterMenu.Current.ProcessId -ne $process.Id) {
+    $filterDialog = Open-FilterDialogByShortcut $main $process
+  } else {
   Set-Stage "focus-filter-menu"
   $menuState = $filterMenu.Current
   $treeWalker = [System.Windows.Automation.TreeWalker]::ControlViewWalker
@@ -2813,28 +2849,8 @@ try {
   Set-Stage "verify-menu-focus-snapshot"
   Write-FocusSnapshotObservation "caller" $focusSnapshot
   Set-Stage "resolve-open-filter-menu"
-  $filterDialog = $null
   if ($null -eq $menu -or $menu.Current.ProcessId -ne $process.Id) {
-    Set-Stage "fallback-open-filter-dialog-shortcut"
-    Set-VerifiedProcmonMainWindowForeground $main $process "MAIN"
-    $mainWindowHandle = [IntPtr]$main.Current.NativeWindowHandle
-    $currentForegroundHandle = [ProcmonNativeMenu]::GetForegroundWindow()
-    $shortcutForegroundGate = if (
-      $currentForegroundHandle -eq $mainWindowHandle -and
-      [ProcmonNativeMenu]::GetWindowProcessId($currentForegroundHandle) -eq $process.Id
-    ) { "passed" } else { "failed" }
-    [Console]::Out.WriteLine(
-      "PROC_MON_FILTER_SHORTCUT_FOREGROUND=gate:$shortcutForegroundGate"
-    )
-    if ($shortcutForegroundGate -ne "passed") {
-      throw "Process Monitor main window lost foreground before the Filter shortcut"
-    }
-    [Console]::Out.WriteLine(
-      "PROC_MON_FILTER_MENU_OPEN_FALLBACK=filter-dialog-shortcut"
-    )
-    [System.Windows.Forms.SendKeys]::SendWait("^l")
-    Set-Stage "wait-filter-dialog-shortcut"
-    $filterDialog = Wait-FilterDialog $process $main
+    $filterDialog = Open-FilterDialogByShortcut $main $process
   } else {
     if ($focusSnapshot["ControlType"] -ne "ControlType.Menu") {
       Write-MenuItemsObservation "after-open" $menu
@@ -2899,6 +2915,7 @@ try {
     Write-FocusOwnerObservation "after-command-invoke" $process $main
     Set-Stage "wait-filter-dialog"
     $filterDialog = Wait-FilterDialog $process $main
+  }
   }
   Set-Stage "reset-existing-filters"
   $reset = Wait-Element $filterDialog ([System.Windows.Automation.PropertyCondition]::new(
