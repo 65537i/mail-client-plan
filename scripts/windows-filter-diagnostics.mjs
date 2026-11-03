@@ -93,11 +93,11 @@ export function describeWindowsFilterDiagnostics(output) {
   }
 
   const embeddedDialogScan = output.match(
-    /^PROC_MON_FILTER_DIALOG_EMBEDDED_SCAN=main-reset:(true|false);windows:(\d{1,4});owned:(\d{1,4});handled:(\d{1,4});distinct-runtime-id:(\d{1,4});reset:(\d{1,4});layout:(\d{1,4});max-items:(\d{1,4});max-combos:(\d{1,4});max-edits:(\d{1,4});max-buttons:(\d{1,4});max-texts:(\d{1,4});max-custom:(\d{1,4});max-other:(\d{1,4});items-truncated:(true|false)\r?$/m,
+    /^PROC_MON_FILTER_DIALOG_EMBEDDED_SCAN=main-reset:(true|false);windows:(\d{1,4});owned:(\d{1,4});handled:(\d{1,4});distinct-runtime-id:(\d{1,4});reset:(\d{1,4});layout:(\d{1,4});max-items:(\d{1,4});max-combos:(\d{1,4});max-edits:(\d{1,4});max-buttons:(\d{1,4});max-texts:(\d{1,4});max-custom:(\d{1,4});max-panes:(\d{1,4});max-windows:(\d{1,4});max-menus:(\d{1,4});max-menu-items:(\d{1,4});max-toolbars:(\d{1,4});max-other:(\d{1,4});items-truncated:(true|false)\r?$/m,
   );
   if (embeddedDialogScan) {
     diagnostics.push(
-      `filter-dialog-embedded-scan=main-reset:${embeddedDialogScan[1]};windows:${embeddedDialogScan[2]};owned:${embeddedDialogScan[3]};handled:${embeddedDialogScan[4]};distinct-runtime-id:${embeddedDialogScan[5]};reset:${embeddedDialogScan[6]};layout:${embeddedDialogScan[7]};max-items:${embeddedDialogScan[8]};max-combos:${embeddedDialogScan[9]};max-edits:${embeddedDialogScan[10]};max-buttons:${embeddedDialogScan[11]};max-texts:${embeddedDialogScan[12]};max-custom:${embeddedDialogScan[13]};max-other:${embeddedDialogScan[14]};items-truncated:${embeddedDialogScan[15]}`,
+      `filter-dialog-embedded-scan=main-reset:${embeddedDialogScan[1]};windows:${embeddedDialogScan[2]};owned:${embeddedDialogScan[3]};handled:${embeddedDialogScan[4]};distinct-runtime-id:${embeddedDialogScan[5]};reset:${embeddedDialogScan[6]};layout:${embeddedDialogScan[7]};max-items:${embeddedDialogScan[8]};max-combos:${embeddedDialogScan[9]};max-edits:${embeddedDialogScan[10]};max-buttons:${embeddedDialogScan[11]};max-texts:${embeddedDialogScan[12]};max-custom:${embeddedDialogScan[13]};max-panes:${embeddedDialogScan[14]};max-windows:${embeddedDialogScan[15]};max-menus:${embeddedDialogScan[16]};max-menu-items:${embeddedDialogScan[17]};max-toolbars:${embeddedDialogScan[18]};max-other:${embeddedDialogScan[19]};items-truncated:${embeddedDialogScan[20]}`,
     );
   }
 

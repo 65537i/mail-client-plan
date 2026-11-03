@@ -717,19 +717,19 @@ test("AC-05: Windows filter diagnostics retain bounded dialog scan counts", () =
 test("AC-05: Windows embedded-dialog diagnostics retain bounded UIA counts only", () => {
   assert.equal(
     describeWindowsFilterDiagnostics(
-      "PROC_MON_FILTER_DIALOG_EMBEDDED_SCAN=main-reset:true;windows:2;owned:2;handled:2;distinct-runtime-id:1;reset:2;layout:1;max-items:8;max-combos:3;max-edits:1;max-buttons:2;max-texts:1;max-custom:0;max-other:1;items-truncated:false",
+      "PROC_MON_FILTER_DIALOG_EMBEDDED_SCAN=main-reset:true;windows:2;owned:2;handled:2;distinct-runtime-id:1;reset:2;layout:1;max-items:8;max-combos:3;max-edits:1;max-buttons:2;max-texts:1;max-custom:0;max-panes:2;max-windows:1;max-menus:0;max-menu-items:0;max-toolbars:0;max-other:1;items-truncated:false",
     ),
-    "; filter-dialog-embedded-scan=main-reset:true;windows:2;owned:2;handled:2;distinct-runtime-id:1;reset:2;layout:1;max-items:8;max-combos:3;max-edits:1;max-buttons:2;max-texts:1;max-custom:0;max-other:1;items-truncated:false",
+    "; filter-dialog-embedded-scan=main-reset:true;windows:2;owned:2;handled:2;distinct-runtime-id:1;reset:2;layout:1;max-items:8;max-combos:3;max-edits:1;max-buttons:2;max-texts:1;max-custom:0;max-panes:2;max-windows:1;max-menus:0;max-menu-items:0;max-toolbars:0;max-other:1;items-truncated:false",
   );
   assert.equal(
     describeWindowsFilterDiagnostics(
-      "PROC_MON_FILTER_DIALOG_EMBEDDED_SCAN=main-reset:true;windows:20000;owned:2;handled:2;distinct-runtime-id:1;reset:2;layout:1;max-items:8;max-combos:3;max-edits:1;max-buttons:2;max-texts:1;max-custom:0;max-other:1;items-truncated:false",
+      "PROC_MON_FILTER_DIALOG_EMBEDDED_SCAN=main-reset:true;windows:20000;owned:2;handled:2;distinct-runtime-id:1;reset:2;layout:1;max-items:8;max-combos:3;max-edits:1;max-buttons:2;max-texts:1;max-custom:0;max-panes:2;max-windows:1;max-menus:0;max-menu-items:0;max-toolbars:0;max-other:1;items-truncated:false",
     ),
     "",
   );
   assert.equal(
     describeWindowsFilterDiagnostics(
-      "PROC_MON_FILTER_DIALOG_EMBEDDED_SCAN=main-reset:true;windows:2;owned:2;handled:2;distinct-runtime-id:1;reset:2;layout:1;max-items:8;max-combos:3;max-edits:1;max-buttons:2;max-texts:1;max-custom:0;max-other:1;items-truncated:false;path:C:\\private",
+      "PROC_MON_FILTER_DIALOG_EMBEDDED_SCAN=main-reset:true;windows:2;owned:2;handled:2;distinct-runtime-id:1;reset:2;layout:1;max-items:8;max-combos:3;max-edits:1;max-buttons:2;max-texts:1;max-custom:0;max-panes:2;max-windows:1;max-menus:0;max-menu-items:0;max-toolbars:0;max-other:1;items-truncated:false;path:C:\\private",
     ),
     "",
   );

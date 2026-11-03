@@ -1800,6 +1800,11 @@ function Wait-FilterDialog([System.Diagnostics.Process]$Process, [System.Windows
   $embeddedMaxButtonCount = 0
   $embeddedMaxTextCount = 0
   $embeddedMaxCustomCount = 0
+  $embeddedMaxPaneCount = 0
+  $embeddedMaxWindowCount = 0
+  $embeddedMaxMenuCount = 0
+  $embeddedMaxMenuItemCount = 0
+  $embeddedMaxToolbarCount = 0
   $embeddedMaxOtherCount = 0
   $embeddedItemsTruncated = $false
   $windowCondition = [System.Windows.Automation.PropertyCondition]::new(
@@ -1823,6 +1828,11 @@ function Wait-FilterDialog([System.Diagnostics.Process]$Process, [System.Windows
     $embeddedMaxButtonCount = 0
     $embeddedMaxTextCount = 0
     $embeddedMaxCustomCount = 0
+    $embeddedMaxPaneCount = 0
+    $embeddedMaxWindowCount = 0
+    $embeddedMaxMenuCount = 0
+    $embeddedMaxMenuItemCount = 0
+    $embeddedMaxToolbarCount = 0
     $embeddedMaxOtherCount = 0
     $embeddedItemsTruncated = $false
     $windows = [System.Windows.Automation.AutomationElement]::RootElement.FindAll(
@@ -1886,6 +1896,11 @@ function Wait-FilterDialog([System.Diagnostics.Process]$Process, [System.Windows
               $candidateButtonCount = 0
               $candidateTextCount = 0
               $candidateCustomCount = 0
+              $candidatePaneCount = 0
+              $candidateWindowCount = 0
+              $candidateMenuCount = 0
+              $candidateMenuItemCount = 0
+              $candidateToolbarCount = 0
               $candidateOtherCount = 0
               $candidateItemCount = [Math]::Min($candidateItems.Count, 1024)
               if ($candidateItems.Count -gt 1024) {
@@ -1899,6 +1914,11 @@ function Wait-FilterDialog([System.Diagnostics.Process]$Process, [System.Windows
                   "ControlType.Button" { $candidateButtonCount++ }
                   "ControlType.Text" { $candidateTextCount++ }
                   "ControlType.Custom" { $candidateCustomCount++ }
+                  "ControlType.Pane" { $candidatePaneCount++ }
+                  "ControlType.Window" { $candidateWindowCount++ }
+                  "ControlType.Menu" { $candidateMenuCount++ }
+                  "ControlType.MenuItem" { $candidateMenuItemCount++ }
+                  "ControlType.ToolBar" { $candidateToolbarCount++ }
                   default { $candidateOtherCount++ }
                 }
               }
@@ -1908,6 +1928,11 @@ function Wait-FilterDialog([System.Diagnostics.Process]$Process, [System.Windows
               $embeddedMaxButtonCount = [Math]::Max($embeddedMaxButtonCount, $candidateButtonCount)
               $embeddedMaxTextCount = [Math]::Max($embeddedMaxTextCount, $candidateTextCount)
               $embeddedMaxCustomCount = [Math]::Max($embeddedMaxCustomCount, $candidateCustomCount)
+              $embeddedMaxPaneCount = [Math]::Max($embeddedMaxPaneCount, $candidatePaneCount)
+              $embeddedMaxWindowCount = [Math]::Max($embeddedMaxWindowCount, $candidateWindowCount)
+              $embeddedMaxMenuCount = [Math]::Max($embeddedMaxMenuCount, $candidateMenuCount)
+              $embeddedMaxMenuItemCount = [Math]::Max($embeddedMaxMenuItemCount, $candidateMenuItemCount)
+              $embeddedMaxToolbarCount = [Math]::Max($embeddedMaxToolbarCount, $candidateToolbarCount)
               $embeddedMaxOtherCount = [Math]::Max($embeddedMaxOtherCount, $candidateOtherCount)
               $hasEmbeddedLayout = $candidateComboCount -ge 3 -and $candidateEditCount -ge 1
               if ($hasEmbeddedLayout) {
@@ -1935,7 +1960,7 @@ function Wait-FilterDialog([System.Diagnostics.Process]$Process, [System.Windows
     Start-Sleep -Milliseconds 100
   } while ([DateTime]::UtcNow -lt $deadline)
   [Console]::Out.WriteLine(
-    "PROC_MON_FILTER_DIALOG_EMBEDDED_SCAN=main-reset:$($mainResetPresent.ToString().ToLowerInvariant());windows:$([Math]::Min($embeddedWindowCount, 9999));owned:$([Math]::Min($embeddedOwnedWindowCount, 9999));handled:$([Math]::Min($embeddedWindowHandleCount, 9999));distinct-runtime-id:$([Math]::Min($embeddedDistinctRuntimeIdCount, 9999));reset:$([Math]::Min($embeddedResetCount, 9999));layout:$([Math]::Min($embeddedLayoutCount, 9999));max-items:$embeddedMaxItemCount;max-combos:$embeddedMaxComboCount;max-edits:$embeddedMaxEditCount;max-buttons:$embeddedMaxButtonCount;max-texts:$embeddedMaxTextCount;max-custom:$embeddedMaxCustomCount;max-other:$embeddedMaxOtherCount;items-truncated:$($embeddedItemsTruncated.ToString().ToLowerInvariant())"
+    "PROC_MON_FILTER_DIALOG_EMBEDDED_SCAN=main-reset:$($mainResetPresent.ToString().ToLowerInvariant());windows:$([Math]::Min($embeddedWindowCount, 9999));owned:$([Math]::Min($embeddedOwnedWindowCount, 9999));handled:$([Math]::Min($embeddedWindowHandleCount, 9999));distinct-runtime-id:$([Math]::Min($embeddedDistinctRuntimeIdCount, 9999));reset:$([Math]::Min($embeddedResetCount, 9999));layout:$([Math]::Min($embeddedLayoutCount, 9999));max-items:$embeddedMaxItemCount;max-combos:$embeddedMaxComboCount;max-edits:$embeddedMaxEditCount;max-buttons:$embeddedMaxButtonCount;max-texts:$embeddedMaxTextCount;max-custom:$embeddedMaxCustomCount;max-panes:$embeddedMaxPaneCount;max-windows:$embeddedMaxWindowCount;max-menus:$embeddedMaxMenuCount;max-menu-items:$embeddedMaxMenuItemCount;max-toolbars:$embeddedMaxToolbarCount;max-other:$embeddedMaxOtherCount;items-truncated:$($embeddedItemsTruncated.ToString().ToLowerInvariant())"
   )
   foreach ($window in $windows) {
     $reset = $window.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $resetCondition)
