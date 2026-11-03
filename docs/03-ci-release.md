@@ -2,6 +2,8 @@
 
 ## 1. ワークフロー構成
 
+[Run 41587731505](https://github.com/65537i/mail-client-plan/actions/runs/41587731505)（`3b094b7`、Windows 2025 x64 / webview）はcontrol basename一致10件がDrive形式、expected parent一致0だが、parent末尾4以上のcomponent一致を示した。pathの値は出力しておらず、共通末尾の手前のroot / prefix差が疑われる。次の診断ではOS temp directory aliasを避けてrepository workspace配下へ合成ファイルを作り、exact-path gateを保持してprobeと実監査を行う。
+
 [Run 41586859978](https://github.com/65537i/mail-client-plan/actions/runs/41586859978)（`bebca81`、Windows 2025 x64 / webview）はNoFilter probeで49,764 eventsをexport。control basename一致10件（Drive形式）、Node `ReadFile` basename一致1件に対し、full pathとexpected parent一致はいずれも0。Procmon list inspectorはnonzeroでunavailable。次はpath値非出力のparent suffix component一致数を追加する。strict監査未到達、AC-05未達。
 
 [Run 41585920539](https://github.com/65537i/mail-client-plan/actions/runs/41585920539)（`a0ed7ad`、Windows 2025 x64 / webview）は`/NoFilter` probeでPML 26,021,500 bytes / CSV 9,275,358 bytes、50,730 events、Node `ReadFile` 15件をexportした。control exact path一致は0件だが、basename一致は10件、そのうちNode `ReadFile` basename一致は1件。control file access自体は記録された一方、CSV Path全体が期待pathと異なる。live list inspectionはnonzeroでunavailable。次はpath値をログへ出さずparent一致とDrive / device / UNC / otherの固定分類件数を追加し、差分の位置を特定する。strict監査未到達、AC-05未達。

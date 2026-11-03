@@ -102,6 +102,7 @@ export function summarizeWindowsFileTrace(traceOutput, canaryPath) {
   let nodeReadFileEvents = 0;
   let canaryFileNameEvents = 0;
   let canaryFileNameParentEvents = 0;
+  let canaryFileNameRootMatches = 0;
   let nodeReadFileCanaryFileNameEvents = 0;
   let nodeReadFileCanaryFileNameParentEvents = 0;
   const canaryFileNamePathKinds = { drive: 0, device: 0, unc: 0, other: 0 };
@@ -123,6 +124,9 @@ export function summarizeWindowsFileTrace(traceOutput, canaryPath) {
       canaryFileNameEvents += 1;
       const parentMatches = path.win32.dirname(eventPath) === canaryParentPath;
       if (parentMatches) canaryFileNameParentEvents += 1;
+      if (path.win32.parse(eventPath).root === path.win32.parse(normalizedCanaryPath).root) {
+        canaryFileNameRootMatches += 1;
+      }
       const eventParentSegments = path.win32.dirname(eventPath).split("\\").filter(Boolean);
       const expectedParentSegments = canaryParentPath.split("\\").filter(Boolean);
       let commonParentSuffixLength = 0;
@@ -198,6 +202,7 @@ export function summarizeWindowsFileTrace(traceOutput, canaryPath) {
     nodeReadFileEvents,
     canaryFileNameEvents,
     canaryFileNameParentEvents,
+    canaryFileNameRootMatches,
     nodeReadFileCanaryFileNameEvents,
     nodeReadFileCanaryFileNameParentEvents,
     canaryFileNamePathKinds,

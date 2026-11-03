@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { fork, spawn } from "node:child_process";
 import { access, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
-import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import {
@@ -26,7 +25,7 @@ const procmonPath = path.resolve(process.env.MAIL_CLIENT_PROCMON_PATH);
 let unfilteredCaptureProbeVerified = false;
 
 async function captureScenario(scenario) {
-  const temporaryDirectory = await mkdtemp(path.join(os.tmpdir(), "mail-client-file-audit-"));
+  const temporaryDirectory = await mkdtemp(path.join(root, ".mail-client-file-audit-"));
   const canaryPath = path.join(temporaryDirectory, `mc-${randomUUID().slice(0, 12)}.png`);
   const positiveControlPath = path.join(temporaryDirectory, `mc-control-${randomUUID().slice(0, 12)}.png`);
   const excludedPath = path.join(temporaryDirectory, `mc-excluded-${randomUUID().slice(0, 12)}.png`);
@@ -247,11 +246,11 @@ async function captureScenario(scenario) {
           processName.toLowerCase() === "node.exe" && operation === "ReadFile",
       );
       console.log(
-        `Windows audit ${scenario}: unfiltered-probe-list-items:${probeListCount};events:${summary.eventCount};control-path-events:${summary.canaryEvents.length};control-file-name-events:${summary.canaryFileNameEvents};control-file-name-parent-events:${summary.canaryFileNameParentEvents};control-file-name-path-kinds:${JSON.stringify(summary.canaryFileNamePathKinds)};control-file-name-parent-suffix-matches:${JSON.stringify(summary.canaryFileNameParentSuffixMatches)};node-events:${summary.nodeProcessEvents};node-readfile-events:${summary.nodeReadFileEvents};node-readfile-control-file-name-events:${summary.nodeReadFileCanaryFileNameEvents};node-readfile-control-file-name-parent-events:${summary.nodeReadFileCanaryFileNameParentEvents};pml-bytes:${backingStats.size};csv-bytes:${csvStats.size}`,
+        `Windows audit ${scenario}: unfiltered-probe-list-items:${probeListCount};events:${summary.eventCount};control-path-events:${summary.canaryEvents.length};control-file-name-events:${summary.canaryFileNameEvents};control-file-name-parent-events:${summary.canaryFileNameParentEvents};control-file-name-root-matches:${summary.canaryFileNameRootMatches};control-file-name-path-kinds:${JSON.stringify(summary.canaryFileNamePathKinds)};control-file-name-parent-suffix-matches:${JSON.stringify(summary.canaryFileNameParentSuffixMatches)};node-events:${summary.nodeProcessEvents};node-readfile-events:${summary.nodeReadFileEvents};node-readfile-control-file-name-events:${summary.nodeReadFileCanaryFileNameEvents};node-readfile-control-file-name-parent-events:${summary.nodeReadFileCanaryFileNameParentEvents};pml-bytes:${backingStats.size};csv-bytes:${csvStats.size}`,
       );
       assert(
         control.length > 0,
-        `Unfiltered Process Monitor probe did not record the Node positive-control ReadFile (events:${summary.eventCount};control-path-events:${summary.canaryEvents.length};control-file-name-events:${summary.canaryFileNameEvents};control-file-name-parent-events:${summary.canaryFileNameParentEvents};control-file-name-parent-suffix-matches:${JSON.stringify(summary.canaryFileNameParentSuffixMatches)};node-events:${summary.nodeProcessEvents};node-readfile-events:${summary.nodeReadFileEvents};node-readfile-control-file-name-events:${summary.nodeReadFileCanaryFileNameEvents};node-readfile-control-file-name-parent-events:${summary.nodeReadFileCanaryFileNameParentEvents})`,
+        `Unfiltered Process Monitor probe did not record the Node positive-control ReadFile (events:${summary.eventCount};control-path-events:${summary.canaryEvents.length};control-file-name-events:${summary.canaryFileNameEvents};control-file-name-parent-events:${summary.canaryFileNameParentEvents};control-file-name-root-matches:${summary.canaryFileNameRootMatches};control-file-name-parent-suffix-matches:${JSON.stringify(summary.canaryFileNameParentSuffixMatches)};node-events:${summary.nodeProcessEvents};node-readfile-events:${summary.nodeReadFileEvents};node-readfile-control-file-name-events:${summary.nodeReadFileCanaryFileNameEvents};node-readfile-control-file-name-parent-events:${summary.nodeReadFileCanaryFileNameParentEvents})`,
       );
     } finally {
       if (probe.pid && probe.exitCode === null && probe.signalCode === null) {
