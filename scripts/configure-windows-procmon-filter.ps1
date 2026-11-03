@@ -2337,9 +2337,9 @@ function Get-NativeMenuItemSnapshot(
 }
 
 function Write-ProcmonNativeMenuSummary(
-  [System.IntPtr]$MainWindowHandle,
+  [System.IntPtr[]]$WindowHandles,
   [System.Diagnostics.Process]$Process,
-  [ValidateSet("main", "focused-root")][string]$Source = "main"
+  [ValidateSet("main", "focused-root", "all-top-level")][string]$Source = "main"
 ) {
   $state = "ready"
   $menus = 0
@@ -2348,16 +2348,28 @@ function Write-ProcmonNativeMenuSummary(
   $filterMatches = 0
   $filterCommandMatches = 0
   $unreadableItems = 0
-  if ([ProcmonNativeMenu]::GetWindowProcessId($MainWindowHandle) -ne $Process.Id) {
-    $state = "owner-mismatch"
+  if ($null -eq $WindowHandles -or $WindowHandles.Length -gt 257) {
+    $state = "over-limit"
   } else {
-    $rootMenu = [ProcmonNativeMenu]::GetMenu($MainWindowHandle)
-    if ($rootMenu -eq [IntPtr]::Zero) {
+    $queue = [System.Collections.Generic.Queue[object]]::new()
+    $seenMenus = [System.Collections.Generic.HashSet[IntPtr]]::new()
+    foreach ($windowHandle in $WindowHandles) {
+      if ([IntPtr]$windowHandle -eq [IntPtr]::Zero) {
+        continue
+      }
+      if ([ProcmonNativeMenu]::GetWindowProcessId($windowHandle) -ne $Process.Id) {
+        $state = "owner-mismatch"
+        break
+      }
+      $rootMenu = [ProcmonNativeMenu]::GetMenu($windowHandle)
+      if ($rootMenu -ne [IntPtr]::Zero) {
+        $queue.Enqueue(@{ Handle = $rootMenu; Depth = 0 })
+      }
+    }
+    if ($state -eq "ready" -and $queue.Count -eq 0) {
       $state = "unavailable"
-    } else {
-      $queue = [System.Collections.Generic.Queue[object]]::new()
-      $seenMenus = [System.Collections.Generic.HashSet[IntPtr]]::new()
-      $queue.Enqueue(@{ Handle = $rootMenu; Depth = 0 })
+    }
+    if ($state -eq "ready") {
       while ($queue.Count -gt 0) {
         if ($menus -ge 32) {
           $state = "over-limit"
@@ -2435,6 +2447,10 @@ function Find-ProcmonNativeFilterDialog(
   [System.IntPtr]$MainWindowHandle
 ) {
   [IntPtr[]]$handles = [ProcmonNativeMenu]::GetProcessTopLevelWindows($Process.Id, 257)
+  Write-ProcmonNativeMenuSummary `
+    -WindowHandles $handles `
+    -Process $Process `
+    -Source "all-top-level"
   $windowCount = [Math]::Min($handles.Length, 256)
   $mainWindowCount = 0
   $otherWindowCount = 0
@@ -3253,7 +3269,10 @@ function Write-FocusOwnerObservation(
         $focusedWindowHandle $Process ([IntPtr]$MainWindow.Current.NativeWindowHandle)
       if ($nativeRoot -eq "procmon-other") {
         $rootHandle = [ProcmonNativeMenu]::GetAncestor($focusedWindowHandle, 2)
-        Write-ProcmonNativeMenuSummary $rootHandle $Process "focused-root"
+        Write-ProcmonNativeMenuSummary `
+          -WindowHandles ([IntPtr[]]@($rootHandle)) `
+          -Process $Process `
+          -Source "focused-root"
       }
     } catch {
       $reason = $_.Exception.GetType().Name
@@ -3325,7 +3344,9 @@ try {
   Set-VerifiedProcmonMainWindowForeground $main $process "MAIN"
   Set-Stage "find-filter-menu"
   Write-ProcmonNativeMenuSummary `
-    ([IntPtr]$main.Current.NativeWindowHandle) $process
+    -WindowHandles ([IntPtr[]]@([IntPtr]$main.Current.NativeWindowHandle)) `
+    -Process $process `
+    -Source "main"
   $filterMenuCondition = [System.Windows.Automation.AndCondition]::new(
     [System.Windows.Automation.PropertyCondition]::new(
       [System.Windows.Automation.AutomationElement]::NameProperty, "Filter"

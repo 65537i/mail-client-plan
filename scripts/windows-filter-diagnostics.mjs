@@ -240,7 +240,7 @@ export function describeWindowsFilterDiagnostics(output) {
   }
 
   for (const nativeMenu of output.matchAll(
-    /^PROC_MON_FILTER_NATIVE_MENU=source:(main|focused-root);state:(ready|partial|unavailable|owner-mismatch|read-failed|over-limit);menus:(\d{1,2});items:(\d{1,3});event:(\d{1,2});filter:(\d{1,2});filter-command:(\d{1,2});unreadable:(\d{1,3})\r?$/gm,
+    /^PROC_MON_FILTER_NATIVE_MENU=source:(main|focused-root|all-top-level);state:(ready|partial|unavailable|owner-mismatch|read-failed|over-limit);menus:(\d{1,2});items:(\d{1,3});event:(\d{1,2});filter:(\d{1,2});filter-command:(\d{1,2});unreadable:(\d{1,3})\r?$/gm,
   )) {
     const [, source, state, rawMenus, rawItems, rawEvents, rawFilters, rawCommands, rawUnreadable] = nativeMenu;
     const [menus, items, events, filters, commands, unreadable] = [
