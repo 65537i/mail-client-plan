@@ -1554,6 +1554,40 @@ function Wait-MainWindow([System.Diagnostics.Process]$Process, [int]$TimeoutSeco
   throw "Process Monitor did not expose its configuration window"
 }
 
+function Set-VerifiedProcmonMainWindowForeground(
+  [System.Windows.Automation.AutomationElement]$Window,
+  [System.Diagnostics.Process]$Process,
+  [ValidateSet("MAIN", "RELOAD_MAIN")][string]$DiagnosticName
+) {
+  $windowHandle = [IntPtr]$Window.Current.NativeWindowHandle
+  $foregroundGate = "failed"
+  if (
+    $Window.Current.ProcessId -eq $Process.Id -and
+    $windowHandle -ne [IntPtr]::Zero -and
+    [ProcmonNativeMenu]::GetWindowProcessId($windowHandle) -eq $Process.Id
+  ) {
+    [ProcmonNativeMenu]::SetForegroundWindow($windowHandle) | Out-Null
+    $foregroundDeadline = [DateTime]::UtcNow.AddSeconds(2)
+    do {
+      $foregroundHandle = [ProcmonNativeMenu]::GetForegroundWindow()
+      if (
+        $foregroundHandle -eq $windowHandle -and
+        [ProcmonNativeMenu]::GetWindowProcessId($foregroundHandle) -eq $Process.Id
+      ) {
+        $foregroundGate = "passed"
+        break
+      }
+      Start-Sleep -Milliseconds 50
+    } while ([DateTime]::UtcNow -lt $foregroundDeadline)
+  }
+  [Console]::Out.WriteLine(
+    "PROC_MON_FILTER_${DiagnosticName}_FOREGROUND=gate:$foregroundGate"
+  )
+  if ($foregroundGate -ne "passed") {
+    throw "Process Monitor $DiagnosticName window did not become the foreground window"
+  }
+}
+
 function Wait-ProcessMenu(
   [System.Diagnostics.Process]$Process,
   [int]$TimeoutSeconds = 5
@@ -2635,8 +2669,8 @@ try {
   }
   Set-Stage "find-main-window"
   $main = Wait-MainWindow $process
-  Set-Stage "focus-main-window"
-  $main.SetFocus()
+  Set-Stage "activate-main-window"
+  Set-VerifiedProcmonMainWindowForeground $main $process "MAIN"
   Set-Stage "find-filter-menu"
   $filterMenuCondition = [System.Windows.Automation.AndCondition]::new(
     [System.Windows.Automation.PropertyCondition]::new(
@@ -3244,31 +3278,8 @@ try {
   Set-Stage "find-reloaded-main-window"
   $main = Wait-MainWindow $process
   Set-Stage "activate-reloaded-main-window"
+  Set-VerifiedProcmonMainWindowForeground $main $process "RELOAD_MAIN"
   $mainWindowHandle = [IntPtr]$main.Current.NativeWindowHandle
-  $mainForegroundGate = "failed"
-  if (
-    $main.Current.ProcessId -eq $process.Id -and
-    $mainWindowHandle -ne [IntPtr]::Zero -and
-    [ProcmonNativeMenu]::GetWindowProcessId($mainWindowHandle) -eq $process.Id
-  ) {
-    [ProcmonNativeMenu]::SetForegroundWindow($mainWindowHandle) | Out-Null
-    $mainForegroundDeadline = [DateTime]::UtcNow.AddSeconds(2)
-    do {
-      $foregroundHandle = [ProcmonNativeMenu]::GetForegroundWindow()
-      if (
-        $foregroundHandle -eq $mainWindowHandle -and
-        [ProcmonNativeMenu]::GetWindowProcessId($foregroundHandle) -eq $process.Id
-      ) {
-        $mainForegroundGate = "passed"
-        break
-      }
-      Start-Sleep -Milliseconds 50
-    } while ([DateTime]::UtcNow -lt $mainForegroundDeadline)
-  }
-  [Console]::Out.WriteLine("PROC_MON_FILTER_RELOAD_MAIN_FOREGROUND=gate:$mainForegroundGate")
-  if ($mainForegroundGate -ne "passed") {
-    throw "Process Monitor reloaded main window did not become the foreground window"
-  }
   Set-Stage "verify-reloaded-filter-dialog-shortcut-foreground"
   $currentForegroundHandle = [ProcmonNativeMenu]::GetForegroundWindow()
   if ($currentForegroundHandle -ne $mainWindowHandle -or

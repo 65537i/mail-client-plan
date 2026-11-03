@@ -2,9 +2,9 @@
 
 ## 1. ワークフロー構成
 
-[Run 41601180416](https://github.com/65537i/mail-client-plan/actions/runs/41601180416)（Windows 2025 x64 / webview）でもstrict baselineはpositive-control `ReadFile` 1件・canary event 0件を通過。attack側のvolume preflight後、Procmon filter再設定が3回目も`find-main-window` / `InvalidOperationException`で停止し、attack capture未実施。AC-05未達。
+[Run 41602561655](https://github.com/65537i/mail-client-plan/actions/runs/41602561655)（Windows 2025 x64 / webview）ではstrict baseline gate通過後、attack用Procmon window取得後のUI Automation `SetFocus()`が`InvalidOperationException`で失敗し、attack未実施。初回とreload時のwindow activationを共通の厳格なforeground ownership verificationへ変更する。
 
-`find-main-window` stageはwindow取得と`SetFocus()`を含み、失敗箇所が不明瞭だったため`focus-main-window`を独立stageにする。現時点ではfocus時の例外が疑われるのみで、原因は未確定。
+[Run 41601180416](https://github.com/65537i/mail-client-plan/actions/runs/41601180416)（Windows 2025 x64 / webview）でもstrict baselineはpositive-control `ReadFile` 1件・canary event 0件を通過。attack側のvolume preflight後、Procmon filter再設定が3回目も`find-main-window` / `InvalidOperationException`で停止し、attack capture未実施。AC-05未達。
 
 [Run 41599783724](https://github.com/65537i/mail-client-plan/actions/runs/41599783724)（Windows 2025 x64 / webview）はRun 41598534727と同様にstrict baseline positive control / canary zero / WDIO gateを通過。attack側のProcmon再設定が再び`find-main-window` / `InvalidOperationException`で停止し、attack未実施。原因切り分けと両strict capture完了は未達、AC-05未達。
 

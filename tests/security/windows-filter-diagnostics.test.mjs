@@ -500,6 +500,14 @@ test("AC-05: configuration save observations expose states, not paths or dialog 
     "",
   );
   assert.equal(
+    describeWindowsFilterDiagnostics("PROC_MON_FILTER_MAIN_FOREGROUND=gate:passed"),
+    "; main-foreground-gate=passed",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics("PROC_MON_FILTER_MAIN_FOREGROUND=gate:C:\\private"),
+    "",
+  );
+  assert.equal(
     describeWindowsFilterDiagnostics("PROC_MON_FILTER_RELOAD_MAIN_FOREGROUND=gate:passed"),
     "; reload-main-foreground-gate=passed",
   );

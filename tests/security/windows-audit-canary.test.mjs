@@ -241,14 +241,27 @@ test("AC-05: live filter verification attaches to the capture PID and preserves 
   assert.match(driver, /if \(required\) \{\s*assert\.notEqual\(counts\[0\]\[1\], "unavailable"[\s\S]*Number\(counts\[0\]\[1\]\) > 0/);
 });
 
-test("AC-05: Procmon main-window discovery and focus failures have distinct stages", async () => {
+test("AC-05: Procmon main-window activation verifies its process-owned foreground handle", async () => {
   const configuration = await readFile(
     new URL("../../scripts/configure-windows-procmon-filter.ps1", import.meta.url),
     "utf8",
   );
+  const initialActivation = configuration.match(
+    /Set-Stage "find-main-window"[\s\S]*?Set-Stage "find-filter-menu"/,
+  )?.[0];
+  assert.ok(initialActivation, "Initial Procmon main-window activation flow is missing");
+  assert.match(
+    initialActivation,
+    /Set-Stage "find-main-window"\s+\$main = Wait-MainWindow \$process\s+Set-Stage "activate-main-window"\s+Set-VerifiedProcmonMainWindowForeground \$main \$process "MAIN"/,
+  );
   assert.match(
     configuration,
-    /Set-Stage "find-main-window"\s+\$main = Wait-MainWindow \$process\s+Set-Stage "focus-main-window"\s+\$main\.SetFocus\(\)/,
+    /function Set-VerifiedProcmonMainWindowForeground[\s\S]*\$Window\.Current\.ProcessId -eq \$Process\.Id[\s\S]*GetWindowProcessId\(\$windowHandle\) -eq \$Process\.Id[\s\S]*SetForegroundWindow\(\$windowHandle\)[\s\S]*\$foregroundHandle -eq \$windowHandle[\s\S]*GetWindowProcessId\(\$foregroundHandle\) -eq \$Process\.Id/,
+  );
+  assert.doesNotMatch(initialActivation, /\$main\.SetFocus\(\)/);
+  assert.match(
+    configuration,
+    /Set-Stage "activate-reloaded-main-window"\s+Set-VerifiedProcmonMainWindowForeground \$main \$process "RELOAD_MAIN"/,
   );
 });
 
