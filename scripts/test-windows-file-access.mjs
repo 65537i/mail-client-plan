@@ -50,6 +50,40 @@ async function captureScenario(scenario) {
     });
   }
 
+  async function resolveTargetVolumePath(targetPath) {
+    const resolver = spawn(
+      "powershell.exe",
+      [
+        "-STA", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+        "-File", path.join(root, "scripts", "inspect-windows-procmon-capture.ps1"),
+        "-ResolveTargetVolumeOnly", "-TargetPath", targetPath,
+      ],
+      { stdio: ["ignore", "pipe", "pipe"], windowsHide: true },
+    );
+    let output = "";
+    let overflow = false;
+    resolver.stdout.setEncoding("utf8");
+    resolver.stdout.on("data", (chunk) => {
+      overflow ||= output.length + chunk.length > 2048;
+      output = (output + chunk).slice(0, 2048);
+    });
+    resolver.stderr.resume();
+    const resolverExit = waitForProcess(resolver);
+    const result = await waitWithTimeout(resolverExit, 20_000);
+    if (result.timedOut) {
+      resolver.kill();
+      await resolverExit;
+      throw new Error("Process Monitor target-volume resolution timed out");
+    }
+    assert(
+      !result.error && result.code === 0 && !overflow,
+      "Process Monitor target-volume resolution failed",
+    );
+    const evidence = /^PROC_MON_TARGET_VOLUME_PATH=([A-Za-z]:\\(?:[A-Za-z0-9_.$ -]+\\)*)\r?\n?$/.exec(output);
+    assert(evidence, "Process Monitor target-volume resolution evidence is incomplete");
+    return evidence[1];
+  }
+
   async function readCaptureListCount(label, required = false, owner = capture, allowUnavailable = false) {
     assert(owner?.pid, `Process Monitor ${label} list inspection owner is unavailable`);
     function reportUnavailable(reason) {
@@ -278,6 +312,8 @@ async function captureScenario(scenario) {
     console.log(`Windows audit ${scenario}: canary flushed and closed UTC=${canaryCreatedAt}; bytes=${canaryStats.size}`);
     await writeFile(positiveControlPath, "Synthetic Process Monitor positive control.\n");
     await writeFile(excludedPath, "Synthetic Process Monitor filter negative control.\n");
+    const targetVolumePath = await resolveTargetVolumePath(canaryPath);
+    console.log(`Windows audit ${scenario}: target-volume-resolution=verified`);
     if (!unfilteredCaptureProbeVerified) {
       await verifyUnfilteredCaptureProbe();
       unfilteredCaptureProbeVerified = true;
@@ -429,7 +465,7 @@ async function captureScenario(scenario) {
       [
         "-STA", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
         "-File", path.join(root, "scripts", "inspect-windows-procmon-capture.ps1"),
-        "-OwnerProcessId", String(capture.pid), "-TargetPath", canaryPath,
+        "-OwnerProcessId", String(capture.pid), "-TargetVolumePath", targetVolumePath,
       ],
       { stdio: ["ignore", "pipe", "pipe"], windowsHide: true },
     );

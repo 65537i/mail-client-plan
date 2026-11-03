@@ -1,6 +1,8 @@
 param(
-  [Parameter(Mandatory = $true)][int]$OwnerProcessId,
+  [int]$OwnerProcessId,
   [string]$TargetPath,
+  [string]$TargetVolumePath,
+  [switch]$ResolveTargetVolumeOnly,
   [switch]$CountOnly
 )
 
@@ -553,8 +555,31 @@ function Get-ProcmonFilterManagerVolumeEvidence {
   return "candidates:$candidates;instances:$instances"
 }
 
+function Get-ProcmonVolumeName([string]$VolumePath) {
+  if ($VolumePath -isnot [string] -or $VolumePath.Length -gt 260 -or
+    -not $VolumePath.EndsWith("\")) {
+    throw "Procmon target-volume mount point is unsupported"
+  }
+  $volumeName = $VolumePath.TrimEnd('\')
+  if ($volumeName.Length -eq 0 -or
+    $volumeName -notmatch '^(?:[A-Za-z]:|[A-Za-z]:\\[A-Za-z0-9_.$ -]+(?:\\[A-Za-z0-9_.$ -]+)*)$') {
+    throw "Procmon target-volume mount point has an unsupported shape"
+  }
+  return $volumeName
+}
+
+function Resolve-ProcmonTargetVolumePath([string]$Path) {
+  if ($Path -isnot [string] -or $Path.Length -eq 0 -or $Path.Length -gt 2048 -or
+    -not [IO.Path]::IsPathRooted($Path) -or -not [IO.File]::Exists($Path)) {
+    throw "Procmon target-volume path is unavailable"
+  }
+  $volumePath = [ProcmonCaptureWindows]::GetVolumePathName([IO.Path]::GetFullPath($Path))
+  Get-ProcmonVolumeName $volumePath | Out-Null
+  return $volumePath
+}
+
 function Get-ProcmonFilterManagerSnapshot {
-  param([string]$Path)
+  param([string]$TargetVolumePath)
   $script:stage = "query-filter-manager-filter-inventory"
   $filterManagerPath = Join-Path $env:SystemRoot "System32\fltmc.exe"
   if (-not [IO.File]::Exists($filterManagerPath)) {
@@ -576,20 +601,7 @@ function Get-ProcmonFilterManagerSnapshot {
     throw "Procmon Filter Manager candidate inventory exceeded its limit"
   }
   $script:stage = "resolve-filter-manager-target-volume"
-  if ($Path -isnot [string] -or $Path.Length -eq 0 -or $Path.Length -gt 2048 -or
-    -not [IO.Path]::IsPathRooted($Path) -or -not [IO.File]::Exists($Path)) {
-    throw "Procmon target-volume path is unavailable"
-  }
-  $volumePath = [ProcmonCaptureWindows]::GetVolumePathName([IO.Path]::GetFullPath($Path))
-  if ($volumePath -isnot [string] -or $volumePath.Length -gt 260 -or
-    -not $volumePath.EndsWith("\")) {
-    throw "Procmon target-volume mount point is unsupported"
-  }
-  $volumeName = $volumePath.TrimEnd('\')
-  if ($volumeName.Length -eq 0 -or
-    $volumeName -notmatch '^(?:[A-Za-z]:|[A-Za-z]:\\[A-Za-z0-9_.$ -]+(?:\\[A-Za-z0-9_.$ -]+)*)$') {
-    throw "Procmon target-volume mount point has an unsupported shape"
-  }
+  $volumeName = Get-ProcmonVolumeName $TargetVolumePath
   $script:stage = "query-filter-manager-instance-command"
   $script:filterManagerInstanceQueryExitCode = $null
   $instanceLines = @(& $filterManagerPath instances -v $volumeName 2>$null)
@@ -797,6 +809,18 @@ public static class ProcmonCaptureWindows
 '@
   Add-Type -TypeDefinition $nativeCaptureType `
     -ReferencedAssemblies ([Accessibility.IAccessible].Assembly.Location)
+  if ($ResolveTargetVolumeOnly) {
+    $stage = "resolve-target-volume"
+    $volumePath = Resolve-ProcmonTargetVolumePath $TargetPath
+    [Console]::Out.WriteLine("PROC_MON_TARGET_VOLUME_PATH=$volumePath")
+    exit 0
+  }
+  if ($OwnerProcessId -lt 1 -or $OwnerProcessId -gt 2147483647) {
+    throw "Procmon capture process identifier is invalid"
+  }
+  if ($TargetVolumePath -isnot [string] -or $TargetVolumePath.Length -eq 0) {
+    throw "Procmon target-volume path is unavailable"
+  }
   $stage = "find-capture-window"
   $process = [System.Diagnostics.Process]::GetProcessById($OwnerProcessId)
   $handle = $process.MainWindowHandle
@@ -851,7 +875,7 @@ public static class ProcmonCaptureWindows
   [Console]::Out.WriteLine("PROC_MON_CAPTURE_SERVICE_STATUS=$serviceEvidence")
   $stage = "query-filter-manager-inventory"
   $stage = "query-filter-manager-volume-instances"
-  $filterManagerEvidence = Get-ProcmonFilterManagerSnapshot $TargetPath
+  $filterManagerEvidence = Get-ProcmonFilterManagerSnapshot $TargetVolumePath
   [Console]::Out.WriteLine("PROC_MON_CAPTURE_FILTER_MANAGER=$filterManagerEvidence")
   $stage = "inspect-capture-window"
   $visual = "unavailable"
