@@ -66,6 +66,7 @@ public static class ProcmonNativeMenu
     private const uint MFT_OWNERDRAW = 0x00000100;
     private const uint GUI_INMENUMODE = 0x00000004;
     private const uint GUI_POPUPMENUMODE = 0x00000010;
+    private const uint GA_ROOT = 2;
     private const int AccessibleMenuObjectId = -3;
     private const int AccessibleClientObjectId = -4;
     private const uint MaximumTextCharacters = 255;
@@ -151,6 +152,9 @@ public static class ProcmonNativeMenu
 
     [DllImport("user32.dll", ExactSpelling = true, SetLastError = true)]
     public static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll", ExactSpelling = true, SetLastError = true)]
+    public static extern IntPtr GetAncestor(IntPtr hWnd, uint gaFlags);
 
     [DllImport("user32.dll", ExactSpelling = true, SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
@@ -2972,9 +2976,13 @@ function Get-ProcmonFocusHandleClass(
   if ($Handle -eq [IntPtr]::Zero) {
     return "none"
   }
-  $ownerProcessId = [ProcmonNativeMenu]::GetWindowProcessId($Handle)
+  $rootHandle = [ProcmonNativeMenu]::GetAncestor($Handle, 2)
+  if ($rootHandle -eq [IntPtr]::Zero) {
+    return "unavailable"
+  }
+  $ownerProcessId = [ProcmonNativeMenu]::GetWindowProcessId($rootHandle)
   if ($ownerProcessId -eq $Process.Id) {
-    if ($Handle -eq $MainWindowHandle) {
+    if ($rootHandle -eq $MainWindowHandle) {
       return "procmon-main"
     }
     return "procmon-other"
