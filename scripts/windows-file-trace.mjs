@@ -93,6 +93,7 @@ export function summarizeWindowsFileTrace(traceOutput, canaryPath) {
 
   const normalizedCanaryPath = normalizeWindowsPath(canaryPath);
   const canaryFileName = path.win32.basename(normalizedCanaryPath);
+  const canaryParentPath = path.win32.dirname(normalizedCanaryPath);
   const canaryEvents = [];
   const canaryDiagnostics = [];
   const observedPaths = new Set();
@@ -100,7 +101,10 @@ export function summarizeWindowsFileTrace(traceOutput, canaryPath) {
   let nodeProcessEvents = 0;
   let nodeReadFileEvents = 0;
   let canaryFileNameEvents = 0;
+  let canaryFileNameParentEvents = 0;
   let nodeReadFileCanaryFileNameEvents = 0;
+  let nodeReadFileCanaryFileNameParentEvents = 0;
+  const canaryFileNamePathKinds = { drive: 0, device: 0, unc: 0, other: 0 };
 
   for (const fields of records) {
     assert.equal(fields.length, headers.length, "Process Monitor CSV row has an unexpected column count");
@@ -110,6 +114,23 @@ export function summarizeWindowsFileTrace(traceOutput, canaryPath) {
     const eventPath = normalizeWindowsPath(fields[pathColumn]);
     if (path.win32.basename(eventPath) === canaryFileName) {
       canaryFileNameEvents += 1;
+      const parentMatches = path.win32.dirname(eventPath) === canaryParentPath;
+      if (parentMatches) canaryFileNameParentEvents += 1;
+      const pathKind = /^\\\\/.test(eventPath)
+        ? "unc"
+        : /^\\device\\/i.test(eventPath)
+          ? "device"
+          : /^[a-z]:\\/i.test(eventPath)
+            ? "drive"
+            : "other";
+      canaryFileNamePathKinds[pathKind] += 1;
+      if (
+        processName.toLowerCase() === "node.exe" &&
+        operation === "ReadFile" &&
+        parentMatches
+      ) {
+        nodeReadFileCanaryFileNameParentEvents += 1;
+      }
     }
     if (processName.toLowerCase() === "node.exe") {
       nodeProcessEvents += 1;
@@ -148,7 +169,10 @@ export function summarizeWindowsFileTrace(traceOutput, canaryPath) {
     nodeProcessEvents,
     nodeReadFileEvents,
     canaryFileNameEvents,
+    canaryFileNameParentEvents,
     nodeReadFileCanaryFileNameEvents,
+    nodeReadFileCanaryFileNameParentEvents,
+    canaryFileNamePathKinds,
   };
 }
 
