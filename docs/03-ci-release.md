@@ -8,6 +8,8 @@
 
 [Run 41605740569](https://github.com/65537i/mail-client-plan/actions/runs/41605740569)（Windows 2025 x64 / webview）でCtrl+L fallbackがFilter dialogを開き、exact two rulesを設定。dialog適用後のmain-window foreground activationが`focus-main-for-drop-filtered-events`で失敗しattack未実施。modal dialog後にUIA main-window elementを再取得してから再試行する。AC-05未達。
 
+[Run 41607273404](https://github.com/65537i/mail-client-plan/actions/runs/41607273404)（Windows 2025 x64 / webview）でも再取得したProcmon windowのforeground activationが失敗。dialog後にroot UIA enumerationが別のowned windowを選ぶ可能性があるため、Process.MainWindowHandleを優先して返すようにする。AC-05未達。
+
 [Run 41601180416](https://github.com/65537i/mail-client-plan/actions/runs/41601180416)（Windows 2025 x64 / webview）でもstrict baselineはpositive-control `ReadFile` 1件・canary event 0件を通過。attack側のvolume preflight後、Procmon filter再設定が3回目も`find-main-window` / `InvalidOperationException`で停止し、attack capture未実施。AC-05未達。
 
 [Run 41599783724](https://github.com/65537i/mail-client-plan/actions/runs/41599783724)（Windows 2025 x64 / webview）はRun 41598534727と同様にstrict baseline positive control / canary zero / WDIO gateを通過。attack側のProcmon再設定が再び`find-main-window` / `InvalidOperationException`で停止し、attack未実施。原因切り分けと両strict capture完了は未達、AC-05未達。

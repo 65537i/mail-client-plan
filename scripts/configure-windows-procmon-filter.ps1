@@ -1501,6 +1501,17 @@ function Wait-MainWindow([System.Diagnostics.Process]$Process, [int]$TimeoutSeco
         $processExited = $true
         break
       }
+      $scanPhase = "read-main-window-handle"
+      $mainHandle = $Process.MainWindowHandle
+      $mainHandleAvailable = $mainHandle -ne [IntPtr]::Zero
+      if ($mainHandleAvailable) {
+        $scanPhase = "read-main-window-owner"
+        $mainWindow = [System.Windows.Automation.AutomationElement]::FromHandle($mainHandle)
+        if ($mainWindow.Current.ProcessId -eq $Process.Id) {
+          $windowFound = $true
+          return $mainWindow
+        }
+      }
       $scanPhase = "enumerate-uia-windows"
       $windows = [System.Windows.Automation.AutomationElement]::RootElement.FindAll(
         [System.Windows.Automation.TreeScope]::Children,
@@ -1513,17 +1524,6 @@ function Wait-MainWindow([System.Diagnostics.Process]$Process, [int]$TimeoutSeco
           $ownedWindowCount++
           $windowFound = $true
           return $window
-        }
-      }
-      $scanPhase = "read-main-window-handle"
-      $mainHandle = $Process.MainWindowHandle
-      $mainHandleAvailable = $mainHandle -ne [IntPtr]::Zero
-      if ($mainHandleAvailable) {
-        $scanPhase = "read-main-window-owner"
-        $mainWindow = [System.Windows.Automation.AutomationElement]::FromHandle($mainHandle)
-        if ($mainWindow.Current.ProcessId -eq $Process.Id) {
-          $windowFound = $true
-          return $mainWindow
         }
       }
       $scanPhase = "wait"

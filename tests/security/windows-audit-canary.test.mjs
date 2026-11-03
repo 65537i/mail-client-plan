@@ -246,6 +246,14 @@ test("AC-05: Procmon main-window activation verifies its process-owned foregroun
     new URL("../../scripts/configure-windows-procmon-filter.ps1", import.meta.url),
     "utf8",
   );
+  const mainWindowDiscovery = configuration.match(
+    /function Wait-MainWindow[\s\S]*?function Set-VerifiedProcmonMainWindowForeground/,
+  )?.[0];
+  assert.ok(mainWindowDiscovery, "Procmon main-window discovery helper is missing");
+  assert.match(
+    mainWindowDiscovery,
+    /\$mainHandle = \$Process\.MainWindowHandle[\s\S]*FromHandle\(\$mainHandle\)[\s\S]*\$mainWindow\.Current\.ProcessId -eq \$Process\.Id[\s\S]*return \$mainWindow[\s\S]*RootElement\.FindAll/,
+  );
   const initialActivation = configuration.match(
     /Set-Stage "find-main-window"[\s\S]*?Set-Stage "find-filter-menu"/,
   )?.[0];
