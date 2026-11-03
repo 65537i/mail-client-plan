@@ -2864,6 +2864,8 @@ try {
   )) 5
   $ok.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
 
+  Set-Stage "find-main-for-drop-filtered-events"
+  $main = Wait-MainWindow $process
   Set-Stage "focus-main-for-drop-filtered-events"
   Set-VerifiedProcmonMainWindowForeground $main $process "MAIN"
   Set-Stage "find-filter-menu-for-drop-filtered-events"
@@ -3101,6 +3103,8 @@ try {
 
   Set-Stage "save-filter"
   [System.Windows.Forms.SendKeys]::SendWait("{ESC}")
+  Set-Stage "find-main-before-export"
+  $main = Wait-MainWindow $process
   Set-Stage "activate-main-before-export"
   Set-VerifiedProcmonMainWindowForeground $main $process "MAIN"
   Set-Stage "open-file-menu-for-export"

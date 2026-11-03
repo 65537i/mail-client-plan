@@ -4,7 +4,9 @@
 
 [Run 41602561655](https://github.com/65537i/mail-client-plan/actions/runs/41602561655)（Windows 2025 x64 / webview）ではstrict baseline gate通過後、attack用Procmon window取得後のUI Automation `SetFocus()`が`InvalidOperationException`で失敗し、attack未実施。初回とreload時のwindow activationを共通の厳格なforeground ownership verificationへ変更する。
 
-[Run 41604101368](https://github.com/65537i/mail-client-plan/actions/runs/41604101368)（Windows 2025 x64 / webview）では初回・reload双方のforeground ownership gateが成功したが、attack側のUIA Invoke後にFilter menuが見えず`resolve-open-filter-menu`で停止。baseline strict gatesは成功、attack未実施。既検証のCtrl+L filter-dialog shortcutをforeground gate後のfallbackとして追加する。
+[Run 41604101368](https://github.com/65537i/mail-client-plan/actions/runs/41604101368)（Windows 2025 x64 / webview）では初回・reload双方のforeground ownership gateが成功したが、attack側のUIA Invoke後にFilter menuが見えず`resolve-open-filter-menu`で停止。baseline strict gatesは成功、attack未実施。
+
+[Run 41605740569](https://github.com/65537i/mail-client-plan/actions/runs/41605740569)（Windows 2025 x64 / webview）でCtrl+L fallbackがFilter dialogを開き、exact two rulesを設定。dialog適用後のmain-window foreground activationが`focus-main-for-drop-filtered-events`で失敗しattack未実施。modal dialog後にUIA main-window elementを再取得してから再試行する。AC-05未達。
 
 [Run 41601180416](https://github.com/65537i/mail-client-plan/actions/runs/41601180416)（Windows 2025 x64 / webview）でもstrict baselineはpositive-control `ReadFile` 1件・canary event 0件を通過。attack側のvolume preflight後、Procmon filter再設定が3回目も`find-main-window` / `InvalidOperationException`で停止し、attack capture未実施。AC-05未達。
 

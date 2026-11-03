@@ -261,11 +261,11 @@ test("AC-05: Procmon main-window activation verifies its process-owned foregroun
   assert.doesNotMatch(configuration, /\$main\.SetFocus\(\)/);
   assert.match(
     configuration,
-    /Set-Stage "focus-main-for-drop-filtered-events"\s+Set-VerifiedProcmonMainWindowForeground \$main \$process "MAIN"/,
+    /Set-Stage "find-main-for-drop-filtered-events"\s+\$main = Wait-MainWindow \$process\s+Set-Stage "focus-main-for-drop-filtered-events"\s+Set-VerifiedProcmonMainWindowForeground \$main \$process "MAIN"/,
   );
   assert.match(
     configuration,
-    /Set-Stage "activate-main-before-export"\s+Set-VerifiedProcmonMainWindowForeground \$main \$process "MAIN"/,
+    /Set-Stage "find-main-before-export"\s+\$main = Wait-MainWindow \$process\s+Set-Stage "activate-main-before-export"\s+Set-VerifiedProcmonMainWindowForeground \$main \$process "MAIN"/,
   );
   assert.match(
     configuration,
