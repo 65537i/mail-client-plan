@@ -2,6 +2,8 @@
 
 ## 1. ワークフロー構成
 
+[Run 41613665606](https://github.com/65537i/mail-client-plan/actions/runs/41613665606)（`ea55ec4`、Windows 2025 x64 / webview）はbaseline setupの`wait-filter-dialog-shortcut`で失敗し、strict capture未実施。bounded UIA evidenceではReset controlが`procmon-main` window hierarchy内にある一方、non-main owned windowは0件だった。Procmon PID、非zero HWND、Reset control、および3 ComboBox / 1 Editのlayout確認を保持し、MainWindowとは異なるUIA RuntimeIdを持つembedded Windowを候補として扱う。ローカルfocused tests 53/53とPowerShell parseは成功、Windows再実行待ち。AC-05未達。
+
 [Run 41602561655](https://github.com/65537i/mail-client-plan/actions/runs/41602561655)（Windows 2025 x64 / webview）ではstrict baseline gate通過後、attack用Procmon window取得後のUI Automation `SetFocus()`が`InvalidOperationException`で失敗し、attack未実施。初回とreload時のwindow activationを共通の厳格なforeground ownership verificationへ変更する。
 
 [Run 41604101368](https://github.com/65537i/mail-client-plan/actions/runs/41604101368)（Windows 2025 x64 / webview）では初回・reload双方のforeground ownership gateが成功したが、attack側のUIA Invoke後にFilter menuが見えず`resolve-open-filter-menu`で停止。baseline strict gatesは成功、attack未実施。

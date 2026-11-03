@@ -289,6 +289,10 @@ test("AC-05: Procmon main-window activation verifies its process-owned foregroun
   );
   assert.match(
     configuration,
+    /\$candidateRuntimeId = \$candidateWindow\.GetRuntimeId\(\) -join ","[\s\S]*\$mainRuntimeId = \$MainWindow\.GetRuntimeId\(\) -join ","[\s\S]*\$candidateState\.ProcessId -eq \$Process\.Id[\s\S]*\$candidateState\.NativeWindowHandle -ne 0 -and[\s\S]*\$candidateRuntimeId -cne \$mainRuntimeId[\s\S]*\$candidateCombos\.Count -ge 3[\s\S]*\$candidateEdits\.Count -ge 1/,
+  );
+  assert.match(
+    configuration,
     /if \(\$null -eq \$menu -or \$menu\.Current\.ProcessId -ne \$process\.Id\) \{\s+\$filterDialog = Open-FilterDialogByShortcut \$main \$process/,
   );
   assert.match(

@@ -1826,11 +1826,13 @@ function Wait-FilterDialog([System.Diagnostics.Process]$Process, [System.Windows
       $candidateWindow = $mainReset
       for ($level = 0; $null -ne $candidateWindow -and $level -lt 8; $level++) {
         $candidateState = $candidateWindow.Current
+        $candidateRuntimeId = $candidateWindow.GetRuntimeId() -join ","
+        $mainRuntimeId = $MainWindow.GetRuntimeId() -join ","
         if (
           $candidateState.ControlType -eq [System.Windows.Automation.ControlType]::Window -and
           $candidateState.ProcessId -eq $Process.Id -and
           $candidateState.NativeWindowHandle -ne 0 -and
-          $candidateState.NativeWindowHandle -ne $MainWindow.Current.NativeWindowHandle
+          $candidateRuntimeId -cne $mainRuntimeId
         ) {
           $candidateCombos = $candidateWindow.FindAll(
             [System.Windows.Automation.TreeScope]::Descendants,
