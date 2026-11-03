@@ -2,6 +2,8 @@
 
 ## 1. ワークフロー構成
 
+[Run 41633765048](https://github.com/65537i/mail-client-plan/actions/runs/41633765048)（`222959b`、Windows 2025 x64 / webview）はsecurity-test buildとNode 74/74、Windows audit setup / worker coordination、configuration export waitに成功したが、baseline `wait-filter-dialog-shortcut`で失敗しstrict capture未実施。native menu handleはunavailableでEvent / Filter command件数は0。Ctrl+L直後のGUIThreadInfo active / focusはともにmainだが、10秒後のfocused UIA WindowはProcmon別windowで、候補layoutはComboBox / Edit 0。次runはfocused UIA Windowに対応するnative rootのowner classだけを追加し、操作・strict gateを変更せず切り分ける。AC-05未達。
+
 [Run 41631861265](https://github.com/65537i/mail-client-plan/actions/runs/41631861265)（`53bfdbf`、Windows 2025 x64 / webview）はbaseline `wait-filter-dialog-shortcut`で停止し、strict capture未実施。GUIThreadInfoのactive/focusはshortcut前後とも`procmon-main`で、`GetAncestor(GA_ROOT)`によるfocus rootもmainだった。よって別top-level windowへfocusが移っている仮説は支持されない。UIA dialog candidateにResetはあるがComboBox / Editは0。unfiltered probeのpositive controlは成功したがstrict監査の証拠ではない。後続run向けにnative menuを深さ2・最大32 menus / 256 itemsで読み取り、Event / Filter / Filter... の件数だけを出す診断を追加した。操作やstrict gateは変更していない。ローカルfocused tests 58/58、PowerShell parse、`git diff --check`成功。Windows runtime未確認、AC-05未達。
 
 [Run 41630347505](https://github.com/65537i/mail-client-plan/actions/runs/41630347505)（`079993b`、Windows 2025 x64 / webview）はbaseline `wait-filter-dialog-shortcut`で停止し、strict capture未実施。GUIThreadInfoのactive/focus分類はshortcut前後とも`procmon-main` / `procmon-other`で変わらず、フォーカスが移動しなかった。focus HWNDがmain windowのchildか別root windowかは不明。unfiltered probeのpositive controlは成功したがstrict監査の証拠ではない。次runでは`GetAncestor(GA_ROOT)`でfocus HWNDのrootを分類する読み取り専用診断を追加する。入力操作とstrict gateは変更しない。AC-05未達。

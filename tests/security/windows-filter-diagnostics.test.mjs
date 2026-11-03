@@ -123,6 +123,20 @@ test("AC-05: Windows shortcut diagnostics retain only classified GUI focus owner
   );
 });
 
+test("AC-05: Windows focused-window diagnostics retain only native root ownership classes", () => {
+  const output = [
+    "PROC_MON_FILTER_FOCUS_NATIVE_ROOT=after-filter-dialog-shortcut;root:procmon-other",
+    "PROC_MON_FILTER_FOCUS_NATIVE_ROOT=after-command-invoke;root:procmon-main",
+    "PROC_MON_FILTER_FOCUS_NATIVE_ROOT=after-save-enter;root:procmon-other",
+    "PROC_MON_FILTER_FOCUS_NATIVE_ROOT=after-filter-dialog-shortcut;root:C:\\private",
+  ].join("\n");
+  assert.equal(
+    describeWindowsFilterDiagnostics(output),
+    "; focus-native-root-after-filter-dialog-shortcut=procmon-other"
+      + "; focus-native-root-after-command-invoke=procmon-main",
+  );
+});
+
 test("AC-05: Windows native menu diagnostics retain bounded command counts only", () => {
   const line = "PROC_MON_FILTER_NATIVE_MENU="
     + "state:ready;menus:3;items:18;event:1;filter:1;filter-command:1;unreadable:0";

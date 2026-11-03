@@ -882,6 +882,12 @@ export function describeWindowsFilterDiagnostics(output) {
     diagnostics.push(`focus-owner-${match[1]}=${match[2]}${reason}`);
   }
 
+  for (const match of output.matchAll(
+    /^PROC_MON_FILTER_FOCUS_NATIVE_ROOT=(after-command-invoke|after-filter-dialog-shortcut);root:(procmon-main|procmon-other|other-process|none|unavailable)\r?$/gm,
+  )) {
+    diagnostics.push(`focus-native-root-${match[1]}=${match[2]}`);
+  }
+
   const tree = output.match(/PROC_MON_FILTER_MENU_TREE=([A-Za-z:>]+)/)?.[1];
   if (tree) {
     const nodes = tree.split(">");

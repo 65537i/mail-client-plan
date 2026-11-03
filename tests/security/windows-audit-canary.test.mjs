@@ -297,6 +297,10 @@ test("AC-05: Procmon main-window activation verifies its process-owned foregroun
   );
   assert.match(
     configuration,
+    /function Write-FocusOwnerObservation[\s\S]*\$focusedWindowHandle = \[IntPtr\]\$focused\.Current\.NativeWindowHandle[\s\S]*Get-ProcmonFocusHandleClass[\s\S]*PROC_MON_FILTER_FOCUS_NATIVE_ROOT=\$Phase;root:\$nativeRoot/,
+  );
+  assert.match(
+    configuration,
     /ReadFocusSnapshot\(IntPtr window\)[\s\S]*GetGUIThreadInfo\(threadId, ref info\)[\s\S]*function Get-ProcmonFocusHandleClass[\s\S]*GetAncestor\(\$Handle, 2\)[\s\S]*GetWindowProcessId\(\$rootHandle\)[\s\S]*function Write-ShortcutGuiFocusObservation[\s\S]*ReadFocusSnapshot\(\$MainWindowHandle\)/,
   );
   assert.match(

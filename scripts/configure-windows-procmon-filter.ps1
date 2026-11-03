@@ -3027,7 +3027,9 @@ function Write-FocusOwnerObservation(
   [System.Windows.Automation.AutomationElement]$MainWindow
 ) {
   $owner = "unavailable"
+  $nativeRoot = "unavailable"
   $reason = $null
+  $focusedWindowHandle = [IntPtr]::Zero
   try {
     $focused = [System.Windows.Automation.AutomationElement]::FocusedElement
     $treeWalker = [System.Windows.Automation.TreeWalker]::ControlViewWalker
@@ -3040,6 +3042,7 @@ function Write-FocusOwnerObservation(
         } else {
           $owner = "procmon-other"
         }
+        $focusedWindowHandle = [IntPtr]$focused.Current.NativeWindowHandle
         break
       }
       $focused = $treeWalker.GetParent($focused)
@@ -3057,8 +3060,24 @@ function Write-FocusOwnerObservation(
       $reason = "Other"
     }
   }
+  if ($focusedWindowHandle -ne [IntPtr]::Zero) {
+    try {
+      $nativeRoot = Get-ProcmonFocusHandleClass `
+        $focusedWindowHandle $Process ([IntPtr]$MainWindow.Current.NativeWindowHandle)
+    } catch {
+      $reason = $_.Exception.GetType().Name
+      if ($reason -notin @(
+          "ElementNotAvailableException",
+          "InvalidOperationException",
+          "COMException"
+        )) {
+        $reason = "Other"
+      }
+    }
+  }
   $suffix = if ($null -eq $reason) { "" } else { ";reason:$reason" }
   [Console]::Out.WriteLine("PROC_MON_FILTER_FOCUS_OWNER=$Phase;owner:$owner$suffix")
+  [Console]::Out.WriteLine("PROC_MON_FILTER_FOCUS_NATIVE_ROOT=$Phase;root:$nativeRoot")
 }
 
 function Get-ProcmonFocusHandleClass(
