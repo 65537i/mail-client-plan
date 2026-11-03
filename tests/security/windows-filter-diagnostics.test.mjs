@@ -138,7 +138,7 @@ test("AC-05: Windows focused-window diagnostics retain only native root ownershi
 });
 
 test("AC-05: Windows native menu diagnostics retain bounded command counts only", () => {
-  const line = "PROC_MON_FILTER_NATIVE_MENU="
+  const line = "PROC_MON_FILTER_NATIVE_MENU=source:main;"
     + "state:ready;menus:3;items:18;event:1;filter:1;filter-command:1;unreadable:0";
   assert.equal(
     describeWindowsFilterDiagnostics(line),
@@ -151,6 +151,13 @@ test("AC-05: Windows native menu diagnostics retain bounded command counts only"
     ),
     "; filter-native-menu=state:partial;menus:3;items:18;event:1;filter:1;"
       + "filter-command:1;unreadable:1",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      line.replace("source:main", "source:focused-root"),
+    ),
+    "; filter-native-menu-focused-root=state:ready;menus:3;items:18;event:1;filter:1;"
+      + "filter-command:1;unreadable:0",
   );
   assert.equal(
     describeWindowsFilterDiagnostics(

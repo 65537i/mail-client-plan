@@ -2305,7 +2305,8 @@ function Get-NativeMenuItemSnapshot(
 
 function Write-ProcmonNativeMenuSummary(
   [System.IntPtr]$MainWindowHandle,
-  [System.Diagnostics.Process]$Process
+  [System.Diagnostics.Process]$Process,
+  [ValidateSet("main", "focused-root")][string]$Source = "main"
 ) {
   $state = "ready"
   $menus = 0
@@ -2392,7 +2393,7 @@ function Write-ProcmonNativeMenuSummary(
     }
   }
   [Console]::Out.WriteLine(
-    "PROC_MON_FILTER_NATIVE_MENU=state:$state;menus:$([Math]::Min($menus, 99));items:$([Math]::Min($items, 999));event:$([Math]::Min($eventMatches, 99));filter:$([Math]::Min($filterMatches, 99));filter-command:$([Math]::Min($filterCommandMatches, 99));unreadable:$([Math]::Min($unreadableItems, 999))"
+    "PROC_MON_FILTER_NATIVE_MENU=source:$Source;state:$state;menus:$([Math]::Min($menus, 99));items:$([Math]::Min($items, 999));event:$([Math]::Min($eventMatches, 99));filter:$([Math]::Min($filterMatches, 99));filter-command:$([Math]::Min($filterCommandMatches, 99));unreadable:$([Math]::Min($unreadableItems, 999))"
   )
 }
 
@@ -3064,6 +3065,10 @@ function Write-FocusOwnerObservation(
     try {
       $nativeRoot = Get-ProcmonFocusHandleClass `
         $focusedWindowHandle $Process ([IntPtr]$MainWindow.Current.NativeWindowHandle)
+      if ($nativeRoot -eq "procmon-other") {
+        $rootHandle = [ProcmonNativeMenu]::GetAncestor($focusedWindowHandle, 2)
+        Write-ProcmonNativeMenuSummary $rootHandle $Process "focused-root"
+      }
     } catch {
       $reason = $_.Exception.GetType().Name
       if ($reason -notin @(
