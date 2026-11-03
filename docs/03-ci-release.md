@@ -2,6 +2,8 @@
 
 ## 1. ワークフロー構成
 
+[Run 41554219735](https://github.com/65537i/mail-client-plan/actions/runs/41554219735)（`f3f9978`、Windows 2025 x64 / webview）はsecurity-test build / setup / configuration exportを通過。probe live list inspectionはnonzeroだったため`unavailable`として継続し、一時PML 28,533,140 bytes / CSV 8,178,893 bytesから44,416 events、Node events 1,486 / `ReadFile` 11を集計した。期待するcontrol exact path eventは0。capture/export全体は動作するが、期待pathとの一致は確認できず、strict監査は未到達。pathはログに含めず、次はcontrolのbasename一致数を追加してalias / path mismatchの可能性を区別する。
+
 [Run 41552786078](https://github.com/65537i/mail-client-plan/actions/runs/41552786078)（`0037067`、Windows 2025 x64 / webview）はsecurity-test buildとaudit setup / worker coordinationを通過したが、`/NoFilter` probeのNode positive control後、任意のlive list inspectionがnonzero終了しCSV export前に停止した。これはprobe capture結果を判定できる証拠ではない。次はlist inspection失敗を明示的unavailableとして記録し、bounded PML / CSV export集計まで継続する。
 
 [Run 41541551636](https://github.com/65537i/mail-client-plan/actions/runs/41541551636)（`f1fa981`、Windows 2025 x64 / webview）はsecurity-test build、Windows audit setup / worker coordination、configuration exportを通過したが、strict exact-path監査前の一時`/NoFilter` capture probeもNode positive-control `ReadFile`をexport CSVで検出できず停止した。これはPMC exact-path条件だけでは説明できないが、probe時点ではPML / CSV event総数やProcmon live list件数を出しておらず、capture不作動・export・path解析のどこで欠落するか未特定。次回はlive list countと、pathを含まないCSV event / Node / control-path集計を出し、別々の証拠として比較する。probe結果はAC-05証拠にせず、strict gateとAC-05未達を維持する。

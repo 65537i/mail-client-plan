@@ -167,6 +167,8 @@ test("AC-05: canary diagnostics expose only bounded allowlisted metadata", () =>
   assert.equal(summary.eventCount, 12);
   assert.equal(summary.nodeProcessEvents, 0);
   assert.equal(summary.nodeReadFileEvents, 0);
+  assert.equal(summary.canaryFileNameEvents, 12);
+  assert.equal(summary.nodeReadFileCanaryFileNameEvents, 0);
   assert.equal(summary.canaryDiagnostics.length, 10);
   assert.deepEqual(summary.canaryDiagnostics[0], {
     time: "10:02:03.1234567",
@@ -193,6 +195,17 @@ test("AC-05: trace summary counts Node ReadFile events", () => {
   assert.equal(summary.canaryEvents.length, 1);
   assert.equal(summary.nodeProcessEvents, 2);
   assert.equal(summary.nodeReadFileEvents, 2);
+  assert.equal(summary.canaryFileNameEvents, 1);
+  assert.equal(summary.nodeReadFileCanaryFileNameEvents, 1);
+});
+
+test("AC-05: trace summary diagnoses matching filenames without treating them as exact paths", () => {
+  const aliasEvent =
+    '"10:00:00.0000001","node.exe","100","ReadFile","C:\\other\\mc-control.png","SUCCESS",""\r\n';
+  const summary = summarizeWindowsFileTrace(header + aliasEvent, controlPath);
+  assert.equal(summary.canaryEvents.length, 0);
+  assert.equal(summary.canaryFileNameEvents, 1);
+  assert.equal(summary.nodeReadFileCanaryFileNameEvents, 1);
 });
 
 test("AC-05: malformed rows fail rather than hiding canary events", () => {

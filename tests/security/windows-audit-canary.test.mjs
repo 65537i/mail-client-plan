@@ -238,7 +238,7 @@ test("AC-05: unfiltered probe stays separate from strict capture and exported pa
   assert.match(source, /async function verifyUnfilteredCaptureProbe\(\)[\s\S]*"\/NoFilter"[\s\S]*readCaptureListCount\("unfiltered-probe", false, probe, true\)/);
   assert.match(source, /function reportUnavailable\(reason\)[\s\S]*if \(!allowUnavailable\)[\s\S]*inspection=\$\{reason\}/);
   assert.match(source, /backingStats\.size <= 64 \* 1024 \* 1024[\s\S]*csvStats\.size <= 64 \* 1024 \* 1024/);
-  assert.match(source, /events:\$\{summary\.eventCount\}[\s\S]*Unfiltered Process Monitor probe did not record the Node positive-control ReadFile/);
+  assert.match(source, /events:\$\{summary\.eventCount\}[\s\S]*node-readfile-control-file-name-events:\$\{summary\.nodeReadFileCanaryFileNameEvents\}[\s\S]*Unfiltered Process Monitor probe did not record the Node positive-control ReadFile/);
   assert.match(source, /if \(!unfilteredCaptureProbeVerified\) \{\s*await verifyUnfilteredCaptureProbe\(\);\s*unfilteredCaptureProbeVerified = true;\s*\}[\s\S]*"\/LoadConfig",\s*filterConfig,\s*"\/BackingFile",\s*backingFile/);
   assert.match(source, /\["\/AcceptEula", "\/Quiet", "\/NoFilter", "\/OpenLog", backingFile, "\/SaveAs", csvFile\]/);
   assert.match(source, /capture = spawn\([\s\S]*"\/LoadConfig",\s*filterConfig,\s*"\/BackingFile",\s*backingFile/);

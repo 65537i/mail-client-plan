@@ -247,11 +247,11 @@ async function captureScenario(scenario) {
           processName.toLowerCase() === "node.exe" && operation === "ReadFile",
       );
       console.log(
-        `Windows audit ${scenario}: unfiltered-probe-list-items:${probeListCount};events:${summary.eventCount};control-path-events:${summary.canaryEvents.length};node-events:${summary.nodeProcessEvents};node-readfile-events:${summary.nodeReadFileEvents};pml-bytes:${backingStats.size};csv-bytes:${csvStats.size}`,
+        `Windows audit ${scenario}: unfiltered-probe-list-items:${probeListCount};events:${summary.eventCount};control-path-events:${summary.canaryEvents.length};control-file-name-events:${summary.canaryFileNameEvents};node-events:${summary.nodeProcessEvents};node-readfile-events:${summary.nodeReadFileEvents};node-readfile-control-file-name-events:${summary.nodeReadFileCanaryFileNameEvents};pml-bytes:${backingStats.size};csv-bytes:${csvStats.size}`,
       );
       assert(
         control.length > 0,
-        `Unfiltered Process Monitor probe did not record the Node positive-control ReadFile (events:${summary.eventCount};control-path-events:${summary.canaryEvents.length};node-events:${summary.nodeProcessEvents};node-readfile-events:${summary.nodeReadFileEvents})`,
+        `Unfiltered Process Monitor probe did not record the Node positive-control ReadFile (events:${summary.eventCount};control-path-events:${summary.canaryEvents.length};control-file-name-events:${summary.canaryFileNameEvents};node-events:${summary.nodeProcessEvents};node-readfile-events:${summary.nodeReadFileEvents};node-readfile-control-file-name-events:${summary.nodeReadFileCanaryFileNameEvents})`,
       );
     } finally {
       if (probe.pid && probe.exitCode === null && probe.signalCode === null) {

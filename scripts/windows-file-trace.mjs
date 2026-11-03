@@ -92,23 +92,34 @@ export function summarizeWindowsFileTrace(traceOutput, canaryPath) {
   );
 
   const normalizedCanaryPath = normalizeWindowsPath(canaryPath);
+  const canaryFileName = path.win32.basename(normalizedCanaryPath);
   const canaryEvents = [];
   const canaryDiagnostics = [];
   const observedPaths = new Set();
   let eventCount = 0;
   let nodeProcessEvents = 0;
   let nodeReadFileEvents = 0;
+  let canaryFileNameEvents = 0;
+  let nodeReadFileCanaryFileNameEvents = 0;
 
   for (const fields of records) {
     assert.equal(fields.length, headers.length, "Process Monitor CSV row has an unexpected column count");
     const processName = fields[processColumn].trim();
     const operation = fields[operationColumn].trim();
     eventCount += 1;
+    const eventPath = normalizeWindowsPath(fields[pathColumn]);
+    if (path.win32.basename(eventPath) === canaryFileName) {
+      canaryFileNameEvents += 1;
+    }
     if (processName.toLowerCase() === "node.exe") {
       nodeProcessEvents += 1;
-      if (operation === "ReadFile") nodeReadFileEvents += 1;
+      if (operation === "ReadFile") {
+        nodeReadFileEvents += 1;
+        if (path.win32.basename(eventPath) === canaryFileName) {
+          nodeReadFileCanaryFileNameEvents += 1;
+        }
+      }
     }
-    const eventPath = normalizeWindowsPath(fields[pathColumn]);
     if (eventPath) observedPaths.add(eventPath);
     if (eventPath === normalizedCanaryPath) {
       canaryEvents.push({
@@ -136,6 +147,8 @@ export function summarizeWindowsFileTrace(traceOutput, canaryPath) {
     eventCount,
     nodeProcessEvents,
     nodeReadFileEvents,
+    canaryFileNameEvents,
+    nodeReadFileCanaryFileNameEvents,
   };
 }
 
