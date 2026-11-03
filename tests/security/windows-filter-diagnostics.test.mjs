@@ -81,6 +81,15 @@ test("AC-05: Windows filter diagnostics identify focused-window dialog discovery
   );
 });
 
+test("AC-05: Windows filter diagnostics identify native top-level dialog discovery", () => {
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_DIALOG_DISCOVERY=native-top-level-window",
+    ),
+    "; filter-dialog-discovery=native-top-level-window",
+  );
+});
+
 test("AC-05: Windows filter diagnostics retain bounded focused-window ownership and layout counts", () => {
   const scan = "PROC_MON_FILTER_DIALOG_FOCUS_SCAN="
     + "windows:2;owned:2;handled:2;native-owned:2;distinct-runtime-id:1;"
@@ -192,6 +201,30 @@ test("AC-05: Windows native window diagnostics retain consistent bounded counts"
   );
   assert.equal(
     describeWindowsFilterDiagnostics(`${line};handle=0x1234`),
+    "",
+  );
+});
+
+test("AC-05: Windows native window UIA diagnostics require consistent bounded counts", () => {
+  const line = "PROC_MON_FILTER_NATIVE_WINDOW_UIA="
+    + "visible-other:2;inspected:2;owned:2;distinct-runtime-id:2;reset:1;"
+    + "max-combos:0;max-edits:0;read-failures:0;truncated:false";
+  assert.equal(
+    describeWindowsFilterDiagnostics(line),
+    "; filter-native-window-uia=visible-other:2;inspected:2;owned:2;"
+      + "distinct-runtime-id:2;reset:1;max-combos:0;max-edits:0;"
+      + "read-failures:0;truncated:false",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(line.replace("owned:2", "owned:3")),
+    "",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(line.replace("max-combos:0", "max-combos:1000")),
+    "",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(`${line};hwnd=0x100`),
     "",
   );
 });

@@ -268,7 +268,7 @@ test("AC-05: Procmon main-window activation verifies its process-owned foregroun
   );
   assert.match(
     configuration,
-    /EnumWindows\(EnumWindowsProc callback, IntPtr lParam\)[\s\S]*GetProcessTopLevelWindows\(int processId, int maximum\)[\s\S]*maximum > 257[\s\S]*function Write-ProcmonNativeWindowSummary[\s\S]*GetProcessTopLevelWindows\(\$Process\.Id, 257\)[\s\S]*\$windowCount = \[Math\]::Min\(\$handles\.Length, 256\)[\s\S]*PROC_MON_FILTER_NATIVE_WINDOWS=/,
+    /EnumWindows\(EnumWindowsProc callback, IntPtr lParam\)[\s\S]*GetProcessTopLevelWindows\(int processId, int maximum\)[\s\S]*maximum > 257[\s\S]*function Find-ProcmonNativeFilterDialog[\s\S]*GetProcessTopLevelWindows\(\$Process\.Id, 257\)[\s\S]*\$windowCount = \[Math\]::Min\(\$handles\.Length, 256\)[\s\S]*IsWindowVisible\(\$handle\)[\s\S]*candidateState\.ControlType -ne \[System\.Windows\.Automation\.ControlType\]::Window[\s\S]*candidateState\.ProcessId -ne \$Process\.Id[\s\S]*\[IntPtr\]\(\$candidateState\.NativeWindowHandle\) -ne \$handle[\s\S]*candidateState\.IsEnabled[\s\S]*candidateState\.IsOffscreen[\s\S]*distinctRuntimeId -and[\s\S]*\$combos\.Count -ge 3[\s\S]*\$edits\.Count -ge 1[\s\S]*PROC_MON_FILTER_DIALOG_DISCOVERY=native-top-level-window[\s\S]*PROC_MON_FILTER_NATIVE_WINDOW_UIA=/,
   );
   assert.match(
     initialActivation,

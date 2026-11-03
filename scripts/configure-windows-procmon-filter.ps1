@@ -2146,8 +2146,11 @@ function Wait-FilterDialog([System.Diagnostics.Process]$Process, [System.Windows
   if ($desktopResetTree.Count -gt 0) {
     [Console]::Out.WriteLine("PROC_MON_FILTER_DIALOG_RESET_TREE=$($desktopResetTree -join '>')")
   }
-  Write-ProcmonNativeWindowSummary `
+  $nativeFilterDialog = Find-ProcmonNativeFilterDialog `
     $Process ([IntPtr]$MainWindow.Current.NativeWindowHandle)
+  if ($null -ne $nativeFilterDialog) {
+    return $nativeFilterDialog
+  }
   throw "Process Monitor filter dialog did not expose its Reset control"
 }
 
@@ -2427,7 +2430,7 @@ function Write-ProcmonNativeMenuSummary(
   )
 }
 
-function Write-ProcmonNativeWindowSummary(
+function Find-ProcmonNativeFilterDialog(
   [System.Diagnostics.Process]$Process,
   [System.IntPtr]$MainWindowHandle
 ) {
@@ -2438,6 +2441,43 @@ function Write-ProcmonNativeWindowSummary(
   $visibleWindowCount = 0
   $menuHandleCount = 0
   $truncated = $handles.Length -gt 256
+  $visibleOtherCount = 0
+  $inspectedCount = 0
+  $ownedCount = 0
+  $distinctRuntimeIdCount = 0
+  $resetCount = 0
+  $maxComboCount = 0
+  $maxEditCount = 0
+  $readFailureCount = 0
+  $resetCondition = [System.Windows.Automation.PropertyCondition]::new(
+    [System.Windows.Automation.AutomationElement]::NameProperty,
+    "Reset"
+  )
+  $comboCondition = [System.Windows.Automation.PropertyCondition]::new(
+    [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+    [System.Windows.Automation.ControlType]::ComboBox
+  )
+  $editCondition = [System.Windows.Automation.PropertyCondition]::new(
+    [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+    [System.Windows.Automation.ControlType]::Edit
+  )
+  $mainRuntimeId = $null
+  try {
+    $mainWindowElement = [System.Windows.Automation.AutomationElement]::FromHandle(
+      $MainWindowHandle
+    )
+    $mainRuntimeId = $mainWindowElement.GetRuntimeId() -join ","
+  } catch {
+    $failureType = $_.Exception.GetType().Name
+    if ($failureType -notin @(
+        "ElementNotAvailableException",
+        "InvalidOperationException",
+        "COMException"
+      )) {
+      throw
+    }
+    $readFailureCount++
+  }
   for ($index = 0; $index -lt $windowCount; $index++) {
     $handle = [IntPtr]$handles[$index]
     if ($handle -eq $MainWindowHandle) {
@@ -2451,10 +2491,96 @@ function Write-ProcmonNativeWindowSummary(
     if ([ProcmonNativeMenu]::GetMenu($handle) -ne [IntPtr]::Zero) {
       $menuHandleCount++
     }
+    if (
+      $handle -eq $MainWindowHandle -or
+      -not [ProcmonNativeMenu]::IsWindowVisible($handle)
+    ) {
+      continue
+    }
+    $visibleOtherCount++
+    if ([ProcmonNativeMenu]::GetWindowProcessId($handle) -ne $Process.Id) {
+      continue
+    }
+    $inspectedCount++
+    try {
+      $candidateWindow = [System.Windows.Automation.AutomationElement]::FromHandle($handle)
+      if ($null -eq $candidateWindow) {
+        $readFailureCount++
+        continue
+      }
+      $candidateState = $candidateWindow.Current
+      if (
+        $candidateState.ControlType -ne [System.Windows.Automation.ControlType]::Window -or
+        $candidateState.ProcessId -ne $Process.Id -or
+        [IntPtr]($candidateState.NativeWindowHandle) -ne $handle -or
+        -not $candidateState.IsEnabled -or
+        $candidateState.IsOffscreen
+      ) {
+        continue
+      }
+      $ownedCount++
+      $candidateRuntimeId = $candidateWindow.GetRuntimeId() -join ","
+      $distinctRuntimeId = (
+        $null -ne $mainRuntimeId -and
+        $candidateRuntimeId -cne $mainRuntimeId
+      )
+      if ($distinctRuntimeId) {
+        $distinctRuntimeIdCount++
+      }
+      $combos = $candidateWindow.FindAll(
+        [System.Windows.Automation.TreeScope]::Descendants,
+        $comboCondition
+      )
+      $edits = $candidateWindow.FindAll(
+        [System.Windows.Automation.TreeScope]::Descendants,
+        $editCondition
+      )
+      $maxComboCount = [Math]::Max($maxComboCount, $combos.Count)
+      $maxEditCount = [Math]::Max($maxEditCount, $edits.Count)
+      $reset = $candidateWindow.FindFirst(
+        [System.Windows.Automation.TreeScope]::Descendants,
+        $resetCondition
+      )
+      if ($null -ne $reset) {
+        $resetCount++
+      }
+      if (
+        $distinctRuntimeId -and
+        $null -ne $reset -and
+        $combos.Count -ge 3 -and
+        $edits.Count -ge 1
+      ) {
+        [Console]::Out.WriteLine(
+          "PROC_MON_FILTER_NATIVE_WINDOWS=state:ready;windows:$windowCount;main:$mainWindowCount;other:$otherWindowCount;visible:$visibleWindowCount;menus:$menuHandleCount;truncated:$($truncated.ToString().ToLowerInvariant())"
+        )
+        [Console]::Out.WriteLine(
+          "PROC_MON_FILTER_NATIVE_WINDOW_UIA=visible-other:$visibleOtherCount;inspected:$inspectedCount;owned:$ownedCount;distinct-runtime-id:$distinctRuntimeIdCount;reset:$resetCount;max-combos:$maxComboCount;max-edits:$maxEditCount;read-failures:$readFailureCount;truncated:$($truncated.ToString().ToLowerInvariant())"
+        )
+        [Console]::Out.WriteLine("PROC_MON_FILTER_DIALOG_DISCOVERY=native-top-level-window")
+        [Console]::Out.WriteLine(
+          "PROC_MON_FILTER_DIALOG_LAYOUT=combos:$($combos.Count);edits:$($edits.Count)"
+        )
+        return $candidateWindow
+      }
+    } catch {
+      $failureType = $_.Exception.GetType().Name
+      if ($failureType -notin @(
+          "ElementNotAvailableException",
+          "InvalidOperationException",
+          "COMException"
+        )) {
+        throw
+      }
+      $readFailureCount++
+    }
   }
   [Console]::Out.WriteLine(
     "PROC_MON_FILTER_NATIVE_WINDOWS=state:ready;windows:$windowCount;main:$mainWindowCount;other:$otherWindowCount;visible:$visibleWindowCount;menus:$menuHandleCount;truncated:$($truncated.ToString().ToLowerInvariant())"
   )
+  [Console]::Out.WriteLine(
+    "PROC_MON_FILTER_NATIVE_WINDOW_UIA=visible-other:$visibleOtherCount;inspected:$inspectedCount;owned:$ownedCount;distinct-runtime-id:$distinctRuntimeIdCount;reset:$resetCount;max-combos:$maxComboCount;max-edits:$maxEditCount;read-failures:$readFailureCount;truncated:$($truncated.ToString().ToLowerInvariant())"
+  )
+  return $null
 }
 
 function Read-ReloadedFilterPopupState(

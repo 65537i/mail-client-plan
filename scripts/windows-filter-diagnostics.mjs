@@ -195,6 +195,37 @@ export function describeWindowsFilterDiagnostics(output) {
     }
   }
 
+  const nativeWindowUi = output.match(
+    /^PROC_MON_FILTER_NATIVE_WINDOW_UIA=visible-other:(\d{1,3});inspected:(\d{1,3});owned:(\d{1,3});distinct-runtime-id:(\d{1,3});reset:(\d{1,3});max-combos:(\d{1,3});max-edits:(\d{1,3});read-failures:(\d{1,3});truncated:(true|false)\r?$/m,
+  );
+  if (nativeWindowUi) {
+    const [, rawVisible, rawInspected, rawOwned, rawDistinct, rawReset, rawCombos, rawEdits, rawFailures, truncated] = nativeWindowUi;
+    const [visible, inspected, owned, distinct, reset, combos, edits, failures] = [
+      rawVisible,
+      rawInspected,
+      rawOwned,
+      rawDistinct,
+      rawReset,
+      rawCombos,
+      rawEdits,
+      rawFailures,
+    ].map(Number);
+    if (
+      visible <= 256
+      && inspected <= visible
+      && owned <= inspected
+      && distinct <= owned
+      && reset <= owned
+      && combos <= 999
+      && edits <= 999
+      && failures <= inspected + 1
+    ) {
+      diagnostics.push(
+        `filter-native-window-uia=visible-other:${visible};inspected:${inspected};owned:${owned};distinct-runtime-id:${distinct};reset:${reset};max-combos:${combos};max-edits:${edits};read-failures:${failures};truncated:${truncated}`,
+      );
+    }
+  }
+
   const mainWindowSelection = output.match(
     /^PROC_MON_FILTER_MAIN_WINDOW=selection:(filter-menu-root|main-handle-root|from-handle|first-owned);root-windows:(\d{1,4});uia-owned-windows:(\d{1,4});main-handle:(available|unavailable);filter-menu:(present|absent)\r?$/m,
   );
@@ -719,7 +750,7 @@ export function describeWindowsFilterDiagnostics(output) {
   }
 
   const dialogDiscovery = output.match(
-    /^PROC_MON_FILTER_DIALOG_DISCOVERY=(embedded-window|focused-window)\r?$/m,
+    /^PROC_MON_FILTER_DIALOG_DISCOVERY=(embedded-window|focused-window|native-top-level-window)\r?$/m,
   )?.[1];
   if (dialogDiscovery) {
     diagnostics.push(`filter-dialog-discovery=${dialogDiscovery}`);
