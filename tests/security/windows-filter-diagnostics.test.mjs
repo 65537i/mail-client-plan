@@ -123,6 +123,33 @@ test("AC-05: Windows shortcut diagnostics retain only classified GUI focus owner
   );
 });
 
+test("AC-05: Windows native menu diagnostics retain bounded command counts only", () => {
+  const line = "PROC_MON_FILTER_NATIVE_MENU="
+    + "state:ready;menus:3;items:18;event:1;filter:1;filter-command:1;unreadable:0";
+  assert.equal(
+    describeWindowsFilterDiagnostics(line),
+    "; filter-native-menu=state:ready;menus:3;items:18;event:1;filter:1;"
+      + "filter-command:1;unreadable:0",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      line.replace("state:ready", "state:partial").replace("unreadable:0", "unreadable:1"),
+    ),
+    "; filter-native-menu=state:partial;menus:3;items:18;event:1;filter:1;"
+      + "filter-command:1;unreadable:1",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      line.replace("items:18", "items:257"),
+    ),
+    "",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(`${line};name=C:\\private`),
+    "",
+  );
+});
+
 test("AC-05: Windows filter diagnostics omit arbitrary names and exception details", () => {
   const output = [
     "PROC_MON_FILTER_MENU_STATE=enabled:yes;offscreen:false;keyboard-focusable:true",

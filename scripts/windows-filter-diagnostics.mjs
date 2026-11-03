@@ -208,6 +208,35 @@ export function describeWindowsFilterDiagnostics(output) {
     );
   }
 
+  const nativeMenu = output.match(
+    /^PROC_MON_FILTER_NATIVE_MENU=state:(ready|partial|unavailable|owner-mismatch|read-failed|over-limit);menus:(\d{1,2});items:(\d{1,3});event:(\d{1,2});filter:(\d{1,2});filter-command:(\d{1,2});unreadable:(\d{1,3})\r?$/m,
+  );
+  if (nativeMenu) {
+    const [, state, rawMenus, rawItems, rawEvents, rawFilters, rawCommands, rawUnreadable] = nativeMenu;
+    const [menus, items, events, filters, commands, unreadable] = [
+      rawMenus,
+      rawItems,
+      rawEvents,
+      rawFilters,
+      rawCommands,
+      rawUnreadable,
+    ].map(Number);
+    if (
+      menus <= 32
+      && items <= 256
+      && events <= items
+      && filters <= items
+      && commands <= items
+      && unreadable <= items
+      && (state !== "ready" || unreadable === 0)
+      && (state !== "partial" || unreadable > 0)
+    ) {
+      diagnostics.push(
+        `filter-native-menu=state:${state};menus:${menus};items:${items};event:${events};filter:${filters};filter-command:${commands};unreadable:${unreadable}`,
+      );
+    }
+  }
+
   if (/^PROC_MON_FILTER_MENU_OPEN_FALLBACK=filter-dialog-shortcut\r?$/m.test(output)) {
     diagnostics.push("filter-menu-open-fallback=filter-dialog-shortcut");
   }

@@ -255,12 +255,20 @@ test("AC-05: Procmon main-window activation verifies its process-owned foregroun
     /\$mainHandle = \$Process\.MainWindowHandle[\s\S]*FromHandle\(\$mainHandle\)[\s\S]*\$candidate\.Current\.ProcessId -eq \$Process\.Id[\s\S]*RootElement\.FindAll[\s\S]*\$window\.FindFirst\([\s\S]*\$filterMenuCondition[\s\S]*\$menuItem\.Current\.ProcessId -eq \$Process\.Id[\s\S]*selection:filter-menu-root[\s\S]*return \$filterMenuWindow[\s\S]*return \$mainHandleRootElement/,
   );
   const initialActivation = configuration.match(
-    /Set-Stage "find-main-window"[\s\S]*?Set-Stage "find-filter-menu"/,
+    /Set-Stage "find-main-window"[\s\S]*?Set-Stage "focus-filter-menu"/,
   )?.[0];
   assert.ok(initialActivation, "Initial Procmon main-window activation flow is missing");
   assert.match(
     initialActivation,
     /Set-Stage "find-main-window"\s+\$main = Wait-MainWindow \$process\s+Set-Stage "activate-main-window"\s+Set-VerifiedProcmonMainWindowForeground \$main \$process "MAIN"/,
+  );
+  assert.match(
+    configuration,
+    /function Write-ProcmonNativeMenuSummary[\s\S]*GetWindowProcessId\(\$MainWindowHandle\) -ne \$Process\.Id[\s\S]*GetMenu\(\$MainWindowHandle\)[\s\S]*GetMenuItemCount[\s\S]*ReadItem[\s\S]*"Event" \{ \$eventMatches\+\+ \}[\s\S]*"Filter" \{ \$filterMatches\+\+ \}[\s\S]*"Filter\.\.\." \{ \$filterCommandMatches\+\+ \}[\s\S]*PROC_MON_FILTER_NATIVE_MENU=/,
+  );
+  assert.match(
+    initialActivation,
+    /Set-Stage "find-filter-menu"\s+Write-ProcmonNativeMenuSummary[\s\S]*Wait-Element \$main \$filterMenuCondition/,
   );
   assert.match(
     configuration,

@@ -2303,6 +2303,99 @@ function Get-NativeMenuItemSnapshot(
   }
 }
 
+function Write-ProcmonNativeMenuSummary(
+  [System.IntPtr]$MainWindowHandle,
+  [System.Diagnostics.Process]$Process
+) {
+  $state = "ready"
+  $menus = 0
+  $items = 0
+  $eventMatches = 0
+  $filterMatches = 0
+  $filterCommandMatches = 0
+  $unreadableItems = 0
+  if ([ProcmonNativeMenu]::GetWindowProcessId($MainWindowHandle) -ne $Process.Id) {
+    $state = "owner-mismatch"
+  } else {
+    $rootMenu = [ProcmonNativeMenu]::GetMenu($MainWindowHandle)
+    if ($rootMenu -eq [IntPtr]::Zero) {
+      $state = "unavailable"
+    } else {
+      $queue = [System.Collections.Generic.Queue[object]]::new()
+      $seenMenus = [System.Collections.Generic.HashSet[IntPtr]]::new()
+      $queue.Enqueue(@{ Handle = $rootMenu; Depth = 0 })
+      while ($queue.Count -gt 0) {
+        if ($menus -ge 32) {
+          $state = "over-limit"
+          break
+        }
+        $candidate = $queue.Dequeue()
+        if (-not $seenMenus.Add([IntPtr]$candidate.Handle)) {
+          continue
+        }
+        $menus++
+        $itemCount = [ProcmonNativeMenu]::GetMenuItemCount([IntPtr]$candidate.Handle)
+        if ($itemCount -lt 0) {
+          $state = "read-failed"
+          break
+        }
+        if ($itemCount -gt 64 -or $items + $itemCount -gt 256) {
+          $state = "over-limit"
+          break
+        }
+        $items += $itemCount
+        for ($position = 0; $position -lt $itemCount; $position++) {
+          $ownerDrawn = $false
+          $item = [ProcmonNativeMenu]::ReadItem(
+            [IntPtr]$candidate.Handle,
+            [uint32]$position,
+            [ref]$ownerDrawn
+          )
+          if ($null -eq $item) {
+            $unreadableItems++
+            continue
+          }
+          $itemName = $item.Text.Replace("&", "")
+          $acceleratorIndex = $itemName.IndexOf("`t")
+          if ($acceleratorIndex -ge 0) {
+            $itemName = $itemName.Substring(0, $acceleratorIndex)
+          }
+          switch ($itemName.Trim()) {
+            "Event" { $eventMatches++ }
+            "Filter" { $filterMatches++ }
+            "Filter..." { $filterCommandMatches++ }
+          }
+          if (
+            $candidate.Depth -lt 2 -and
+            $item.Submenu -ne [IntPtr]::Zero -and
+            $queue.Count -lt 64
+          ) {
+            $queue.Enqueue(@{
+              Handle = $item.Submenu
+              Depth = $candidate.Depth + 1
+            })
+          } elseif (
+            $candidate.Depth -lt 2 -and
+            $item.Submenu -ne [IntPtr]::Zero
+          ) {
+            $state = "over-limit"
+            break
+          }
+        }
+        if ($state -eq "over-limit") {
+          break
+        }
+      }
+      if ($state -eq "ready" -and $unreadableItems -gt 0) {
+        $state = "partial"
+      }
+    }
+  }
+  [Console]::Out.WriteLine(
+    "PROC_MON_FILTER_NATIVE_MENU=state:$state;menus:$([Math]::Min($menus, 99));items:$([Math]::Min($items, 999));event:$([Math]::Min($eventMatches, 99));filter:$([Math]::Min($filterMatches, 99));filter-command:$([Math]::Min($filterCommandMatches, 99));unreadable:$([Math]::Min($unreadableItems, 999))"
+  )
+}
+
 function Read-ReloadedFilterPopupState(
   [System.IntPtr]$MainWindowHandle,
   [uint32]$ProcessId
@@ -3021,6 +3114,8 @@ try {
   Set-Stage "activate-main-window"
   Set-VerifiedProcmonMainWindowForeground $main $process "MAIN"
   Set-Stage "find-filter-menu"
+  Write-ProcmonNativeMenuSummary `
+    ([IntPtr]$main.Current.NativeWindowHandle) $process
   $filterMenuCondition = [System.Windows.Automation.AndCondition]::new(
     [System.Windows.Automation.PropertyCondition]::new(
       [System.Windows.Automation.AutomationElement]::NameProperty, "Filter"
