@@ -66,6 +66,10 @@ public static class ProcmonNativeMenu
     private const uint MFT_OWNERDRAW = 0x00000100;
     private const uint GUI_INMENUMODE = 0x00000004;
     private const uint GUI_POPUPMENUMODE = 0x00000010;
+    private const uint INPUT_KEYBOARD = 1;
+    private const uint KEYEVENTF_KEYUP = 0x00000002;
+    private const ushort VK_CONTROL = 0x0011;
+    private const ushort VK_L = 0x004C;
     private const uint GA_ROOT = 2;
     private const int AccessibleMenuObjectId = -3;
     private const int AccessibleClientObjectId = -4;
@@ -114,6 +118,30 @@ public static class ProcmonNativeMenu
         public IntPtr hwndMoveSize;
         public IntPtr hwndCaret;
         public Rect rcCaret;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct KeyboardInput
+    {
+        public ushort VirtualKey;
+        public ushort ScanCode;
+        public uint Flags;
+        public uint Time;
+        public IntPtr ExtraInfo;
+    }
+
+    [StructLayout(LayoutKind.Explicit)]
+    private struct InputUnion
+    {
+        [FieldOffset(0)]
+        public KeyboardInput Keyboard;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativeInput
+    {
+        public uint Type;
+        public InputUnion Data;
     }
 
     public sealed class ItemSnapshot
@@ -173,12 +201,81 @@ public static class ProcmonNativeMenu
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool IsWindowVisible(IntPtr hWnd);
 
+    [DllImport("user32.dll", ExactSpelling = true, SetLastError = true)]
+    private static extern uint SendInput(
+        uint inputCount,
+        NativeInput[] inputs,
+        int inputSize
+    );
+
     public static int GetWindowProcessId(IntPtr hWnd)
     {
         uint processId;
         return GetWindowThreadProcessId(hWnd, out processId) == 0
             ? 0
             : processId > int.MaxValue ? 0 : (int)processId;
+    }
+
+    private static NativeInput CreateKeyboardInput(ushort virtualKey, uint flags)
+    {
+        return new NativeInput
+        {
+            Type = INPUT_KEYBOARD,
+            Data = new InputUnion
+            {
+                Keyboard = new KeyboardInput
+                {
+                    VirtualKey = virtualKey,
+                    ScanCode = 0,
+                    Flags = flags,
+                    Time = 0,
+                    ExtraInfo = IntPtr.Zero
+                }
+            }
+        };
+    }
+
+    public static uint SendControlLShortcut(IntPtr expectedWindow, int expectedProcessId)
+    {
+        if (
+            expectedWindow == IntPtr.Zero ||
+            expectedProcessId <= 0 ||
+            GetForegroundWindow() != expectedWindow ||
+            GetWindowProcessId(expectedWindow) != expectedProcessId
+        )
+        {
+            throw new InvalidOperationException(
+                "Filter shortcut target is not the verified foreground process window"
+            );
+        }
+
+        var inputs = new[]
+        {
+            CreateKeyboardInput(VK_CONTROL, 0),
+            CreateKeyboardInput(VK_L, 0),
+            CreateKeyboardInput(VK_L, KEYEVENTF_KEYUP),
+            CreateKeyboardInput(VK_CONTROL, KEYEVENTF_KEYUP)
+        };
+        var inserted = SendInput(
+            (uint)inputs.Length,
+            inputs,
+            Marshal.SizeOf(typeof(NativeInput))
+        );
+        if (inserted != (uint)inputs.Length)
+        {
+            var releaseInputs = new[]
+            {
+                CreateKeyboardInput(VK_L, KEYEVENTF_KEYUP),
+                CreateKeyboardInput(VK_CONTROL, KEYEVENTF_KEYUP)
+            };
+            SendInput(
+                (uint)releaseInputs.Length,
+                releaseInputs,
+                Marshal.SizeOf(typeof(NativeInput))
+            );
+            throw new InvalidOperationException("Filter shortcut input was incomplete");
+        }
+        return inserted;
     }
 
     public static IntPtr[] GetProcessTopLevelWindows(int processId, int maximum)
@@ -1831,7 +1928,13 @@ function Open-FilterDialogByShortcut(
     "PROC_MON_FILTER_MENU_OPEN_FALLBACK=filter-dialog-shortcut"
   )
   Write-ShortcutGuiFocusObservation "before" $Process $mainWindowHandle
-  [System.Windows.Forms.SendKeys]::SendWait("^l")
+  $shortcutEvents = [ProcmonNativeMenu]::SendControlLShortcut(
+    $mainWindowHandle,
+    $Process.Id
+  )
+  [Console]::Out.WriteLine(
+    "PROC_MON_FILTER_SHORTCUT_INPUT=method:send-input;events:$shortcutEvents"
+  )
   Write-ShortcutGuiFocusObservation "after" $Process $mainWindowHandle
   Write-FocusObservation "after-filter-dialog-shortcut" | Out-Null
   Write-FocusOwnerObservation "after-filter-dialog-shortcut" $Process $MainWindow
@@ -4229,7 +4332,13 @@ try {
     throw "Process Monitor reloaded main window lost the foreground before the Filter shortcut"
   }
   Set-Stage "open-reloaded-filter-dialog-shortcut"
-  [System.Windows.Forms.SendKeys]::SendWait("^l")
+  $reloadShortcutEvents = [ProcmonNativeMenu]::SendControlLShortcut(
+    $mainWindowHandle,
+    $process.Id
+  )
+  [Console]::Out.WriteLine(
+    "PROC_MON_FILTER_SHORTCUT_INPUT=method:send-input;events:$reloadShortcutEvents"
+  )
   [Console]::Out.WriteLine("PROC_MON_FILTER_RELOAD_SHORTCUT=command:filter-dialog;state:sent")
   Write-FocusObservation "after-reload-filter-dialog-shortcut" | Out-Null
   Set-Stage "wait-reloaded-filter-dialog"

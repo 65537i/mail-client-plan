@@ -132,6 +132,27 @@ test("AC-05: Windows shortcut diagnostics retain only classified GUI focus owner
   );
 });
 
+test("AC-05: shortcut input diagnostics accept only a complete native key sequence", () => {
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_SHORTCUT_INPUT=method:send-input;events:4",
+    ),
+    "; filter-shortcut-input=method:send-input;events:4",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_SHORTCUT_INPUT=method:send-input;events:3",
+    ),
+    "",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_SHORTCUT_INPUT=method:send-input;events:4;path=C:\\private",
+    ),
+    "",
+  );
+});
+
 test("AC-05: Windows focused-window diagnostics retain only native root ownership classes", () => {
   const output = [
     "PROC_MON_FILTER_FOCUS_NATIVE_ROOT=after-filter-dialog-shortcut;root:procmon-other",

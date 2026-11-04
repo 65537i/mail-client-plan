@@ -83,6 +83,14 @@ export function describeWindowsFilterDiagnostics(output) {
     diagnostics.push("filter-command-activation=invoke-pattern");
   }
 
+  for (const match of output.matchAll(
+    /^PROC_MON_FILTER_SHORTCUT_INPUT=method:send-input;events:(\d{1,1})\r?$/gm,
+  )) {
+    if (match[1] === "4") {
+      diagnostics.push("filter-shortcut-input=method:send-input;events:4");
+    }
+  }
+
   const dialogScan = output.match(
     /PROC_MON_FILTER_DIALOG_SCAN=process-windows:(\d{1,4});non-main-windows:(\d{1,4});reset-control:(true|false)/,
   );

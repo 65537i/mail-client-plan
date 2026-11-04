@@ -285,6 +285,10 @@ test("AC-05: Procmon main-window activation verifies its process-owned foregroun
   );
   assert.match(
     configuration,
+    /private struct KeyboardInput[\s\S]*LayoutKind\.Explicit[\s\S]*private struct InputUnion[\s\S]*private struct NativeInput[\s\S]*private static extern uint SendInput[\s\S]*SendControlLShortcut\(IntPtr expectedWindow, int expectedProcessId\)[\s\S]*GetForegroundWindow\(\) != expectedWindow[\s\S]*GetWindowProcessId\(expectedWindow\) != expectedProcessId[\s\S]*CreateKeyboardInput\(VK_CONTROL, 0\)[\s\S]*CreateKeyboardInput\(VK_L, 0\)[\s\S]*CreateKeyboardInput\(VK_L, KEYEVENTF_KEYUP\)[\s\S]*CreateKeyboardInput\(VK_CONTROL, KEYEVENTF_KEYUP\)[\s\S]*if \(inserted != \(uint\)inputs\.Length\)[\s\S]*releaseInputs/,
+  );
+  assert.match(
+    configuration,
     /EnumWindows\(EnumWindowsProc callback, IntPtr lParam\)[\s\S]*GetProcessTopLevelWindows\(int processId, int maximum\)[\s\S]*maximum > 257[\s\S]*function Find-ProcmonNativeFilterDialog[\s\S]*GetProcessTopLevelWindows\(\$Process\.Id, 257\)[\s\S]*Write-ProcmonNativeMenuSummary[\s\S]*-Source "all-top-level"[\s\S]*\$windowCount = \[Math\]::Min\(\$handles\.Length, 256\)[\s\S]*IsWindowVisible\(\$handle\)[\s\S]*candidateState\.ControlType -ne \[System\.Windows\.Automation\.ControlType\]::Window[\s\S]*candidateState\.ProcessId -ne \$Process\.Id[\s\S]*\[IntPtr\]\(\$candidateState\.NativeWindowHandle\) -ne \$handle[\s\S]*candidateState\.IsEnabled[\s\S]*candidateState\.IsOffscreen[\s\S]*distinctRuntimeId -and[\s\S]*\$combos\.Count -ge 3[\s\S]*\$edits\.Count -ge 1[\s\S]*PROC_MON_FILTER_DIALOG_DISCOVERY=native-top-level-window[\s\S]*PROC_MON_FILTER_NATIVE_WINDOW_UIA=/,
   );
   assert.match(
@@ -318,7 +322,7 @@ test("AC-05: Procmon main-window activation verifies its process-owned foregroun
   );
   assert.match(
     configuration,
-    /function Open-FilterDialogByShortcut[\s\S]*Set-VerifiedProcmonMainWindowForeground \$MainWindow \$Process "MAIN"[\s\S]*GetWindowProcessId\(\$currentForegroundHandle\) -eq \$Process\.Id[\s\S]*PROC_MON_FILTER_SHORTCUT_FOREGROUND=gate:\$shortcutForegroundGate[\s\S]*SendWait\("\^l"\)[\s\S]*Write-FocusObservation "after-filter-dialog-shortcut"[\s\S]*Write-FocusOwnerObservation "after-filter-dialog-shortcut" \$Process \$MainWindow[\s\S]*Wait-FilterDialog \$Process \$MainWindow/,
+    /function Open-FilterDialogByShortcut[\s\S]*Set-VerifiedProcmonMainWindowForeground \$MainWindow \$Process "MAIN"[\s\S]*GetWindowProcessId\(\$currentForegroundHandle\) -eq \$Process\.Id[\s\S]*PROC_MON_FILTER_SHORTCUT_FOREGROUND=gate:\$shortcutForegroundGate[\s\S]*SendControlLShortcut\(\s*\$mainWindowHandle,\s*\$Process\.Id\s*\)[\s\S]*PROC_MON_FILTER_SHORTCUT_INPUT=method:send-input;events:\$shortcutEvents[\s\S]*Write-FocusObservation "after-filter-dialog-shortcut"[\s\S]*Write-FocusOwnerObservation "after-filter-dialog-shortcut" \$Process \$MainWindow[\s\S]*Wait-FilterDialog \$Process \$MainWindow/,
   );
   assert.match(
     configuration,
@@ -334,8 +338,13 @@ test("AC-05: Procmon main-window activation verifies its process-owned foregroun
   );
   assert.match(
     configuration,
-    /function Open-FilterDialogByShortcut[\s\S]*Write-ShortcutGuiFocusObservation "before" \$Process \$mainWindowHandle[\s\S]*SendWait\("\^l"\)[\s\S]*Write-ShortcutGuiFocusObservation "after" \$Process \$mainWindowHandle/,
+    /function Open-FilterDialogByShortcut[\s\S]*Write-ShortcutGuiFocusObservation "before" \$Process \$mainWindowHandle[\s\S]*SendControlLShortcut\(\s*\$mainWindowHandle,\s*\$Process\.Id\s*\)[\s\S]*Write-ShortcutGuiFocusObservation "after" \$Process \$mainWindowHandle/,
   );
+  assert.match(
+    configuration,
+    /open-reloaded-filter-dialog-shortcut[\s\S]*SendControlLShortcut\(\s*\$mainWindowHandle,\s*\$process\.Id\s*\)[\s\S]*PROC_MON_FILTER_RELOAD_SHORTCUT=command:filter-dialog;state:sent/,
+  );
+  assert.doesNotMatch(configuration, /SendWait\("\^l"\)/);
   assert.match(
     configuration,
     /\$candidateRuntimeId = \$candidateWindow\.GetRuntimeId\(\) -join ","[\s\S]*\$mainRuntimeId = \$MainWindow\.GetRuntimeId\(\) -join ","[\s\S]*\$distinctRuntimeId = \$candidateRuntimeId -cne \$mainRuntimeId/,
