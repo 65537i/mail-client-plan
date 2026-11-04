@@ -2,6 +2,8 @@
 
 ## 1. ワークフロー構成
 
+[Run 41911826267](https://github.com/65537i/mail-client-plan/actions/runs/41911826267)（`bd72ceb`、Windows 2025 x64 / full）はunfiltered baseline後、strict capture前の`clear-existing-filter-rules`で失敗しAC-05未達。final row-count / column-count readsは通過し、shape comparisonで停止したため、期待値との比較を個別stage化して次runで区別する。
+
 [Run 41906589924](https://github.com/65537i/mail-client-plan/actions/runs/41906589924)（`5c18245`、Windows 2025 x64 / full）はunfiltered baseline後、strict capture前の`clear-existing-filter-rules`で失敗しAC-05未達。最終row countは通過したがfinal column-count verification stageで停止した。column read自体の失敗と取得値のshape mismatchを別stageで判別する。
 
 [Run 41902239784](https://github.com/65537i/mail-client-plan/actions/runs/41902239784)（`77e2132`、Windows 2025 x64 / full）はunfiltered baseline後、strict capture前の`clear-existing-filter-rules`で失敗しAC-05未達。Native item countと4-cell readを通過し、最終list shape verificationで停止した。最終row count / column countを別stageにし、次runで検証のどちらが失敗するか確認する。

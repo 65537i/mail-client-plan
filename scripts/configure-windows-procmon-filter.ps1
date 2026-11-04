@@ -4502,8 +4502,12 @@ function Get-ProcmonNativeFilterRuleRows(
     $Controls.List,
     $ProcessId
   )
-  Set-Stage "compare-native-filter-row-shape"
-  if ($finalCount -ne $count -or $finalColumnCount -ne 4) {
+  Set-Stage "compare-native-filter-row-count"
+  if ($finalCount -ne $count) {
+    throw "Process Monitor native filter list changed while it was being read"
+  }
+  Set-Stage "compare-native-filter-column-count"
+  if ($finalColumnCount -ne 4) {
     throw "Process Monitor native filter list changed while it was being read"
   }
   $ruleCount = @(
