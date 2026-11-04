@@ -2343,6 +2343,7 @@ function Clear-LoadedFilterRules(
   [int]$OwnerProcessId
 ) {
   $maximumRows = 64
+  Set-Stage "read-native-filter-rows-before-clear"
   $nativeControls = Get-ProcmonNativeFilterDialogControls $Dialog $OwnerProcessId
   if ($null -ne $nativeControls) {
     $rows = Get-ProcmonNativeFilterRuleRows $nativeControls $OwnerProcessId -Quiet
@@ -2361,6 +2362,7 @@ function Clear-LoadedFilterRules(
     ) {
       throw "Process Monitor native filter dialog lost the foreground before row selection"
     }
+    Set-Stage "select-native-filter-rows-for-clear"
     $selectedCount = [ProcmonNativeMenu]::SelectNativeListItemsExact(
       $nativeControls.List,
       $OwnerProcessId,
@@ -2369,6 +2371,7 @@ function Clear-LoadedFilterRules(
     if ($selectedCount -ne $rows.Count) {
       throw "Process Monitor native filter rows were not selected exactly"
     }
+    Set-Stage "verify-native-remove-button"
     $selectedControls = Get-ProcmonNativeFilterDialogControls $Dialog $OwnerProcessId
     if (
       $null -eq $selectedControls -or
@@ -2377,7 +2380,9 @@ function Clear-LoadedFilterRules(
     ) {
       throw "Process Monitor native Remove button was unavailable after exact row selection"
     }
+    Set-Stage "invoke-native-filter-remove"
     Invoke-ProcmonNativeFilterButton $Dialog $OwnerProcessId "Remove"
+    Set-Stage "verify-native-filter-clear"
     $remainingRows = Get-ProcmonNativeFilterRuleRows `
       $selectedControls $OwnerProcessId -Quiet
     $removeDeadline = [DateTime]::UtcNow.AddSeconds(2)
