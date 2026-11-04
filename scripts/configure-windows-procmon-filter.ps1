@@ -2582,6 +2582,111 @@ function Write-ProcmonAccessibleMenuSummary(
   )
 }
 
+function Get-ProcmonRawUiaSummary(
+  [System.Windows.Automation.AutomationElement]$Root,
+  [int]$ProcessId
+) {
+  $maximumNodes = 512
+  $maximumDepth = 16
+  $nodes = 0
+  $windows = 0
+  $panes = 0
+  $combos = 0
+  $edits = 0
+  $buttons = 0
+  $menus = 0
+  $menuItems = 0
+  $other = 0
+  $truncated = $false
+  $readFailed = $false
+  $walker = [System.Windows.Automation.TreeWalker]::RawViewWalker
+  $pending = [System.Collections.Generic.Queue[object]]::new()
+  $pending.Enqueue([pscustomobject]@{ Element = $Root; Depth = 0 })
+  try {
+    while ($pending.Count -gt 0) {
+      if ($nodes -ge $maximumNodes) {
+        $truncated = $true
+        break
+      }
+      $entry = $pending.Dequeue()
+      $state = $entry.Element.Current
+      if ($state.ProcessId -ne $ProcessId) {
+        continue
+      }
+      $nodes++
+      switch ($state.ControlType.ProgrammaticName) {
+        "ControlType.Window" { $windows++ }
+        "ControlType.Pane" { $panes++ }
+        "ControlType.ComboBox" { $combos++ }
+        "ControlType.Edit" { $edits++ }
+        "ControlType.Button" { $buttons++ }
+        "ControlType.Menu" { $menus++ }
+        "ControlType.MenuItem" { $menuItems++ }
+        default { $other++ }
+      }
+      $child = $walker.GetFirstChild($entry.Element)
+      if ($null -eq $child) {
+        continue
+      }
+      if ($entry.Depth -ge $maximumDepth) {
+        $truncated = $true
+        break
+      }
+      do {
+        if ($pending.Count + $nodes -ge $maximumNodes) {
+          $truncated = $true
+          break
+        }
+        $pending.Enqueue([pscustomobject]@{
+          Element = $child
+          Depth = $entry.Depth + 1
+        })
+        $child = $walker.GetNextSibling($child)
+      } while ($null -ne $child)
+      if ($truncated) {
+        break
+      }
+    }
+  } catch [System.Windows.Automation.ElementNotAvailableException] {
+    $readFailed = $true
+  } catch [System.InvalidOperationException] {
+    $readFailed = $true
+  } catch [System.Runtime.InteropServices.COMException] {
+    $readFailed = $true
+  }
+  $scanState = if ($readFailed) {
+    "partial"
+  } elseif ($truncated) {
+    "truncated"
+  } else {
+    "ready"
+  }
+  return [pscustomobject]@{
+    State = $scanState
+    Nodes = $nodes
+    Windows = $windows
+    Panes = $panes
+    Combos = $combos
+    Edits = $edits
+    Buttons = $buttons
+    Menus = $menus
+    MenuItems = $menuItems
+    Other = $other
+    Truncated = $truncated
+  }
+}
+
+function Write-ProcmonRawUiaSummary(
+  [System.Windows.Automation.AutomationElement]$Root,
+  [ValidateSet("main", "visible-other")][string]$Source,
+  [int]$ProcessId
+) {
+  $summary = Get-ProcmonRawUiaSummary $Root $ProcessId
+  [Console]::Out.WriteLine(
+    "PROC_MON_FILTER_RAW_UIA=source:$Source;state:$($summary.State);nodes:$($summary.Nodes);windows:$($summary.Windows);panes:$($summary.Panes);combos:$($summary.Combos);edits:$($summary.Edits);buttons:$($summary.Buttons);menus:$($summary.Menus);menu-items:$($summary.MenuItems);other:$($summary.Other);truncated:$($summary.Truncated.ToString().ToLowerInvariant())"
+  )
+}
+
 function Find-ProcmonNativeFilterDialog(
   [System.Diagnostics.Process]$Process,
   [System.IntPtr]$MainWindowHandle
@@ -2606,6 +2711,7 @@ function Find-ProcmonNativeFilterDialog(
   $maxComboCount = 0
   $maxEditCount = 0
   $readFailureCount = 0
+  $rawScannedOtherCount = 0
   $resetCondition = [System.Windows.Automation.PropertyCondition]::new(
     [System.Windows.Automation.AutomationElement]::NameProperty,
     "Reset"
@@ -2619,6 +2725,7 @@ function Find-ProcmonNativeFilterDialog(
     [System.Windows.Automation.ControlType]::Edit
   )
   $mainRuntimeId = $null
+  $mainWindowElement = $null
   try {
     $mainWindowElement = [System.Windows.Automation.AutomationElement]::FromHandle(
       $MainWindowHandle
@@ -2634,6 +2741,10 @@ function Find-ProcmonNativeFilterDialog(
       throw
     }
     $readFailureCount++
+  }
+  if ($null -ne $mainWindowElement -and
+    [ProcmonNativeMenu]::GetWindowProcessId($MainWindowHandle) -eq $Process.Id) {
+    Write-ProcmonRawUiaSummary $mainWindowElement "main" $Process.Id
   }
   for ($index = 0; $index -lt $windowCount; $index++) {
     $handle = [IntPtr]$handles[$index]
@@ -2676,6 +2787,10 @@ function Find-ProcmonNativeFilterDialog(
         continue
       }
       $ownedCount++
+      if ($rawScannedOtherCount -lt 2) {
+        Write-ProcmonRawUiaSummary $candidateWindow "visible-other" $Process.Id
+        $rawScannedOtherCount++
+      }
       $candidateRuntimeId = $candidateWindow.GetRuntimeId() -join ","
       $distinctRuntimeId = (
         $null -ne $mainRuntimeId -and

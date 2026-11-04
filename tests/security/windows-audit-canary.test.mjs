@@ -270,9 +270,26 @@ test("AC-05: Procmon main-window activation verifies its process-owned foregroun
     configuration,
     /ReadAccessibleFilterMenuSummary[\s\S]*AccessibleObjectFromWindow[\s\S]*MaximumAccessibleMenuItems[\s\S]*"Event"[\s\S]*"Filter"[\s\S]*"Filter\.\.\."[\s\S]*function Write-ProcmonAccessibleMenuSummary[\s\S]*ReadAccessibleFilterMenuSummary\([\s\S]*PROC_MON_FILTER_ACCESSIBLE_MENU=/,
   );
+  const rawUiaSummary = configuration.match(
+    /function Get-ProcmonRawUiaSummary[\s\S]*?function Write-ProcmonRawUiaSummary/,
+  )?.[0];
+  assert.ok(rawUiaSummary, "Bounded Raw View UIA scanner is missing");
+  assert.match(
+    rawUiaSummary,
+    /maximumNodes = 512[\s\S]*maximumDepth = 16[\s\S]*TreeWalker\]::RawViewWalker[\s\S]*\$state\.ProcessId -ne \$ProcessId[\s\S]*GetFirstChild[\s\S]*GetNextSibling[\s\S]*ElementNotAvailableException[\s\S]*COMException/,
+  );
+  assert.doesNotMatch(rawUiaSummary, /\.Current\.(?:Name|Value|HelpText)|get_accName/);
+  assert.match(
+    configuration,
+    /function Write-ProcmonRawUiaSummary[\s\S]*PROC_MON_FILTER_RAW_UIA=source:\$Source;state:/,
+  );
   assert.match(
     configuration,
     /EnumWindows\(EnumWindowsProc callback, IntPtr lParam\)[\s\S]*GetProcessTopLevelWindows\(int processId, int maximum\)[\s\S]*maximum > 257[\s\S]*function Find-ProcmonNativeFilterDialog[\s\S]*GetProcessTopLevelWindows\(\$Process\.Id, 257\)[\s\S]*Write-ProcmonNativeMenuSummary[\s\S]*-Source "all-top-level"[\s\S]*\$windowCount = \[Math\]::Min\(\$handles\.Length, 256\)[\s\S]*IsWindowVisible\(\$handle\)[\s\S]*candidateState\.ControlType -ne \[System\.Windows\.Automation\.ControlType\]::Window[\s\S]*candidateState\.ProcessId -ne \$Process\.Id[\s\S]*\[IntPtr\]\(\$candidateState\.NativeWindowHandle\) -ne \$handle[\s\S]*candidateState\.IsEnabled[\s\S]*candidateState\.IsOffscreen[\s\S]*distinctRuntimeId -and[\s\S]*\$combos\.Count -ge 3[\s\S]*\$edits\.Count -ge 1[\s\S]*PROC_MON_FILTER_DIALOG_DISCOVERY=native-top-level-window[\s\S]*PROC_MON_FILTER_NATIVE_WINDOW_UIA=/,
+  );
+  assert.match(
+    configuration,
+    /Get-ProcmonRawUiaSummary[\s\S]*maximumNodes = 512[\s\S]*Write-ProcmonRawUiaSummary \$mainWindowElement "main" \$Process\.Id[\s\S]*rawScannedOtherCount -lt 2[\s\S]*Write-ProcmonRawUiaSummary \$candidateWindow "visible-other" \$Process\.Id/,
   );
   assert.match(
     initialActivation,

@@ -281,6 +281,42 @@ test("AC-05: Windows accessible menu diagnostics retain exact bounded label coun
   );
 });
 
+test("AC-05: Windows raw UIA diagnostics retain bounded control-type counts only", () => {
+  const line = "PROC_MON_FILTER_RAW_UIA="
+    + "source:main;state:ready;nodes:18;windows:2;panes:6;combos:3;edits:1;"
+    + "buttons:2;menus:0;menu-items:0;other:4;truncated:false";
+  assert.equal(
+    describeWindowsFilterDiagnostics(line),
+    "; filter-raw-uia=source:main;state:ready;nodes:18;windows:2;panes:6;"
+      + "combos:3;edits:1;buttons:2;menus:0;menu-items:0;other:4;truncated:false",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      line.replace("source:main", "source:visible-other")
+        .replace("state:ready", "state:partial"),
+    ),
+    "; filter-raw-uia=source:visible-other;state:partial;nodes:18;windows:2;"
+      + "panes:6;combos:3;edits:1;buttons:2;menus:0;menu-items:0;other:4;"
+      + "truncated:false",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_RAW_UIA=source:main;state:truncated;nodes:512;"
+        + "windows:2;panes:6;combos:3;edits:1;buttons:2;menus:0;"
+        + "menu-items:0;other:498;truncated:true",
+    ).startsWith("; filter-raw-uia=source:main;state:truncated;nodes:512;"),
+    true,
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(line.replace("other:4", "other:3")),
+    "",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(`${line};name=C:\\private`),
+    "",
+  );
+});
+
 test("AC-05: Windows filter diagnostics omit arbitrary names and exception details", () => {
   const output = [
     "PROC_MON_FILTER_MENU_STATE=enabled:yes;offscreen:false;keyboard-focusable:true",

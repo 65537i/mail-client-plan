@@ -259,6 +259,31 @@ export function describeWindowsFilterDiagnostics(output) {
     }
   }
 
+  for (const rawUia of output.matchAll(
+    /^PROC_MON_FILTER_RAW_UIA=source:(main|visible-other);state:(ready|partial|truncated);nodes:(\d{1,3});windows:(\d{1,3});panes:(\d{1,3});combos:(\d{1,3});edits:(\d{1,3});buttons:(\d{1,3});menus:(\d{1,3});menu-items:(\d{1,3});other:(\d{1,3});truncated:(true|false)\r?$/gm,
+  )) {
+    const [, source, state, ...rawCounts] = rawUia;
+    const [nodes, windows, panes, combos, edits, buttons, menus, menuItems, other] =
+      rawCounts.slice(0, 9).map(Number);
+    const truncated = rawCounts[9] === "true";
+    if (
+      nodes >= 1
+      && nodes <= 512
+      && [windows, panes, combos, edits, buttons, menus, menuItems, other]
+        .every((count) => count <= nodes)
+      && windows + panes + combos + edits + buttons + menus + menuItems + other === nodes
+      && (
+        (state === "ready" && !truncated)
+        || (state === "truncated" && truncated)
+        || state === "partial"
+      )
+    ) {
+      diagnostics.push(
+        `filter-raw-uia=source:${source};state:${state};nodes:${nodes};windows:${windows};panes:${panes};combos:${combos};edits:${edits};buttons:${buttons};menus:${menus};menu-items:${menuItems};other:${other};truncated:${truncated}`,
+      );
+    }
+  }
+
   const mainWindowSelection = output.match(
     /^PROC_MON_FILTER_MAIN_WINDOW=selection:(filter-menu-root|main-handle-root|from-handle|first-owned);root-windows:(\d{1,4});uia-owned-windows:(\d{1,4});main-handle:(available|unavailable);filter-menu:(present|absent)\r?$/m,
   );

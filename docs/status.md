@@ -1,9 +1,10 @@
 # 開発状況
 
-更新日: 2026-11-03
+更新日: 2026-11-04
 
 ## 現在の範囲
 
+- [Run 41681453818](https://github.com/65537i/mail-client-plan/actions/runs/41681453818)（`b0f869b`、Windows 2025 x64 / webview）はsecurity-test build、Windows監査回帰79/79、configuration export waitを通過したが、baseline `wait-filter-dialog-shortcut`で停止しstrict capture未実施。MSAA `OBJID_MENU`診断はstate `ready` / windows 4 / readable 4 / items 0で、accessible menu itemは取得できなかった。native top-level inventoryは11 windows / 4 menu handles、native menu scanは1件unreadableでpartial。この結果を受け、Control Viewが除外するUIA要素の有無を調べるため、同一PIDのmainと表示中候補最大2件を各512 nodes / 16 levelsまでRaw View走査する件数診断を追加した。ラベル・値は読まず、strict dialog gateは変更しない。focused Node tests 64/64、PowerShell parse、`git diff --check`成功。Windows runtime未確認、AC-05未達。
 - [Run 41679281913](https://github.com/65537i/mail-client-plan/actions/runs/41679281913)（`76ff6b9`、Windows 2025 x64 / webview）はsecurity-test buildとNode 78/78、Windows audit setup / worker coordination、configuration export waitの回帰を通過したが、baseline `wait-filter-dialog-shortcut`で停止しstrict capture未実施。native menu集計はstate `partial` / visited menu 1 / unreadable 1 / item 0で、Filter commandの有無は未確定。top-level window上の4つのGetMenu結果を、同一PID再確認後に既存MSAA `OBJID_MENU`経路で読みEvent / Filter / Filter... 件数のみを出す診断を追加した。dialog受理条件・入力操作は変更しない。ローカルfocused tests 63/63、PowerShell parse、`git diff --check`成功、Windows runtime未確認。
 - [Run 41677409576](https://github.com/65537i/mail-client-plan/actions/runs/41677409576)（`82c3d2d`、Windows 2025 x64 / webview）はsecurity-test buildとNode 78/78、Windows audit setup / worker coordination、configuration export waitの回帰を通過したが、baseline `wait-filter-dialog-shortcut`で停止しstrict capture未実施。native menu集計は4つのmenu handle中最初のGetMenuItemCountが失敗し、後続menuを読む前に終了したため、全top-level menuのコマンド有無は未確定。次runでは無効menuをboundedなunreadable countとして記録して残りを走査する。候補条件・入力操作は変更しない。
 - [Run 41675402073](https://github.com/65537i/mail-client-plan/actions/runs/41675402073)（`7608934`、Windows 2025 x64 / webview）はsecurity-test buildとNode 78/78、Windows audit setup / worker coordination、configuration export waitの回帰を通過したが、baseline `wait-filter-dialog-shortcut`で停止しstrict capture未実施。native-window fallbackではvisible Procmon-owned window 1件をUIA `FromHandle`で確認、distinct RuntimeId 1 / Reset 1だったがComboBox / Editは0で厳格なdialog layoutを満たさない。次runではProcmonの11 top-level windowsに付属するnative menuを合算で読み、Event / Filter / Filter... の件数だけを確認する。候補の受理条件は変更しない。
