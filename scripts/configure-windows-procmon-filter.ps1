@@ -4508,6 +4508,9 @@ function Get-ProcmonNativeFilterRuleRows(
   }
   Set-Stage "compare-native-filter-column-count"
   if ($finalColumnCount -ne 4) {
+    [Console]::Out.WriteLine(
+      "PROC_MON_FILTER_NATIVE_SHAPE=expected-columns:4;actual-columns:$finalColumnCount"
+    )
     throw "Process Monitor native filter list changed while it was being read"
   }
   $ruleCount = @(

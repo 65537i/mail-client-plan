@@ -829,6 +829,18 @@ export function describeWindowsFilterDiagnostics(output) {
     );
   }
 
+  const nativeShape = output.match(
+    /^PROC_MON_FILTER_NATIVE_SHAPE=expected-columns:4;actual-columns:(\d)\r?$/m,
+  );
+  if (nativeShape) {
+    const actualColumns = Number(nativeShape[1]);
+    if (actualColumns >= 1 && actualColumns <= 8 && actualColumns !== 4) {
+      diagnostics.push(
+        `filter-native-shape=expected-columns:4;actual-columns:${actualColumns}`,
+      );
+    }
+  }
+
   const ruleSelection = output.match(
     /^PROC_MON_FILTER_RULE_SELECTION=selected:(\d{1,2});expected:(\d{1,2})\r?$/m,
   );

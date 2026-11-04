@@ -4,6 +4,8 @@
 
 ## 現在の範囲
 
+- [Run 41916807507](https://github.com/65537i/mail-client-plan/actions/runs/41916807507)（`d0c1019`、Windows 2025 x64 / full）はunfiltered baseline成功後、strict capture前の`clear-existing-filter-rules`で失敗しAC-05未達。Expected row countは一致したが4-column比較で停止した。実column countを1-8に限定して記録するallowlisted診断を追加する。
+
 - [Run 41911826267](https://github.com/65537i/mail-client-plan/actions/runs/41911826267)（`bd72ceb`、Windows 2025 x64 / full）はunfiltered baseline成功後、strict capture前の`clear-existing-filter-rules`で失敗しAC-05未達。最終row countおよびcolumn countのnative readsは成功したが、shape比較で停止した。expected row countとの比較と4-column invariant比較を別stageに分割する。
 
 - [Run 41906589924](https://github.com/65537i/mail-client-plan/actions/runs/41906589924)（`5c18245`、Windows 2025 x64 / full）はunfiltered baseline成功後、strict capture前の`clear-existing-filter-rules`で失敗しAC-05未達。最終row count readは通過したが、final column-count verificationで停止した。native header read failureか、取得したcolumn countの不一致かを見分けるstageを追加する。
