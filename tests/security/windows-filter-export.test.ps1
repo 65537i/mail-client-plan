@@ -672,6 +672,109 @@ public static class SyntheticListCount
     public static extern bool DestroyWindow(IntPtr window);
     [DllImport("user32.dll", EntryPoint = "SendMessageW", ExactSpelling = true)]
     public static extern IntPtr SetCount(IntPtr window, uint message, IntPtr count, IntPtr flags);
+    [DllImport("user32.dll", EntryPoint = "SendMessageW", CharSet = CharSet.Unicode, ExactSpelling = true)]
+    private static extern IntPtr SendText(
+        IntPtr window, uint message, IntPtr wParam,
+        [MarshalAs(UnmanagedType.LPWStr)] string text);
+    [DllImport("user32.dll", EntryPoint = "SendMessageW", ExactSpelling = true)]
+    private static extern IntPtr SendRaw(IntPtr window, uint message, IntPtr wParam, IntPtr lParam);
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    private struct ListViewColumn
+    {
+        public uint Mask;
+        public int Format;
+        public int Width;
+        public IntPtr Text;
+        public int TextMax;
+        public int SubItem;
+        public int Image;
+        public int Order;
+        public int MinimumWidth;
+        public int DefaultWidth;
+        public int IdealWidth;
+    }
+    [StructLayout(LayoutKind.Sequential)]
+    private struct ListViewItem
+    {
+        public uint Mask;
+        public int Item;
+        public int SubItem;
+        public uint State;
+        public uint StateMask;
+        public IntPtr Text;
+        public int TextMax;
+        public int Image;
+        public IntPtr Parameter;
+        public int Indent;
+        public int GroupId;
+        public uint ColumnCount;
+        public IntPtr Columns;
+        public IntPtr ColumnFormats;
+        public int Group;
+    }
+    public static void AddComboOption(IntPtr window, string value)
+    {
+        if (SendText(window, 0x0143, IntPtr.Zero, value).ToInt32() == -1)
+            throw new InvalidOperationException("Synthetic combo option could not be added");
+    }
+    public static void AddListColumn(IntPtr window, int index, string value)
+    {
+        var text = Marshal.StringToHGlobalUni(value);
+        var memory = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(ListViewColumn)));
+        try
+        {
+            var column = new ListViewColumn
+            {
+                Mask = 0x000E,
+                Width = 120,
+                Text = text,
+                TextMax = value.Length + 1,
+                SubItem = index
+            };
+            Marshal.StructureToPtr(column, memory, false);
+            if (SendRaw(window, 0x1061, new IntPtr(index), memory).ToInt32() != index)
+                throw new InvalidOperationException("Synthetic list column could not be added");
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(memory);
+            Marshal.FreeHGlobal(text);
+        }
+    }
+    public static void AddListCell(IntPtr window, int row, int columnIndex, string value, bool insert)
+    {
+        var text = Marshal.StringToHGlobalUni(value);
+        var memory = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(ListViewItem)));
+        try
+        {
+            var item = new ListViewItem
+            {
+                Mask = 0x0001,
+                Item = row,
+                SubItem = columnIndex,
+                Text = text,
+                TextMax = value.Length + 1
+            };
+            Marshal.StructureToPtr(item, memory, false);
+            var result = SendRaw(
+                window,
+                (uint)(insert ? 0x104D : 0x1074),
+                new IntPtr(row),
+                memory
+            ).ToInt32();
+            if ((insert && result != row) || (!insert && result == 0))
+                throw new InvalidOperationException("Synthetic list cell could not be added");
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(memory);
+            Marshal.FreeHGlobal(text);
+        }
+    }
+    public static int GetButtonCheck(IntPtr window)
+    {
+        return SendRaw(window, 0x00F0, IntPtr.Zero, IntPtr.Zero).ToInt32();
+    }
 }
 '@
 $nativeTestForm = [System.Windows.Forms.Form]::new()
@@ -744,60 +847,85 @@ Add-Type -TypeDefinition $nativeMenuLiteral.Value `
 $nativeForm = [System.Windows.Forms.Form]::new()
 $nativeForm.ShowInTaskbar = $false
 $nativeForm.Opacity = 0
-$nativeCombo = [System.Windows.Forms.ComboBox]::new()
-$nativeCombo.DropDownStyle = [System.Windows.Forms.ComboBoxStyle]::DropDownList
-[void]$nativeCombo.Items.AddRange(@("Path", "is", "Include"))
-$nativeEdit = [System.Windows.Forms.TextBox]::new()
-$nativeButton = [System.Windows.Forms.Button]::new()
-$nativeButton.Text = "Add"
-$nativeList = [System.Windows.Forms.ListView]::new()
-$nativeList.View = [System.Windows.Forms.View]::Details
-foreach ($column in @("Column", "Relation", "Value", "Action")) {
-  [void]$nativeList.Columns.Add($column, 120)
+$nativeForm.Width = 640
+$nativeForm.Height = 320
+$nativeComboHandle = [SyntheticListCount]::Create(
+  0, "ComboBox", "", 0x50200203, 8, 8, 220, 100,
+  $nativeForm.Handle, [IntPtr]201, [IntPtr]::Zero, [IntPtr]::Zero
+)
+$nativeEditHandle = [SyntheticListCount]::Create(
+  0, "Edit", "", 0x50000080, 8, 40, 220, 24,
+  $nativeForm.Handle, [IntPtr]202, [IntPtr]::Zero, [IntPtr]::Zero
+)
+$nativeButtonHandle = [SyntheticListCount]::Create(
+  0, "Button", "Add", 0x50000003, 240, 8, 80, 24,
+  $nativeForm.Handle, [IntPtr]203, [IntPtr]::Zero, [IntPtr]::Zero
+)
+$nativeListHandle = [SyntheticListCount]::Create(
+  0, "SysListView32", "", 0x50000001, 8, 80, 560, 180,
+  $nativeForm.Handle, [IntPtr]204, [IntPtr]::Zero, [IntPtr]::Zero
+)
+if (
+  $nativeComboHandle -eq [IntPtr]::Zero -or
+  $nativeEditHandle -eq [IntPtr]::Zero -or
+  $nativeButtonHandle -eq [IntPtr]::Zero -or
+  $nativeListHandle -eq [IntPtr]::Zero
+) {
+  throw "Synthetic native filter controls could not be created"
 }
-$nativeRow = [System.Windows.Forms.ListViewItem]::new("Path")
-[void]$nativeRow.SubItems.Add("is")
-[void]$nativeRow.SubItems.Add("C:\audit\canary.png")
-[void]$nativeRow.SubItems.Add("Include")
-[void]$nativeList.Items.Add($nativeRow)
-$nativeForm.Controls.AddRange(@($nativeCombo, $nativeEdit, $nativeButton, $nativeList))
+foreach ($option in @("Path", "is", "Include")) {
+  [SyntheticListCount]::AddComboOption($nativeComboHandle, $option)
+}
+$nativeList = [System.Windows.Forms.ListView]::new()
+[void]$nativeList.Handle
+$nativeList.Dispose()
+$nativeList = $nativeListHandle
+foreach ($columnIndex in 0..3) {
+  [SyntheticListCount]::AddListColumn(
+    $nativeList,
+    $columnIndex,
+    @("Column", "Relation", "Value", "Action")[$columnIndex]
+  )
+}
+[SyntheticListCount]::AddListCell($nativeList, 0, 0, "Path", $true)
+[SyntheticListCount]::AddListCell($nativeList, 0, 1, "is", $false)
+[SyntheticListCount]::AddListCell($nativeList, 0, 2, "C:\audit\canary.png", $false)
+[SyntheticListCount]::AddListCell($nativeList, 0, 3, "Include", $false)
 $nativeForm.Show()
 $nativeForm.Activate()
 [System.Windows.Forms.Application]::DoEvents()
 try {
-  if ([ProcmonNativeMenu]::ReadNativeComboItemCount($nativeCombo.Handle, [int]$PID) -ne 3) {
+  if ([ProcmonNativeMenu]::ReadNativeComboItemCount($nativeComboHandle, [int]$PID) -ne 3) {
     throw "Native combo count did not read the synthetic options"
   }
-  if ([ProcmonNativeMenu]::CountNativeComboItemExact($nativeCombo.Handle, [int]$PID, "Path") -ne 1) {
+  if ([ProcmonNativeMenu]::CountNativeComboItemExact($nativeComboHandle, [int]$PID, "Path") -ne 1) {
     throw "Native combo exact option count was not unique"
   }
-  [ProcmonNativeMenu]::SelectNativeComboItemExact($nativeCombo.Handle, [int]$PID, "Path")
-  if ([ProcmonNativeMenu]::ReadNativeControlText($nativeCombo.Handle, [int]$PID, "combo", 256) -cne "Path") {
+  [ProcmonNativeMenu]::SelectNativeComboItemExact($nativeComboHandle, [int]$PID, "Path")
+  if ([ProcmonNativeMenu]::ReadNativeControlText($nativeComboHandle, [int]$PID, "combo", 256) -cne "Path") {
     throw "Native combo selection readback did not match"
   }
   [ProcmonNativeMenu]::SetNativeEditTextExact(
-    $nativeEdit.Handle, [int]$PID, "C:\audit\canary.png"
+    $nativeEditHandle, [int]$PID, "C:\audit\canary.png"
   )
-  if ([ProcmonNativeMenu]::ReadNativeControlText($nativeEdit.Handle, [int]$PID, "edit", 1024) -cne "C:\audit\canary.png") {
+  if ([ProcmonNativeMenu]::ReadNativeControlText($nativeEditHandle, [int]$PID, "edit", 1024) -cne "C:\audit\canary.png") {
     throw "Native edit text readback did not match"
   }
-  $script:nativeButtonClicks = 0
-  $nativeButton.Add_Click({ $script:nativeButtonClicks++ })
-  [ProcmonNativeMenu]::ClickNativeButtonExact($nativeButton.Handle, [int]$PID, "Add")
+  [ProcmonNativeMenu]::ClickNativeButtonExact($nativeButtonHandle, [int]$PID, "Add")
   [System.Windows.Forms.Application]::DoEvents()
-  if ($script:nativeButtonClicks -ne 1) {
-    throw "Native button activation did not invoke exactly once"
+  if ([SyntheticListCount]::GetButtonCheck($nativeButtonHandle) -ne 1) {
+    throw "Native button activation did not toggle its synthetic checked state"
   }
   if (
-    [ProcmonNativeMenu]::ReadNativeListItemCount($nativeList.Handle, [int]$PID) -ne 1 -or
-    [ProcmonNativeMenu]::ReadNativeListColumnCount($nativeList.Handle, [int]$PID) -ne 4
+    [ProcmonNativeMenu]::ReadNativeListItemCount($nativeList, [int]$PID) -ne 1 -or
+    [ProcmonNativeMenu]::ReadNativeListColumnCount($nativeList, [int]$PID) -ne 4
   ) {
     throw "Native list count or header count did not match the synthetic fixture"
   }
   $expectedCells = @("Path", "is", "C:\audit\canary.png", "Include")
   for ($columnIndex = 0; $columnIndex -lt $expectedCells.Count; $columnIndex++) {
     $actualCell = [ProcmonNativeMenu]::ReadNativeListItemText(
-      $nativeList.Handle, [int]$PID, 0, $columnIndex, 1024
+      $nativeList, [int]$PID, 0, $columnIndex, 1024
     )
     if ($actualCell -cne $expectedCells[$columnIndex]) {
       throw "Native list text did not match the synthetic four-column fixture"
