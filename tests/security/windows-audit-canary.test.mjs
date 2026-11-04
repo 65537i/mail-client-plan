@@ -334,13 +334,53 @@ test("AC-05: Procmon main-window activation verifies its process-owned foregroun
     /\.SetValue\(|\.Select\(|\.Expand\(|\.Invoke\(|\.Toggle\(/,
   );
   assert.doesNotMatch(nativeChildUiaSummary, /\.Current\.(?:Name|Value|HelpText)/);
+  const nativeControlSummary = configuration.match(
+    /function Write-ProcmonNativeChildSummary[\s\S]*?PROC_MON_FILTER_NATIVE_CONTROLS=[\s\S]*?\n}/,
+  )?.[0];
+  assert.ok(nativeControlSummary, "Native control read-only summary is missing");
+  assert.match(
+    nativeControlSummary,
+    /IsWindowVisible\(\$child\.Handle\)[\s\S]*GetWindowProcessId\(\$child\.Handle\) -ne \$ProcessId[\s\S]*IsWindowEnabled\(\$child\.Handle\)[\s\S]*ReadNativeComboItemCount[\s\S]*FindNativeComboItemExact[\s\S]*"Path"[\s\S]*"is"[\s\S]*"Include"[\s\S]*ReadNativeControlText[\s\S]*"Reset"[\s\S]*"Add"[\s\S]*"OK"[\s\S]*"Cancel"[\s\S]*"Remove"[\s\S]*ReadNativeListItemCount/,
+  );
+  assert.doesNotMatch(
+    nativeControlSummary,
+    /SetWindowText|PostMessage|SendMessage|CB_SETCURSEL|BM_CLICK|LVM_DELETEITEM|\.Invoke\(/,
+  );
+  assert.match(
+    nativeControlSummary,
+    /PROC_MON_FILTER_NATIVE_CONTROLS=source:\$Source;state:\$nativeControlState;combos:\$nativeCombos;path-options:\$pathOptions;operator-options:\$operatorOptions;include-options:\$includeOptions;edits:\$nativeEdits;readable-edits:\$readableEdits;buttons:\$nativeButtons;reset:\$resetButtons;add:\$addButtons;ok:\$okButtons;cancel:\$cancelButtons;remove:\$removeButtons;lists:\$nativeLists;list-items:\$nativeListItems;read-failures:\$nativeReadFailures;truncated:/,
+  );
+  assert.match(
+    configuration,
+    /private const uint WM_GETTEXT = 0x000D;[\s\S]*private const uint CB_GETCOUNT = 0x0146;[\s\S]*private const uint CB_FINDSTRINGEXACT = 0x0158;[\s\S]*private const uint LVM_GETITEMCOUNT = 0x1004;[\s\S]*NativeControlMessageTimeout = 1000[\s\S]*ReadNativeComboItemCount[\s\S]*CB_GETCOUNT[\s\S]*ReadNativeListItemCount[\s\S]*LVM_GETITEMCOUNT/,
+  );
+  assert.match(
+    configuration,
+    /SelectNativeComboItemExact[\s\S]*CB_SETCURSEL[\s\S]*CB_GETCURSEL[\s\S]*SetNativeEditTextExact[\s\S]*WM_SETTEXT[\s\S]*ClickNativeButtonExact[\s\S]*BM_CLICK[\s\S]*ReadNativeListColumnCount[\s\S]*HDM_GETITEMCOUNT[\s\S]*ReadNativeListItemText[\s\S]*OpenProcess[\s\S]*WriteProcessMemory[\s\S]*LVM_GETITEMTEXTW[\s\S]*ReadProcessMemory[\s\S]*VirtualFreeEx/,
+  );
+  const nativeDialogControls = configuration.match(
+    /function Get-ProcmonNativeFilterDialogControls[\s\S]*?function Get-ProcmonNativeFilterRuleRows/,
+  )?.[0];
+  assert.ok(nativeDialogControls, "Native filter dialog fallback gate is missing");
+  assert.match(
+    nativeDialogControls,
+    /GetWindowProcessId\(\$root\) -ne \$ProcessId[\s\S]*IsWindowVisible\(\$root\)[\s\S]*IsWindowEnabled\(\$root\)[\s\S]*ReadNativeChildSummary\(\$root, \$ProcessId, 256\)[\s\S]*GetWindowProcessId\(\$child\.Handle\) -ne \$ProcessId[\s\S]*ControlType\]::Pane[\s\S]*ValuePattern\]::Pattern[\s\S]*SelectionPattern\]::Pattern[\s\S]*ExpandCollapsePattern\]::Pattern[\s\S]*InvokePattern\]::Pattern[\s\S]*TogglePattern\]::Pattern[\s\S]*CountNativeComboItemExact[\s\S]*ReadNativeListColumnCount/,
+  );
+  assert.match(
+    configuration,
+    /function Set-FilterRule\([\s\S]*\$nativeControls = Get-ProcmonNativeFilterDialogControls[\s\S]*Set-ProcmonNativeFilterCombo[\s\S]*Set-ProcmonNativeFilterPath[\s\S]*Invoke-ProcmonNativeFilterButton[\s\S]*Get-ProcmonNativeFilterRuleRows[\s\S]*StringComparison\]::Ordinal[\s\S]*exactMatches -ne 1/,
+  );
+  assert.match(
+    configuration,
+    /function Get-ProcmonNativeFilterRuleRows[\s\S]*ReadNativeListItemCount[\s\S]*\$count -gt 64[\s\S]*\$columnIndex -lt 4[\s\S]*ReadNativeListItemText[\s\S]*\$finalCount -ne \$count[\s\S]*\$finalColumnCount -ne 4[\s\S]*PROC_MON_FILTER_NATIVE_RULES=/,
+  );
   assert.match(
     configuration,
     /private struct KeyboardInput[\s\S]*private struct MouseInput[\s\S]*LayoutKind\.Explicit[\s\S]*private struct InputUnion[\s\S]*FieldOffset\(0\)[\s\S]*MouseInput Mouse[\s\S]*FieldOffset\(0\)[\s\S]*KeyboardInput Keyboard[\s\S]*private struct NativeInput[\s\S]*private static extern uint SendInput[\s\S]*SendControlLShortcut\(\s*IntPtr expectedWindow,\s*int expectedProcessId\s*\)[\s\S]*GetForegroundWindow\(\) != expectedWindow[\s\S]*GetWindowProcessId\(expectedWindow\) != expectedProcessId[\s\S]*CreateKeyboardInput\(VK_CONTROL, 0\)[\s\S]*CreateKeyboardInput\(VK_L, 0\)[\s\S]*CreateKeyboardInput\(VK_L, KEYEVENTF_KEYUP\)[\s\S]*CreateKeyboardInput\(VK_CONTROL, KEYEVENTF_KEYUP\)[\s\S]*if \(inserted != \(uint\)inputs\.Length\)[\s\S]*releaseInputs/,
   );
   assert.match(
     configuration,
-    /EnumWindows\(EnumWindowsProc callback, IntPtr lParam\)[\s\S]*GetProcessTopLevelWindows\(int processId, int maximum\)[\s\S]*maximum > 257[\s\S]*function Find-ProcmonNativeFilterDialog[\s\S]*GetProcessTopLevelWindows\(\$Process\.Id, 257\)[\s\S]*Write-ProcmonNativeMenuSummary[\s\S]*-Source "all-top-level"[\s\S]*\$windowCount = \[Math\]::Min\(\$handles\.Length, 256\)[\s\S]*IsWindowVisible\(\$handle\)[\s\S]*candidateState\.ControlType -ne \[System\.Windows\.Automation\.ControlType\]::Window[\s\S]*candidateState\.ProcessId -ne \$Process\.Id[\s\S]*\[IntPtr\]\(\$candidateState\.NativeWindowHandle\) -ne \$handle[\s\S]*candidateState\.IsEnabled[\s\S]*candidateState\.IsOffscreen[\s\S]*distinctRuntimeId -and[\s\S]*\$combos\.Count -ge 3[\s\S]*\$edits\.Count -ge 1[\s\S]*PROC_MON_FILTER_DIALOG_DISCOVERY=native-top-level-window[\s\S]*PROC_MON_FILTER_NATIVE_WINDOW_UIA=/,
+    /EnumWindows\(EnumWindowsProc callback, IntPtr lParam\)[\s\S]*GetProcessTopLevelWindows\(int processId, int maximum\)[\s\S]*maximum > 257[\s\S]*function Find-ProcmonNativeFilterDialog[\s\S]*GetProcessTopLevelWindows\(\$Process\.Id, 257\)[\s\S]*Write-ProcmonNativeMenuSummary[\s\S]*-Source "all-top-level"[\s\S]*\$windowCount = \[Math\]::Min\(\$handles\.Length, 256\)[\s\S]*IsWindowVisible\(\$handle\)[\s\S]*candidateState\.ProcessId -ne \$Process\.Id[\s\S]*\[IntPtr\]\(\$candidateState\.NativeWindowHandle\) -ne \$handle[\s\S]*ControlType\]::Pane[\s\S]*Get-ProcmonNativeFilterDialogControls \$candidateWindow \$Process\.Id[\s\S]*return \$candidateWindow[\s\S]*ControlType\]::Window[\s\S]*candidateState\.IsEnabled[\s\S]*candidateState\.IsOffscreen[\s\S]*distinctRuntimeId -and[\s\S]*\$combos\.Count -ge 3[\s\S]*\$edits\.Count -ge 1[\s\S]*PROC_MON_FILTER_DIALOG_DISCOVERY=native-top-level-window[\s\S]*PROC_MON_FILTER_NATIVE_WINDOW_UIA=/,
   );
   assert.match(
     configuration,

@@ -729,6 +729,84 @@ if ($parseErrors.Count -ne 0) {
   throw "Procmon configuration script has PowerShell parse errors"
 }
 $sourceText = [IO.File]::ReadAllText($source)
+$nativeMenuLiteral = $ast.Find({
+  param($node)
+  $node -is [System.Management.Automation.Language.StringConstantExpressionAst] -and
+    $node.Value -match 'public static class ProcmonNativeMenu'
+}, $true)
+if ($null -eq $nativeMenuLiteral) {
+  throw "Native Procmon control helper is missing"
+}
+Add-Type -AssemblyName Accessibility
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type -TypeDefinition $nativeMenuLiteral.Value `
+  -ReferencedAssemblies ([Accessibility.IAccessible].Assembly.Location)
+$nativeForm = [System.Windows.Forms.Form]::new()
+$nativeForm.ShowInTaskbar = $false
+$nativeForm.Opacity = 0
+$nativeCombo = [System.Windows.Forms.ComboBox]::new()
+$nativeCombo.DropDownStyle = [System.Windows.Forms.ComboBoxStyle]::DropDownList
+[void]$nativeCombo.Items.AddRange(@("Path", "is", "Include"))
+$nativeEdit = [System.Windows.Forms.TextBox]::new()
+$nativeButton = [System.Windows.Forms.Button]::new()
+$nativeButton.Text = "Add"
+$nativeList = [System.Windows.Forms.ListView]::new()
+$nativeList.View = [System.Windows.Forms.View]::Details
+foreach ($column in @("Column", "Relation", "Value", "Action")) {
+  [void]$nativeList.Columns.Add($column, 120)
+}
+$nativeRow = [System.Windows.Forms.ListViewItem]::new("Path")
+[void]$nativeRow.SubItems.Add("is")
+[void]$nativeRow.SubItems.Add("C:\audit\canary.png")
+[void]$nativeRow.SubItems.Add("Include")
+[void]$nativeList.Items.Add($nativeRow)
+$nativeForm.Controls.AddRange(@($nativeCombo, $nativeEdit, $nativeButton, $nativeList))
+$nativeForm.Show()
+$nativeForm.Activate()
+[System.Windows.Forms.Application]::DoEvents()
+try {
+  if ([ProcmonNativeMenu]::ReadNativeComboItemCount($nativeCombo.Handle, [int]$PID) -ne 3) {
+    throw "Native combo count did not read the synthetic options"
+  }
+  if ([ProcmonNativeMenu]::CountNativeComboItemExact($nativeCombo.Handle, [int]$PID, "Path") -ne 1) {
+    throw "Native combo exact option count was not unique"
+  }
+  [ProcmonNativeMenu]::SelectNativeComboItemExact($nativeCombo.Handle, [int]$PID, "Path")
+  if ([ProcmonNativeMenu]::ReadNativeControlText($nativeCombo.Handle, [int]$PID, "combo", 256) -cne "Path") {
+    throw "Native combo selection readback did not match"
+  }
+  [ProcmonNativeMenu]::SetNativeEditTextExact(
+    $nativeEdit.Handle, [int]$PID, "C:\audit\canary.png"
+  )
+  if ([ProcmonNativeMenu]::ReadNativeControlText($nativeEdit.Handle, [int]$PID, "edit", 1024) -cne "C:\audit\canary.png") {
+    throw "Native edit text readback did not match"
+  }
+  $script:nativeButtonClicks = 0
+  $nativeButton.Add_Click({ $script:nativeButtonClicks++ })
+  [ProcmonNativeMenu]::ClickNativeButtonExact($nativeButton.Handle, [int]$PID, "Add")
+  [System.Windows.Forms.Application]::DoEvents()
+  if ($script:nativeButtonClicks -ne 1) {
+    throw "Native button activation did not invoke exactly once"
+  }
+  if (
+    [ProcmonNativeMenu]::ReadNativeListItemCount($nativeList.Handle, [int]$PID) -ne 1 -or
+    [ProcmonNativeMenu]::ReadNativeListColumnCount($nativeList.Handle, [int]$PID) -ne 4
+  ) {
+    throw "Native list count or header count did not match the synthetic fixture"
+  }
+  $expectedCells = @("Path", "is", "C:\audit\canary.png", "Include")
+  for ($columnIndex = 0; $columnIndex -lt $expectedCells.Count; $columnIndex++) {
+    $actualCell = [ProcmonNativeMenu]::ReadNativeListItemText(
+      $nativeList.Handle, [int]$PID, 0, $columnIndex, 1024
+    )
+    if ($actualCell -cne $expectedCells[$columnIndex]) {
+      throw "Native list text did not match the synthetic four-column fixture"
+    }
+  }
+} finally {
+  $nativeForm.Close()
+  $nativeForm.Dispose()
+}
 if (
   $sourceText -notmatch 'GetProcessById\(\$CaptureProcessId\)' -or
   $sourceText -notmatch '\$process.Path -cne \[IO.Path\]::GetFullPath\(\$ProcmonPath\)' -or

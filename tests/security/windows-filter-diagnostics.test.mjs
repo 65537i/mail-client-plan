@@ -455,6 +455,64 @@ test("AC-05: native child pattern diagnostics retain supported-pattern counts on
   );
 });
 
+test("AC-05: native control diagnostics retain bounded class and fixed-label counts only", () => {
+  const line = "PROC_MON_FILTER_NATIVE_CONTROLS="
+    + "source:visible-other;state:ready;combos:4;path-options:1;operator-options:1;"
+    + "include-options:1;edits:1;readable-edits:1;buttons:6;reset:1;add:1;ok:1;"
+    + "cancel:1;remove:1;lists:1;list-items:0;read-failures:0;truncated:false";
+  assert.equal(
+    describeWindowsFilterDiagnostics(line),
+    "; filter-native-controls=source:visible-other;state:ready;combos:4;path-options:1;"
+      + "operator-options:1;include-options:1;edits:1;readable-edits:1;buttons:6;"
+      + "reset:1;add:1;ok:1;cancel:1;remove:1;lists:1;list-items:0;"
+      + "read-failures:0;truncated:false",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(line.replace("state:ready", "state:partial"))
+      .includes("filter-native-controls=source:visible-other;state:partial"),
+    true,
+  );
+  for (const invalid of [
+    line.replace("path-options:1", "path-options:5"),
+    line.replace("readable-edits:1", "readable-edits:2"),
+    line.replace("add:1", "add:7"),
+    line.replace("list-items:0", "list-items:257"),
+    line.replace("state:ready", "state:ready").replace("truncated:false", "truncated:true"),
+    `${line};text=private-path`,
+  ]) {
+    assert.equal(describeWindowsFilterDiagnostics(invalid), "");
+  }
+});
+
+test("AC-05: native rule diagnostics retain exact four-column row counts only", () => {
+  const line = "PROC_MON_FILTER_NATIVE_RULES="
+    + "phase:reloaded;state:ready;rows:2;columns:4;path:2;is:2;include:2;exact-shape:2;"
+    + "unclassified:0;truncated:false";
+  assert.equal(
+    describeWindowsFilterDiagnostics(line),
+    "; filter-native-rules=phase:reloaded;state:ready;rows:2;columns:4;path:2;is:2;include:2;"
+      + "exact-shape:2;unclassified:0;truncated:false",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      line.replace("state:ready", "state:partial")
+        .replace("exact-shape:2", "exact-shape:1")
+        .replace("unclassified:0", "unclassified:1"),
+    ).includes("filter-native-rules=phase:reloaded;state:partial"),
+    true,
+  );
+  for (const invalid of [
+    line.replace("columns:4", "columns:3"),
+    line.replace("exact-shape:2", "exact-shape:1"),
+    line.replace("rows:2", "rows:65"),
+    line.replace("include:2", "include:3"),
+    line.replace("truncated:false", "truncated:true"),
+    `${line};path=C:\\private`,
+  ]) {
+    assert.equal(describeWindowsFilterDiagnostics(invalid), "");
+  }
+});
+
 test("AC-05: Windows filter diagnostics omit arbitrary names and exception details", () => {
   const output = [
     "PROC_MON_FILTER_MENU_STATE=enabled:yes;offscreen:false;keyboard-focusable:true",
@@ -1281,6 +1339,9 @@ test("AC-05: truncation preserves mandatory evidence across chunk boundaries wit
     "PROC_MON_FILTER_NATIVE_CHILD_UIA=source:visible-other;state:ready;candidates:12;mapped:12;combos:0;edits:0;buttons:0;windows:0;panes:12;other:0;unreadable:0;truncated:false",
     "PROC_MON_FILTER_NATIVE_CHILD_PATTERNS=source:main;state:ready;candidates:2;mapped:2;value:0;selection:0;selection-item:0;expand-collapse:0;invoke:1;toggle:0;pattern-errors:0;unreadable:0;truncated:false",
     "PROC_MON_FILTER_NATIVE_CHILD_PATTERNS=source:visible-other;state:ready;candidates:12;mapped:12;value:1;selection:4;selection-item:0;expand-collapse:4;invoke:6;toggle:0;pattern-errors:0;unreadable:0;truncated:false",
+    "PROC_MON_FILTER_NATIVE_CONTROLS=source:main;state:ready;combos:0;path-options:0;operator-options:0;include-options:0;edits:0;readable-edits:0;buttons:1;reset:0;add:0;ok:0;cancel:0;remove:0;lists:0;list-items:0;read-failures:0;truncated:false",
+    "PROC_MON_FILTER_NATIVE_CONTROLS=source:visible-other;state:ready;combos:4;path-options:1;operator-options:1;include-options:1;edits:1;readable-edits:1;buttons:6;reset:1;add:1;ok:1;cancel:1;remove:1;lists:1;list-items:0;read-failures:0;truncated:false",
+    "PROC_MON_FILTER_NATIVE_RULES=phase:reloaded;state:ready;rows:2;columns:4;path:2;is:2;include:2;exact-shape:2;unclassified:0;truncated:false",
   ];
   for (const chunkSize of [1, 7, 64, 4096, 65536]) {
     const stream = `${"x".repeat(9000)}\n${lines.join("\n")}\n${"y".repeat(12000)}\n`;
@@ -1299,6 +1360,9 @@ test("AC-05: truncation preserves mandatory evidence across chunk boundaries wit
     assert.ok(diagnostics.includes("; filter-native-child-uia=source:visible-other;state:ready"));
     assert.ok(diagnostics.includes("; filter-native-child-patterns=source:main;state:ready"));
     assert.ok(diagnostics.includes("; filter-native-child-patterns=source:visible-other;state:ready"));
+    assert.ok(diagnostics.includes("; filter-native-controls=source:main;state:ready"));
+    assert.ok(diagnostics.includes("; filter-native-controls=source:visible-other;state:ready"));
+    assert.ok(diagnostics.includes("; filter-native-rules=phase:reloaded;state:ready;rows:2;columns:4"));
     const ui = diagnostics.split("; ").find(value => value.startsWith("reloaded-filter-ui="));
     assert.match(ui, reloadedFilterUiEvidencePattern);
     assert.equal(captured.length, windowsFilterOutputLimit);

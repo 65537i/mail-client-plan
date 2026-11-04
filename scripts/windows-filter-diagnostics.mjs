@@ -14,13 +14,17 @@ export function appendBoundedWindowsFilterOutput(current, chunk) {
   if (combined.length <= windowsFilterOutputLimit) return combined;
   const evidence = new Map();
   for (const match of combined.matchAll(
-    /^(PROC_MON_FILTER_CONFIG_PATHS|PROC_MON_FILTER_RELOADED_RULES|PROC_MON_FILTER_RELOADED_UI|PROC_MON_FILTER_RELOADED_DROP|PROC_MON_FILTER_NATIVE_CHILDREN|PROC_MON_FILTER_NATIVE_CHILD_UIA|PROC_MON_FILTER_NATIVE_CHILD_PATTERNS)=[^\r\n]{1,1024}\r?$/gm,
+    /^(PROC_MON_FILTER_CONFIG_PATHS|PROC_MON_FILTER_RELOADED_RULES|PROC_MON_FILTER_RELOADED_UI|PROC_MON_FILTER_RELOADED_DROP|PROC_MON_FILTER_NATIVE_CHILDREN|PROC_MON_FILTER_NATIVE_CHILD_UIA|PROC_MON_FILTER_NATIVE_CHILD_PATTERNS|PROC_MON_FILTER_NATIVE_CONTROLS|PROC_MON_FILTER_NATIVE_RULES)=[^\r\n]{1,1024}\r?$/gm,
   )) {
     const hasSource = match[1] === "PROC_MON_FILTER_NATIVE_CHILDREN"
       || match[1] === "PROC_MON_FILTER_NATIVE_CHILD_UIA"
-      || match[1] === "PROC_MON_FILTER_NATIVE_CHILD_PATTERNS";
+      || match[1] === "PROC_MON_FILTER_NATIVE_CHILD_PATTERNS"
+      || match[1] === "PROC_MON_FILTER_NATIVE_CONTROLS"
+      || match[1] === "PROC_MON_FILTER_NATIVE_RULES";
     const source = hasSource
       ? match[0].match(/^PROC_MON_FILTER_NATIVE_CHILD(?:REN|_UIA|_PATTERNS)=source:(main|visible-other);/)?.[1]
+        ?? match[0].match(/^PROC_MON_FILTER_NATIVE_CONTROLS=source:(main|visible-other);/)?.[1]
+        ?? match[0].match(/^PROC_MON_FILTER_NATIVE_RULES=phase:(initial|reloaded);/)?.[1]
       : undefined;
     const evidenceKey = source ? `${match[1]}:${source}` : match[1];
     if (!evidence.has(evidenceKey) && describeWindowsFilterDiagnostics(match[0])) {
@@ -436,6 +440,67 @@ export function describeWindowsFilterDiagnostics(output) {
     ) {
       diagnostics.push(
         `filter-native-child-patterns=source:${source};state:${state};candidates:${candidates};mapped:${mapped};value:${value};selection:${selection};selection-item:${selectionItem};expand-collapse:${expandCollapse};invoke:${invoke};toggle:${toggle};pattern-errors:${patternErrors};unreadable:${unreadable};truncated:${truncated}`,
+      );
+    }
+  }
+
+  for (const nativeControls of output.matchAll(
+    /^PROC_MON_FILTER_NATIVE_CONTROLS=source:(main|visible-other);state:(ready|partial);combos:(\d{1,3});path-options:(\d{1,3});operator-options:(\d{1,3});include-options:(\d{1,3});edits:(\d{1,3});readable-edits:(\d{1,3});buttons:(\d{1,3});reset:(\d{1,3});add:(\d{1,3});ok:(\d{1,3});cancel:(\d{1,3});remove:(\d{1,3});lists:(\d{1,3});list-items:(\d{1,3});read-failures:(\d{1,3});truncated:(true|false)\r?$/gm,
+  )) {
+    const [, source, state, ...rawCounts] = nativeControls;
+    const [
+      combos,
+      pathOptions,
+      operatorOptions,
+      includeOptions,
+      edits,
+      readableEdits,
+      buttons,
+      reset,
+      add,
+      ok,
+      cancel,
+      remove,
+      lists,
+      listItems,
+      readFailures,
+    ] = rawCounts.slice(0, 15).map(Number);
+    const truncated = rawCounts[15] === "true";
+    if (
+      [combos, edits, buttons, lists, listItems, readFailures].every((count) => count <= 256)
+      && [pathOptions, operatorOptions, includeOptions].every((count) => count <= combos)
+      && readableEdits <= edits
+      && [reset, add, ok, cancel, remove].every((count) => count <= buttons)
+      && (
+        state === "partial"
+        || (!truncated && readFailures === 0)
+      )
+    ) {
+      diagnostics.push(
+        `filter-native-controls=source:${source};state:${state};combos:${combos};path-options:${pathOptions};operator-options:${operatorOptions};include-options:${includeOptions};edits:${edits};readable-edits:${readableEdits};buttons:${buttons};reset:${reset};add:${add};ok:${ok};cancel:${cancel};remove:${remove};lists:${lists};list-items:${listItems};read-failures:${readFailures};truncated:${truncated}`,
+      );
+    }
+  }
+
+  for (const nativeRules of output.matchAll(
+    /^PROC_MON_FILTER_NATIVE_RULES=phase:(initial|reloaded);state:(ready|partial);rows:(\d{1,2});columns:(\d);path:(\d{1,2});is:(\d{1,2});include:(\d{1,2});exact-shape:(\d{1,2});unclassified:(\d{1,2});truncated:(true|false)\r?$/gm,
+  )) {
+    const [, phase, state, ...rawCounts] = nativeRules;
+    const [rows, columns, path, operator, include, exactShape, unclassified] =
+      rawCounts.slice(0, 7).map(Number);
+    const truncated = rawCounts[7] === "true";
+    if (
+      rows <= 64 &&
+      columns === 4 &&
+      [path, operator, include, exactShape, unclassified].every((count) => count <= rows) &&
+      exactShape + unclassified === rows &&
+      (
+        state === "partial" ||
+        (!truncated && unclassified === 0)
+      )
+    ) {
+      diagnostics.push(
+        `filter-native-rules=phase:${phase};state:${state};rows:${rows};columns:${columns};path:${path};is:${operator};include:${include};exact-shape:${exactShape};unclassified:${unclassified};truncated:${truncated}`,
       );
     }
   }

@@ -68,6 +68,30 @@ public static class ProcmonNativeMenu
     private const uint GUI_POPUPMENUMODE = 0x00000010;
     private const uint INPUT_KEYBOARD = 1;
     private const uint KEYEVENTF_KEYUP = 0x00000002;
+    private const uint WM_GETTEXT = 0x000D;
+    private const uint WM_GETTEXTLENGTH = 0x000E;
+    private const uint WM_SETTEXT = 0x000C;
+    private const uint WM_COMMAND = 0x0111;
+    private const uint CBN_SELCHANGE = 1;
+    private const uint CB_GETCOUNT = 0x0146;
+    private const uint CB_GETCURSEL = 0x0147;
+    private const uint CB_SETCURSEL = 0x014E;
+    private const uint CB_FINDSTRINGEXACT = 0x0158;
+    private const uint BM_CLICK = 0x00F5;
+    private const uint LVM_GETITEMCOUNT = 0x1004;
+    private const uint LVM_GETHEADER = 0x101F;
+    private const uint LVM_GETITEMTEXTW = 0x1073;
+    private const uint HDM_GETITEMCOUNT = 0x1200;
+    private const uint SMTO_ABORTIFHUNG = 0x0002;
+    private const uint NativeControlMessageTimeout = 1000;
+    private const uint LVIF_TEXT = 0x0001;
+    private const uint ProcessVmOperation = 0x0008;
+    private const uint ProcessVmRead = 0x0010;
+    private const uint ProcessVmWrite = 0x0020;
+    private const uint ProcessQueryLimitedInformation = 0x1000;
+    private const uint MemCommitReserve = 0x3000;
+    private const uint MemRelease = 0x8000;
+    private const uint PageReadWrite = 0x04;
     private const ushort VK_CONTROL = 0x0011;
     private const ushort VK_L = 0x004C;
     private const uint GA_ROOT = 2;
@@ -156,6 +180,26 @@ public static class ProcmonNativeMenu
     {
         public uint Type;
         public InputUnion Data;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativeListViewItem
+    {
+        public uint Mask;
+        public int Item;
+        public int SubItem;
+        public uint State;
+        public uint StateMask;
+        public IntPtr Text;
+        public int TextMax;
+        public int Image;
+        public IntPtr Parameter;
+        public int Indent;
+        public int GroupId;
+        public uint ColumnCount;
+        public IntPtr Columns;
+        public IntPtr ColumnFormats;
+        public int Group;
     }
 
     public sealed class ItemSnapshot
@@ -249,6 +293,120 @@ public static class ProcmonNativeMenu
         IntPtr window,
         System.Text.StringBuilder className,
         int maximum
+    );
+
+    [DllImport("user32.dll", ExactSpelling = true, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool IsWindow(IntPtr window);
+
+    [DllImport("user32.dll", ExactSpelling = true, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool IsWindowEnabled(IntPtr window);
+
+    [DllImport("user32.dll", ExactSpelling = true, SetLastError = true)]
+    private static extern IntPtr GetParent(IntPtr window);
+
+    [DllImport("user32.dll", ExactSpelling = true, SetLastError = true)]
+    private static extern int GetDlgCtrlID(IntPtr window);
+
+    [DllImport(
+        "user32.dll",
+        EntryPoint = "SendMessageTimeoutW",
+        CharSet = CharSet.Unicode,
+        ExactSpelling = true,
+        SetLastError = true
+    )]
+    private static extern IntPtr SendMessageTimeoutRaw(
+        IntPtr window,
+        uint message,
+        IntPtr wParam,
+        IntPtr lParam,
+        uint flags,
+        uint timeout,
+        out IntPtr result
+    );
+
+    [DllImport(
+        "user32.dll",
+        EntryPoint = "SendMessageTimeoutW",
+        CharSet = CharSet.Unicode,
+        ExactSpelling = true,
+        SetLastError = true
+    )]
+    private static extern IntPtr SendMessageTimeoutText(
+        IntPtr window,
+        uint message,
+        IntPtr wParam,
+        System.Text.StringBuilder lParam,
+        uint flags,
+        uint timeout,
+        out IntPtr result
+    );
+
+    [DllImport(
+        "user32.dll",
+        EntryPoint = "SendMessageTimeoutW",
+        CharSet = CharSet.Unicode,
+        ExactSpelling = true,
+        SetLastError = true
+    )]
+    private static extern IntPtr SendMessageTimeoutString(
+        IntPtr window,
+        uint message,
+        IntPtr wParam,
+        [MarshalAs(UnmanagedType.LPWStr)] string lParam,
+        uint flags,
+        uint timeout,
+        out IntPtr result
+    );
+
+    [DllImport("kernel32.dll", ExactSpelling = true, SetLastError = true)]
+    private static extern IntPtr OpenProcess(
+        uint desiredAccess,
+        [MarshalAs(UnmanagedType.Bool)] bool inheritHandle,
+        uint processId
+    );
+
+    [DllImport("kernel32.dll", ExactSpelling = true, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool CloseHandle(IntPtr handle);
+
+    [DllImport("kernel32.dll", ExactSpelling = true, SetLastError = true)]
+    private static extern IntPtr VirtualAllocEx(
+        IntPtr process,
+        IntPtr address,
+        UIntPtr size,
+        uint allocationType,
+        uint protection
+    );
+
+    [DllImport("kernel32.dll", ExactSpelling = true, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool VirtualFreeEx(
+        IntPtr process,
+        IntPtr address,
+        UIntPtr size,
+        uint freeType
+    );
+
+    [DllImport("kernel32.dll", ExactSpelling = true, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool WriteProcessMemory(
+        IntPtr process,
+        IntPtr address,
+        byte[] buffer,
+        UIntPtr size,
+        out UIntPtr written
+    );
+
+    [DllImport("kernel32.dll", ExactSpelling = true, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool ReadProcessMemory(
+        IntPtr process,
+        IntPtr address,
+        byte[] buffer,
+        UIntPtr size,
+        out UIntPtr read
     );
 
     [DllImport("user32.dll", ExactSpelling = true, SetLastError = true)]
@@ -477,6 +635,538 @@ public static class ProcmonNativeMenu
             ? "partial"
             : snapshot.Truncated ? "truncated" : "ready";
         return snapshot;
+    }
+
+    private static void VerifyNativeControl(
+        IntPtr window,
+        int expectedProcessId,
+        string expectedKind
+    )
+    {
+        uint processId;
+        if (
+            window == IntPtr.Zero ||
+            expectedProcessId <= 0 ||
+            !IsWindow(window) ||
+            !IsWindowVisible(window) ||
+            !IsWindowEnabled(window) ||
+            GetWindowThreadProcessId(window, out processId) == 0 ||
+            processId != (uint)expectedProcessId
+        )
+        {
+            throw new InvalidOperationException("Native control ownership is unavailable");
+        }
+        var className = new System.Text.StringBuilder(128);
+        if (GetClassName(window, className, className.Capacity) == 0)
+        {
+            throw new InvalidOperationException("Native control class is unavailable");
+        }
+        var actualClassName = className.ToString();
+        var classMatches =
+            (expectedKind == "combo" &&
+                (actualClassName == "ComboBox" || actualClassName == "ComboBoxEx32")) ||
+            (expectedKind == "edit" && actualClassName == "Edit") ||
+            (expectedKind == "button" && actualClassName == "Button") ||
+            (expectedKind == "list" && actualClassName == "SysListView32");
+        if (!classMatches)
+        {
+            throw new InvalidOperationException("Native control class did not match its expected kind");
+        }
+    }
+
+    public static string ReadNativeControlText(
+        IntPtr window,
+        int expectedProcessId,
+        string expectedKind,
+        int maximumCharacters
+    )
+    {
+        if (maximumCharacters < 1 || maximumCharacters > 1024)
+            throw new ArgumentOutOfRangeException();
+        VerifyNativeControl(window, expectedProcessId, expectedKind);
+        IntPtr lengthResult;
+        if (
+            SendMessageTimeoutRaw(
+                window,
+                WM_GETTEXTLENGTH,
+                IntPtr.Zero,
+                IntPtr.Zero,
+                SMTO_ABORTIFHUNG,
+                NativeControlMessageTimeout,
+                out lengthResult
+            ) == IntPtr.Zero
+        )
+        {
+            throw new InvalidOperationException("Native control text length could not be read");
+        }
+        var textLength = lengthResult.ToInt32();
+        if (textLength < 0 || textLength > maximumCharacters)
+            throw new InvalidOperationException("Native control text exceeded its bound");
+        var text = new System.Text.StringBuilder(textLength + 1);
+        IntPtr copiedLength;
+        if (
+            SendMessageTimeoutText(
+                window,
+                WM_GETTEXT,
+                new IntPtr(text.Capacity),
+                text,
+                SMTO_ABORTIFHUNG,
+                NativeControlMessageTimeout,
+                out copiedLength
+            ) == IntPtr.Zero ||
+            copiedLength.ToInt32() != textLength
+        )
+        {
+            throw new InvalidOperationException("Native control text could not be read consistently");
+        }
+        VerifyNativeControl(window, expectedProcessId, expectedKind);
+        return text.ToString();
+    }
+
+    public static int FindNativeComboItemExact(
+        IntPtr window,
+        int expectedProcessId,
+        string value
+    )
+    {
+        return FindNativeComboItemExactStartingAt(window, expectedProcessId, value, -1);
+    }
+
+    private static int FindNativeComboItemExactStartingAt(
+        IntPtr window,
+        int expectedProcessId,
+        string value,
+        int startAfter
+    )
+    {
+        if (string.IsNullOrEmpty(value) || value.Length > 128 || value.IndexOf('\0') >= 0)
+            throw new ArgumentException("Native combo lookup value is invalid");
+        if (startAfter < -1 || startAfter > 255)
+            throw new ArgumentOutOfRangeException();
+        VerifyNativeControl(window, expectedProcessId, "combo");
+        IntPtr indexResult;
+        if (
+            SendMessageTimeoutString(
+                window,
+                CB_FINDSTRINGEXACT,
+                new IntPtr(startAfter),
+                value,
+                SMTO_ABORTIFHUNG,
+                NativeControlMessageTimeout,
+                out indexResult
+            ) == IntPtr.Zero
+        )
+        {
+            throw new InvalidOperationException("Native combo option lookup failed");
+        }
+        VerifyNativeControl(window, expectedProcessId, "combo");
+        var index = indexResult.ToInt32();
+        if (index < -1 || index > 255)
+            throw new InvalidOperationException("Native combo option index exceeded its bound");
+        return index;
+    }
+
+    public static int CountNativeComboItemExact(
+        IntPtr window,
+        int expectedProcessId,
+        string value
+    )
+    {
+        var first = FindNativeComboItemExactStartingAt(window, expectedProcessId, value, -1);
+        if (first < 0)
+            return 0;
+        var second = FindNativeComboItemExactStartingAt(window, expectedProcessId, value, first);
+        return second < 0 || second == first ? 1 : 2;
+    }
+
+    public static void SelectNativeComboItemExact(
+        IntPtr window,
+        int expectedProcessId,
+        string value
+    )
+    {
+        if (CountNativeComboItemExact(window, expectedProcessId, value) != 1)
+            throw new InvalidOperationException("Native combo option was not unique");
+        var index = FindNativeComboItemExact(window, expectedProcessId, value);
+        IntPtr selectionResult;
+        if (
+            SendMessageTimeoutRaw(
+                window,
+                CB_SETCURSEL,
+                new IntPtr(index),
+                IntPtr.Zero,
+                SMTO_ABORTIFHUNG,
+                NativeControlMessageTimeout,
+                out selectionResult
+            ) == IntPtr.Zero ||
+            selectionResult.ToInt32() != index
+        )
+        {
+            throw new InvalidOperationException("Native combo selection failed");
+        }
+        var parent = GetParent(window);
+        var controlId = GetDlgCtrlID(window);
+        uint parentProcessId;
+        if (
+            parent == IntPtr.Zero ||
+            controlId < 0 ||
+            controlId > ushort.MaxValue ||
+            GetWindowThreadProcessId(parent, out parentProcessId) == 0 ||
+            parentProcessId != (uint)expectedProcessId
+        )
+        {
+            throw new InvalidOperationException("Native combo parent ownership is unavailable");
+        }
+        var command = unchecked((int)(((uint)controlId << 16) | CBN_SELCHANGE));
+        IntPtr notificationResult;
+        if (
+            SendMessageTimeoutRaw(
+                parent,
+                WM_COMMAND,
+                new IntPtr(command),
+                window,
+                SMTO_ABORTIFHUNG,
+                NativeControlMessageTimeout,
+                out notificationResult
+            ) == IntPtr.Zero
+        )
+        {
+            throw new InvalidOperationException("Native combo selection notification failed");
+        }
+        VerifyNativeControl(window, expectedProcessId, "combo");
+        IntPtr currentSelection;
+        if (
+            SendMessageTimeoutRaw(
+                window,
+                CB_GETCURSEL,
+                IntPtr.Zero,
+                IntPtr.Zero,
+                SMTO_ABORTIFHUNG,
+                NativeControlMessageTimeout,
+                out currentSelection
+            ) == IntPtr.Zero ||
+            currentSelection.ToInt32() != index ||
+            ReadNativeControlText(window, expectedProcessId, "combo", 256) != value
+        )
+        {
+            throw new InvalidOperationException("Native combo selection readback failed");
+        }
+    }
+
+    public static int ReadNativeComboItemCount(IntPtr window, int expectedProcessId)
+    {
+        VerifyNativeControl(window, expectedProcessId, "combo");
+        IntPtr countResult;
+        if (
+            SendMessageTimeoutRaw(
+                window,
+                CB_GETCOUNT,
+                IntPtr.Zero,
+                IntPtr.Zero,
+                SMTO_ABORTIFHUNG,
+                NativeControlMessageTimeout,
+                out countResult
+            ) == IntPtr.Zero
+        )
+        {
+            throw new InvalidOperationException("Native combo item count could not be read");
+        }
+        VerifyNativeControl(window, expectedProcessId, "combo");
+        var count = countResult.ToInt32();
+        if (count < 0 || count > 256)
+            throw new InvalidOperationException("Native combo item count exceeded its bound");
+        return count;
+    }
+
+    public static void SetNativeEditTextExact(
+        IntPtr window,
+        int expectedProcessId,
+        string value
+    )
+    {
+        if (
+            string.IsNullOrEmpty(value) ||
+            value.Length > 1024 ||
+            value.IndexOf('\0') >= 0
+        )
+        {
+            throw new ArgumentException("Native edit value is invalid");
+        }
+        VerifyNativeControl(window, expectedProcessId, "edit");
+        IntPtr setResult;
+        if (
+            SendMessageTimeoutString(
+                window,
+                WM_SETTEXT,
+                IntPtr.Zero,
+                value,
+                SMTO_ABORTIFHUNG,
+                NativeControlMessageTimeout,
+                out setResult
+            ) == IntPtr.Zero ||
+            setResult == IntPtr.Zero
+        )
+        {
+            throw new InvalidOperationException("Native edit value could not be set");
+        }
+        VerifyNativeControl(window, expectedProcessId, "edit");
+        if (!string.Equals(
+            ReadNativeControlText(window, expectedProcessId, "edit", 1024),
+            value,
+            StringComparison.Ordinal
+        ))
+        {
+            throw new InvalidOperationException("Native edit value readback did not match");
+        }
+    }
+
+    public static void ClickNativeButtonExact(
+        IntPtr window,
+        int expectedProcessId,
+        string expectedText
+    )
+    {
+        if (string.IsNullOrEmpty(expectedText) || expectedText.Length > 128)
+            throw new ArgumentException("Native button label is invalid");
+        VerifyNativeControl(window, expectedProcessId, "button");
+        if (!string.Equals(
+            ReadNativeControlText(window, expectedProcessId, "button", 128),
+            expectedText,
+            StringComparison.Ordinal
+        ))
+        {
+            throw new InvalidOperationException("Native button label did not match");
+        }
+        IntPtr clickResult;
+        if (
+            SendMessageTimeoutRaw(
+                window,
+                BM_CLICK,
+                IntPtr.Zero,
+                IntPtr.Zero,
+                SMTO_ABORTIFHUNG,
+                NativeControlMessageTimeout,
+                out clickResult
+            ) == IntPtr.Zero
+        )
+        {
+            throw new InvalidOperationException("Native button activation failed");
+        }
+    }
+
+    public static int ReadNativeListItemCount(IntPtr window, int expectedProcessId)
+    {
+        VerifyNativeControl(window, expectedProcessId, "list");
+        IntPtr countResult;
+        if (
+            SendMessageTimeoutRaw(
+                window,
+                LVM_GETITEMCOUNT,
+                IntPtr.Zero,
+                IntPtr.Zero,
+                SMTO_ABORTIFHUNG,
+                NativeControlMessageTimeout,
+                out countResult
+            ) == IntPtr.Zero
+        )
+        {
+            throw new InvalidOperationException("Native list item count could not be read");
+        }
+        VerifyNativeControl(window, expectedProcessId, "list");
+        var count = countResult.ToInt32();
+        if (count < 0 || count > 64)
+            throw new InvalidOperationException("Native list item count exceeded its bound");
+        return count;
+    }
+
+    public static int ReadNativeListColumnCount(IntPtr window, int expectedProcessId)
+    {
+        VerifyNativeControl(window, expectedProcessId, "list");
+        IntPtr headerResult;
+        if (
+            SendMessageTimeoutRaw(
+                window,
+                LVM_GETHEADER,
+                IntPtr.Zero,
+                IntPtr.Zero,
+                SMTO_ABORTIFHUNG,
+                NativeControlMessageTimeout,
+                out headerResult
+            ) == IntPtr.Zero ||
+            headerResult == IntPtr.Zero
+        )
+        {
+            throw new InvalidOperationException("Native filter list header could not be read");
+        }
+        var header = headerResult;
+        uint headerProcessId;
+        if (
+            GetWindowThreadProcessId(header, out headerProcessId) == 0 ||
+            headerProcessId != (uint)expectedProcessId
+        )
+        {
+            throw new InvalidOperationException("Native filter list header ownership is unavailable");
+        }
+        var className = new System.Text.StringBuilder(128);
+        if (
+            GetClassName(header, className, className.Capacity) == 0 ||
+            className.ToString() != "SysHeader32"
+        )
+        {
+            throw new InvalidOperationException("Native filter list header class did not match");
+        }
+        IntPtr countResult;
+        if (
+            SendMessageTimeoutRaw(
+                header,
+                HDM_GETITEMCOUNT,
+                IntPtr.Zero,
+                IntPtr.Zero,
+                SMTO_ABORTIFHUNG,
+                NativeControlMessageTimeout,
+                out countResult
+            ) == IntPtr.Zero
+        )
+        {
+            throw new InvalidOperationException("Native filter list column count could not be read");
+        }
+        VerifyNativeControl(window, expectedProcessId, "list");
+        var count = countResult.ToInt32();
+        if (count < 1 || count > 8)
+            throw new InvalidOperationException("Native filter list column count exceeded its bound");
+        return count;
+    }
+
+    public static string ReadNativeListItemText(
+        IntPtr window,
+        int expectedProcessId,
+        int item,
+        int subItem,
+        int maximumCharacters
+    )
+    {
+        if (
+            item < 0 ||
+            item >= ReadNativeListItemCount(window, expectedProcessId) ||
+            subItem < 0 ||
+            subItem >= ReadNativeListColumnCount(window, expectedProcessId) ||
+            maximumCharacters < 1 ||
+            maximumCharacters > 1024
+        )
+        {
+            throw new ArgumentOutOfRangeException();
+        }
+        VerifyNativeControl(window, expectedProcessId, "list");
+        var process = OpenProcess(
+            ProcessVmOperation |
+                ProcessVmRead |
+                ProcessVmWrite |
+                ProcessQueryLimitedInformation,
+            false,
+            (uint)expectedProcessId
+        );
+        if (process == IntPtr.Zero)
+            throw new InvalidOperationException("Native filter list process memory is unavailable");
+        IntPtr remoteMemory = IntPtr.Zero;
+        IntPtr localMemory = IntPtr.Zero;
+        try
+        {
+            var itemSize = Marshal.SizeOf(typeof(NativeListViewItem));
+            var textBufferSize = checked((maximumCharacters + 1) * 2);
+            var allocationSize = checked(itemSize + textBufferSize);
+            remoteMemory = VirtualAllocEx(
+                process,
+                IntPtr.Zero,
+                new UIntPtr((uint)allocationSize),
+                MemCommitReserve,
+                PageReadWrite
+            );
+            if (remoteMemory == IntPtr.Zero)
+                throw new InvalidOperationException("Native filter list buffer allocation failed");
+            var remoteText = new IntPtr(remoteMemory.ToInt64() + itemSize);
+            var nativeItem = new NativeListViewItem
+            {
+                Mask = LVIF_TEXT,
+                Item = item,
+                SubItem = subItem,
+                Text = remoteText,
+                TextMax = maximumCharacters + 1
+            };
+            localMemory = Marshal.AllocHGlobal(itemSize);
+            Marshal.StructureToPtr(nativeItem, localMemory, false);
+            var itemBytes = new byte[itemSize];
+            Marshal.Copy(localMemory, itemBytes, 0, itemSize);
+            UIntPtr written;
+            if (
+                !WriteProcessMemory(
+                    process,
+                    remoteMemory,
+                    itemBytes,
+                    new UIntPtr((uint)itemBytes.Length),
+                    out written
+                ) ||
+                written.ToUInt64() != (ulong)itemBytes.Length
+            )
+            {
+                throw new InvalidOperationException("Native filter list request could not be written");
+            }
+            IntPtr copiedResult;
+            if (
+                SendMessageTimeoutRaw(
+                    window,
+                    LVM_GETITEMTEXTW,
+                    new IntPtr(item),
+                    remoteMemory,
+                    SMTO_ABORTIFHUNG,
+                    NativeControlMessageTimeout,
+                    out copiedResult
+                ) == IntPtr.Zero
+            )
+            {
+                throw new InvalidOperationException("Native filter list item text could not be read");
+            }
+            var copied = copiedResult.ToInt32();
+            if (copied < 0 || copied > maximumCharacters)
+                throw new InvalidOperationException("Native filter list item text exceeded its bound");
+            var textBytes = new byte[textBufferSize];
+            UIntPtr read;
+            if (
+                !ReadProcessMemory(
+                    process,
+                    remoteText,
+                    textBytes,
+                    new UIntPtr((uint)textBytes.Length),
+                    out read
+                ) ||
+                read.ToUInt64() != (ulong)textBytes.Length
+            )
+            {
+                throw new InvalidOperationException("Native filter list text readback failed");
+            }
+            var text = System.Text.Encoding.Unicode.GetString(textBytes);
+            var terminator = text.IndexOf('\0');
+            if (terminator < 0 || terminator != copied)
+                throw new InvalidOperationException("Native filter list text was inconsistent");
+            VerifyNativeControl(window, expectedProcessId, "list");
+            return text.Substring(0, terminator);
+        }
+        finally
+        {
+            if (localMemory != IntPtr.Zero)
+                Marshal.FreeHGlobal(localMemory);
+            var cleanupFailed = false;
+            if (
+                remoteMemory != IntPtr.Zero &&
+                !VirtualFreeEx(process, remoteMemory, UIntPtr.Zero, MemRelease)
+            )
+            {
+                cleanupFailed = true;
+            }
+            if (!CloseHandle(process))
+                cleanupFailed = true;
+            if (cleanupFailed)
+                throw new InvalidOperationException("Native filter list memory cleanup failed");
+        }
     }
 
     public static IntPtr[] GetProcessTopLevelWindows(int processId, int maximum)
@@ -1218,6 +1908,15 @@ function Get-LoadedFilterRuleRows(
   ) {
     throw "Process Monitor filter dialog ownership could not be verified"
   }
+  $nativeControls = Get-ProcmonNativeFilterDialogControls $Dialog $OwnerProcessId
+  if ($null -ne $nativeControls) {
+    $nativeRows = Get-ProcmonNativeFilterRuleRows `
+      $nativeControls $OwnerProcessId -Quiet:$Quiet -Reloaded:$Reloaded
+    if ($nativeRows.Count -eq 0 -and -not $AllowEmpty) {
+      throw "Process Monitor filter dialog did not expose readable native rule rows"
+    }
+    return ,$nativeRows
+  }
   $items = $Dialog.FindAll(
     [System.Windows.Automation.TreeScope]::Descendants,
     [System.Windows.Automation.Condition]::TrueCondition
@@ -1463,6 +2162,9 @@ function Clear-LoadedFilterRules(
   if ($rows.Count -eq 0) {
     [Console]::Out.WriteLine("PROC_MON_FILTER_RULE_RESET=removed:0;remaining:0")
     return
+  }
+  if ($null -ne (Get-ProcmonNativeFilterDialogControls $Dialog $OwnerProcessId)) {
+    throw "Process Monitor native Reset did not clear every existing filter rule"
   }
   if ($rows.Count -gt $maximumRows) {
     throw "Process Monitor filter list exceeded the bounded row limit"
@@ -2575,6 +3277,40 @@ function Close-ReloadedFilterDialog($Dialog, $MainWindow, [int]$OwnerProcessId) 
   ) {
     throw "Process Monitor reloaded filter dialog cannot be closed safely"
   }
+  if ($null -ne (Get-ProcmonNativeFilterDialogControls $Dialog $OwnerProcessId)) {
+    Set-Stage "close-reloaded-native-filter-dialog"
+    Invoke-ProcmonNativeFilterButton $Dialog $OwnerProcessId "Cancel"
+    Set-Stage "wait-reloaded-native-filter-dialog-closed"
+    $nativeCloseDeadline = [DateTime]::UtcNow.AddSeconds(2)
+    do {
+      if (-not [ProcmonNativeMenu]::IsWindowVisible($dialogHandle)) { break }
+      Start-Sleep -Milliseconds 50
+    } while ([DateTime]::UtcNow -lt $nativeCloseDeadline)
+    if ([ProcmonNativeMenu]::IsWindowVisible($dialogHandle)) {
+      [Console]::Out.WriteLine("PROC_MON_FILTER_RELOAD_DIALOG_CLOSED=gate:failed")
+      throw "Process Monitor reloaded filter dialog remained visible after Cancel"
+    }
+    Set-Stage "restore-reloaded-main-window"
+    [ProcmonNativeMenu]::SetForegroundWindow($mainHandle) | Out-Null
+    $nativeCloseDeadline = [DateTime]::UtcNow.AddSeconds(2)
+    $nativeCloseGate = "failed"
+    do {
+      if (
+        [ProcmonNativeMenu]::GetForegroundWindow() -eq $mainHandle -and
+        [ProcmonNativeMenu]::GetWindowProcessId($mainHandle) -eq $OwnerProcessId -and
+        -not [ProcmonNativeMenu]::IsWindowVisible($dialogHandle)
+      ) {
+        $nativeCloseGate = "passed"
+        break
+      }
+      Start-Sleep -Milliseconds 50
+    } while ([DateTime]::UtcNow -lt $nativeCloseDeadline)
+    [Console]::Out.WriteLine("PROC_MON_FILTER_RELOAD_DIALOG_CLOSED=gate:$nativeCloseGate")
+    if ($nativeCloseGate -ne "passed") {
+      throw "Process Monitor main window was not restored after closing the reloaded filter dialog"
+    }
+    return
+  }
   Set-Stage "close-reloaded-filter-dialog"
   $windowPattern = $Dialog.GetCurrentPattern(
     [System.Windows.Automation.WindowPattern]::Pattern
@@ -3129,6 +3865,406 @@ function Write-ProcmonNativeChildSummary(
   [Console]::Out.WriteLine(
     "PROC_MON_FILTER_NATIVE_CHILD_PATTERNS=source:$Source;state:$uiaState;candidates:$($uiaCandidates.Count);mapped:$mapped;value:$uiaValuePatterns;selection:$uiaSelectionPatterns;selection-item:$uiaSelectionItemPatterns;expand-collapse:$uiaExpandCollapsePatterns;invoke:$uiaInvokePatterns;toggle:$uiaTogglePatterns;pattern-errors:$uiaPatternReadFailures;unreadable:$uiaReadFailures;truncated:$($summary.Truncated.ToString().ToLowerInvariant())"
   )
+  $nativeControlState = "ready"
+  $nativeCombos = 0
+  $pathOptions = 0
+  $operatorOptions = 0
+  $includeOptions = 0
+  $nativeEdits = 0
+  $readableEdits = 0
+  $nativeButtons = 0
+  $resetButtons = 0
+  $addButtons = 0
+  $okButtons = 0
+  $cancelButtons = 0
+  $removeButtons = 0
+  $nativeLists = 0
+  $nativeListItems = 0
+  $nativeReadFailures = 0
+  foreach ($child in $summary.ChildWindows) {
+    if (-not [ProcmonNativeMenu]::IsWindowVisible($child.Handle)) {
+      continue
+    }
+    if ([ProcmonNativeMenu]::GetWindowProcessId($child.Handle) -ne $ProcessId) {
+      $nativeReadFailures++
+      continue
+    }
+    if (-not [ProcmonNativeMenu]::IsWindowEnabled($child.Handle)) {
+      continue
+    }
+    $childReadFailed = $false
+    try {
+      switch ($child.Kind) {
+        "combo" {
+          $nativeCombos++
+          $optionCount = [ProcmonNativeMenu]::ReadNativeComboItemCount(
+            $child.Handle,
+            $ProcessId
+          )
+          if ($optionCount -gt 0) {
+            [ProcmonNativeMenu]::ReadNativeControlText(
+              $child.Handle,
+              $ProcessId,
+              "combo",
+              256
+            ) | Out-Null
+            if ([ProcmonNativeMenu]::FindNativeComboItemExact(
+                $child.Handle,
+                $ProcessId,
+                "Path"
+              ) -ge 0) {
+              $pathOptions++
+            }
+            if ([ProcmonNativeMenu]::FindNativeComboItemExact(
+                $child.Handle,
+                $ProcessId,
+                "is"
+              ) -ge 0) {
+              $operatorOptions++
+            }
+            if ([ProcmonNativeMenu]::FindNativeComboItemExact(
+                $child.Handle,
+                $ProcessId,
+                "Include"
+              ) -ge 0) {
+              $includeOptions++
+            }
+          }
+        }
+        "edit" {
+          $nativeEdits++
+          [ProcmonNativeMenu]::ReadNativeControlText(
+            $child.Handle,
+            $ProcessId,
+            "edit",
+            1024
+          ) | Out-Null
+          $readableEdits++
+        }
+        "button" {
+          $nativeButtons++
+          $controlText = [ProcmonNativeMenu]::ReadNativeControlText(
+            $child.Handle,
+            $ProcessId,
+            "button",
+            128
+          )
+          if ($controlText -ceq "Reset") { $resetButtons++ }
+          if ($controlText -ceq "Add") { $addButtons++ }
+          if ($controlText -ceq "OK") { $okButtons++ }
+          if ($controlText -ceq "Cancel") { $cancelButtons++ }
+          if ($controlText -ceq "Remove") { $removeButtons++ }
+        }
+        "list" {
+          $nativeLists++
+          $listCount = [ProcmonNativeMenu]::ReadNativeListItemCount(
+            $child.Handle,
+            $ProcessId
+          )
+          if ($nativeListItems + $listCount -gt 256) {
+            $childReadFailed = $true
+          } else {
+            $nativeListItems += $listCount
+          }
+        }
+      }
+    } catch [System.InvalidOperationException] {
+      $childReadFailed = $true
+    } catch [System.ArgumentException] {
+      $childReadFailed = $true
+    } catch [System.Runtime.InteropServices.COMException] {
+      $childReadFailed = $true
+    }
+    if ($childReadFailed) {
+      $nativeReadFailures++
+    }
+  }
+  if ($nativeReadFailures -gt 0 -or $summary.State -ne "ready") {
+    $nativeControlState = "partial"
+  }
+  [Console]::Out.WriteLine(
+    "PROC_MON_FILTER_NATIVE_CONTROLS=source:$Source;state:$nativeControlState;combos:$nativeCombos;path-options:$pathOptions;operator-options:$operatorOptions;include-options:$includeOptions;edits:$nativeEdits;readable-edits:$readableEdits;buttons:$nativeButtons;reset:$resetButtons;add:$addButtons;ok:$okButtons;cancel:$cancelButtons;remove:$removeButtons;lists:$nativeLists;list-items:$nativeListItems;read-failures:$nativeReadFailures;truncated:$($summary.Truncated.ToString().ToLowerInvariant())"
+  )
+}
+
+function Get-ProcmonNativeFilterDialogControls(
+  [System.Windows.Automation.AutomationElement]$Dialog,
+  [int]$ProcessId
+) {
+  $dialogState = $Dialog.Current
+  $root = [IntPtr]$dialogState.NativeWindowHandle
+  if (
+    $ProcessId -le 0 -or
+    $root -eq [IntPtr]::Zero -or
+    $dialogState.ProcessId -ne $ProcessId -or
+    [ProcmonNativeMenu]::GetWindowProcessId($root) -ne $ProcessId -or
+    -not [ProcmonNativeMenu]::IsWindowVisible($root) -or
+    -not [ProcmonNativeMenu]::IsWindowEnabled($root) -or
+    $dialogState.ControlType -notin @(
+      [System.Windows.Automation.ControlType]::Window,
+      [System.Windows.Automation.ControlType]::Pane
+    )
+  ) {
+    throw "Process Monitor native filter dialog ownership is unavailable"
+  }
+  $summary = [ProcmonNativeMenu]::ReadNativeChildSummary($root, $ProcessId, 256)
+  if (
+    $summary.State -ne "ready" -or
+    $summary.Truncated -or
+    $summary.Windows -gt 256
+  ) {
+    throw "Process Monitor native filter dialog controls were not completely readable"
+  }
+  $controls = [ordered]@{
+    Root = $root
+    Combos = [System.Collections.Generic.List[System.IntPtr]]::new()
+    Edits = [System.Collections.Generic.List[System.IntPtr]]::new()
+    Buttons = [System.Collections.Generic.Dictionary[string, System.IntPtr]]::new(
+      [System.StringComparer]::Ordinal
+    )
+    Lists = [System.Collections.Generic.List[System.IntPtr]]::new()
+  }
+  $allCandidateControls = [System.Collections.Generic.List[System.IntPtr]]::new()
+  foreach ($child in $summary.ChildWindows) {
+    if ($child.Kind -notin @("combo", "edit", "button", "list")) {
+      continue
+    }
+    if (
+      -not [ProcmonNativeMenu]::IsWindowVisible($child.Handle) -or
+      -not [ProcmonNativeMenu]::IsWindowEnabled($child.Handle) -or
+      [ProcmonNativeMenu]::GetWindowProcessId($child.Handle) -ne $ProcessId
+    ) {
+      continue
+    }
+    $element = [System.Windows.Automation.AutomationElement]::FromHandle($child.Handle)
+    if ($null -eq $element) {
+      return $null
+    }
+    $elementState = $element.Current
+    if (
+      $elementState.ProcessId -ne $ProcessId -or
+      [IntPtr]$elementState.NativeWindowHandle -ne $child.Handle -or
+      $elementState.ControlType -ne [System.Windows.Automation.ControlType]::Pane
+    ) {
+      return $null
+    }
+    foreach ($pattern in @(
+        [System.Windows.Automation.ValuePattern]::Pattern,
+        [System.Windows.Automation.SelectionPattern]::Pattern,
+        [System.Windows.Automation.SelectionItemPattern]::Pattern,
+        [System.Windows.Automation.ExpandCollapsePattern]::Pattern,
+        [System.Windows.Automation.InvokePattern]::Pattern,
+        [System.Windows.Automation.TogglePattern]::Pattern
+      )) {
+      $patternObject = $null
+      if ($element.TryGetCurrentPattern($pattern, [ref]$patternObject)) {
+        return $null
+      }
+    }
+    $allCandidateControls.Add($child.Handle)
+    switch ($child.Kind) {
+      "combo" { $controls.Combos.Add($child.Handle) }
+      "edit" { $controls.Edits.Add($child.Handle) }
+      "list" { $controls.Lists.Add($child.Handle) }
+      "button" {
+        $label = [ProcmonNativeMenu]::ReadNativeControlText(
+          $child.Handle,
+          $ProcessId,
+          "button",
+          128
+        )
+        if ($label -in @("Reset", "Add", "OK", "Cancel", "Remove")) {
+          if ($controls.Buttons.ContainsKey($label)) {
+            throw "Process Monitor native filter dialog has duplicate fixed buttons"
+          }
+          $controls.Buttons.Add($label, $child.Handle)
+        }
+      }
+    }
+  }
+  if (
+    $controls.Combos.Count -lt 3 -or
+    $controls.Combos.Count -gt 8 -or
+    $controls.Edits.Count -ne 1 -or
+    $controls.Lists.Count -ne 1 -or
+    $allCandidateControls.Count -gt 64
+  ) {
+    return $null
+  }
+  foreach ($label in @("Reset", "Add", "OK", "Cancel")) {
+    if (-not $controls.Buttons.ContainsKey($label)) {
+      return $null
+    }
+  }
+  $pathCombos = @(
+    $controls.Combos | Where-Object {
+      [ProcmonNativeMenu]::CountNativeComboItemExact($_, $ProcessId, "Path") -eq 1
+    }
+  )
+  $operatorCombos = @(
+    $controls.Combos | Where-Object {
+      [ProcmonNativeMenu]::CountNativeComboItemExact($_, $ProcessId, "is") -eq 1
+    }
+  )
+  $includeCombos = @(
+    $controls.Combos | Where-Object {
+      [ProcmonNativeMenu]::CountNativeComboItemExact($_, $ProcessId, "Include") -eq 1
+    }
+  )
+  if (
+    $pathCombos.Count -ne 1 -or
+    $operatorCombos.Count -ne 1 -or
+    $includeCombos.Count -ne 1 -or
+    $pathCombos[0] -eq $operatorCombos[0] -or
+    $pathCombos[0] -eq $includeCombos[0] -or
+    $operatorCombos[0] -eq $includeCombos[0]
+  ) {
+    return $null
+  }
+  $columnCount = [ProcmonNativeMenu]::ReadNativeListColumnCount(
+    $controls.Lists[0],
+    $ProcessId
+  )
+  if ($columnCount -ne 4) {
+    return $null
+  }
+  $controls["PathCombo"] = $pathCombos[0]
+  $controls["OperatorCombo"] = $operatorCombos[0]
+  $controls["IncludeCombo"] = $includeCombos[0]
+  $controls["Edit"] = $controls.Edits[0]
+  $controls["List"] = $controls.Lists[0]
+  $controls["ColumnCount"] = $columnCount
+  return [pscustomobject]$controls
+}
+
+function Get-ProcmonNativeFilterRuleRows(
+  [object]$Controls,
+  [int]$ProcessId,
+  [switch]$Quiet,
+  [switch]$Reloaded
+) {
+  $count = [ProcmonNativeMenu]::ReadNativeListItemCount($Controls.List, $ProcessId)
+  if ($count -gt 64) {
+    throw "Process Monitor native filter list exceeded the bounded row limit"
+  }
+  $rows = [System.Collections.Generic.List[object]]::new()
+  for ($rowIndex = 0; $rowIndex -lt $count; $rowIndex++) {
+    $cells = [System.Collections.Generic.List[string]]::new()
+    for ($columnIndex = 0; $columnIndex -lt 4; $columnIndex++) {
+      $cell = [ProcmonNativeMenu]::ReadNativeListItemText(
+        $Controls.List,
+        $ProcessId,
+        $rowIndex,
+        $columnIndex,
+        1024
+      )
+      if ([string]::IsNullOrWhiteSpace($cell)) {
+        throw "Process Monitor native filter row contained an empty cell"
+      }
+      $cells.Add($cell)
+    }
+    $rows.Add([pscustomobject]@{
+      Text = $cells -join " "
+      Element = $null
+      Container = $null
+    })
+  }
+  $finalCount = [ProcmonNativeMenu]::ReadNativeListItemCount($Controls.List, $ProcessId)
+  $finalColumnCount = [ProcmonNativeMenu]::ReadNativeListColumnCount(
+    $Controls.List,
+    $ProcessId
+  )
+  if ($finalCount -ne $count -or $finalColumnCount -ne 4) {
+    throw "Process Monitor native filter list changed while it was being read"
+  }
+  $ruleCount = @(
+    $rows | Where-Object {
+      $_.Text -match "(?i)^Path\s+is\s+.+\s+Include$"
+    }
+  ).Count
+  $pathCount = @(
+    $rows | Where-Object { $_.Text -match "(?i)^Path\s+" }
+  ).Count
+  $operatorCount = @(
+    $rows | Where-Object { $_.Text -match "(?i)^Path\s+is\s+" }
+  ).Count
+  $includeCount = @(
+    $rows | Where-Object { $_.Text -match "(?i)\sInclude$" }
+  ).Count
+  $phase = if ($Reloaded) { "reloaded" } else { "initial" }
+  if (-not $Quiet) {
+    [Console]::Out.WriteLine(
+      "PROC_MON_FILTER_NATIVE_RULES=phase:$phase;state:ready;rows:$count;columns:4;path:$pathCount;is:$operatorCount;include:$includeCount;exact-shape:$ruleCount;unclassified:$($count - $ruleCount);truncated:false"
+    )
+  }
+  return ,$rows.ToArray()
+}
+
+function Invoke-ProcmonNativeFilterButton(
+  [System.Windows.Automation.AutomationElement]$Dialog,
+  [int]$ProcessId,
+  [ValidateSet("Reset", "Add", "OK", "Cancel", "Remove")][string]$Label
+) {
+  $controls = Get-ProcmonNativeFilterDialogControls $Dialog $ProcessId
+  if ($null -eq $controls -or -not $controls.Buttons.ContainsKey($Label)) {
+    throw "Process Monitor native filter button could not be identified exactly"
+  }
+  $button = $controls.Buttons[$Label]
+  if (
+    [ProcmonNativeMenu]::GetForegroundWindow() -ne $controls.Root -or
+    -not [ProcmonNativeMenu]::IsWindowVisible($button) -or
+    -not [ProcmonNativeMenu]::IsWindowEnabled($button) -or
+    [ProcmonNativeMenu]::GetWindowProcessId($button) -ne $ProcessId
+  ) {
+    throw "Process Monitor native filter button is unavailable"
+  }
+  [ProcmonNativeMenu]::ClickNativeButtonExact($button, $ProcessId, $Label)
+}
+
+function Set-ProcmonNativeFilterCombo(
+  [System.Windows.Automation.AutomationElement]$Dialog,
+  [int]$ProcessId,
+  [ValidateSet("Path", "is", "Include")][string]$Value
+) {
+  $controls = Get-ProcmonNativeFilterDialogControls $Dialog $ProcessId
+  if ($null -eq $controls) {
+    throw "Process Monitor native filter combo is unavailable"
+  }
+  $combo = switch ($Value) {
+    "Path" { $controls.PathCombo }
+    "is" { $controls.OperatorCombo }
+    "Include" { $controls.IncludeCombo }
+  }
+  if (
+    [ProcmonNativeMenu]::GetForegroundWindow() -ne $controls.Root -or
+    -not [ProcmonNativeMenu]::IsWindowVisible($combo) -or
+    -not [ProcmonNativeMenu]::IsWindowEnabled($combo) -or
+    [ProcmonNativeMenu]::GetWindowProcessId($combo) -ne $ProcessId
+  ) {
+    throw "Process Monitor native filter combo is unavailable"
+  }
+  [ProcmonNativeMenu]::SelectNativeComboItemExact($combo, $ProcessId, $Value)
+}
+
+function Set-ProcmonNativeFilterPath(
+  [System.Windows.Automation.AutomationElement]$Dialog,
+  [int]$ProcessId,
+  [string]$Path
+) {
+  $controls = Get-ProcmonNativeFilterDialogControls $Dialog $ProcessId
+  if ($null -eq $controls) {
+    throw "Process Monitor native filter path field is unavailable"
+  }
+  $edit = $controls.Edit
+  if (
+    [ProcmonNativeMenu]::GetForegroundWindow() -ne $controls.Root -or
+    -not [ProcmonNativeMenu]::IsWindowVisible($edit) -or
+    -not [ProcmonNativeMenu]::IsWindowEnabled($edit) -or
+    [ProcmonNativeMenu]::GetWindowProcessId($edit) -ne $ProcessId
+  ) {
+    throw "Process Monitor native filter path field is unavailable"
+  }
+  [ProcmonNativeMenu]::SetNativeEditTextExact($edit, $ProcessId, $Path)
 }
 
 function Find-ProcmonNativeFilterDialog(
@@ -3224,13 +4360,18 @@ function Find-ProcmonNativeFilterDialog(
       }
       $candidateState = $candidateWindow.Current
       if (
-        $candidateState.ControlType -ne [System.Windows.Automation.ControlType]::Window -or
         $candidateState.ProcessId -ne $Process.Id -or
-        [IntPtr]($candidateState.NativeWindowHandle) -ne $handle -or
-        -not $candidateState.IsEnabled -or
-        $candidateState.IsOffscreen
+        [IntPtr]($candidateState.NativeWindowHandle) -ne $handle
       ) {
         continue
+      }
+      $candidateRuntimeId = $candidateWindow.GetRuntimeId() -join ","
+      $distinctRuntimeId = (
+        $null -ne $mainRuntimeId -and
+        $candidateRuntimeId -cne $mainRuntimeId
+      )
+      if ($distinctRuntimeId) {
+        $distinctRuntimeIdCount++
       }
       $ownedCount++
       if ($rawScannedOtherCount -lt 2) {
@@ -3241,13 +4382,32 @@ function Find-ProcmonNativeFilterDialog(
         Write-ProcmonNativeChildSummary $handle "visible-other" $Process.Id
         $nativeChildScannedOtherCount++
       }
-      $candidateRuntimeId = $candidateWindow.GetRuntimeId() -join ","
-      $distinctRuntimeId = (
-        $null -ne $mainRuntimeId -and
-        $candidateRuntimeId -cne $mainRuntimeId
-      )
-      if ($distinctRuntimeId) {
-        $distinctRuntimeIdCount++
+      if ($candidateState.ControlType -eq [System.Windows.Automation.ControlType]::Pane) {
+        if (-not $distinctRuntimeId) {
+          continue
+        }
+        $nativeControls = Get-ProcmonNativeFilterDialogControls $candidateWindow $Process.Id
+        if ($null -ne $nativeControls) {
+          [Console]::Out.WriteLine(
+            "PROC_MON_FILTER_NATIVE_WINDOWS=state:ready;windows:$windowCount;main:$mainWindowCount;other:$otherWindowCount;visible:$visibleWindowCount;menus:$menuHandleCount;truncated:$($truncated.ToString().ToLowerInvariant())"
+          )
+          [Console]::Out.WriteLine(
+            "PROC_MON_FILTER_NATIVE_WINDOW_UIA=visible-other:$visibleOtherCount;inspected:$inspectedCount;owned:$ownedCount;distinct-runtime-id:$distinctRuntimeIdCount;reset:1;max-combos:$($nativeControls.Combos.Count);max-edits:$($nativeControls.Edits.Count);read-failures:$readFailureCount;truncated:$($truncated.ToString().ToLowerInvariant())"
+          )
+          [Console]::Out.WriteLine("PROC_MON_FILTER_DIALOG_DISCOVERY=native-top-level-window")
+          [Console]::Out.WriteLine(
+            "PROC_MON_FILTER_DIALOG_LAYOUT=combos:$($nativeControls.Combos.Count);edits:$($nativeControls.Edits.Count)"
+          )
+          return $candidateWindow
+        }
+        continue
+      }
+      if (
+        $candidateState.ControlType -ne [System.Windows.Automation.ControlType]::Window -or
+        -not $candidateState.IsEnabled -or
+        $candidateState.IsOffscreen
+      ) {
+        continue
       }
       $combos = $candidateWindow.FindAll(
         [System.Windows.Automation.TreeScope]::Descendants,
@@ -3265,6 +4425,25 @@ function Find-ProcmonNativeFilterDialog(
       )
       if ($null -ne $reset) {
         $resetCount++
+      }
+      if (
+        $distinctRuntimeId -and
+        ($null -eq $reset -or $combos.Count -lt 3 -or $edits.Count -lt 1)
+      ) {
+        $nativeControls = Get-ProcmonNativeFilterDialogControls $candidateWindow $Process.Id
+        if ($null -ne $nativeControls) {
+          [Console]::Out.WriteLine(
+            "PROC_MON_FILTER_NATIVE_WINDOWS=state:ready;windows:$windowCount;main:$mainWindowCount;other:$otherWindowCount;visible:$visibleWindowCount;menus:$menuHandleCount;truncated:$($truncated.ToString().ToLowerInvariant())"
+          )
+          [Console]::Out.WriteLine(
+            "PROC_MON_FILTER_NATIVE_WINDOW_UIA=visible-other:$visibleOtherCount;inspected:$inspectedCount;owned:$ownedCount;distinct-runtime-id:$distinctRuntimeIdCount;reset:1;max-combos:$($nativeControls.Combos.Count);max-edits:$($nativeControls.Edits.Count);read-failures:$readFailureCount;truncated:$($truncated.ToString().ToLowerInvariant())"
+          )
+          [Console]::Out.WriteLine("PROC_MON_FILTER_DIALOG_DISCOVERY=native-top-level-window")
+          [Console]::Out.WriteLine(
+            "PROC_MON_FILTER_DIALOG_LAYOUT=combos:$($nativeControls.Combos.Count);edits:$($nativeControls.Edits.Count)"
+          )
+          return $candidateWindow
+        }
       }
       if (
         $distinctRuntimeId -and
@@ -3755,6 +4934,31 @@ function Select-ComboValue($Combos, [string]$Value) {
 }
 
 function Set-FilterRule([System.Windows.Automation.AutomationElement]$Dialog, [string]$Path, [int]$OwnerProcessId) {
+  $nativeControls = Get-ProcmonNativeFilterDialogControls $Dialog $OwnerProcessId
+  if ($null -ne $nativeControls) {
+    Set-Stage "select-filter-column"
+    Set-ProcmonNativeFilterCombo $Dialog $OwnerProcessId "Path"
+    Set-Stage "select-filter-operator"
+    Set-ProcmonNativeFilterCombo $Dialog $OwnerProcessId "is"
+    Set-Stage "set-filter-path-value"
+    Set-ProcmonNativeFilterPath $Dialog $OwnerProcessId $Path
+    Set-Stage "select-filter-action"
+    Set-ProcmonNativeFilterCombo $Dialog $OwnerProcessId "Include"
+    Set-Stage "add-filter-rule"
+    Invoke-ProcmonNativeFilterButton $Dialog $OwnerProcessId "Add"
+    $updatedControls = Get-ProcmonNativeFilterDialogControls $Dialog $OwnerProcessId
+    $updatedRows = Get-ProcmonNativeFilterRuleRows $updatedControls $OwnerProcessId -Quiet
+    $expectedRow = "Path is $Path Include"
+    $exactMatches = @(
+      $updatedRows | Where-Object {
+        [string]::Equals($_.Text, $expectedRow, [System.StringComparison]::Ordinal)
+      }
+    ).Count
+    if ($exactMatches -ne 1) {
+      throw "Process Monitor native Add did not retain the exact filter rule"
+    }
+    return
+  }
   $combos = $Dialog.FindAll(
     [System.Windows.Automation.TreeScope]::Descendants,
     [System.Windows.Automation.PropertyCondition]::new(
@@ -4214,10 +5418,15 @@ try {
   }
   }
   Set-Stage "reset-existing-filters"
-  $reset = Wait-Element $filterDialog ([System.Windows.Automation.PropertyCondition]::new(
-    [System.Windows.Automation.AutomationElement]::NameProperty, "Reset"
-  )) 5
-  $reset.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
+  $nativeFilterControls = Get-ProcmonNativeFilterDialogControls $filterDialog $process.Id
+  if ($null -ne $nativeFilterControls) {
+    Invoke-ProcmonNativeFilterButton $filterDialog $process.Id "Reset"
+  } else {
+    $reset = Wait-Element $filterDialog ([System.Windows.Automation.PropertyCondition]::new(
+      [System.Windows.Automation.AutomationElement]::NameProperty, "Reset"
+    )) 5
+    $reset.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
+  }
   Set-Stage "clear-existing-filter-rules"
   Clear-LoadedFilterRules $filterDialog $process.Id
   Set-Stage "set-canary-filter"
@@ -4225,10 +5434,24 @@ try {
   Set-Stage "set-control-filter"
   Set-FilterRule $filterDialog $ControlPath $process.Id
   Set-Stage "apply-filters"
-  $ok = Wait-Element $filterDialog ([System.Windows.Automation.PropertyCondition]::new(
-    [System.Windows.Automation.AutomationElement]::NameProperty, "OK"
-  )) 5
-  $ok.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
+  $nativeFilterControls = Get-ProcmonNativeFilterDialogControls $filterDialog $process.Id
+  if ($null -ne $nativeFilterControls) {
+    Invoke-ProcmonNativeFilterButton $filterDialog $process.Id "OK"
+    $dialogHandle = [IntPtr]$filterDialog.Current.NativeWindowHandle
+    $closeDeadline = [DateTime]::UtcNow.AddSeconds(2)
+    do {
+      if (-not [ProcmonNativeMenu]::IsWindowVisible($dialogHandle)) { break }
+      Start-Sleep -Milliseconds 50
+    } while ([DateTime]::UtcNow -lt $closeDeadline)
+    if ([ProcmonNativeMenu]::IsWindowVisible($dialogHandle)) {
+      throw "Process Monitor native filter dialog did not close after OK"
+    }
+  } else {
+    $ok = Wait-Element $filterDialog ([System.Windows.Automation.PropertyCondition]::new(
+      [System.Windows.Automation.AutomationElement]::NameProperty, "OK"
+    )) 5
+    $ok.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
+  }
 
   Set-Stage "find-main-for-drop-filtered-events"
   $main = Wait-MainWindow $process
