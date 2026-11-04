@@ -2354,9 +2354,16 @@ function Clear-LoadedFilterRules(
       return
     }
     Set-Stage "verify-native-controls-stable-before-clear"
-    if ($null -ne (Get-ProcmonNativeFilterDialogControls $Dialog $OwnerProcessId)) {
-      throw "Process Monitor native filter controls appeared during UIA rule clearing"
+    $verifiedNativeControls = Get-ProcmonNativeFilterDialogControls `
+      $Dialog $OwnerProcessId
+    if (
+      $null -eq $verifiedNativeControls -or
+      $verifiedNativeControls.Root -ne $nativeControls.Root -or
+      $verifiedNativeControls.List -ne $nativeControls.List
+    ) {
+      throw "Process Monitor native filter controls changed before row selection"
     }
+    $nativeControls = $verifiedNativeControls
     if ($rows.Count -gt $maximumRows) {
       throw "Process Monitor native filter list exceeded the bounded row limit"
     }

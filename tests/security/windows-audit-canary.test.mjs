@@ -411,6 +411,14 @@ test("AC-05: Procmon main-window activation verifies its process-owned foregroun
     /Get-ProcmonNativeFilterRuleRows[\s\S]*SelectNativeListItemsExact[\s\S]*selectedCount -ne \$rows\.Count[\s\S]*Invoke-ProcmonNativeFilterButton \$Dialog \$OwnerProcessId "Remove"[\s\S]*remainingRows\.Count -ne 0[\s\S]*Get-LoadedFilterRuleRows[\s\S]*SelectionItemPattern/,
   );
   assert.match(
+    nativeRuleClear,
+    /verify-native-controls-stable-before-clear[\s\S]*\$verifiedNativeControls = Get-ProcmonNativeFilterDialogControls[\s\S]*\$null -eq \$verifiedNativeControls[\s\S]*\$verifiedNativeControls\.Root -ne \$nativeControls\.Root[\s\S]*\$verifiedNativeControls\.List -ne \$nativeControls\.List/,
+  );
+  assert.doesNotMatch(
+    nativeRuleClear,
+    /if \(\$null -ne \(Get-ProcmonNativeFilterDialogControls[\s\S]*appeared during UIA rule clearing/,
+  );
+  assert.match(
     configuration,
     /Get-ProcmonRawUiaSummary[\s\S]*maximumNodes = 512[\s\S]*Write-ProcmonRawUiaSummary \$mainWindowElement "main" \$Process\.Id[\s\S]*rawScannedOtherCount -lt 2[\s\S]*Write-ProcmonRawUiaSummary \$candidateWindow "visible-other" \$Process\.Id/,
   );
