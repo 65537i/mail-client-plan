@@ -674,6 +674,11 @@ public static class ProcmonNativeMenu
         }
     }
 
+    private static string NormalizeNativeButtonLabel(string value)
+    {
+        return (value ?? string.Empty).Replace("&", string.Empty).Trim();
+    }
+
     public static string ReadNativeControlText(
         IntPtr window,
         int expectedProcessId,
@@ -929,11 +934,15 @@ public static class ProcmonNativeMenu
         if (string.IsNullOrEmpty(expectedText) || expectedText.Length > 128)
             throw new ArgumentException("Native button label is invalid");
         VerifyNativeControl(window, expectedProcessId, "button");
-        if (!string.Equals(
-            ReadNativeControlText(window, expectedProcessId, "button", 128),
-            expectedText,
-            StringComparison.Ordinal
-        ))
+        if (
+            !string.Equals(
+                NormalizeNativeButtonLabel(
+                    ReadNativeControlText(window, expectedProcessId, "button", 128)
+                ),
+                NormalizeNativeButtonLabel(expectedText),
+                StringComparison.OrdinalIgnoreCase
+            )
+        )
         {
             throw new InvalidOperationException("Native button label did not match");
         }
@@ -3730,6 +3739,23 @@ function Write-ProcmonRawUiaSummary(
   )
 }
 
+function Resolve-ProcmonNativeFixedButtonLabel([string]$Label) {
+  if ($null -eq $Label -or $Label.Length -gt 128) {
+    return $null
+  }
+  $normalized = $Label.Replace("&", "").Trim()
+  foreach ($fixedLabel in @("Reset", "Add", "OK", "Cancel", "Remove")) {
+    if ([string]::Equals(
+        $normalized,
+        $fixedLabel,
+        [System.StringComparison]::OrdinalIgnoreCase
+      )) {
+      return $fixedLabel
+    }
+  }
+  return $null
+}
+
 function Write-ProcmonNativeChildSummary(
   [System.IntPtr]$Root,
   [ValidateSet("main", "visible-other")][string]$Source,
@@ -3949,11 +3975,12 @@ function Write-ProcmonNativeChildSummary(
             "button",
             128
           )
-          if ($controlText -ceq "Reset") { $resetButtons++ }
-          if ($controlText -ceq "Add") { $addButtons++ }
-          if ($controlText -ceq "OK") { $okButtons++ }
-          if ($controlText -ceq "Cancel") { $cancelButtons++ }
-          if ($controlText -ceq "Remove") { $removeButtons++ }
+          $fixedLabel = Resolve-ProcmonNativeFixedButtonLabel $controlText
+          if ($fixedLabel -ceq "Reset") { $resetButtons++ }
+          if ($fixedLabel -ceq "Add") { $addButtons++ }
+          if ($fixedLabel -ceq "OK") { $okButtons++ }
+          if ($fixedLabel -ceq "Cancel") { $cancelButtons++ }
+          if ($fixedLabel -ceq "Remove") { $removeButtons++ }
         }
         "list" {
           $nativeLists++
@@ -4067,13 +4094,15 @@ function Get-ProcmonNativeFilterDialogControls(
       "edit" { $controls.Edits.Add($child.Handle) }
       "list" { $controls.Lists.Add($child.Handle) }
       "button" {
-        $label = [ProcmonNativeMenu]::ReadNativeControlText(
+        $labelText = [ProcmonNativeMenu]::ReadNativeControlText(
           $child.Handle,
           $ProcessId,
           "button",
           128
         )
-        if ($label -in @("Reset", "Add", "OK", "Cancel", "Remove")) {
+        $fixedLabel = Resolve-ProcmonNativeFixedButtonLabel $labelText
+        if ($null -ne $fixedLabel) {
+          $label = $fixedLabel
           if ($controls.Buttons.ContainsKey($label)) {
             throw "Process Monitor native filter dialog has duplicate fixed buttons"
           }

@@ -858,7 +858,7 @@ $nativeEditHandle = [SyntheticListCount]::Create(
   $nativeForm.Handle, [IntPtr]202, [IntPtr]::Zero, [IntPtr]::Zero
 )
 $nativeButtonHandle = [SyntheticListCount]::Create(
-  0, "Button", "Add", 0x50000003, 240, 8, 80, 24,
+  0, "Button", "&Add", 0x50000003, 240, 8, 80, 24,
   $nativeForm.Handle, [IntPtr]203, [IntPtr]::Zero, [IntPtr]::Zero
 )
 $nativeListHandle = [SyntheticListCount]::Create(
