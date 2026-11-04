@@ -4467,11 +4467,13 @@ function Get-ProcmonNativeFilterRuleRows(
   [switch]$Quiet,
   [switch]$Reloaded
 ) {
+  Set-Stage "read-native-filter-list-count"
   $count = [ProcmonNativeMenu]::ReadNativeListItemCount($Controls.List, $ProcessId)
   if ($count -gt 64) {
     throw "Process Monitor native filter list exceeded the bounded row limit"
   }
   $rows = [System.Collections.Generic.List[object]]::new()
+  Set-Stage "read-native-filter-list-cells"
   for ($rowIndex = 0; $rowIndex -lt $count; $rowIndex++) {
     $cells = [System.Collections.Generic.List[string]]::new()
     for ($columnIndex = 0; $columnIndex -lt 4; $columnIndex++) {
@@ -4493,6 +4495,7 @@ function Get-ProcmonNativeFilterRuleRows(
       Container = $null
     })
   }
+  Set-Stage "verify-native-filter-list-shape"
   $finalCount = [ProcmonNativeMenu]::ReadNativeListItemCount($Controls.List, $ProcessId)
   $finalColumnCount = [ProcmonNativeMenu]::ReadNativeListColumnCount(
     $Controls.List,

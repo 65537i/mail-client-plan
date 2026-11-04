@@ -2,6 +2,8 @@
 
 ## 1. ワークフロー構成
 
+[Run 41896355711](https://github.com/65537i/mail-client-plan/actions/runs/41896355711)（`0bea7e2`、Windows 2025 x64 / full）はunfiltered baseline成功後、strict capture前の`clear-existing-filter-rules`で失敗しAC-05未達。`read-native-filter-rows-before-clear` stageで停止したため、native controls再取得を越えてListView row extraction中に失敗したと判明。count / cells / final shape verificationを別stage化し、次runで停止箇所を特定する。
+
 [Run 41889285185](https://github.com/65537i/mail-client-plan/actions/runs/41889285185)（`3957598`、Windows 2025 x64 / full）はunfiltered baselineを通過したが、strict capture前の`clear-existing-filter-rules`で失敗しAC-05未達。native controlsを再取得する処理中に停止した可能性を示す`read-native-filter-rows-before-clear` stageで終了したため、controls resolutionとListView row readを分け、次runで絞り込む。
 
 [Run 41887981898](https://github.com/65537i/mail-client-plan/actions/runs/41887981898)（`4134cae`、Windows 2025 x64 / webview）はconfiguration export waitを通過したが、`clear-existing-filter-rules`で失敗しstrict capture未実施。native dialog gateはacceptedで、same-PID fallbackで2 rule rowsが読み取られた。disabled caption read / disabled click rejectionとnative list-selection synthetic testを通過した。native clear経路の正確な停止箇所を次runで確認するため、read / select / remove / verifyを別々に記録するstageを追加。focused AC-05 tests 71/71、PowerShell parse、`git diff --check`成功。strict capture未実施、AC-05未達。
