@@ -483,10 +483,17 @@ export function describeWindowsFilterDiagnostics(output) {
   }
 
   for (const candidate of output.matchAll(
-    /^PROC_MON_FILTER_NATIVE_DIALOG_CANDIDATE=state:(accepted|rejected);gate:(checking|uia-unavailable|uia-mismatch|uia-pattern-available|control-counts|fixed-buttons|fixed-options|list-columns|eligible)\r?$/gm,
+    /^PROC_MON_FILTER_NATIVE_DIALOG_CANDIDATE=state:(accepted|rejected);gate:(checking|native-children|uia-unavailable|uia-mismatch|uia-pattern-available|uia-verification|native-control-read|control-counts|fixed-buttons|fixed-options|list-columns|eligible)\r?$/gm,
   )) {
     diagnostics.push(
       `filter-native-dialog-candidate=state:${candidate[1]};gate:${candidate[2]}`,
+    );
+  }
+  for (const candidate of output.matchAll(
+    /^PROC_MON_FILTER_NATIVE_DIALOG_CANDIDATE=state:error;gate:(checking|native-children|uia-unavailable|uia-mismatch|uia-pattern-available|uia-verification|native-control-read|control-counts|fixed-buttons|fixed-options|list-columns|eligible);exception:(invalid-operation|argument|com|method-invocation)\r?$/gm,
+  )) {
+    diagnostics.push(
+      `filter-native-dialog-candidate=state:error;gate:${candidate[1]};exception:${candidate[2]}`,
     );
   }
 

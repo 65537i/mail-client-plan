@@ -384,7 +384,11 @@ test("AC-05: Procmon main-window activation verifies its process-owned foregroun
   );
   assert.match(
     configuration,
-    /EnumWindows\(EnumWindowsProc callback, IntPtr lParam\)[\s\S]*GetProcessTopLevelWindows\(int processId, int maximum\)[\s\S]*maximum > 257[\s\S]*function Find-ProcmonNativeFilterDialog[\s\S]*GetProcessTopLevelWindows\(\$Process\.Id, 257\)[\s\S]*Write-ProcmonNativeMenuSummary[\s\S]*-Source "all-top-level"[\s\S]*\$windowCount = \[Math\]::Min\(\$handles\.Length, 256\)[\s\S]*IsWindowVisible\(\$handle\)[\s\S]*candidateState\.ProcessId -ne \$Process\.Id[\s\S]*\[IntPtr\]\(\$candidateState\.NativeWindowHandle\) -ne \$handle[\s\S]*ControlType\]::Pane[\s\S]*Get-ProcmonNativeFilterDialogControls \$candidateWindow \$Process\.Id[\s\S]*return \$candidateWindow[\s\S]*ControlType\]::Window[\s\S]*candidateState\.IsEnabled[\s\S]*candidateState\.IsOffscreen[\s\S]*distinctRuntimeId -and[\s\S]*\$combos\.Count -ge 3[\s\S]*\$edits\.Count -ge 1[\s\S]*PROC_MON_FILTER_DIALOG_DISCOVERY=native-top-level-window[\s\S]*PROC_MON_FILTER_NATIVE_WINDOW_UIA=/,
+    /EnumWindows\(EnumWindowsProc callback, IntPtr lParam\)[\s\S]*GetProcessTopLevelWindows\(int processId, int maximum\)[\s\S]*maximum > 257[\s\S]*function Find-ProcmonNativeFilterDialog[\s\S]*GetProcessTopLevelWindows\(\$Process\.Id, 257\)[\s\S]*Write-ProcmonNativeMenuSummary[\s\S]*-Source "all-top-level"[\s\S]*\$windowCount = \[Math\]::Min\(\$handles\.Length, 256\)[\s\S]*IsWindowVisible\(\$handle\)[\s\S]*candidateState\.ProcessId -ne \$Process\.Id[\s\S]*\[IntPtr\]\(\$candidateState\.NativeWindowHandle\) -ne \$handle[\s\S]*ControlType\]::Pane[\s\S]*Get-ProcmonNativeFilterDialogCandidate \$candidateWindow \$Process\.Id[\s\S]*return \$candidateWindow[\s\S]*ControlType\]::Window[\s\S]*candidateState\.IsEnabled[\s\S]*candidateState\.IsOffscreen[\s\S]*distinctRuntimeId -and[\s\S]*\$combos\.Count -ge 3[\s\S]*\$edits\.Count -ge 1[\s\S]*PROC_MON_FILTER_DIALOG_DISCOVERY=native-top-level-window[\s\S]*PROC_MON_FILTER_NATIVE_WINDOW_UIA=/,
+  );
+  assert.match(
+    configuration,
+    /function Get-ProcmonNativeFilterDialogCandidate[\s\S]*Get-ProcmonNativeFilterDialogControls \$Candidate \$ProcessId[\s\S]*catch \[System\.InvalidOperationException\][\s\S]*state:error;gate:\$script:nativeFilterControlGate;exception:invalid-operation[\s\S]*throw/,
   );
   assert.match(
     configuration,

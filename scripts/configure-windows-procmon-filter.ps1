@@ -4035,6 +4035,7 @@ function Get-ProcmonNativeFilterDialogControls(
   ) {
     throw "Process Monitor native filter dialog ownership is unavailable"
   }
+  $script:nativeFilterControlGate = "native-children"
   $summary = [ProcmonNativeMenu]::ReadNativeChildSummary($root, $ProcessId, 256)
   if (
     $summary.State -ne "ready" -or
@@ -4067,6 +4068,7 @@ function Get-ProcmonNativeFilterDialogControls(
     ) {
       continue
     }
+    $script:nativeFilterControlGate = "uia-verification"
     $element = [System.Windows.Automation.AutomationElement]::FromHandle($child.Handle)
     if ($null -eq $element) {
       $script:nativeFilterControlGate = "uia-unavailable"
@@ -4096,6 +4098,7 @@ function Get-ProcmonNativeFilterDialogControls(
       }
     }
     $allCandidateControls.Add($child.Handle)
+    $script:nativeFilterControlGate = "native-control-read"
     switch ($child.Kind) {
       "combo" { $controls.Combos.Add($child.Handle) }
       "edit" { $controls.Edits.Add($child.Handle) }
@@ -4129,12 +4132,14 @@ function Get-ProcmonNativeFilterDialogControls(
     $script:nativeFilterControlGate = "control-counts"
     return $null
   }
+  $script:nativeFilterControlGate = "fixed-buttons"
   foreach ($label in @("Reset", "Add", "OK", "Cancel")) {
     if (-not $controls.Buttons.ContainsKey($label)) {
       $script:nativeFilterControlGate = "fixed-buttons"
       return $null
     }
   }
+  $script:nativeFilterControlGate = "fixed-options"
   $pathCombos = @(
     $controls.Combos | Where-Object {
       [ProcmonNativeMenu]::CountNativeComboItemExact($_, $ProcessId, "Path") -eq 1
@@ -4161,6 +4166,7 @@ function Get-ProcmonNativeFilterDialogControls(
     $script:nativeFilterControlGate = "fixed-options"
     return $null
   }
+  $script:nativeFilterControlGate = "list-columns"
   $columnCount = [ProcmonNativeMenu]::ReadNativeListColumnCount(
     $controls.Lists[0],
     $ProcessId
@@ -4177,6 +4183,44 @@ function Get-ProcmonNativeFilterDialogControls(
   $controls["ColumnCount"] = $columnCount
   $script:nativeFilterControlGate = "eligible"
   return [pscustomobject]$controls
+}
+
+function Get-ProcmonNativeFilterDialogCandidate(
+  [System.Windows.Automation.AutomationElement]$Candidate,
+  [int]$ProcessId
+) {
+  try {
+    $nativeControls = Get-ProcmonNativeFilterDialogControls $Candidate $ProcessId
+  } catch [System.InvalidOperationException] {
+    [Console]::Out.WriteLine(
+      "PROC_MON_FILTER_NATIVE_DIALOG_CANDIDATE=state:error;gate:$script:nativeFilterControlGate;exception:invalid-operation"
+    )
+    throw
+  } catch [System.ArgumentException] {
+    [Console]::Out.WriteLine(
+      "PROC_MON_FILTER_NATIVE_DIALOG_CANDIDATE=state:error;gate:$script:nativeFilterControlGate;exception:argument"
+    )
+    throw
+  } catch [System.Runtime.InteropServices.COMException] {
+    [Console]::Out.WriteLine(
+      "PROC_MON_FILTER_NATIVE_DIALOG_CANDIDATE=state:error;gate:$script:nativeFilterControlGate;exception:com"
+    )
+    throw
+  } catch [System.Management.Automation.MethodInvocationException] {
+    [Console]::Out.WriteLine(
+      "PROC_MON_FILTER_NATIVE_DIALOG_CANDIDATE=state:error;gate:$script:nativeFilterControlGate;exception:method-invocation"
+    )
+    throw
+  }
+  $nativeDialogCandidateState = if ($null -ne $nativeControls) {
+    "accepted"
+  } else {
+    "rejected"
+  }
+  [Console]::Out.WriteLine(
+    "PROC_MON_FILTER_NATIVE_DIALOG_CANDIDATE=state:$nativeDialogCandidateState;gate:$script:nativeFilterControlGate"
+  )
+  return $nativeControls
 }
 
 function Get-ProcmonNativeFilterRuleRows(
@@ -4428,15 +4472,7 @@ function Find-ProcmonNativeFilterDialog(
         if (-not $distinctRuntimeId) {
           continue
         }
-        $nativeControls = Get-ProcmonNativeFilterDialogControls $candidateWindow $Process.Id
-        $nativeDialogCandidateState = if ($null -ne $nativeControls) {
-          "accepted"
-        } else {
-          "rejected"
-        }
-        [Console]::Out.WriteLine(
-          "PROC_MON_FILTER_NATIVE_DIALOG_CANDIDATE=state:$nativeDialogCandidateState;gate:$script:nativeFilterControlGate"
-        )
+        $nativeControls = Get-ProcmonNativeFilterDialogCandidate $candidateWindow $Process.Id
         if ($null -ne $nativeControls) {
           [Console]::Out.WriteLine(
             "PROC_MON_FILTER_NATIVE_WINDOWS=state:ready;windows:$windowCount;main:$mainWindowCount;other:$otherWindowCount;visible:$visibleWindowCount;menus:$menuHandleCount;truncated:$($truncated.ToString().ToLowerInvariant())"
@@ -4480,15 +4516,7 @@ function Find-ProcmonNativeFilterDialog(
         $distinctRuntimeId -and
         ($null -eq $reset -or $combos.Count -lt 3 -or $edits.Count -lt 1)
       ) {
-        $nativeControls = Get-ProcmonNativeFilterDialogControls $candidateWindow $Process.Id
-        $nativeDialogCandidateState = if ($null -ne $nativeControls) {
-          "accepted"
-        } else {
-          "rejected"
-        }
-        [Console]::Out.WriteLine(
-          "PROC_MON_FILTER_NATIVE_DIALOG_CANDIDATE=state:$nativeDialogCandidateState;gate:$script:nativeFilterControlGate"
-        )
+        $nativeControls = Get-ProcmonNativeFilterDialogCandidate $candidateWindow $Process.Id
         if ($null -ne $nativeControls) {
           [Console]::Out.WriteLine(
             "PROC_MON_FILTER_NATIVE_WINDOWS=state:ready;windows:$windowCount;main:$mainWindowCount;other:$otherWindowCount;visible:$visibleWindowCount;menus:$menuHandleCount;truncated:$($truncated.ToString().ToLowerInvariant())"

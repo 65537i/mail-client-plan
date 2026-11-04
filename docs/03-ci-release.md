@@ -2,7 +2,10 @@
 
 ## 1. ワークフロー構成
 
+[Run 41877206092](https://github.com/65537i/mail-client-plan/actions/runs/41877206092)（`77c018f`、Windows 2025 x64 / webview）はconfiguration export waitまで通過したが、引き続き`wait-filter-dialog-shortcut`で失敗しstrict capture未実施。failure typeは`InvalidOperationException`、native child summaryではvisible-otherのfixed controlsが読めたがcandidate gate markerは出力されなかった。このため既知例外を再throwする前にgateと型だけ記録し、native/UIA検査段階を分類する診断を追加。focused AC-05 tests 71/71、PowerShell parse、`git diff --check`成功。strict capture未実施、AC-05未達。
+
 [Run 41874564142](https://github.com/65537i/mail-client-plan/actions/runs/41874564142)（`a955000`、Windows 2025 x64 / webview）はsecurity-test build、Windows監査setup / worker coordination、configuration export waitを通過したが、`wait-filter-dialog-shortcut`で停止しstrict capture未実施。可視native候補のsummaryでは同一Procmon PID内のComboBox 4 / Edit 1 / Button 4 / ListView 1、完全一致Path / is / Include option、Reset / Add / OK / Cancel labelを確認したが、native dialog discoveryは完了しなかった。disabled buttonは識別対象に含めつつクリック時にはenabledを再検証する修正はWindows configuration testを通過。次runでgate拒否理由を特定するため、candidate分類をbounded allowlistで記録する診断を追加。focused AC-05 tests 71/71、PowerShell parse、`git diff --check`成功。strict capture未実施、AC-05未達。
+
 
 [Run 41857644703](https://github.com/65537i/mail-client-plan/actions/runs/41857644703)（`eff85df`、Windows 2025 x64 / webview）はsecurity-test build、Windows監査setup / worker coordination、configuration export waitを通過したが、`wait-filter-dialog-shortcut`で停止しstrict capture未実施。可視候補のnative child HWND 12件をUIA `FromHandle`で確認した結果、Value / Selection / SelectionItem / ExpandCollapse / Invoke / Toggleの全patternsが0、読み取り状態はready。Procmon providerはこれらをUIA Paneとして公開しUIA patternsも提供していない。ユーザー承認により、AC-05は同一PID・可視・有効・期待class・foregroundの確認を操作時に行うbounded native HWND fallbackを許可するよう変更した。fallbackは完全一致option / button識別、edit readback、same-process ListView remote-memory読取を通じて既存の保存・reload exact-two gateを維持する。focused Node tests 70/70、PowerShell parse、embedded C# helper compile（Linux Accessibility interface stub使用）、`git diff --check`成功。Windows helper compile / synthetic Win32 runtime / Procmon実測は未実施で、Windows configuration regressionとstrict capture待ち。AC-05未達。
 

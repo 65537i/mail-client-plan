@@ -495,6 +495,17 @@ test("AC-05: native dialog candidate diagnostics allowlist gate classifications"
     describeWindowsFilterDiagnostics(line.replace("list-columns", "private-text")),
     "",
   );
+  const errorLine = "PROC_MON_FILTER_NATIVE_DIALOG_CANDIDATE="
+    + "state:error;gate:fixed-options;exception:invalid-operation";
+  assert.equal(
+    describeWindowsFilterDiagnostics(errorLine),
+    "; filter-native-dialog-candidate=state:error;gate:fixed-options;"
+      + "exception:invalid-operation",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(errorLine.replace("invalid-operation", "private-text")),
+    "",
+  );
 });
 
 test("AC-05: native rule diagnostics retain exact four-column row counts only", () => {
