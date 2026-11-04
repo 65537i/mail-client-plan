@@ -2348,10 +2348,12 @@ function Clear-LoadedFilterRules(
   if ($null -ne $nativeControls) {
     Set-Stage "read-native-filter-rows-before-clear"
     $rows = Get-ProcmonNativeFilterRuleRows $nativeControls $OwnerProcessId -Quiet
+    Set-Stage "native-filter-rule-read-complete"
     if ($rows.Count -eq 0) {
       [Console]::Out.WriteLine("PROC_MON_FILTER_RULE_RESET=removed:0;remaining:0")
       return
     }
+    Set-Stage "verify-native-controls-stable-before-clear"
     if ($null -ne (Get-ProcmonNativeFilterDialogControls $Dialog $OwnerProcessId)) {
       throw "Process Monitor native filter controls appeared during UIA rule clearing"
     }
@@ -4502,17 +4504,18 @@ function Get-ProcmonNativeFilterRuleRows(
     $Controls.List,
     $ProcessId
   )
+  [Console]::Out.WriteLine(
+    "PROC_MON_FILTER_NATIVE_SHAPE=expected-columns:4;actual-columns:$finalColumnCount"
+  )
   Set-Stage "compare-native-filter-row-count"
   if ($finalCount -ne $count) {
     throw "Process Monitor native filter list changed while it was being read"
   }
   Set-Stage "compare-native-filter-column-count"
   if ($finalColumnCount -ne 4) {
-    [Console]::Out.WriteLine(
-      "PROC_MON_FILTER_NATIVE_SHAPE=expected-columns:4;actual-columns:$finalColumnCount"
-    )
     throw "Process Monitor native filter list changed while it was being read"
   }
+  Set-Stage "native-filter-row-shape-verified"
   $ruleCount = @(
     $rows | Where-Object {
       $_.Text -match "(?i)^Path\s+is\s+.+\s+Include$"

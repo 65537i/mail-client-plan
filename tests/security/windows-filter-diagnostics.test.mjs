@@ -693,10 +693,15 @@ test("AC-05: native filter shape diagnostics retain only bounded column counts",
     ),
     "; filter-native-shape=expected-columns:4;actual-columns:3",
   );
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_NATIVE_SHAPE=expected-columns:4;actual-columns:4",
+    ),
+    "; filter-native-shape=expected-columns:4;actual-columns:4",
+  );
   for (const invalid of [
     "PROC_MON_FILTER_NATIVE_SHAPE=expected-columns:4;actual-columns:0",
     "PROC_MON_FILTER_NATIVE_SHAPE=expected-columns:4;actual-columns:9",
-    "PROC_MON_FILTER_NATIVE_SHAPE=expected-columns:4;actual-columns:4",
     "PROC_MON_FILTER_NATIVE_SHAPE=expected-columns:4;actual-columns:C:\\private",
   ]) {
     assert.equal(describeWindowsFilterDiagnostics(invalid), "");

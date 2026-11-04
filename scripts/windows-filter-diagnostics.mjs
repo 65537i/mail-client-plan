@@ -834,7 +834,7 @@ export function describeWindowsFilterDiagnostics(output) {
   );
   if (nativeShape) {
     const actualColumns = Number(nativeShape[1]);
-    if (actualColumns >= 1 && actualColumns <= 8 && actualColumns !== 4) {
+    if (actualColumns >= 1 && actualColumns <= 8) {
       diagnostics.push(
         `filter-native-shape=expected-columns:4;actual-columns:${actualColumns}`,
       );

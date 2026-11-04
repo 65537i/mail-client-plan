@@ -2,9 +2,9 @@
 
 ## 1. ワークフロー構成
 
-[Run 41922105914](https://github.com/65537i/mail-client-plan/actions/runs/41922105914)（`1a81063`、Windows 2025 x64 / full）はunfiltered baseline後、strict capture前の`clear-existing-filter-rules`で失敗しAC-05未達。row countは一致、column countは4-column invariantに不一致だったが、8192-char output boundが新markerを保持しなかった。必須evidence retentionに追加し、次runでbounded actual countを回収する。
+[Run 41922105914](https://github.com/65537i/mail-client-plan/actions/runs/41922105914)（`1a81063`、Windows 2025 x64 / full）はunfiltered baseline後、strict capture前の`clear-existing-filter-rules`で失敗しAC-05未達。failure outputにcolumn markerがなく、最後のprogress stageだけではcolumn comparison mismatchか後続処理かを区別できなかった。markerを常に出し、rule-row read completion / stable-controls checkも分ける。
 
-[Run 41916807507](https://github.com/65537i/mail-client-plan/actions/runs/41916807507)（`d0c1019`、Windows 2025 x64 / full）はunfiltered baseline後、strict capture前の`clear-existing-filter-rules`で失敗しAC-05未達。expected row countは一致したが、final column countが4でないため比較stageで停止した。次runでは実際のcolumn countのみbounded diagnosticに出し、shape変化の値を特定する。
+[Run 41916807507](https://github.com/65537i/mail-client-plan/actions/runs/41916807507)（`d0c1019`、Windows 2025 x64 / full）はunfiltered baseline後、strict capture前の`clear-existing-filter-rules`で失敗しAC-05未達。failure outputの最終stageはcolumn-count comparisonだったが、その後の処理にstageがなく、実際の停止箇所は未確定だった。
 
 [Run 41911826267](https://github.com/65537i/mail-client-plan/actions/runs/41911826267)（`bd72ceb`、Windows 2025 x64 / full）はunfiltered baseline後、strict capture前の`clear-existing-filter-rules`で失敗しAC-05未達。final row-count / column-count readsは通過し、shape comparisonで停止したため、期待値との比較を個別stage化して次runで区別する。
 
