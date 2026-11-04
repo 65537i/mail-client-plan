@@ -4495,8 +4495,9 @@ function Get-ProcmonNativeFilterRuleRows(
       Container = $null
     })
   }
-  Set-Stage "verify-native-filter-list-shape"
+  Set-Stage "verify-native-filter-row-count"
   $finalCount = [ProcmonNativeMenu]::ReadNativeListItemCount($Controls.List, $ProcessId)
+  Set-Stage "verify-native-filter-column-count"
   $finalColumnCount = [ProcmonNativeMenu]::ReadNativeListColumnCount(
     $Controls.List,
     $ProcessId
