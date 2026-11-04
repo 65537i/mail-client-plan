@@ -285,7 +285,7 @@ test("AC-05: Procmon main-window activation verifies its process-owned foregroun
   );
   assert.match(
     configuration,
-    /private struct KeyboardInput[\s\S]*LayoutKind\.Explicit[\s\S]*private struct InputUnion[\s\S]*private struct NativeInput[\s\S]*private static extern uint SendInput[\s\S]*SendControlLShortcut\(\s*IntPtr expectedWindow,\s*int expectedProcessId\s*\)[\s\S]*GetForegroundWindow\(\) != expectedWindow[\s\S]*GetWindowProcessId\(expectedWindow\) != expectedProcessId[\s\S]*CreateKeyboardInput\(VK_CONTROL, 0\)[\s\S]*CreateKeyboardInput\(VK_L, 0\)[\s\S]*CreateKeyboardInput\(VK_L, KEYEVENTF_KEYUP\)[\s\S]*CreateKeyboardInput\(VK_CONTROL, KEYEVENTF_KEYUP\)[\s\S]*if \(inserted != \(uint\)inputs\.Length\)[\s\S]*releaseInputs/,
+    /private struct KeyboardInput[\s\S]*private struct MouseInput[\s\S]*LayoutKind\.Explicit[\s\S]*private struct InputUnion[\s\S]*FieldOffset\(0\)[\s\S]*MouseInput Mouse[\s\S]*FieldOffset\(0\)[\s\S]*KeyboardInput Keyboard[\s\S]*private struct NativeInput[\s\S]*private static extern uint SendInput[\s\S]*SendControlLShortcut\(\s*IntPtr expectedWindow,\s*int expectedProcessId\s*\)[\s\S]*GetForegroundWindow\(\) != expectedWindow[\s\S]*GetWindowProcessId\(expectedWindow\) != expectedProcessId[\s\S]*CreateKeyboardInput\(VK_CONTROL, 0\)[\s\S]*CreateKeyboardInput\(VK_L, 0\)[\s\S]*CreateKeyboardInput\(VK_L, KEYEVENTF_KEYUP\)[\s\S]*CreateKeyboardInput\(VK_CONTROL, KEYEVENTF_KEYUP\)[\s\S]*if \(inserted != \(uint\)inputs\.Length\)[\s\S]*releaseInputs/,
   );
   assert.match(
     configuration,

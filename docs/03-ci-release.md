@@ -2,7 +2,9 @@
 
 ## 1. ワークフロー構成
 
-[Run 41837154253](https://github.com/65537i/mail-client-plan/actions/runs/41837154253)（`fdeb603`、Windows 2025 x64 / webview）はsecurity-test build、Windows監査回帰81/81、configuration export waitを通過したが、`fallback-open-filter-dialog-shortcut`で`InvalidOperationException`となりstrict capture未実施。前景ゲートと直前GUI focus観測は成功したが、native input methodの例外により送信前提条件失敗とSendInput不完全の区別は未確定。次runでは成功・target mismatch・incompleteを件数のみで分類し、失敗時は停止する。
+[Run 41838787074](https://github.com/65537i/mail-client-plan/actions/runs/41838787074)（`bbe2b7c`、Windows 2025 x64 / webview）はsecurity-test build、Windows監査回帰81/81、configuration export waitを通過したが、`fallback-open-filter-dialog-shortcut`で停止しstrict capture未実施。native input診断は`state:incomplete;events:0;release-events:0`で、前景ゲートはpassed。`INPUT` unionに最大メンバー`MOUSEINPUT`を含めずx64構造体サイズが誤っていたため修正し、APIが要求するサイズに合わせた。Windows runtime再検証待ち。
+
+[Run 41837154253](https://github.com/65537i/mail-client-plan/actions/runs/41837154253)（`fdeb603`、Windows 2025 x64 / webview）はsecurity-test build、Windows監査回帰81/81、configuration export waitを通過したが、`fallback-open-filter-dialog-shortcut`で`InvalidOperationException`となりstrict capture未実施。前景ゲートと直前GUI focus観測は成功したが、native input methodの例外により送信前提条件失敗とSendInput不完全の区別は未確定。
 
 [Run 41835100750](https://github.com/65537i/mail-client-plan/actions/runs/41835100750)（`835f44b`、Windows 2025 x64 / webview）はsecurity-test build、Windows監査回帰80/80、configuration export waitに成功したが、baseline `wait-filter-dialog-shortcut`で停止しstrict capture未実施。Raw View scanはmain 25 nodes（Window 2 / Pane 23）、visible-other 18 nodes（Window 1 / Pane 17）で、いずれもComboBox / Edit 0。Control View外にfilter dialog controlsがある仮説は支持されなかった。この結果を受け、前景HWND・PIDを再確認した上でCtrl+Lのみnative `SendInput`を使う変更を追加した。初回/reload両経路を揃え、厳格なdialog gateは維持。focused Node tests 65/65、PowerShell parse成功、Windows runtime再検証待ち。AC-05未達。
 
