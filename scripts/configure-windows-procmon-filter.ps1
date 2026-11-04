@@ -4059,7 +4059,10 @@ function Get-ProcmonNativeFilterDialogControls(
     }
     if (
       -not [ProcmonNativeMenu]::IsWindowVisible($child.Handle) -or
-      -not [ProcmonNativeMenu]::IsWindowEnabled($child.Handle) -or
+      (
+        $child.Kind -ne "button" -and
+        -not [ProcmonNativeMenu]::IsWindowEnabled($child.Handle)
+      ) -or
       [ProcmonNativeMenu]::GetWindowProcessId($child.Handle) -ne $ProcessId
     ) {
       continue
