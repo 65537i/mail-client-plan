@@ -4429,6 +4429,14 @@ function Find-ProcmonNativeFilterDialog(
           continue
         }
         $nativeControls = Get-ProcmonNativeFilterDialogControls $candidateWindow $Process.Id
+        $nativeDialogCandidateState = if ($null -ne $nativeControls) {
+          "accepted"
+        } else {
+          "rejected"
+        }
+        [Console]::Out.WriteLine(
+          "PROC_MON_FILTER_NATIVE_DIALOG_CANDIDATE=state:$nativeDialogCandidateState;gate:$script:nativeFilterControlGate"
+        )
         if ($null -ne $nativeControls) {
           [Console]::Out.WriteLine(
             "PROC_MON_FILTER_NATIVE_WINDOWS=state:ready;windows:$windowCount;main:$mainWindowCount;other:$otherWindowCount;visible:$visibleWindowCount;menus:$menuHandleCount;truncated:$($truncated.ToString().ToLowerInvariant())"
@@ -4473,6 +4481,14 @@ function Find-ProcmonNativeFilterDialog(
         ($null -eq $reset -or $combos.Count -lt 3 -or $edits.Count -lt 1)
       ) {
         $nativeControls = Get-ProcmonNativeFilterDialogControls $candidateWindow $Process.Id
+        $nativeDialogCandidateState = if ($null -ne $nativeControls) {
+          "accepted"
+        } else {
+          "rejected"
+        }
+        [Console]::Out.WriteLine(
+          "PROC_MON_FILTER_NATIVE_DIALOG_CANDIDATE=state:$nativeDialogCandidateState;gate:$script:nativeFilterControlGate"
+        )
         if ($null -ne $nativeControls) {
           [Console]::Out.WriteLine(
             "PROC_MON_FILTER_NATIVE_WINDOWS=state:ready;windows:$windowCount;main:$mainWindowCount;other:$otherWindowCount;visible:$visibleWindowCount;menus:$menuHandleCount;truncated:$($truncated.ToString().ToLowerInvariant())"

@@ -484,6 +484,19 @@ test("AC-05: native control diagnostics retain bounded class and fixed-label cou
   }
 });
 
+test("AC-05: native dialog candidate diagnostics allowlist gate classifications", () => {
+  const line = "PROC_MON_FILTER_NATIVE_DIALOG_CANDIDATE="
+    + "state:rejected;gate:list-columns";
+  assert.equal(
+    describeWindowsFilterDiagnostics(line),
+    "; filter-native-dialog-candidate=state:rejected;gate:list-columns",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(line.replace("list-columns", "private-text")),
+    "",
+  );
+});
+
 test("AC-05: native rule diagnostics retain exact four-column row counts only", () => {
   const line = "PROC_MON_FILTER_NATIVE_RULES="
     + "phase:reloaded;state:ready;rows:2;columns:4;path:2;is:2;include:2;exact-shape:2;"

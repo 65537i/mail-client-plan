@@ -14,7 +14,7 @@ export function appendBoundedWindowsFilterOutput(current, chunk) {
   if (combined.length <= windowsFilterOutputLimit) return combined;
   const evidence = new Map();
   for (const match of combined.matchAll(
-    /^(PROC_MON_FILTER_CONFIG_PATHS|PROC_MON_FILTER_RELOADED_RULES|PROC_MON_FILTER_RELOADED_UI|PROC_MON_FILTER_RELOADED_DROP|PROC_MON_FILTER_NATIVE_CHILDREN|PROC_MON_FILTER_NATIVE_CHILD_UIA|PROC_MON_FILTER_NATIVE_CHILD_PATTERNS|PROC_MON_FILTER_NATIVE_CONTROLS|PROC_MON_FILTER_NATIVE_RULES)=[^\r\n]{1,1024}\r?$/gm,
+    /^(PROC_MON_FILTER_CONFIG_PATHS|PROC_MON_FILTER_RELOADED_RULES|PROC_MON_FILTER_RELOADED_UI|PROC_MON_FILTER_RELOADED_DROP|PROC_MON_FILTER_NATIVE_CHILDREN|PROC_MON_FILTER_NATIVE_CHILD_UIA|PROC_MON_FILTER_NATIVE_CHILD_PATTERNS|PROC_MON_FILTER_NATIVE_CONTROLS|PROC_MON_FILTER_NATIVE_DIALOG_CANDIDATE|PROC_MON_FILTER_NATIVE_RULES)=[^\r\n]{1,1024}\r?$/gm,
   )) {
     const hasSource = match[1] === "PROC_MON_FILTER_NATIVE_CHILDREN"
       || match[1] === "PROC_MON_FILTER_NATIVE_CHILD_UIA"
@@ -480,6 +480,14 @@ export function describeWindowsFilterDiagnostics(output) {
         `filter-native-controls=source:${source};state:${state};combos:${combos};path-options:${pathOptions};operator-options:${operatorOptions};include-options:${includeOptions};edits:${edits};readable-edits:${readableEdits};buttons:${buttons};reset:${reset};add:${add};ok:${ok};cancel:${cancel};remove:${remove};lists:${lists};list-items:${listItems};read-failures:${readFailures};truncated:${truncated}`,
       );
     }
+  }
+
+  for (const candidate of output.matchAll(
+    /^PROC_MON_FILTER_NATIVE_DIALOG_CANDIDATE=state:(accepted|rejected);gate:(checking|uia-unavailable|uia-mismatch|uia-pattern-available|control-counts|fixed-buttons|fixed-options|list-columns|eligible)\r?$/gm,
+  )) {
+    diagnostics.push(
+      `filter-native-dialog-candidate=state:${candidate[1]};gate:${candidate[2]}`,
+    );
   }
 
   for (const nativeRules of output.matchAll(
