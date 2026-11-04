@@ -4495,13 +4495,14 @@ function Get-ProcmonNativeFilterRuleRows(
       Container = $null
     })
   }
-  Set-Stage "verify-native-filter-row-count"
+  Set-Stage "read-native-filter-final-row-count"
   $finalCount = [ProcmonNativeMenu]::ReadNativeListItemCount($Controls.List, $ProcessId)
-  Set-Stage "verify-native-filter-column-count"
+  Set-Stage "read-native-filter-final-column-count"
   $finalColumnCount = [ProcmonNativeMenu]::ReadNativeListColumnCount(
     $Controls.List,
     $ProcessId
   )
+  Set-Stage "compare-native-filter-row-shape"
   if ($finalCount -ne $count -or $finalColumnCount -ne 4) {
     throw "Process Monitor native filter list changed while it was being read"
   }

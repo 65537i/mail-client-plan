@@ -2,6 +2,8 @@
 
 ## 1. ワークフロー構成
 
+[Run 41906589924](https://github.com/65537i/mail-client-plan/actions/runs/41906589924)（`5c18245`、Windows 2025 x64 / full）はunfiltered baseline後、strict capture前の`clear-existing-filter-rules`で失敗しAC-05未達。最終row countは通過したがfinal column-count verification stageで停止した。column read自体の失敗と取得値のshape mismatchを別stageで判別する。
+
 [Run 41902239784](https://github.com/65537i/mail-client-plan/actions/runs/41902239784)（`77e2132`、Windows 2025 x64 / full）はunfiltered baseline後、strict capture前の`clear-existing-filter-rules`で失敗しAC-05未達。Native item countと4-cell readを通過し、最終list shape verificationで停止した。最終row count / column countを別stageにし、次runで検証のどちらが失敗するか確認する。
 
 [Run 41896355711](https://github.com/65537i/mail-client-plan/actions/runs/41896355711)（`0bea7e2`、Windows 2025 x64 / full）はunfiltered baseline成功後、strict capture前の`clear-existing-filter-rules`で失敗しAC-05未達。`read-native-filter-rows-before-clear` stageで停止したため、native controls再取得を越えてListView row extraction中に失敗したと判明。count / cells / final shape verificationを別stage化し、次runで停止箇所を特定する。
