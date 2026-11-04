@@ -372,6 +372,10 @@ test("AC-05: Procmon main-window activation verifies its process-owned foregroun
   );
   assert.match(
     configuration,
+    /Set-Stage "inspect-native-filter-controls"[\s\S]*Set-Stage "native-filter-controls-\$script:nativeFilterControlGate"/,
+  );
+  assert.match(
+    configuration,
     /function Get-ProcmonNativeFilterRuleRows[\s\S]*ReadNativeListItemCount[\s\S]*\$count -gt 64[\s\S]*\$columnIndex -lt 4[\s\S]*ReadNativeListItemText[\s\S]*\$finalCount -ne \$count[\s\S]*\$finalColumnCount -ne 4[\s\S]*PROC_MON_FILTER_NATIVE_RULES=/,
   );
   assert.match(

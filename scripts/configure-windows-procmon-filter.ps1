@@ -4018,6 +4018,7 @@ function Get-ProcmonNativeFilterDialogControls(
   [System.Windows.Automation.AutomationElement]$Dialog,
   [int]$ProcessId
 ) {
+  $script:nativeFilterControlGate = "checking"
   $dialogState = $Dialog.Current
   $root = [IntPtr]$dialogState.NativeWindowHandle
   if (
@@ -4065,6 +4066,7 @@ function Get-ProcmonNativeFilterDialogControls(
     }
     $element = [System.Windows.Automation.AutomationElement]::FromHandle($child.Handle)
     if ($null -eq $element) {
+      $script:nativeFilterControlGate = "uia-unavailable"
       return $null
     }
     $elementState = $element.Current
@@ -4073,6 +4075,7 @@ function Get-ProcmonNativeFilterDialogControls(
       [IntPtr]$elementState.NativeWindowHandle -ne $child.Handle -or
       $elementState.ControlType -ne [System.Windows.Automation.ControlType]::Pane
     ) {
+      $script:nativeFilterControlGate = "uia-mismatch"
       return $null
     }
     foreach ($pattern in @(
@@ -4085,6 +4088,7 @@ function Get-ProcmonNativeFilterDialogControls(
       )) {
       $patternObject = $null
       if ($element.TryGetCurrentPattern($pattern, [ref]$patternObject)) {
+        $script:nativeFilterControlGate = "uia-pattern-available"
         return $null
       }
     }
@@ -4104,6 +4108,7 @@ function Get-ProcmonNativeFilterDialogControls(
         if ($null -ne $fixedLabel) {
           $label = $fixedLabel
           if ($controls.Buttons.ContainsKey($label)) {
+            $script:nativeFilterControlGate = "duplicate-fixed-buttons"
             throw "Process Monitor native filter dialog has duplicate fixed buttons"
           }
           $controls.Buttons.Add($label, $child.Handle)
@@ -4118,10 +4123,12 @@ function Get-ProcmonNativeFilterDialogControls(
     $controls.Lists.Count -ne 1 -or
     $allCandidateControls.Count -gt 64
   ) {
+    $script:nativeFilterControlGate = "control-counts"
     return $null
   }
   foreach ($label in @("Reset", "Add", "OK", "Cancel")) {
     if (-not $controls.Buttons.ContainsKey($label)) {
+      $script:nativeFilterControlGate = "fixed-buttons"
       return $null
     }
   }
@@ -4148,6 +4155,7 @@ function Get-ProcmonNativeFilterDialogControls(
     $pathCombos[0] -eq $includeCombos[0] -or
     $operatorCombos[0] -eq $includeCombos[0]
   ) {
+    $script:nativeFilterControlGate = "fixed-options"
     return $null
   }
   $columnCount = [ProcmonNativeMenu]::ReadNativeListColumnCount(
@@ -4155,6 +4163,7 @@ function Get-ProcmonNativeFilterDialogControls(
     $ProcessId
   )
   if ($columnCount -ne 4) {
+    $script:nativeFilterControlGate = "list-columns"
     return $null
   }
   $controls["PathCombo"] = $pathCombos[0]
@@ -4163,6 +4172,7 @@ function Get-ProcmonNativeFilterDialogControls(
   $controls["Edit"] = $controls.Edits[0]
   $controls["List"] = $controls.Lists[0]
   $controls["ColumnCount"] = $columnCount
+  $script:nativeFilterControlGate = "eligible"
   return [pscustomobject]$controls
 }
 
@@ -4963,7 +4973,11 @@ function Select-ComboValue($Combos, [string]$Value) {
 }
 
 function Set-FilterRule([System.Windows.Automation.AutomationElement]$Dialog, [string]$Path, [int]$OwnerProcessId) {
+  Set-Stage "inspect-native-filter-controls"
   $nativeControls = Get-ProcmonNativeFilterDialogControls $Dialog $OwnerProcessId
+  if ($null -eq $nativeControls) {
+    Set-Stage "native-filter-controls-$script:nativeFilterControlGate"
+  }
   if ($null -ne $nativeControls) {
     Set-Stage "select-filter-column"
     Set-ProcmonNativeFilterCombo $Dialog $OwnerProcessId "Path"
