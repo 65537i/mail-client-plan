@@ -358,6 +358,14 @@ test("AC-05: Procmon main-window activation verifies its process-owned foregroun
     configuration,
     /SelectNativeComboItemExact[\s\S]*CB_SETCURSEL[\s\S]*CB_GETCURSEL[\s\S]*SetNativeEditTextExact[\s\S]*WM_SETTEXT[\s\S]*ClickNativeButtonExact[\s\S]*BM_CLICK[\s\S]*ReadNativeListColumnCount[\s\S]*HDM_GETITEMCOUNT[\s\S]*ReadNativeListItemText[\s\S]*OpenProcess[\s\S]*WriteProcessMemory[\s\S]*LVM_GETITEMTEXTW[\s\S]*ReadProcessMemory[\s\S]*VirtualFreeEx/,
   );
+  const nativeListSelection = configuration.match(
+    /public static int SelectNativeListItemsExact\([\s\S]*?private static int ReadNativeListSelectedCount/,
+  )?.[0];
+  assert.ok(nativeListSelection, "Native list exact-selection helper is missing");
+  assert.match(
+    nativeListSelection,
+    /expectedCount < 1 \|\| expectedCount > 64[\s\S]*VerifyNativeControl\(window, expectedProcessId, "list"\)[\s\S]*WriteProcessMemory[\s\S]*LVM_SETITEMSTATE[\s\S]*LVM_GETSELECTEDCOUNT[\s\S]*LVM_GETITEMSTATE[\s\S]*LVIS_SELECTED[\s\S]*ReadNativeListItemCount/,
+  );
   assert.match(
     configuration,
     /VerifyNativeControl\([\s\S]*bool requireEnabled = true[\s\S]*requireEnabled && !IsWindowEnabled\(window\)[\s\S]*ReadNativeControlText\([\s\S]*bool allowDisabledButton = false[\s\S]*allowDisabledButton && expectedKind != "button"[\s\S]*VerifyNativeControl\(window, expectedProcessId, expectedKind, requireEnabled\)[\s\S]*ReadNativeControlText\([\s\S]*"button"[\s\S]*128,[\s\S]*\$true/,
@@ -393,6 +401,14 @@ test("AC-05: Procmon main-window activation verifies its process-owned foregroun
   assert.match(
     configuration,
     /function Get-ProcmonNativeFilterDialogCandidate[\s\S]*Get-ProcmonNativeFilterDialogControls \$Candidate \$ProcessId[\s\S]*catch \[System\.InvalidOperationException\][\s\S]*state:error;gate:\$script:nativeFilterControlGate;exception:invalid-operation[\s\S]*throw/,
+  );
+  const nativeRuleClear = configuration.match(
+    /function Clear-LoadedFilterRules\([\s\S]*?function Wait-KeyboardFocus/,
+  )?.[0];
+  assert.ok(nativeRuleClear, "Filter-rule clearing gate is missing");
+  assert.match(
+    nativeRuleClear,
+    /Get-ProcmonNativeFilterRuleRows[\s\S]*SelectNativeListItemsExact[\s\S]*selectedCount -ne \$rows\.Count[\s\S]*Invoke-ProcmonNativeFilterButton \$Dialog \$OwnerProcessId "Remove"[\s\S]*remainingRows\.Count -ne 0[\s\S]*Get-LoadedFilterRuleRows[\s\S]*SelectionItemPattern/,
   );
   assert.match(
     configuration,

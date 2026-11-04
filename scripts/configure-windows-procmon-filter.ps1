@@ -79,12 +79,17 @@ public static class ProcmonNativeMenu
     private const uint CB_FINDSTRINGEXACT = 0x0158;
     private const uint BM_CLICK = 0x00F5;
     private const uint LVM_GETITEMCOUNT = 0x1004;
+    private const uint LVM_SETITEMSTATE = 0x102B;
+    private const uint LVM_GETITEMSTATE = 0x102C;
     private const uint LVM_GETHEADER = 0x101F;
+    private const uint LVM_GETSELECTEDCOUNT = 0x1032;
     private const uint LVM_GETITEMTEXTW = 0x1073;
     private const uint HDM_GETITEMCOUNT = 0x1200;
     private const uint SMTO_ABORTIFHUNG = 0x0002;
     private const uint NativeControlMessageTimeout = 1000;
     private const uint LVIF_TEXT = 0x0001;
+    private const uint LVIF_STATE = 0x0008;
+    private const uint LVIS_SELECTED = 0x0002;
     private const uint ProcessVmOperation = 0x0008;
     private const uint ProcessVmRead = 0x0010;
     private const uint ProcessVmWrite = 0x0020;
@@ -990,6 +995,172 @@ public static class ProcmonNativeMenu
         var count = countResult.ToInt32();
         if (count < 0 || count > 64)
             throw new InvalidOperationException("Native list item count exceeded its bound");
+        return count;
+    }
+
+    public static int SelectNativeListItemsExact(
+        IntPtr window,
+        int expectedProcessId,
+        int expectedCount
+    )
+    {
+        if (expectedCount < 1 || expectedCount > 64)
+            throw new ArgumentOutOfRangeException();
+        VerifyNativeControl(window, expectedProcessId, "list");
+        if (ReadNativeListItemCount(window, expectedProcessId) != expectedCount)
+            throw new InvalidOperationException("Native filter list changed before selection");
+        var process = OpenProcess(
+            ProcessVmOperation |
+                ProcessVmRead |
+                ProcessVmWrite |
+                ProcessQueryLimitedInformation,
+            false,
+            (uint)expectedProcessId
+        );
+        if (process == IntPtr.Zero)
+            throw new InvalidOperationException("Native filter list process memory is unavailable");
+        IntPtr remoteMemory = IntPtr.Zero;
+        IntPtr localMemory = IntPtr.Zero;
+        try
+        {
+            var itemSize = Marshal.SizeOf(typeof(NativeListViewItem));
+            remoteMemory = VirtualAllocEx(
+                process,
+                IntPtr.Zero,
+                new UIntPtr((uint)itemSize),
+                MemCommitReserve,
+                PageReadWrite
+            );
+            if (remoteMemory == IntPtr.Zero)
+                throw new InvalidOperationException("Native filter selection buffer allocation failed");
+            var nativeItem = new NativeListViewItem
+            {
+                Mask = LVIF_STATE,
+                Item = 0,
+                State = LVIS_SELECTED,
+                StateMask = LVIS_SELECTED
+            };
+            localMemory = Marshal.AllocHGlobal(itemSize);
+            Marshal.StructureToPtr(nativeItem, localMemory, false);
+            var itemBytes = new byte[itemSize];
+            Marshal.Copy(localMemory, itemBytes, 0, itemSize);
+            UIntPtr written;
+            if (
+                !WriteProcessMemory(
+                    process,
+                    remoteMemory,
+                    itemBytes,
+                    new UIntPtr((uint)itemBytes.Length),
+                    out written
+                ) ||
+                written.ToUInt64() != (ulong)itemBytes.Length
+            )
+            {
+                throw new InvalidOperationException("Native filter selection request could not be written");
+            }
+            IntPtr setResult;
+            if (
+                SendMessageTimeoutRaw(
+                    window,
+                    LVM_SETITEMSTATE,
+                    new IntPtr(-1),
+                    remoteMemory,
+                    SMTO_ABORTIFHUNG,
+                    NativeControlMessageTimeout,
+                    out setResult
+                ) == IntPtr.Zero ||
+                setResult == IntPtr.Zero
+            )
+            {
+                throw new InvalidOperationException("Native filter rows could not be selected");
+            }
+            IntPtr selectedResult;
+            if (
+                SendMessageTimeoutRaw(
+                    window,
+                    LVM_GETSELECTEDCOUNT,
+                    IntPtr.Zero,
+                    IntPtr.Zero,
+                    SMTO_ABORTIFHUNG,
+                    NativeControlMessageTimeout,
+                    out selectedResult
+                ) == IntPtr.Zero ||
+                selectedResult.ToInt32() != expectedCount
+            )
+            {
+                throw new InvalidOperationException("Native filter selection count did not match");
+            }
+            for (var itemIndex = 0; itemIndex < expectedCount; itemIndex++)
+            {
+                IntPtr itemState;
+                if (
+                    SendMessageTimeoutRaw(
+                        window,
+                        LVM_GETITEMSTATE,
+                        new IntPtr(itemIndex),
+                        new IntPtr(LVIS_SELECTED),
+                        SMTO_ABORTIFHUNG,
+                        NativeControlMessageTimeout,
+                        out itemState
+                    ) == IntPtr.Zero ||
+                    (itemState.ToInt32() & LVIS_SELECTED) == 0
+                )
+                {
+                    throw new InvalidOperationException("A native filter row was not selected");
+                }
+            }
+            VerifyNativeControl(window, expectedProcessId, "list");
+            if (
+                ReadNativeListItemCount(window, expectedProcessId) != expectedCount ||
+                ReadNativeListItemCount(window, expectedProcessId) !=
+                    ReadNativeListSelectedCount(window, expectedProcessId)
+            )
+            {
+                throw new InvalidOperationException("Native filter rows changed during selection");
+            }
+            return expectedCount;
+        }
+        finally
+        {
+            if (localMemory != IntPtr.Zero)
+                Marshal.FreeHGlobal(localMemory);
+            var cleanupFailed = false;
+            if (
+                remoteMemory != IntPtr.Zero &&
+                !VirtualFreeEx(process, remoteMemory, UIntPtr.Zero, MemRelease)
+            )
+            {
+                cleanupFailed = true;
+            }
+            if (!CloseHandle(process))
+                cleanupFailed = true;
+            if (cleanupFailed)
+                throw new InvalidOperationException("Native filter selection memory cleanup failed");
+        }
+    }
+
+    private static int ReadNativeListSelectedCount(IntPtr window, int expectedProcessId)
+    {
+        VerifyNativeControl(window, expectedProcessId, "list");
+        IntPtr countResult;
+        if (
+            SendMessageTimeoutRaw(
+                window,
+                LVM_GETSELECTEDCOUNT,
+                IntPtr.Zero,
+                IntPtr.Zero,
+                SMTO_ABORTIFHUNG,
+                NativeControlMessageTimeout,
+                out countResult
+            ) == IntPtr.Zero
+        )
+        {
+            throw new InvalidOperationException("Native filter selected row count could not be read");
+        }
+        VerifyNativeControl(window, expectedProcessId, "list");
+        var count = countResult.ToInt32();
+        if (count < 0 || count > 64)
+            throw new InvalidOperationException("Native filter selected row count exceeded its bound");
         return count;
     }
 
@@ -2172,13 +2343,68 @@ function Clear-LoadedFilterRules(
   [int]$OwnerProcessId
 ) {
   $maximumRows = 64
+  $nativeControls = Get-ProcmonNativeFilterDialogControls $Dialog $OwnerProcessId
+  if ($null -ne $nativeControls) {
+    $rows = Get-ProcmonNativeFilterRuleRows $nativeControls $OwnerProcessId -Quiet
+    if ($rows.Count -eq 0) {
+      [Console]::Out.WriteLine("PROC_MON_FILTER_RULE_RESET=removed:0;remaining:0")
+      return
+    }
+    if ($null -ne (Get-ProcmonNativeFilterDialogControls $Dialog $OwnerProcessId)) {
+      throw "Process Monitor native filter controls appeared during UIA rule clearing"
+    }
+    if ($rows.Count -gt $maximumRows) {
+      throw "Process Monitor native filter list exceeded the bounded row limit"
+    }
+    if (
+      [ProcmonNativeMenu]::GetForegroundWindow() -ne $nativeControls.Root
+    ) {
+      throw "Process Monitor native filter dialog lost the foreground before row selection"
+    }
+    $selectedCount = [ProcmonNativeMenu]::SelectNativeListItemsExact(
+      $nativeControls.List,
+      $OwnerProcessId,
+      $rows.Count
+    )
+    if ($selectedCount -ne $rows.Count) {
+      throw "Process Monitor native filter rows were not selected exactly"
+    }
+    $selectedControls = Get-ProcmonNativeFilterDialogControls $Dialog $OwnerProcessId
+    if (
+      $null -eq $selectedControls -or
+      -not $selectedControls.Buttons.ContainsKey("Remove") -or
+      -not [ProcmonNativeMenu]::IsWindowEnabled($selectedControls.Buttons["Remove"])
+    ) {
+      throw "Process Monitor native Remove button was unavailable after exact row selection"
+    }
+    Invoke-ProcmonNativeFilterButton $Dialog $OwnerProcessId "Remove"
+    $remainingRows = Get-ProcmonNativeFilterRuleRows `
+      $selectedControls $OwnerProcessId -Quiet
+    $removeDeadline = [DateTime]::UtcNow.AddSeconds(2)
+    while ($remainingRows.Count -ne 0 -and [DateTime]::UtcNow -lt $removeDeadline) {
+      Start-Sleep -Milliseconds 50
+      $selectedControls = Get-ProcmonNativeFilterDialogControls $Dialog $OwnerProcessId
+      if ($null -eq $selectedControls) {
+        throw "Process Monitor native filter controls disappeared before removal was verified"
+      }
+      $remainingRows = Get-ProcmonNativeFilterRuleRows `
+        $selectedControls $OwnerProcessId -Quiet
+    }
+    [Console]::Out.WriteLine(
+      "PROC_MON_FILTER_RULES_REMAINING=rows:$($remainingRows.Count)"
+    )
+    if ($remainingRows.Count -ne 0) {
+      throw "Process Monitor native filter list did not become empty after removal"
+    }
+    [Console]::Out.WriteLine(
+      "PROC_MON_FILTER_RULE_RESET=removed:$($rows.Count);remaining:0"
+    )
+    return
+  }
   $rows = Get-LoadedFilterRuleRows $Dialog $OwnerProcessId -AllowEmpty
   if ($rows.Count -eq 0) {
     [Console]::Out.WriteLine("PROC_MON_FILTER_RULE_RESET=removed:0;remaining:0")
     return
-  }
-  if ($null -ne (Get-ProcmonNativeFilterDialogControls $Dialog $OwnerProcessId)) {
-    throw "Process Monitor native Reset did not clear every existing filter rule"
   }
   if ($rows.Count -gt $maximumRows) {
     throw "Process Monitor filter list exceeded the bounded row limit"

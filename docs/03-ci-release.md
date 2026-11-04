@@ -2,6 +2,8 @@
 
 ## 1. ワークフロー構成
 
+[Run 41883338324](https://github.com/65537i/mail-client-plan/actions/runs/41883338324)（`0388296`、Windows 2025 x64 / webview）はconfiguration export waitとsynthetic native-control regressionを通過。native dialog candidateは`state:accepted;gate:eligible`となり、固定controls / optionsとnative ListView 2 rowsを識別したが、`clear-existing-filter-rules`で停止しstrict capture未実施。native fallbackではReset後も既存rule rowsが残り、旧clear gateが安全に処理できず失敗したため、全cell readback、same-processで全rowを選択、selection count / row state検証、Remove、row count 0確認を実装。disabled button caption readとdisabled click拒否のsynthetic test成功。今回追加のnative list selection / clear経路はWindows runtime未検証、AC-05未達。
+
 [Run 41881215224](https://github.com/65537i/mail-client-plan/actions/runs/41881215224)（`e969536`、Windows 2025 x64 / webview）はconfiguration export waitまで通過したが、`wait-filter-dialog-shortcut`で失敗しstrict capture未実施。追加したbounded診断により`native-control-read;exception:invalid-operation`を特定。disabled native button captionの読取りが共通検証のenabled requirementで拒否されていた。caption readbackだけに明示的disabled許可を追加し、visible / same-PID / class checksとclick時のenabled gateは維持する。Windows synthetic regressionにdisabled caption readbackとdisabled click拒否を追加。focused AC-05 tests 71/71、PowerShell parse、`git diff --check`成功。Windows runtime validation待ち、AC-05未達。
 
 [Run 41877206092](https://github.com/65537i/mail-client-plan/actions/runs/41877206092)（`77c018f`、Windows 2025 x64 / webview）はconfiguration export waitまで通過したが、引き続き`wait-filter-dialog-shortcut`で失敗しstrict capture未実施。failure typeは`InvalidOperationException`、native child summaryではvisible-otherのfixed controlsが読めたがcandidate gate markerは出力されなかった。このため既知例外を再throwする前にgateと型だけ記録し、native/UIA検査段階を分類する診断を追加。focused AC-05 tests 71/71、PowerShell parse、`git diff --check`成功。strict capture未実施、AC-05未達。

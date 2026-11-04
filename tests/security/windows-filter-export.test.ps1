@@ -946,6 +946,9 @@ try {
   ) {
     throw "Native list count or header count did not match the synthetic fixture"
   }
+  if ([ProcmonNativeMenu]::SelectNativeListItemsExact($nativeList, [int]$PID, 1) -ne 1) {
+    throw "Native list did not select the exact synthetic row"
+  }
   $expectedCells = @("Path", "is", "C:\audit\canary.png", "Include")
   for ($columnIndex = 0; $columnIndex -lt $expectedCells.Count; $columnIndex++) {
     $actualCell = [ProcmonNativeMenu]::ReadNativeListItemText(
