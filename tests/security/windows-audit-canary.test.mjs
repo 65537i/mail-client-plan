@@ -283,6 +283,29 @@ test("AC-05: Procmon main-window activation verifies its process-owned foregroun
     configuration,
     /function Write-ProcmonRawUiaSummary[\s\S]*PROC_MON_FILTER_RAW_UIA=source:\$Source;state:/,
   );
+  const nativeChildReader = configuration.match(
+    /public static NativeChildSnapshot ReadNativeChildSummary[\s\S]*?public static IntPtr\[\] GetProcessTopLevelWindows/,
+  )?.[0];
+  assert.ok(nativeChildReader, "Bounded native child-window scanner is missing");
+  for (const pattern of [
+    /maximum > 256/,
+    /GetWindowThreadProcessId\(root/,
+    /snapshot\.Windows >= maximum/,
+    /EnumChildWindows\(root, callback, IntPtr\.Zero\)/,
+    /GetWindowThreadProcessId\(window/,
+    /GetClassName/,
+    /case "ComboBox"/,
+    /case "Edit"/,
+    /case "Button"/,
+    /snapshot\.State = readFailed/,
+  ]) {
+    assert.match(nativeChildReader, pattern);
+  }
+  assert.doesNotMatch(nativeChildReader, /GetWindowText/);
+  assert.match(
+    configuration,
+    /function Write-ProcmonNativeChildSummary[\s\S]*PROC_MON_FILTER_NATIVE_CHILDREN=source:\$Source;state:[\s\S]*Write-ProcmonNativeChildSummary \$MainWindowHandle "main" \$Process\.Id[\s\S]*nativeChildScannedOtherCount -lt 2[\s\S]*Write-ProcmonNativeChildSummary \$handle "visible-other" \$Process\.Id/,
+  );
   assert.match(
     configuration,
     /private struct KeyboardInput[\s\S]*private struct MouseInput[\s\S]*LayoutKind\.Explicit[\s\S]*private struct InputUnion[\s\S]*FieldOffset\(0\)[\s\S]*MouseInput Mouse[\s\S]*FieldOffset\(0\)[\s\S]*KeyboardInput Keyboard[\s\S]*private struct NativeInput[\s\S]*private static extern uint SendInput[\s\S]*SendControlLShortcut\(\s*IntPtr expectedWindow,\s*int expectedProcessId\s*\)[\s\S]*GetForegroundWindow\(\) != expectedWindow[\s\S]*GetWindowProcessId\(expectedWindow\) != expectedProcessId[\s\S]*CreateKeyboardInput\(VK_CONTROL, 0\)[\s\S]*CreateKeyboardInput\(VK_L, 0\)[\s\S]*CreateKeyboardInput\(VK_L, KEYEVENTF_KEYUP\)[\s\S]*CreateKeyboardInput\(VK_CONTROL, KEYEVENTF_KEYUP\)[\s\S]*if \(inserted != \(uint\)inputs\.Length\)[\s\S]*releaseInputs/,

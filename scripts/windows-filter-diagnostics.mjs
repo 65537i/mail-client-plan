@@ -14,10 +14,14 @@ export function appendBoundedWindowsFilterOutput(current, chunk) {
   if (combined.length <= windowsFilterOutputLimit) return combined;
   const evidence = new Map();
   for (const match of combined.matchAll(
-    /^(PROC_MON_FILTER_CONFIG_PATHS|PROC_MON_FILTER_RELOADED_RULES|PROC_MON_FILTER_RELOADED_UI|PROC_MON_FILTER_RELOADED_DROP)=[^\r\n]{1,1024}\r?$/gm,
+    /^(PROC_MON_FILTER_CONFIG_PATHS|PROC_MON_FILTER_RELOADED_RULES|PROC_MON_FILTER_RELOADED_UI|PROC_MON_FILTER_RELOADED_DROP|PROC_MON_FILTER_NATIVE_CHILDREN)=[^\r\n]{1,1024}\r?$/gm,
   )) {
-    if (!evidence.has(match[1]) && describeWindowsFilterDiagnostics(match[0])) {
-      evidence.set(match[1], match[0].replace(/\r$/, ""));
+    const source = match[1] === "PROC_MON_FILTER_NATIVE_CHILDREN"
+      ? match[0].match(/^PROC_MON_FILTER_NATIVE_CHILDREN=source:(main|visible-other);/)?.[1]
+      : undefined;
+    const evidenceKey = source ? `${match[1]}:${source}` : match[1];
+    if (!evidence.has(evidenceKey) && describeWindowsFilterDiagnostics(match[0])) {
+      evidence.set(evidenceKey, match[0].replace(/\r$/, ""));
     }
   }
   const retainedEvidence = evidence.size ? `${[...evidence.values()].join("\n")}\n` : "";
@@ -301,6 +305,42 @@ export function describeWindowsFilterDiagnostics(output) {
     ) {
       diagnostics.push(
         `filter-raw-uia=source:${source};state:${state};nodes:${nodes};windows:${windows};panes:${panes};combos:${combos};edits:${edits};buttons:${buttons};menus:${menus};menu-items:${menuItems};other:${other};truncated:${truncated}`,
+      );
+    }
+  }
+
+  for (const nativeChildren of output.matchAll(
+    /^PROC_MON_FILTER_NATIVE_CHILDREN=source:(main|visible-other);state:(ready|partial|truncated|root-mismatch);windows:(\d{1,3});combos:(\d{1,3});edits:(\d{1,3});buttons:(\d{1,3});dialogs:(\d{1,3});toolbars:(\d{1,3});lists:(\d{1,3});statics:(\d{1,3});other:(\d{1,3});unreadable:(\d{1,3});truncated:(true|false)\r?$/gm,
+  )) {
+    const [, source, state, ...rawCounts] = nativeChildren;
+    const [
+      windows,
+      combos,
+      edits,
+      buttons,
+      dialogs,
+      toolbars,
+      lists,
+      statics,
+      other,
+      unreadable,
+    ] = rawCounts.slice(0, 10).map(Number);
+    const truncated = rawCounts[10] === "true";
+    if (
+      windows <= 256
+      && [combos, edits, buttons, dialogs, toolbars, lists, statics, other, unreadable]
+        .every((count) => count <= windows)
+      && combos + edits + buttons + dialogs + toolbars + lists + statics + other + unreadable
+        === windows
+      && (
+        (state === "ready" && !truncated)
+        || (state === "truncated" && truncated)
+        || state === "partial"
+        || (state === "root-mismatch" && windows === 0 && !truncated)
+      )
+    ) {
+      diagnostics.push(
+        `filter-native-children=source:${source};state:${state};windows:${windows};combos:${combos};edits:${edits};buttons:${buttons};dialogs:${dialogs};toolbars:${toolbars};lists:${lists};statics:${statics};other:${other};unreadable:${unreadable};truncated:${truncated}`,
       );
     }
   }

@@ -2,6 +2,8 @@
 
 ## 1. ワークフロー構成
 
+[Run 41840365328](https://github.com/65537i/mail-client-plan/actions/runs/41840365328)（`b7b6f91`、Windows 2025 x64 / webview）はsecurity-test build、Windows監査回帰81/81、configuration export waitを通過したが、Ctrl+Lのnative inputが`state:sent;events:4;release-events:0`となった後もfilter dialogを検出できず、`wait-filter-dialog-shortcut`で停止しstrict capture未実施。これを受けて同一PIDのmainと表示中候補最大2件の子HWNDを各256件まで走査し、標準control classの集計だけを出す診断を追加した。window textや任意class名は出力せず、dialog受理条件は維持。今回の差分はfocused Node tests 66/66、PowerShell parse、JavaScript syntax、`git diff --check`成功。Windows runtime再検証待ち、AC-05未達。
+
 [Run 41838787074](https://github.com/65537i/mail-client-plan/actions/runs/41838787074)（`bbe2b7c`、Windows 2025 x64 / webview）はsecurity-test build、Windows監査回帰81/81、configuration export waitを通過したが、`fallback-open-filter-dialog-shortcut`で停止しstrict capture未実施。native input診断は`state:incomplete;events:0;release-events:0`で、前景ゲートはpassed。`INPUT` unionに最大メンバー`MOUSEINPUT`を含めずx64構造体サイズが誤っていたため修正し、APIが要求するサイズに合わせた。Windows runtime再検証待ち。
 
 [Run 41837154253](https://github.com/65537i/mail-client-plan/actions/runs/41837154253)（`fdeb603`、Windows 2025 x64 / webview）はsecurity-test build、Windows監査回帰81/81、configuration export waitを通過したが、`fallback-open-filter-dialog-shortcut`で`InvalidOperationException`となりstrict capture未実施。前景ゲートと直前GUI focus観測は成功したが、native input methodの例外により送信前提条件失敗とSendInput不完全の区別は未確定。

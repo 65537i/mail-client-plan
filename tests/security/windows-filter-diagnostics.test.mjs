@@ -350,6 +350,50 @@ test("AC-05: Windows raw UIA diagnostics retain bounded control-type counts only
   );
 });
 
+test("AC-05: native child diagnostics retain bounded class counts only", () => {
+  const line = "PROC_MON_FILTER_NATIVE_CHILDREN="
+    + "source:visible-other;state:ready;windows:5;combos:1;edits:1;buttons:1;"
+    + "dialogs:0;toolbars:0;lists:0;statics:1;other:1;unreadable:0;truncated:false";
+  assert.equal(
+    describeWindowsFilterDiagnostics(line),
+    "; filter-native-children=source:visible-other;state:ready;windows:5;"
+      + "combos:1;edits:1;buttons:1;dialogs:0;toolbars:0;lists:0;statics:1;"
+      + "other:1;unreadable:0;truncated:false",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      line.replace("state:ready", "state:truncated").replace("truncated:false", "truncated:true"),
+    ).includes("filter-native-children=source:visible-other;state:truncated"),
+    true,
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(line.replace("windows:5", "windows:6")),
+    "",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_NATIVE_CHILDREN=source:main;state:root-mismatch;"
+        + "windows:0;combos:0;edits:0;buttons:0;dialogs:0;toolbars:0;lists:0;"
+        + "statics:0;other:0;unreadable:0;truncated:false",
+    ),
+    "; filter-native-children=source:main;state:root-mismatch;windows:0;"
+      + "combos:0;edits:0;buttons:0;dialogs:0;toolbars:0;lists:0;statics:0;"
+      + "other:0;unreadable:0;truncated:false",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_NATIVE_CHILDREN=source:main;state:root-mismatch;"
+        + "windows:1;combos:0;edits:0;buttons:0;dialogs:0;toolbars:0;lists:0;"
+        + "statics:0;other:0;unreadable:0;truncated:false",
+    ),
+    "",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(`${line};class=private-window-class`),
+    "",
+  );
+});
+
 test("AC-05: Windows filter diagnostics omit arbitrary names and exception details", () => {
   const output = [
     "PROC_MON_FILTER_MENU_STATE=enabled:yes;offscreen:false;keyboard-focusable:true",
@@ -1170,6 +1214,8 @@ test("AC-05: truncation preserves mandatory evidence across chunk boundaries wit
     "PROC_MON_FILTER_RELOADED_RULES=rows:2;canary:1;control:1;path:2;is:2;include:2;unclassified:0",
     "PROC_MON_FILTER_RELOADED_UI=items:86;lists:4;data-grids:1;tables:0;list-items:41;data-items:2;dialog-window-rows:43;other-window-rows:0;unscoped-rows:0;combo-option-rows:41;rule-containers:1;rule-row-candidates:2;rule-container-unclassified-rows:0;rows:2;truncated:false",
     "PROC_MON_FILTER_RELOADED_DROP=checked:on",
+    "PROC_MON_FILTER_NATIVE_CHILDREN=source:main;state:ready;windows:4;combos:0;edits:0;buttons:1;dialogs:0;toolbars:1;lists:0;statics:1;other:1;unreadable:0;truncated:false",
+    "PROC_MON_FILTER_NATIVE_CHILDREN=source:visible-other;state:ready;windows:3;combos:0;edits:0;buttons:0;dialogs:0;toolbars:0;lists:0;statics:1;other:2;unreadable:0;truncated:false",
   ];
   for (const chunkSize of [1, 7, 64, 4096, 65536]) {
     const stream = `${"x".repeat(9000)}\n${lines.join("\n")}\n${"y".repeat(12000)}\n`;
@@ -1182,6 +1228,8 @@ test("AC-05: truncation preserves mandatory evidence across chunk boundaries wit
     assert.ok(diagnostics.includes("; config-filter-paths=canary:1;control:1"));
     assert.ok(diagnostics.includes("; reloaded-filter-rules=rows:2;canary:1;control:1;path:2;is:2;include:2;unclassified:0"));
     assert.ok(diagnostics.includes("; reloaded-drop-filtered-events=on"));
+    assert.ok(diagnostics.includes("; filter-native-children=source:main;state:ready"));
+    assert.ok(diagnostics.includes("; filter-native-children=source:visible-other;state:ready"));
     const ui = diagnostics.split("; ").find(value => value.startsWith("reloaded-filter-ui="));
     assert.match(ui, reloadedFilterUiEvidencePattern);
     assert.equal(captured.length, windowsFilterOutputLimit);

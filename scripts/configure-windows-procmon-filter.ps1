@@ -196,6 +196,22 @@ public static class ProcmonNativeMenu
         public uint ReleaseEvents { get; set; }
     }
 
+    public sealed class NativeChildSnapshot
+    {
+        public string State { get; set; }
+        public int Windows { get; set; }
+        public int Combos { get; set; }
+        public int Edits { get; set; }
+        public int Buttons { get; set; }
+        public int Dialogs { get; set; }
+        public int Toolbars { get; set; }
+        public int Lists { get; set; }
+        public int Statics { get; set; }
+        public int Other { get; set; }
+        public int Unreadable { get; set; }
+        public bool Truncated { get; set; }
+    }
+
     [DllImport("user32.dll", ExactSpelling = true, SetLastError = true)]
     public static extern IntPtr GetMenu(IntPtr hWnd);
 
@@ -207,6 +223,21 @@ public static class ProcmonNativeMenu
 
     [DllImport("user32.dll", ExactSpelling = true, SetLastError = true)]
     private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+
+    [DllImport("user32.dll", ExactSpelling = true, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool EnumChildWindows(
+        IntPtr parent,
+        EnumWindowsProc callback,
+        IntPtr parameter
+    );
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
+    private static extern int GetClassName(
+        IntPtr window,
+        System.Text.StringBuilder className,
+        int maximum
+    );
 
     [DllImport("user32.dll", ExactSpelling = true, SetLastError = true)]
     public static extern IntPtr GetForegroundWindow();
@@ -313,6 +344,110 @@ public static class ProcmonNativeMenu
             Events = inserted,
             ReleaseEvents = 0
         };
+    }
+
+    public static NativeChildSnapshot ReadNativeChildSummary(
+        IntPtr root,
+        int expectedProcessId,
+        int maximum
+    )
+    {
+        var snapshot = new NativeChildSnapshot
+        {
+            State = "root-mismatch",
+            Truncated = false
+        };
+        if (root == IntPtr.Zero || expectedProcessId <= 0 || maximum < 1 || maximum > 256)
+            throw new ArgumentOutOfRangeException();
+        uint rootProcessId;
+        if (
+            GetWindowThreadProcessId(root, out rootProcessId) == 0 ||
+            rootProcessId != (uint)expectedProcessId
+        )
+        {
+            return snapshot;
+        }
+
+        var seen = new System.Collections.Generic.HashSet<IntPtr>();
+        var readFailed = false;
+        EnumWindowsProc callback = delegate(IntPtr window, IntPtr parameter)
+        {
+            if (snapshot.Windows >= maximum)
+            {
+                snapshot.Truncated = true;
+                return false;
+            }
+            if (!seen.Add(window))
+            {
+                readFailed = true;
+                return false;
+            }
+            snapshot.Windows++;
+            uint childProcessId;
+            if (
+                GetWindowThreadProcessId(window, out childProcessId) == 0 ||
+                childProcessId != (uint)expectedProcessId
+            )
+            {
+                snapshot.Unreadable++;
+                readFailed = true;
+                return true;
+            }
+            var className = new System.Text.StringBuilder(128);
+            if (GetClassName(window, className, className.Capacity) == 0)
+            {
+                snapshot.Unreadable++;
+                readFailed = true;
+                return true;
+            }
+            switch (className.ToString())
+            {
+                case "ComboBox":
+                case "ComboBoxEx32":
+                    snapshot.Combos++;
+                    break;
+                case "Edit":
+                    snapshot.Edits++;
+                    break;
+                case "Button":
+                    snapshot.Buttons++;
+                    break;
+                case "#32770":
+                    snapshot.Dialogs++;
+                    break;
+                case "ToolbarWindow32":
+                    snapshot.Toolbars++;
+                    break;
+                case "SysListView32":
+                    snapshot.Lists++;
+                    break;
+                case "Static":
+                    snapshot.Statics++;
+                    break;
+                default:
+                    snapshot.Other++;
+                    break;
+            }
+            return true;
+        };
+        var enumerationSucceeded = EnumChildWindows(root, callback, IntPtr.Zero);
+        GC.KeepAlive(callback);
+        if (!enumerationSucceeded && !snapshot.Truncated)
+        {
+            readFailed = true;
+        }
+        uint verifiedRootProcessId;
+        if (
+            GetWindowThreadProcessId(root, out verifiedRootProcessId) == 0 ||
+            verifiedRootProcessId != (uint)expectedProcessId
+        )
+        {
+            readFailed = true;
+        }
+        snapshot.State = readFailed
+            ? "partial"
+            : snapshot.Truncated ? "truncated" : "ready";
+        return snapshot;
     }
 
     public static IntPtr[] GetProcessTopLevelWindows(int processId, int maximum)
@@ -2830,6 +2965,17 @@ function Write-ProcmonRawUiaSummary(
   )
 }
 
+function Write-ProcmonNativeChildSummary(
+  [System.IntPtr]$Root,
+  [ValidateSet("main", "visible-other")][string]$Source,
+  [int]$ProcessId
+) {
+  $summary = [ProcmonNativeMenu]::ReadNativeChildSummary($Root, $ProcessId, 256)
+  [Console]::Out.WriteLine(
+    "PROC_MON_FILTER_NATIVE_CHILDREN=source:$Source;state:$($summary.State);windows:$($summary.Windows);combos:$($summary.Combos);edits:$($summary.Edits);buttons:$($summary.Buttons);dialogs:$($summary.Dialogs);toolbars:$($summary.Toolbars);lists:$($summary.Lists);statics:$($summary.Statics);other:$($summary.Other);unreadable:$($summary.Unreadable);truncated:$($summary.Truncated.ToString().ToLowerInvariant())"
+  )
+}
+
 function Find-ProcmonNativeFilterDialog(
   [System.Diagnostics.Process]$Process,
   [System.IntPtr]$MainWindowHandle
@@ -2855,6 +3001,7 @@ function Find-ProcmonNativeFilterDialog(
   $maxEditCount = 0
   $readFailureCount = 0
   $rawScannedOtherCount = 0
+  $nativeChildScannedOtherCount = 0
   $resetCondition = [System.Windows.Automation.PropertyCondition]::new(
     [System.Windows.Automation.AutomationElement]::NameProperty,
     "Reset"
@@ -2888,6 +3035,7 @@ function Find-ProcmonNativeFilterDialog(
   if ($null -ne $mainWindowElement -and
     [ProcmonNativeMenu]::GetWindowProcessId($MainWindowHandle) -eq $Process.Id) {
     Write-ProcmonRawUiaSummary $mainWindowElement "main" $Process.Id
+    Write-ProcmonNativeChildSummary $MainWindowHandle "main" $Process.Id
   }
   for ($index = 0; $index -lt $windowCount; $index++) {
     $handle = [IntPtr]$handles[$index]
@@ -2933,6 +3081,10 @@ function Find-ProcmonNativeFilterDialog(
       if ($rawScannedOtherCount -lt 2) {
         Write-ProcmonRawUiaSummary $candidateWindow "visible-other" $Process.Id
         $rawScannedOtherCount++
+      }
+      if ($nativeChildScannedOtherCount -lt 2) {
+        Write-ProcmonNativeChildSummary $handle "visible-other" $Process.Id
+        $nativeChildScannedOtherCount++
       }
       $candidateRuntimeId = $candidateWindow.GetRuntimeId() -join ","
       $distinctRuntimeId = (
