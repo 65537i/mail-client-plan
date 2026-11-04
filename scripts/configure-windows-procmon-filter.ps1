@@ -175,6 +175,13 @@ public static class ProcmonNativeMenu
         public IntPtr FocusWindow { get; set; }
     }
 
+    public sealed class ShortcutInputSnapshot
+    {
+        public string State { get; set; }
+        public uint Events { get; set; }
+        public uint ReleaseEvents { get; set; }
+    }
+
     [DllImport("user32.dll", ExactSpelling = true, SetLastError = true)]
     public static extern IntPtr GetMenu(IntPtr hWnd);
 
@@ -235,7 +242,10 @@ public static class ProcmonNativeMenu
         };
     }
 
-    public static uint SendControlLShortcut(IntPtr expectedWindow, int expectedProcessId)
+    public static ShortcutInputSnapshot SendControlLShortcut(
+        IntPtr expectedWindow,
+        int expectedProcessId
+    )
     {
         if (
             expectedWindow == IntPtr.Zero ||
@@ -244,9 +254,12 @@ public static class ProcmonNativeMenu
             GetWindowProcessId(expectedWindow) != expectedProcessId
         )
         {
-            throw new InvalidOperationException(
-                "Filter shortcut target is not the verified foreground process window"
-            );
+            return new ShortcutInputSnapshot
+            {
+                State = "target-mismatch",
+                Events = 0,
+                ReleaseEvents = 0
+            };
         }
 
         var inputs = new[]
@@ -268,14 +281,24 @@ public static class ProcmonNativeMenu
                 CreateKeyboardInput(VK_L, KEYEVENTF_KEYUP),
                 CreateKeyboardInput(VK_CONTROL, KEYEVENTF_KEYUP)
             };
-            SendInput(
+            var released = SendInput(
                 (uint)releaseInputs.Length,
                 releaseInputs,
                 Marshal.SizeOf(typeof(NativeInput))
             );
-            throw new InvalidOperationException("Filter shortcut input was incomplete");
+            return new ShortcutInputSnapshot
+            {
+                State = "incomplete",
+                Events = inserted,
+                ReleaseEvents = released
+            };
         }
-        return inserted;
+        return new ShortcutInputSnapshot
+        {
+            State = "sent",
+            Events = inserted,
+            ReleaseEvents = 0
+        };
     }
 
     public static IntPtr[] GetProcessTopLevelWindows(int processId, int maximum)
@@ -1928,13 +1951,16 @@ function Open-FilterDialogByShortcut(
     "PROC_MON_FILTER_MENU_OPEN_FALLBACK=filter-dialog-shortcut"
   )
   Write-ShortcutGuiFocusObservation "before" $Process $mainWindowHandle
-  $shortcutEvents = [ProcmonNativeMenu]::SendControlLShortcut(
+  $shortcutInput = [ProcmonNativeMenu]::SendControlLShortcut(
     $mainWindowHandle,
     $Process.Id
   )
   [Console]::Out.WriteLine(
-    "PROC_MON_FILTER_SHORTCUT_INPUT=method:send-input;events:$shortcutEvents"
+    "PROC_MON_FILTER_SHORTCUT_INPUT=state:$($shortcutInput.State);events:$($shortcutInput.Events);release-events:$($shortcutInput.ReleaseEvents)"
   )
+  if ($shortcutInput.State -ne "sent" -or $shortcutInput.Events -ne 4) {
+    throw "Process Monitor filter shortcut input failed"
+  }
   Write-ShortcutGuiFocusObservation "after" $Process $mainWindowHandle
   Write-FocusObservation "after-filter-dialog-shortcut" | Out-Null
   Write-FocusOwnerObservation "after-filter-dialog-shortcut" $Process $MainWindow
@@ -4332,13 +4358,16 @@ try {
     throw "Process Monitor reloaded main window lost the foreground before the Filter shortcut"
   }
   Set-Stage "open-reloaded-filter-dialog-shortcut"
-  $reloadShortcutEvents = [ProcmonNativeMenu]::SendControlLShortcut(
+  $reloadShortcutInput = [ProcmonNativeMenu]::SendControlLShortcut(
     $mainWindowHandle,
     $process.Id
   )
   [Console]::Out.WriteLine(
-    "PROC_MON_FILTER_SHORTCUT_INPUT=method:send-input;events:$reloadShortcutEvents"
+    "PROC_MON_FILTER_SHORTCUT_INPUT=state:$($reloadShortcutInput.State);events:$($reloadShortcutInput.Events);release-events:$($reloadShortcutInput.ReleaseEvents)"
   )
+  if ($reloadShortcutInput.State -ne "sent" -or $reloadShortcutInput.Events -ne 4) {
+    throw "Process Monitor reload filter shortcut input failed"
+  }
   [Console]::Out.WriteLine("PROC_MON_FILTER_RELOAD_SHORTCUT=command:filter-dialog;state:sent")
   Write-FocusObservation "after-reload-filter-dialog-shortcut" | Out-Null
   Set-Stage "wait-reloaded-filter-dialog"

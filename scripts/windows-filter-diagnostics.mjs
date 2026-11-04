@@ -84,10 +84,23 @@ export function describeWindowsFilterDiagnostics(output) {
   }
 
   for (const match of output.matchAll(
-    /^PROC_MON_FILTER_SHORTCUT_INPUT=method:send-input;events:(\d{1,1})\r?$/gm,
+    /^PROC_MON_FILTER_SHORTCUT_INPUT=state:(sent|target-mismatch|incomplete);events:(\d);release-events:(\d)\r?$/gm,
   )) {
-    if (match[1] === "4") {
-      diagnostics.push("filter-shortcut-input=method:send-input;events:4");
+    const [, state, rawEvents, rawReleaseEvents] = match;
+    const events = Number(rawEvents);
+    const releaseEvents = Number(rawReleaseEvents);
+    if (
+      events <= 4
+      && releaseEvents <= 2
+      && (
+        (state === "sent" && events === 4 && releaseEvents === 0)
+        || (state === "target-mismatch" && events === 0 && releaseEvents === 0)
+        || (state === "incomplete" && events < 4)
+      )
+    ) {
+      diagnostics.push(
+        `filter-shortcut-input=state:${state};events:${events};release-events:${releaseEvents}`,
+      );
     }
   }
 

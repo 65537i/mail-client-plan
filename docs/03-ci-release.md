@@ -2,6 +2,8 @@
 
 ## 1. ワークフロー構成
 
+[Run 41837154253](https://github.com/65537i/mail-client-plan/actions/runs/41837154253)（`fdeb603`、Windows 2025 x64 / webview）はsecurity-test build、Windows監査回帰81/81、configuration export waitを通過したが、`fallback-open-filter-dialog-shortcut`で`InvalidOperationException`となりstrict capture未実施。前景ゲートと直前GUI focus観測は成功したが、native input methodの例外により送信前提条件失敗とSendInput不完全の区別は未確定。次runでは成功・target mismatch・incompleteを件数のみで分類し、失敗時は停止する。
+
 [Run 41835100750](https://github.com/65537i/mail-client-plan/actions/runs/41835100750)（`835f44b`、Windows 2025 x64 / webview）はsecurity-test build、Windows監査回帰80/80、configuration export waitに成功したが、baseline `wait-filter-dialog-shortcut`で停止しstrict capture未実施。Raw View scanはmain 25 nodes（Window 2 / Pane 23）、visible-other 18 nodes（Window 1 / Pane 17）で、いずれもComboBox / Edit 0。Control View外にfilter dialog controlsがある仮説は支持されなかった。この結果を受け、前景HWND・PIDを再確認した上でCtrl+Lのみnative `SendInput`を使う変更を追加した。初回/reload両経路を揃え、厳格なdialog gateは維持。focused Node tests 65/65、PowerShell parse成功、Windows runtime再検証待ち。AC-05未達。
 
 [Run 41681453818](https://github.com/65537i/mail-client-plan/actions/runs/41681453818)（`b0f869b`、Windows 2025 x64 / webview）はsecurity-test build、Windows監査回帰79/79、configuration export waitに成功したが、baseline `wait-filter-dialog-shortcut`で停止しstrict capture未実施。MSAA `OBJID_MENU`は4 windowsすべてreadableだがaccessible item 0で、Filter commandの有無は確認できなかった。Procmon top-level windowは11件、native menu handleは4件、native menu scanは1 unreadableでpartial。この結果を受け、Control Viewに含まれないUIA要素の有無を調べるRaw View走査（同一PID、main + 表示候補最大2、512 nodes / 16 levels）を追加した。ラベル・値は読まず、strict dialog gateは維持。focused Node tests 64/64、PowerShell parse、`git diff --check`成功、Windows runtime待ち。AC-05未達。

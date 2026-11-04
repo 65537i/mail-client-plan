@@ -132,22 +132,34 @@ test("AC-05: Windows shortcut diagnostics retain only classified GUI focus owner
   );
 });
 
-test("AC-05: shortcut input diagnostics accept only a complete native key sequence", () => {
+test("AC-05: shortcut input diagnostics classify only bounded native input results", () => {
   assert.equal(
     describeWindowsFilterDiagnostics(
-      "PROC_MON_FILTER_SHORTCUT_INPUT=method:send-input;events:4",
+      "PROC_MON_FILTER_SHORTCUT_INPUT=state:sent;events:4;release-events:0",
     ),
-    "; filter-shortcut-input=method:send-input;events:4",
+    "; filter-shortcut-input=state:sent;events:4;release-events:0",
   );
   assert.equal(
     describeWindowsFilterDiagnostics(
-      "PROC_MON_FILTER_SHORTCUT_INPUT=method:send-input;events:3",
+      "PROC_MON_FILTER_SHORTCUT_INPUT=state:target-mismatch;events:0;release-events:0",
+    ),
+    "; filter-shortcut-input=state:target-mismatch;events:0;release-events:0",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_SHORTCUT_INPUT=state:incomplete;events:1;release-events:2",
+    ),
+    "; filter-shortcut-input=state:incomplete;events:1;release-events:2",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_SHORTCUT_INPUT=state:sent;events:3;release-events:0",
     ),
     "",
   );
   assert.equal(
     describeWindowsFilterDiagnostics(
-      "PROC_MON_FILTER_SHORTCUT_INPUT=method:send-input;events:4;path=C:\\private",
+      "PROC_MON_FILTER_SHORTCUT_INPUT=state:sent;events:4;release-events:0;path=C:\\private",
     ),
     "",
   );

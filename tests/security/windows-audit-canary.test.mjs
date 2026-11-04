@@ -285,7 +285,7 @@ test("AC-05: Procmon main-window activation verifies its process-owned foregroun
   );
   assert.match(
     configuration,
-    /private struct KeyboardInput[\s\S]*LayoutKind\.Explicit[\s\S]*private struct InputUnion[\s\S]*private struct NativeInput[\s\S]*private static extern uint SendInput[\s\S]*SendControlLShortcut\(IntPtr expectedWindow, int expectedProcessId\)[\s\S]*GetForegroundWindow\(\) != expectedWindow[\s\S]*GetWindowProcessId\(expectedWindow\) != expectedProcessId[\s\S]*CreateKeyboardInput\(VK_CONTROL, 0\)[\s\S]*CreateKeyboardInput\(VK_L, 0\)[\s\S]*CreateKeyboardInput\(VK_L, KEYEVENTF_KEYUP\)[\s\S]*CreateKeyboardInput\(VK_CONTROL, KEYEVENTF_KEYUP\)[\s\S]*if \(inserted != \(uint\)inputs\.Length\)[\s\S]*releaseInputs/,
+    /private struct KeyboardInput[\s\S]*LayoutKind\.Explicit[\s\S]*private struct InputUnion[\s\S]*private struct NativeInput[\s\S]*private static extern uint SendInput[\s\S]*SendControlLShortcut\(\s*IntPtr expectedWindow,\s*int expectedProcessId\s*\)[\s\S]*GetForegroundWindow\(\) != expectedWindow[\s\S]*GetWindowProcessId\(expectedWindow\) != expectedProcessId[\s\S]*CreateKeyboardInput\(VK_CONTROL, 0\)[\s\S]*CreateKeyboardInput\(VK_L, 0\)[\s\S]*CreateKeyboardInput\(VK_L, KEYEVENTF_KEYUP\)[\s\S]*CreateKeyboardInput\(VK_CONTROL, KEYEVENTF_KEYUP\)[\s\S]*if \(inserted != \(uint\)inputs\.Length\)[\s\S]*releaseInputs/,
   );
   assert.match(
     configuration,
@@ -322,7 +322,7 @@ test("AC-05: Procmon main-window activation verifies its process-owned foregroun
   );
   assert.match(
     configuration,
-    /function Open-FilterDialogByShortcut[\s\S]*Set-VerifiedProcmonMainWindowForeground \$MainWindow \$Process "MAIN"[\s\S]*GetWindowProcessId\(\$currentForegroundHandle\) -eq \$Process\.Id[\s\S]*PROC_MON_FILTER_SHORTCUT_FOREGROUND=gate:\$shortcutForegroundGate[\s\S]*SendControlLShortcut\(\s*\$mainWindowHandle,\s*\$Process\.Id\s*\)[\s\S]*PROC_MON_FILTER_SHORTCUT_INPUT=method:send-input;events:\$shortcutEvents[\s\S]*Write-FocusObservation "after-filter-dialog-shortcut"[\s\S]*Write-FocusOwnerObservation "after-filter-dialog-shortcut" \$Process \$MainWindow[\s\S]*Wait-FilterDialog \$Process \$MainWindow/,
+    /function Open-FilterDialogByShortcut[\s\S]*Set-VerifiedProcmonMainWindowForeground \$MainWindow \$Process "MAIN"[\s\S]*GetWindowProcessId\(\$currentForegroundHandle\) -eq \$Process\.Id[\s\S]*PROC_MON_FILTER_SHORTCUT_FOREGROUND=gate:\$shortcutForegroundGate[\s\S]*SendControlLShortcut\(\s*\$mainWindowHandle,\s*\$Process\.Id\s*\)[\s\S]*PROC_MON_FILTER_SHORTCUT_INPUT=state:\$\(\$shortcutInput\.State\);events:\$\(\$shortcutInput\.Events\);release-events:\$\(\$shortcutInput\.ReleaseEvents\)[\s\S]*\$shortcutInput\.State -ne "sent" -or \$shortcutInput\.Events -ne 4[\s\S]*throw "Process Monitor filter shortcut input failed"[\s\S]*Write-FocusObservation "after-filter-dialog-shortcut"[\s\S]*Write-FocusOwnerObservation "after-filter-dialog-shortcut" \$Process \$MainWindow[\s\S]*Wait-FilterDialog \$Process \$MainWindow/,
   );
   assert.match(
     configuration,
@@ -342,7 +342,7 @@ test("AC-05: Procmon main-window activation verifies its process-owned foregroun
   );
   assert.match(
     configuration,
-    /open-reloaded-filter-dialog-shortcut[\s\S]*SendControlLShortcut\(\s*\$mainWindowHandle,\s*\$process\.Id\s*\)[\s\S]*PROC_MON_FILTER_RELOAD_SHORTCUT=command:filter-dialog;state:sent/,
+    /open-reloaded-filter-dialog-shortcut[\s\S]*SendControlLShortcut\(\s*\$mainWindowHandle,\s*\$process\.Id\s*\)[\s\S]*PROC_MON_FILTER_SHORTCUT_INPUT=state:\$\(\$reloadShortcutInput\.State\);events:\$\(\$reloadShortcutInput\.Events\);release-events:\$\(\$reloadShortcutInput\.ReleaseEvents\)[\s\S]*\$reloadShortcutInput\.State -ne "sent" -or \$reloadShortcutInput\.Events -ne 4[\s\S]*throw "Process Monitor reload filter shortcut input failed"[\s\S]*PROC_MON_FILTER_RELOAD_SHORTCUT=command:filter-dialog;state:sent/,
   );
   assert.doesNotMatch(configuration, /SendWait\("\^l"\)/);
   assert.match(
