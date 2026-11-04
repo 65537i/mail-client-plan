@@ -861,6 +861,10 @@ $nativeButtonHandle = [SyntheticListCount]::Create(
   0, "Button", "&Add", 0x50000003, 240, 8, 80, 24,
   $nativeForm.Handle, [IntPtr]203, [IntPtr]::Zero, [IntPtr]::Zero
 )
+$nativeDisabledButtonHandle = [SyntheticListCount]::Create(
+  0, "Button", "&Remove", 0x58000003, 330, 8, 80, 24,
+  $nativeForm.Handle, [IntPtr]205, [IntPtr]::Zero, [IntPtr]::Zero
+)
 $nativeListHandle = [SyntheticListCount]::Create(
   0, "SysListView32", "", 0x50000001, 8, 80, 560, 180,
   $nativeForm.Handle, [IntPtr]204, [IntPtr]::Zero, [IntPtr]::Zero
@@ -869,6 +873,7 @@ if (
   $nativeComboHandle -eq [IntPtr]::Zero -or
   $nativeEditHandle -eq [IntPtr]::Zero -or
   $nativeButtonHandle -eq [IntPtr]::Zero -or
+  $nativeDisabledButtonHandle -eq [IntPtr]::Zero -or
   $nativeListHandle -eq [IntPtr]::Zero
 ) {
   throw "Synthetic native filter controls could not be created"
@@ -910,6 +915,25 @@ try {
   )
   if ([ProcmonNativeMenu]::ReadNativeControlText($nativeEditHandle, [int]$PID, "edit", 1024) -cne "C:\audit\canary.png") {
     throw "Native edit text readback did not match"
+  }
+  if ([ProcmonNativeMenu]::IsWindowEnabled($nativeDisabledButtonHandle)) {
+    throw "Synthetic native button was expected to be disabled"
+  }
+  if ([ProcmonNativeMenu]::ReadNativeControlText(
+      $nativeDisabledButtonHandle, [int]$PID, "button", 128, $true
+    ) -cne "&Remove") {
+    throw "Native disabled button caption could not be read for identification"
+  }
+  $disabledButtonClickRejected = $false
+  try {
+    [ProcmonNativeMenu]::ClickNativeButtonExact(
+      $nativeDisabledButtonHandle, [int]$PID, "Remove"
+    )
+  } catch [System.InvalidOperationException] {
+    $disabledButtonClickRejected = $true
+  }
+  if (-not $disabledButtonClickRejected) {
+    throw "Native disabled button passed the click eligibility gate"
   }
   [ProcmonNativeMenu]::ClickNativeButtonExact($nativeButtonHandle, [int]$PID, "Add")
   [System.Windows.Forms.Application]::DoEvents()

@@ -358,6 +358,10 @@ test("AC-05: Procmon main-window activation verifies its process-owned foregroun
     configuration,
     /SelectNativeComboItemExact[\s\S]*CB_SETCURSEL[\s\S]*CB_GETCURSEL[\s\S]*SetNativeEditTextExact[\s\S]*WM_SETTEXT[\s\S]*ClickNativeButtonExact[\s\S]*BM_CLICK[\s\S]*ReadNativeListColumnCount[\s\S]*HDM_GETITEMCOUNT[\s\S]*ReadNativeListItemText[\s\S]*OpenProcess[\s\S]*WriteProcessMemory[\s\S]*LVM_GETITEMTEXTW[\s\S]*ReadProcessMemory[\s\S]*VirtualFreeEx/,
   );
+  assert.match(
+    configuration,
+    /VerifyNativeControl\([\s\S]*bool requireEnabled = true[\s\S]*requireEnabled && !IsWindowEnabled\(window\)[\s\S]*ReadNativeControlText\([\s\S]*bool allowDisabledButton = false[\s\S]*allowDisabledButton && expectedKind != "button"[\s\S]*VerifyNativeControl\(window, expectedProcessId, expectedKind, requireEnabled\)[\s\S]*ReadNativeControlText\([\s\S]*"button"[\s\S]*128,[\s\S]*\$true/,
+  );
   const nativeDialogControls = configuration.match(
     /function Get-ProcmonNativeFilterDialogControls[\s\S]*?function Get-ProcmonNativeFilterRuleRows/,
   )?.[0];

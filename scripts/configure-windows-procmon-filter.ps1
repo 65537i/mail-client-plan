@@ -640,7 +640,8 @@ public static class ProcmonNativeMenu
     private static void VerifyNativeControl(
         IntPtr window,
         int expectedProcessId,
-        string expectedKind
+        string expectedKind,
+        bool requireEnabled = true
     )
     {
         uint processId;
@@ -649,7 +650,7 @@ public static class ProcmonNativeMenu
             expectedProcessId <= 0 ||
             !IsWindow(window) ||
             !IsWindowVisible(window) ||
-            !IsWindowEnabled(window) ||
+            (requireEnabled && !IsWindowEnabled(window)) ||
             GetWindowThreadProcessId(window, out processId) == 0 ||
             processId != (uint)expectedProcessId
         )
@@ -683,12 +684,16 @@ public static class ProcmonNativeMenu
         IntPtr window,
         int expectedProcessId,
         string expectedKind,
-        int maximumCharacters
+        int maximumCharacters,
+        bool allowDisabledButton = false
     )
     {
         if (maximumCharacters < 1 || maximumCharacters > 1024)
             throw new ArgumentOutOfRangeException();
-        VerifyNativeControl(window, expectedProcessId, expectedKind);
+        if (allowDisabledButton && expectedKind != "button")
+            throw new ArgumentException("Only a button caption may be read while disabled");
+        var requireEnabled = !allowDisabledButton;
+        VerifyNativeControl(window, expectedProcessId, expectedKind, requireEnabled);
         IntPtr lengthResult;
         if (
             SendMessageTimeoutRaw(
@@ -724,7 +729,7 @@ public static class ProcmonNativeMenu
         {
             throw new InvalidOperationException("Native control text could not be read consistently");
         }
-        VerifyNativeControl(window, expectedProcessId, expectedKind);
+        VerifyNativeControl(window, expectedProcessId, expectedKind, requireEnabled);
         return text.ToString();
     }
 
@@ -4108,7 +4113,8 @@ function Get-ProcmonNativeFilterDialogControls(
           $child.Handle,
           $ProcessId,
           "button",
-          128
+          128,
+          $true
         )
         $fixedLabel = Resolve-ProcmonNativeFixedButtonLabel $labelText
         if ($null -ne $fixedLabel) {
