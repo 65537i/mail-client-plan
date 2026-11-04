@@ -301,6 +301,7 @@ test("AC-05: Procmon main-window activation verifies its process-owned foregroun
   ]) {
     assert.match(nativeChildReader, pattern);
   }
+  assert.match(configuration, /EntryPoint = "GetClassNameW"/);
   assert.doesNotMatch(nativeChildReader, /GetWindowText/);
   assert.match(
     configuration,

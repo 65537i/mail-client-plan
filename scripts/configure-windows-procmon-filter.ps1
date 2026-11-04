@@ -232,7 +232,12 @@ public static class ProcmonNativeMenu
         IntPtr parameter
     );
 
-    [DllImport("user32.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
+    [DllImport(
+        "user32.dll",
+        EntryPoint = "GetClassNameW",
+        CharSet = CharSet.Unicode,
+        ExactSpelling = true
+    )]
     private static extern int GetClassName(
         IntPtr window,
         System.Text.StringBuilder className,
