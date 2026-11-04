@@ -3016,6 +3016,39 @@ function Write-ProcmonNativeChildSummary(
   $uiaPanes = 0
   $uiaOther = 0
   $uiaReadFailures = 0
+  $uiaPatternReadFailures = 0
+  $uiaValuePatterns = 0
+  $uiaSelectionPatterns = 0
+  $uiaSelectionItemPatterns = 0
+  $uiaExpandCollapsePatterns = 0
+  $uiaInvokePatterns = 0
+  $uiaTogglePatterns = 0
+  $patternDefinitions = @(
+    [pscustomobject]@{
+      Kind = "value"
+      Pattern = [System.Windows.Automation.ValuePattern]::Pattern
+    },
+    [pscustomobject]@{
+      Kind = "selection"
+      Pattern = [System.Windows.Automation.SelectionPattern]::Pattern
+    },
+    [pscustomobject]@{
+      Kind = "selection-item"
+      Pattern = [System.Windows.Automation.SelectionItemPattern]::Pattern
+    },
+    [pscustomobject]@{
+      Kind = "expand-collapse"
+      Pattern = [System.Windows.Automation.ExpandCollapsePattern]::Pattern
+    },
+    [pscustomobject]@{
+      Kind = "invoke"
+      Pattern = [System.Windows.Automation.InvokePattern]::Pattern
+    },
+    [pscustomobject]@{
+      Kind = "toggle"
+      Pattern = [System.Windows.Automation.TogglePattern]::Pattern
+    }
+  )
   foreach ($child in $uiaCandidates) {
     try {
       $element = [System.Windows.Automation.AutomationElement]::FromHandle($child.Handle)
@@ -3045,6 +3078,30 @@ function Write-ProcmonNativeChildSummary(
       } else {
         $uiaOther++
       }
+      foreach ($patternDefinition in $patternDefinitions) {
+        try {
+          $null = $element.GetCurrentPattern($patternDefinition.Pattern)
+          switch ($patternDefinition.Kind) {
+            "value" { $uiaValuePatterns++ }
+            "selection" { $uiaSelectionPatterns++ }
+            "selection-item" { $uiaSelectionItemPatterns++ }
+            "expand-collapse" { $uiaExpandCollapsePatterns++ }
+            "invoke" { $uiaInvokePatterns++ }
+            "toggle" { $uiaTogglePatterns++ }
+          }
+        } catch [System.Windows.Automation.ElementNotAvailableException] {
+          $uiaPatternReadFailures++
+          break
+        } catch [System.Runtime.InteropServices.COMException] {
+          $uiaPatternReadFailures++
+          break
+        } catch [System.ArgumentException] {
+          $uiaPatternReadFailures++
+          break
+        } catch [System.InvalidOperationException] {
+          continue
+        }
+      }
     } catch [System.Windows.Automation.ElementNotAvailableException] {
       $uiaReadFailures++
     } catch [System.InvalidOperationException] {
@@ -3057,13 +3114,20 @@ function Write-ProcmonNativeChildSummary(
   }
   $uiaState = if ($summary.State -eq "root-mismatch") {
     "root-mismatch"
-  } elseif ($summary.State -eq "partial" -or $uiaReadFailures -gt 0) {
+  } elseif (
+    $summary.State -eq "partial" -or
+    $uiaReadFailures -gt 0 -or
+    $uiaPatternReadFailures -gt 0
+  ) {
     "partial"
   } else {
     $summary.State
   }
   [Console]::Out.WriteLine(
     "PROC_MON_FILTER_NATIVE_CHILD_UIA=source:$Source;state:$uiaState;candidates:$($uiaCandidates.Count);mapped:$mapped;combos:$uiaCombos;edits:$uiaEdits;buttons:$uiaButtons;windows:$uiaWindows;panes:$uiaPanes;other:$uiaOther;unreadable:$uiaReadFailures;truncated:$($summary.Truncated.ToString().ToLowerInvariant())"
+  )
+  [Console]::Out.WriteLine(
+    "PROC_MON_FILTER_NATIVE_CHILD_PATTERNS=source:$Source;state:$uiaState;candidates:$($uiaCandidates.Count);mapped:$mapped;value:$uiaValuePatterns;selection:$uiaSelectionPatterns;selection-item:$uiaSelectionItemPatterns;expand-collapse:$uiaExpandCollapsePatterns;invoke:$uiaInvokePatterns;toggle:$uiaTogglePatterns;pattern-errors:$uiaPatternReadFailures;unreadable:$uiaReadFailures;truncated:$($summary.Truncated.ToString().ToLowerInvariant())"
   )
 }
 

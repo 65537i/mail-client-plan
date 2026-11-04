@@ -317,6 +317,22 @@ test("AC-05: Procmon main-window activation verifies its process-owned foregroun
     nativeChildUiaSummary,
     /ChildWindows \| Where-Object[\s\S]*FromHandle\(\$child\.Handle\)[\s\S]*elementState\.ProcessId -ne \$ProcessId[\s\S]*NativeWindowHandle -ne \$child\.Handle[\s\S]*ControlType\]::ComboBox[\s\S]*ControlType\]::Edit[\s\S]*PROC_MON_FILTER_NATIVE_CHILD_UIA=/,
   );
+  for (const pattern of [
+    /GetCurrentPattern\(\$patternDefinition\.Pattern\)/,
+    /ValuePattern\]::Pattern/,
+    /SelectionPattern\]::Pattern/,
+    /SelectionItemPattern\]::Pattern/,
+    /ExpandCollapsePattern\]::Pattern/,
+    /InvokePattern\]::Pattern/,
+    /TogglePattern\]::Pattern/,
+    /PROC_MON_FILTER_NATIVE_CHILD_PATTERNS=/,
+  ]) {
+    assert.match(nativeChildUiaSummary, pattern);
+  }
+  assert.doesNotMatch(
+    nativeChildUiaSummary,
+    /\.SetValue\(|\.Select\(|\.Expand\(|\.Invoke\(|\.Toggle\(/,
+  );
   assert.doesNotMatch(nativeChildUiaSummary, /\.Current\.(?:Name|Value|HelpText)/);
   assert.match(
     configuration,

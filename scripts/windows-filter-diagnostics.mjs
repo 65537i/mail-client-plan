@@ -14,12 +14,13 @@ export function appendBoundedWindowsFilterOutput(current, chunk) {
   if (combined.length <= windowsFilterOutputLimit) return combined;
   const evidence = new Map();
   for (const match of combined.matchAll(
-    /^(PROC_MON_FILTER_CONFIG_PATHS|PROC_MON_FILTER_RELOADED_RULES|PROC_MON_FILTER_RELOADED_UI|PROC_MON_FILTER_RELOADED_DROP|PROC_MON_FILTER_NATIVE_CHILDREN|PROC_MON_FILTER_NATIVE_CHILD_UIA)=[^\r\n]{1,1024}\r?$/gm,
+    /^(PROC_MON_FILTER_CONFIG_PATHS|PROC_MON_FILTER_RELOADED_RULES|PROC_MON_FILTER_RELOADED_UI|PROC_MON_FILTER_RELOADED_DROP|PROC_MON_FILTER_NATIVE_CHILDREN|PROC_MON_FILTER_NATIVE_CHILD_UIA|PROC_MON_FILTER_NATIVE_CHILD_PATTERNS)=[^\r\n]{1,1024}\r?$/gm,
   )) {
     const hasSource = match[1] === "PROC_MON_FILTER_NATIVE_CHILDREN"
-      || match[1] === "PROC_MON_FILTER_NATIVE_CHILD_UIA";
+      || match[1] === "PROC_MON_FILTER_NATIVE_CHILD_UIA"
+      || match[1] === "PROC_MON_FILTER_NATIVE_CHILD_PATTERNS";
     const source = hasSource
-      ? match[0].match(/^PROC_MON_FILTER_NATIVE_CHILD(?:REN|_UIA)=source:(main|visible-other);/)?.[1]
+      ? match[0].match(/^PROC_MON_FILTER_NATIVE_CHILD(?:REN|_UIA|_PATTERNS)=source:(main|visible-other);/)?.[1]
       : undefined;
     const evidenceKey = source ? `${match[1]}:${source}` : match[1];
     if (!evidence.has(evidenceKey) && describeWindowsFilterDiagnostics(match[0])) {
@@ -386,6 +387,55 @@ export function describeWindowsFilterDiagnostics(output) {
     ) {
       diagnostics.push(
         `filter-native-child-uia=source:${source};state:${state};candidates:${candidates};mapped:${mapped};combos:${combos};edits:${edits};buttons:${buttons};windows:${windows};panes:${panes};other:${other};unreadable:${unreadable};truncated:${truncated}`,
+      );
+    }
+  }
+
+  for (const nativeChildPatterns of output.matchAll(
+    /^PROC_MON_FILTER_NATIVE_CHILD_PATTERNS=source:(main|visible-other);state:(ready|partial|truncated|root-mismatch);candidates:(\d{1,3});mapped:(\d{1,3});value:(\d{1,3});selection:(\d{1,3});selection-item:(\d{1,3});expand-collapse:(\d{1,3});invoke:(\d{1,3});toggle:(\d{1,3});pattern-errors:(\d{1,3});unreadable:(\d{1,3});truncated:(true|false)\r?$/gm,
+  )) {
+    const [, source, state, ...rawCounts] = nativeChildPatterns;
+    const [
+      candidates,
+      mapped,
+      value,
+      selection,
+      selectionItem,
+      expandCollapse,
+      invoke,
+      toggle,
+      patternErrors,
+      unreadable,
+    ] = rawCounts.slice(0, 10).map(Number);
+    const truncated = rawCounts[10] === "true";
+    if (
+      candidates <= 256
+      && mapped <= candidates
+      && unreadable <= candidates
+      && mapped + unreadable === candidates
+      && [value, selection, selectionItem, expandCollapse, invoke, toggle, patternErrors]
+        .every((count) => count <= mapped)
+      && (
+        (state === "ready" && !truncated && unreadable === 0 && patternErrors === 0)
+        || (
+          state === "truncated" &&
+          truncated &&
+          unreadable === 0 &&
+          patternErrors === 0
+        )
+        || state === "partial"
+        || (
+          state === "root-mismatch" &&
+          candidates === 0 &&
+          mapped === 0 &&
+          unreadable === 0 &&
+          patternErrors === 0 &&
+          !truncated
+        )
+      )
+    ) {
+      diagnostics.push(
+        `filter-native-child-patterns=source:${source};state:${state};candidates:${candidates};mapped:${mapped};value:${value};selection:${selection};selection-item:${selectionItem};expand-collapse:${expandCollapse};invoke:${invoke};toggle:${toggle};pattern-errors:${patternErrors};unreadable:${unreadable};truncated:${truncated}`,
       );
     }
   }
