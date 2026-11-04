@@ -2,6 +2,8 @@
 
 ## 1. ワークフロー構成
 
+[Run 41889285185](https://github.com/65537i/mail-client-plan/actions/runs/41889285185)（`3957598`、Windows 2025 x64 / full）はunfiltered baselineを通過したが、strict capture前の`clear-existing-filter-rules`で失敗しAC-05未達。native controlsを再取得する処理中に停止した可能性を示す`read-native-filter-rows-before-clear` stageで終了したため、controls resolutionとListView row readを分け、次runで絞り込む。
+
 [Run 41887981898](https://github.com/65537i/mail-client-plan/actions/runs/41887981898)（`4134cae`、Windows 2025 x64 / webview）はconfiguration export waitを通過したが、`clear-existing-filter-rules`で失敗しstrict capture未実施。native dialog gateはacceptedで、same-PID fallbackで2 rule rowsが読み取られた。disabled caption read / disabled click rejectionとnative list-selection synthetic testを通過した。native clear経路の正確な停止箇所を次runで確認するため、read / select / remove / verifyを別々に記録するstageを追加。focused AC-05 tests 71/71、PowerShell parse、`git diff --check`成功。strict capture未実施、AC-05未達。
 
 [Run 41883338324](https://github.com/65537i/mail-client-plan/actions/runs/41883338324)（`0388296`、Windows 2025 x64 / webview）はconfiguration export waitとsynthetic native-control regressionを通過。native dialog candidateは`state:accepted;gate:eligible`となり、固定controls / optionsとnative ListView 2 rowsを識別したが、`clear-existing-filter-rules`で停止しstrict capture未実施。native fallbackではReset後も既存rule rowsが残り、旧clear gateが安全に処理できず失敗したため、全cell readback、same-processで全rowを選択、selection count / row state検証、Remove、row count 0確認を実装。disabled button caption readとdisabled click拒否のsynthetic test成功。今回追加のnative list selection / clear経路はWindows runtime未検証、AC-05未達。

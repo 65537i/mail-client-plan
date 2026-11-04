@@ -4,6 +4,8 @@
 
 ## 現在の範囲
 
+- [Run 41889285185](https://github.com/65537i/mail-client-plan/actions/runs/41889285185)（`3957598`、Windows 2025 x64 / full）はunfiltered baselineを通過したが、strict capture開始前の`clear-existing-filter-rules`で失敗しAC-05未達。記録されたstageは`read-native-filter-rows-before-clear`で、native controls再取得中に停止した可能性があるため、control resolutionとListView row readを別stageに分割する変更を加えた。row selection / Remove / verificationには到達していない。
+
 - [Run 41887981898](https://github.com/65537i/mail-client-plan/actions/runs/41887981898)（`4134cae`、Windows 2025 x64 / webview）はconfiguration export waitを通過したが、`clear-existing-filter-rules`で失敗しstrict capture未実施。native dialog gateはacceptedで、同一Procmon PID内の2 rule rowsを読み取った。disabled caption read / disabled click rejectionとnative list selection synthetic testsも通過した。追加したnative `LVM_SETITEMSTATE` clear経路が止まる箇所を区別できるよう、read / select / remove / verify段階を個別に記録するstageを追加した。focused AC-05 tests 71/71、PowerShell parse、`git diff --check`成功。次runでnative removal stageを確認、AC-05未達。
 
 - [Run 41883338324](https://github.com/65537i/mail-client-plan/actions/runs/41883338324)（`0388296`、Windows 2025 x64 / webview）はconfiguration export waitを通過し、synthetic native-control regressionを含むstep 29も成功した。新しい同一PID native dialog discoveryは`filter-dialog-candidate=accepted;gate:eligible`となり、exact fixed controls / Path-Is-Include options / 4列 ListView 2 rowsを識別した。続く`clear-existing-filter-rules`で失敗しstrict capture未実施。現行gateがnative fallbackでReset後にrule rowsが残ると安全に停止することを確認したため、native ListViewの4列 readback後に全rowを選択し、選択状態を再検証、fixed-label Remove、row count 0 readbackを行うbounded経路を追加した。disabled button caption readback成功とdisabled click拒否のWindows synthetic testは通過。今回の追加list-selection helperとclear経路はfocused AC-05 tests 71/71、PowerShell parse、`git diff --check`成功だが、Windows runtime再検証待ち。AC-05未達。

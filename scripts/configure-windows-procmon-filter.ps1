@@ -2343,9 +2343,10 @@ function Clear-LoadedFilterRules(
   [int]$OwnerProcessId
 ) {
   $maximumRows = 64
-  Set-Stage "read-native-filter-rows-before-clear"
+  Set-Stage "resolve-native-filter-controls-before-clear"
   $nativeControls = Get-ProcmonNativeFilterDialogControls $Dialog $OwnerProcessId
   if ($null -ne $nativeControls) {
+    Set-Stage "read-native-filter-rows-before-clear"
     $rows = Get-ProcmonNativeFilterRuleRows $nativeControls $OwnerProcessId -Quiet
     if ($rows.Count -eq 0) {
       [Console]::Out.WriteLine("PROC_MON_FILTER_RULE_RESET=removed:0;remaining:0")
