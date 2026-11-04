@@ -2,6 +2,8 @@
 
 ## 1. ワークフロー構成
 
+[Run 41844042826](https://github.com/65537i/mail-client-plan/actions/runs/41844042826)（`080e633`、Windows 2025 x64 / webview）はsecurity-test build、Windows監査setup / worker coordination、configuration export waitを通過したが、`wait-filter-dialog-shortcut`で停止しstrict capture未実施。修正後のnative child診断はreadyとなり、mainは6 child（ComboBox/Edit 0）、visible-otherは18 child（ComboBox 4 / Edit 1 / Button 6 / dialog class 1 / ListView 1）。UIA treeは同じvisible-otherでWindow 1 / Pane 17、ComboBox / Edit 0。この差を調べるため、同一PID child HWNDをUIA `FromHandle`で個別確認し、control type件数だけを出す診断を追加した。名前・値は出力せず、dialog受理条件は維持。focused tests 67/67、PowerShell parse、JavaScript syntax、`git diff --check`成功。Windows runtime再検証待ち、AC-05未達。
+
 [Run 41842440829](https://github.com/65537i/mail-client-plan/actions/runs/41842440829)（`b70daa8`、Windows 2025 x64 / webview）はsecurity-test build、Windows監査setup / worker coordination、configuration export waitを通過したが、`wait-filter-dialog-shortcut`で停止しstrict capture未実施。新しいnative child診断は`EntryPointNotFoundException`でsummaryを出せず、Ctrl+Lは`state:sent;events:4`でもdialogを検出できなかった。Win32 `GetClassNameW`のEntryPoint指定を明示して修正。focused tests 66/66、PowerShell parse、JavaScript syntax、`git diff --check`成功。Windows runtime再検証待ち、AC-05未達。
 
 [Run 41840365328](https://github.com/65537i/mail-client-plan/actions/runs/41840365328)（`b7b6f91`、Windows 2025 x64 / webview）はsecurity-test build、Windows監査回帰81/81、configuration export waitを通過したが、Ctrl+Lのnative inputが`state:sent;events:4;release-events:0`となった後もfilter dialogを検出できず、`wait-filter-dialog-shortcut`で停止しstrict capture未実施。これを受けて同一PIDのmainと表示中候補最大2件の子HWNDを各256件まで走査し、標準control classの集計だけを出す診断を追加した。window textや任意class名は出力せず、dialog受理条件は維持。今回の差分はfocused Node tests 66/66、PowerShell parse、JavaScript syntax、`git diff --check`成功。Windows runtime再検証待ち、AC-05未達。

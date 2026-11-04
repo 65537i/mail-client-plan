@@ -297,6 +297,8 @@ test("AC-05: Procmon main-window activation verifies its process-owned foregroun
     /case "ComboBox"/,
     /case "Edit"/,
     /case "Button"/,
+    /NativeChildWindowSnapshot/,
+    /ChildWindows = childWindows\.ToArray\(\)/,
     /snapshot\.State = readFailed/,
   ]) {
     assert.match(nativeChildReader, pattern);
@@ -307,6 +309,15 @@ test("AC-05: Procmon main-window activation verifies its process-owned foregroun
     configuration,
     /function Write-ProcmonNativeChildSummary[\s\S]*PROC_MON_FILTER_NATIVE_CHILDREN=source:\$Source;state:[\s\S]*Write-ProcmonNativeChildSummary \$MainWindowHandle "main" \$Process\.Id[\s\S]*nativeChildScannedOtherCount -lt 2[\s\S]*Write-ProcmonNativeChildSummary \$handle "visible-other" \$Process\.Id/,
   );
+  const nativeChildUiaSummary = configuration.match(
+    /function Write-ProcmonNativeChildSummary[\s\S]*?function Find-ProcmonNativeFilterDialog/,
+  )?.[0];
+  assert.ok(nativeChildUiaSummary, "Native child UIA control-type scanner is missing");
+  assert.match(
+    nativeChildUiaSummary,
+    /ChildWindows \| Where-Object[\s\S]*FromHandle\(\$child\.Handle\)[\s\S]*elementState\.ProcessId -ne \$ProcessId[\s\S]*NativeWindowHandle -ne \$child\.Handle[\s\S]*ControlType\]::ComboBox[\s\S]*ControlType\]::Edit[\s\S]*PROC_MON_FILTER_NATIVE_CHILD_UIA=/,
+  );
+  assert.doesNotMatch(nativeChildUiaSummary, /\.Current\.(?:Name|Value|HelpText)/);
   assert.match(
     configuration,
     /private struct KeyboardInput[\s\S]*private struct MouseInput[\s\S]*LayoutKind\.Explicit[\s\S]*private struct InputUnion[\s\S]*FieldOffset\(0\)[\s\S]*MouseInput Mouse[\s\S]*FieldOffset\(0\)[\s\S]*KeyboardInput Keyboard[\s\S]*private struct NativeInput[\s\S]*private static extern uint SendInput[\s\S]*SendControlLShortcut\(\s*IntPtr expectedWindow,\s*int expectedProcessId\s*\)[\s\S]*GetForegroundWindow\(\) != expectedWindow[\s\S]*GetWindowProcessId\(expectedWindow\) != expectedProcessId[\s\S]*CreateKeyboardInput\(VK_CONTROL, 0\)[\s\S]*CreateKeyboardInput\(VK_L, 0\)[\s\S]*CreateKeyboardInput\(VK_L, KEYEVENTF_KEYUP\)[\s\S]*CreateKeyboardInput\(VK_CONTROL, KEYEVENTF_KEYUP\)[\s\S]*if \(inserted != \(uint\)inputs\.Length\)[\s\S]*releaseInputs/,

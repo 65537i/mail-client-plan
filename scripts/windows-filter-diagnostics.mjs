@@ -14,10 +14,12 @@ export function appendBoundedWindowsFilterOutput(current, chunk) {
   if (combined.length <= windowsFilterOutputLimit) return combined;
   const evidence = new Map();
   for (const match of combined.matchAll(
-    /^(PROC_MON_FILTER_CONFIG_PATHS|PROC_MON_FILTER_RELOADED_RULES|PROC_MON_FILTER_RELOADED_UI|PROC_MON_FILTER_RELOADED_DROP|PROC_MON_FILTER_NATIVE_CHILDREN)=[^\r\n]{1,1024}\r?$/gm,
+    /^(PROC_MON_FILTER_CONFIG_PATHS|PROC_MON_FILTER_RELOADED_RULES|PROC_MON_FILTER_RELOADED_UI|PROC_MON_FILTER_RELOADED_DROP|PROC_MON_FILTER_NATIVE_CHILDREN|PROC_MON_FILTER_NATIVE_CHILD_UIA)=[^\r\n]{1,1024}\r?$/gm,
   )) {
-    const source = match[1] === "PROC_MON_FILTER_NATIVE_CHILDREN"
-      ? match[0].match(/^PROC_MON_FILTER_NATIVE_CHILDREN=source:(main|visible-other);/)?.[1]
+    const hasSource = match[1] === "PROC_MON_FILTER_NATIVE_CHILDREN"
+      || match[1] === "PROC_MON_FILTER_NATIVE_CHILD_UIA";
+    const source = hasSource
+      ? match[0].match(/^PROC_MON_FILTER_NATIVE_CHILD(?:REN|_UIA)=source:(main|visible-other);/)?.[1]
       : undefined;
     const evidenceKey = source ? `${match[1]}:${source}` : match[1];
     if (!evidence.has(evidenceKey) && describeWindowsFilterDiagnostics(match[0])) {
@@ -341,6 +343,49 @@ export function describeWindowsFilterDiagnostics(output) {
     ) {
       diagnostics.push(
         `filter-native-children=source:${source};state:${state};windows:${windows};combos:${combos};edits:${edits};buttons:${buttons};dialogs:${dialogs};toolbars:${toolbars};lists:${lists};statics:${statics};other:${other};unreadable:${unreadable};truncated:${truncated}`,
+      );
+    }
+  }
+
+  for (const nativeChildUia of output.matchAll(
+    /^PROC_MON_FILTER_NATIVE_CHILD_UIA=source:(main|visible-other);state:(ready|partial|truncated|root-mismatch);candidates:(\d{1,3});mapped:(\d{1,3});combos:(\d{1,3});edits:(\d{1,3});buttons:(\d{1,3});windows:(\d{1,3});panes:(\d{1,3});other:(\d{1,3});unreadable:(\d{1,3});truncated:(true|false)\r?$/gm,
+  )) {
+    const [, source, state, ...rawCounts] = nativeChildUia;
+    const [
+      candidates,
+      mapped,
+      combos,
+      edits,
+      buttons,
+      windows,
+      panes,
+      other,
+      unreadable,
+    ] = rawCounts.slice(0, 9).map(Number);
+    const truncated = rawCounts[9] === "true";
+    if (
+      candidates <= 256
+      && mapped <= candidates
+      && unreadable <= candidates
+      && mapped + unreadable === candidates
+      && [combos, edits, buttons, windows, panes, other]
+        .every((count) => count <= mapped)
+      && combos + edits + buttons + windows + panes + other === mapped
+      && (
+        (state === "ready" && !truncated && unreadable === 0)
+        || (state === "truncated" && truncated && unreadable === 0)
+        || state === "partial"
+        || (
+          state === "root-mismatch" &&
+          candidates === 0 &&
+          mapped === 0 &&
+          unreadable === 0 &&
+          !truncated
+        )
+      )
+    ) {
+      diagnostics.push(
+        `filter-native-child-uia=source:${source};state:${state};candidates:${candidates};mapped:${mapped};combos:${combos};edits:${edits};buttons:${buttons};windows:${windows};panes:${panes};other:${other};unreadable:${unreadable};truncated:${truncated}`,
       );
     }
   }

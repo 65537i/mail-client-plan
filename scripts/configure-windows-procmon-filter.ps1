@@ -199,6 +199,7 @@ public static class ProcmonNativeMenu
     public sealed class NativeChildSnapshot
     {
         public string State { get; set; }
+        public NativeChildWindowSnapshot[] ChildWindows { get; set; }
         public int Windows { get; set; }
         public int Combos { get; set; }
         public int Edits { get; set; }
@@ -210,6 +211,12 @@ public static class ProcmonNativeMenu
         public int Other { get; set; }
         public int Unreadable { get; set; }
         public bool Truncated { get; set; }
+    }
+
+    public sealed class NativeChildWindowSnapshot
+    {
+        public IntPtr Handle { get; set; }
+        public string Kind { get; set; }
     }
 
     [DllImport("user32.dll", ExactSpelling = true, SetLastError = true)]
@@ -360,6 +367,7 @@ public static class ProcmonNativeMenu
         var snapshot = new NativeChildSnapshot
         {
             State = "root-mismatch",
+            ChildWindows = new NativeChildWindowSnapshot[0],
             Truncated = false
         };
         if (root == IntPtr.Zero || expectedProcessId <= 0 || maximum < 1 || maximum > 256)
@@ -374,6 +382,7 @@ public static class ProcmonNativeMenu
         }
 
         var seen = new System.Collections.Generic.HashSet<IntPtr>();
+        var childWindows = new System.Collections.Generic.List<NativeChildWindowSnapshot>();
         var readFailed = false;
         EnumWindowsProc callback = delegate(IntPtr window, IntPtr parameter)
         {
@@ -405,34 +414,48 @@ public static class ProcmonNativeMenu
                 readFailed = true;
                 return true;
             }
+            string kind;
             switch (className.ToString())
             {
                 case "ComboBox":
                 case "ComboBoxEx32":
+                    kind = "combo";
                     snapshot.Combos++;
                     break;
                 case "Edit":
+                    kind = "edit";
                     snapshot.Edits++;
                     break;
                 case "Button":
+                    kind = "button";
                     snapshot.Buttons++;
                     break;
                 case "#32770":
+                    kind = "dialog";
                     snapshot.Dialogs++;
                     break;
                 case "ToolbarWindow32":
+                    kind = "toolbar";
                     snapshot.Toolbars++;
                     break;
                 case "SysListView32":
+                    kind = "list";
                     snapshot.Lists++;
                     break;
                 case "Static":
+                    kind = "static";
                     snapshot.Statics++;
                     break;
                 default:
+                    kind = "other";
                     snapshot.Other++;
                     break;
             }
+            childWindows.Add(new NativeChildWindowSnapshot
+            {
+                Handle = window,
+                Kind = kind
+            });
             return true;
         };
         var enumerationSucceeded = EnumChildWindows(root, callback, IntPtr.Zero);
@@ -449,6 +472,7 @@ public static class ProcmonNativeMenu
         {
             readFailed = true;
         }
+        snapshot.ChildWindows = childWindows.ToArray();
         snapshot.State = readFailed
             ? "partial"
             : snapshot.Truncated ? "truncated" : "ready";
@@ -2978,6 +3002,68 @@ function Write-ProcmonNativeChildSummary(
   $summary = [ProcmonNativeMenu]::ReadNativeChildSummary($Root, $ProcessId, 256)
   [Console]::Out.WriteLine(
     "PROC_MON_FILTER_NATIVE_CHILDREN=source:$Source;state:$($summary.State);windows:$($summary.Windows);combos:$($summary.Combos);edits:$($summary.Edits);buttons:$($summary.Buttons);dialogs:$($summary.Dialogs);toolbars:$($summary.Toolbars);lists:$($summary.Lists);statics:$($summary.Statics);other:$($summary.Other);unreadable:$($summary.Unreadable);truncated:$($summary.Truncated.ToString().ToLowerInvariant())"
+  )
+  $uiaCandidates = @(
+    $summary.ChildWindows | Where-Object {
+      $_.Kind -in @("combo", "edit", "button", "dialog")
+    }
+  )
+  $mapped = 0
+  $uiaCombos = 0
+  $uiaEdits = 0
+  $uiaButtons = 0
+  $uiaWindows = 0
+  $uiaPanes = 0
+  $uiaOther = 0
+  $uiaReadFailures = 0
+  foreach ($child in $uiaCandidates) {
+    try {
+      $element = [System.Windows.Automation.AutomationElement]::FromHandle($child.Handle)
+      if ($null -eq $element) {
+        $uiaReadFailures++
+        continue
+      }
+      $elementState = $element.Current
+      if (
+        $elementState.ProcessId -ne $ProcessId -or
+        [System.IntPtr]$elementState.NativeWindowHandle -ne $child.Handle
+      ) {
+        $uiaReadFailures++
+        continue
+      }
+      $mapped++
+      if ($elementState.ControlType -eq [System.Windows.Automation.ControlType]::ComboBox) {
+        $uiaCombos++
+      } elseif ($elementState.ControlType -eq [System.Windows.Automation.ControlType]::Edit) {
+        $uiaEdits++
+      } elseif ($elementState.ControlType -eq [System.Windows.Automation.ControlType]::Button) {
+        $uiaButtons++
+      } elseif ($elementState.ControlType -eq [System.Windows.Automation.ControlType]::Window) {
+        $uiaWindows++
+      } elseif ($elementState.ControlType -eq [System.Windows.Automation.ControlType]::Pane) {
+        $uiaPanes++
+      } else {
+        $uiaOther++
+      }
+    } catch [System.Windows.Automation.ElementNotAvailableException] {
+      $uiaReadFailures++
+    } catch [System.InvalidOperationException] {
+      $uiaReadFailures++
+    } catch [System.Runtime.InteropServices.COMException] {
+      $uiaReadFailures++
+    } catch [System.ArgumentException] {
+      $uiaReadFailures++
+    }
+  }
+  $uiaState = if ($summary.State -eq "root-mismatch") {
+    "root-mismatch"
+  } elseif ($summary.State -eq "partial" -or $uiaReadFailures -gt 0) {
+    "partial"
+  } else {
+    $summary.State
+  }
+  [Console]::Out.WriteLine(
+    "PROC_MON_FILTER_NATIVE_CHILD_UIA=source:$Source;state:$uiaState;candidates:$($uiaCandidates.Count);mapped:$mapped;combos:$uiaCombos;edits:$uiaEdits;buttons:$uiaButtons;windows:$uiaWindows;panes:$uiaPanes;other:$uiaOther;unreadable:$uiaReadFailures;truncated:$($summary.Truncated.ToString().ToLowerInvariant())"
   )
 }
 

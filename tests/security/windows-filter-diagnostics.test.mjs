@@ -394,6 +394,35 @@ test("AC-05: native child diagnostics retain bounded class counts only", () => {
   );
 });
 
+test("AC-05: native child UIA diagnostics retain only owner-checked control-type counts", () => {
+  const line = "PROC_MON_FILTER_NATIVE_CHILD_UIA="
+    + "source:visible-other;state:ready;candidates:12;mapped:12;combos:0;edits:0;"
+    + "buttons:0;windows:0;panes:12;other:0;unreadable:0;truncated:false";
+  assert.equal(
+    describeWindowsFilterDiagnostics(line),
+    "; filter-native-child-uia=source:visible-other;state:ready;candidates:12;"
+      + "mapped:12;combos:0;edits:0;buttons:0;windows:0;panes:12;other:0;"
+      + "unreadable:0;truncated:false",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      line.replace("state:ready", "state:partial")
+        .replace("mapped:12", "mapped:11")
+        .replace("panes:12", "panes:11")
+        .replace("unreadable:0", "unreadable:1"),
+    ).includes("filter-native-child-uia=source:visible-other;state:partial"),
+    true,
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(line.replace("mapped:12", "mapped:13")),
+    "",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(`${line};name=private-label`),
+    "",
+  );
+});
+
 test("AC-05: Windows filter diagnostics omit arbitrary names and exception details", () => {
   const output = [
     "PROC_MON_FILTER_MENU_STATE=enabled:yes;offscreen:false;keyboard-focusable:true",
@@ -1216,6 +1245,8 @@ test("AC-05: truncation preserves mandatory evidence across chunk boundaries wit
     "PROC_MON_FILTER_RELOADED_DROP=checked:on",
     "PROC_MON_FILTER_NATIVE_CHILDREN=source:main;state:ready;windows:4;combos:0;edits:0;buttons:1;dialogs:0;toolbars:1;lists:0;statics:1;other:1;unreadable:0;truncated:false",
     "PROC_MON_FILTER_NATIVE_CHILDREN=source:visible-other;state:ready;windows:3;combos:0;edits:0;buttons:0;dialogs:0;toolbars:0;lists:0;statics:1;other:2;unreadable:0;truncated:false",
+    "PROC_MON_FILTER_NATIVE_CHILD_UIA=source:main;state:ready;candidates:2;mapped:2;combos:0;edits:0;buttons:1;windows:0;panes:1;other:0;unreadable:0;truncated:false",
+    "PROC_MON_FILTER_NATIVE_CHILD_UIA=source:visible-other;state:ready;candidates:12;mapped:12;combos:0;edits:0;buttons:0;windows:0;panes:12;other:0;unreadable:0;truncated:false",
   ];
   for (const chunkSize of [1, 7, 64, 4096, 65536]) {
     const stream = `${"x".repeat(9000)}\n${lines.join("\n")}\n${"y".repeat(12000)}\n`;
@@ -1230,6 +1261,8 @@ test("AC-05: truncation preserves mandatory evidence across chunk boundaries wit
     assert.ok(diagnostics.includes("; reloaded-drop-filtered-events=on"));
     assert.ok(diagnostics.includes("; filter-native-children=source:main;state:ready"));
     assert.ok(diagnostics.includes("; filter-native-children=source:visible-other;state:ready"));
+    assert.ok(diagnostics.includes("; filter-native-child-uia=source:main;state:ready"));
+    assert.ok(diagnostics.includes("; filter-native-child-uia=source:visible-other;state:ready"));
     const ui = diagnostics.split("; ").find(value => value.startsWith("reloaded-filter-ui="));
     assert.match(ui, reloadedFilterUiEvidencePattern);
     assert.equal(captured.length, windowsFilterOutputLimit);
