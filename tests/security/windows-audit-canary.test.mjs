@@ -414,6 +414,10 @@ test("AC-05: Procmon main-window activation verifies its process-owned foregroun
     nativeRuleClear,
     /verify-native-controls-stable-before-clear[\s\S]*\$verifiedNativeControls = Get-ProcmonNativeFilterDialogControls[\s\S]*\$null -eq \$verifiedNativeControls[\s\S]*\$verifiedNativeControls\.Root -ne \$nativeControls\.Root[\s\S]*\$verifiedNativeControls\.List -ne \$nativeControls\.List/,
   );
+  assert.match(
+    nativeRuleClear,
+    /PROC_MON_FILTER_RULE_CLEAR=rows:\$\(\$rows\.Count\);multi-select:true[\s\S]*SelectNativeListItemsExact[\s\S]*PROC_MON_FILTER_RULE_SELECTION=selected:\$selectedCount;expected:\$\(\$rows\.Count\)[\s\S]*\$selectedControls\.Root -ne \$nativeControls\.Root[\s\S]*\$selectedControls\.List -ne \$nativeControls\.List[\s\S]*PROC_MON_FILTER_REMOVE=buttons:1;enabled:true[\s\S]*read-native-filter-rows-after-remove[\s\S]*PROC_MON_FILTER_RULES_REMAINING=rows:\$\(\$remainingRows\.Count\)/,
+  );
   assert.doesNotMatch(
     nativeRuleClear,
     /if \(\$null -ne \(Get-ProcmonNativeFilterDialogControls[\s\S]*appeared during UIA rule clearing/,

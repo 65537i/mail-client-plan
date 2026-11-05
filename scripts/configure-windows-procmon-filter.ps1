@@ -2353,6 +2353,9 @@ function Clear-LoadedFilterRules(
       [Console]::Out.WriteLine("PROC_MON_FILTER_RULE_RESET=removed:0;remaining:0")
       return
     }
+    [Console]::Out.WriteLine(
+      "PROC_MON_FILTER_RULE_CLEAR=rows:$($rows.Count);multi-select:true"
+    )
     Set-Stage "verify-native-controls-stable-before-clear"
     $verifiedNativeControls = Get-ProcmonNativeFilterDialogControls `
       $Dialog $OwnerProcessId
@@ -2381,29 +2384,39 @@ function Clear-LoadedFilterRules(
     if ($selectedCount -ne $rows.Count) {
       throw "Process Monitor native filter rows were not selected exactly"
     }
+    [Console]::Out.WriteLine(
+      "PROC_MON_FILTER_RULE_SELECTION=selected:$selectedCount;expected:$($rows.Count)"
+    )
     Set-Stage "verify-native-remove-button"
     $selectedControls = Get-ProcmonNativeFilterDialogControls $Dialog $OwnerProcessId
     if (
       $null -eq $selectedControls -or
+      $selectedControls.Root -ne $nativeControls.Root -or
+      $selectedControls.List -ne $nativeControls.List -or
       -not $selectedControls.Buttons.ContainsKey("Remove") -or
       -not [ProcmonNativeMenu]::IsWindowEnabled($selectedControls.Buttons["Remove"])
     ) {
       throw "Process Monitor native Remove button was unavailable after exact row selection"
     }
+    [Console]::Out.WriteLine("PROC_MON_FILTER_REMOVE=buttons:1;enabled:true")
     Set-Stage "invoke-native-filter-remove"
     Invoke-ProcmonNativeFilterButton $Dialog $OwnerProcessId "Remove"
     Set-Stage "verify-native-filter-clear"
     $remainingRows = Get-ProcmonNativeFilterRuleRows `
       $selectedControls $OwnerProcessId -Quiet
+    Set-Stage "verify-native-filter-rows-after-remove"
     $removeDeadline = [DateTime]::UtcNow.AddSeconds(2)
     while ($remainingRows.Count -ne 0 -and [DateTime]::UtcNow -lt $removeDeadline) {
       Start-Sleep -Milliseconds 50
+      Set-Stage "refresh-native-filter-controls-after-remove"
       $selectedControls = Get-ProcmonNativeFilterDialogControls $Dialog $OwnerProcessId
       if ($null -eq $selectedControls) {
         throw "Process Monitor native filter controls disappeared before removal was verified"
       }
+      Set-Stage "read-native-filter-rows-after-remove"
       $remainingRows = Get-ProcmonNativeFilterRuleRows `
         $selectedControls $OwnerProcessId -Quiet
+      Set-Stage "verify-native-filter-rows-after-remove"
     }
     [Console]::Out.WriteLine(
       "PROC_MON_FILTER_RULES_REMAINING=rows:$($remainingRows.Count)"

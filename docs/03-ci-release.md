@@ -2,6 +2,8 @@
 
 ## 1. ワークフロー構成
 
+[Run 41935298869](https://github.com/65537i/mail-client-plan/actions/runs/41935298869)（`c5c018d`、Windows 2025 x64 / full）はnative row shape (`actual-columns:4`) / stable root-list identityを通過したが、Remove後のreadbackで`filter-rules-remaining=24`となりstrict capture前に失敗。failure stageが古いrow-shape stageを示していたため、native row selection / Remove / subsequent readbackを独立stageにし、selection countsとRemove eligibilityをbounded markersで記録する。
+
 [Run 41930932202](https://github.com/65537i/mail-client-plan/actions/runs/41930932202)（`2f8af3c`、Windows 2025 x64 / full）はnative row read成功、`actual-columns:4`でshape確認成功後、`verify-native-controls-stable-before-clear`で失敗。native branchで同じnative controlsが再取得されると誤って「UIA clearing中にnative controlsが出現」と拒否していた自己矛盾したguardを特定。再取得root/list handleの同一性を要求する安定性検証に修正する。
 
 [Run 41922105914](https://github.com/65537i/mail-client-plan/actions/runs/41922105914)（`1a81063`、Windows 2025 x64 / full）はunfiltered baseline後、strict capture前の`clear-existing-filter-rules`で失敗しAC-05未達。failure outputにcolumn markerがなく、最後のprogress stageだけではcolumn comparison mismatchか後続処理かを区別できなかった。markerを常に出し、rule-row read completion / stable-controls checkも分ける。
