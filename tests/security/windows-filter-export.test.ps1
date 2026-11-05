@@ -846,7 +846,7 @@ Add-Type -TypeDefinition $nativeMenuLiteral.Value `
   -ReferencedAssemblies ([Accessibility.IAccessible].Assembly.Location)
 $nativeForm = [System.Windows.Forms.Form]::new()
 $nativeForm.ShowInTaskbar = $false
-$nativeForm.Opacity = 0
+$nativeForm.Opacity = 0.05
 $nativeForm.Width = 640
 $nativeForm.Height = 320
 $nativeComboHandle = [SyntheticListCount]::Create(
@@ -939,6 +939,16 @@ try {
   [System.Windows.Forms.Application]::DoEvents()
   if ([SyntheticListCount]::GetButtonCheck($nativeButtonHandle) -ne 1) {
     throw "Native button activation did not toggle its synthetic checked state"
+  }
+  [ProcmonNativeMenu]::ClickNativeButtonWithMouseExact(
+    $nativeButtonHandle,
+    $nativeForm.Handle,
+    [int]$PID,
+    "Add"
+  )
+  [System.Windows.Forms.Application]::DoEvents()
+  if ([SyntheticListCount]::GetButtonCheck($nativeButtonHandle) -ne 0) {
+    throw "Native mouse button activation did not toggle its synthetic checked state"
   }
   if (
     [ProcmonNativeMenu]::ReadNativeListItemCount($nativeList, [int]$PID) -ne 1 -or

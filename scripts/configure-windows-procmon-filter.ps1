@@ -66,7 +66,10 @@ public static class ProcmonNativeMenu
     private const uint MFT_OWNERDRAW = 0x00000100;
     private const uint GUI_INMENUMODE = 0x00000004;
     private const uint GUI_POPUPMENUMODE = 0x00000010;
+    private const uint INPUT_MOUSE = 0;
     private const uint INPUT_KEYBOARD = 1;
+    private const uint MOUSEEVENTF_LEFTDOWN = 0x00000002;
+    private const uint MOUSEEVENTF_LEFTUP = 0x00000004;
     private const uint KEYEVENTF_KEYUP = 0x00000002;
     private const uint WM_GETTEXT = 0x000D;
     private const uint WM_GETTEXTLENGTH = 0x000E;
@@ -133,6 +136,13 @@ public static class ProcmonNativeMenu
         public int Top;
         public int Right;
         public int Bottom;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct Point
+    {
+        public int X;
+        public int Y;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -429,6 +439,21 @@ public static class ProcmonNativeMenu
     public static extern bool IsWindowVisible(IntPtr hWnd);
 
     [DllImport("user32.dll", ExactSpelling = true, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetWindowRect(IntPtr hWnd, out Rect rect);
+
+    [DllImport("user32.dll", ExactSpelling = true, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetCursorPos(out Point point);
+
+    [DllImport("user32.dll", ExactSpelling = true, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetCursorPos(int x, int y);
+
+    [DllImport("user32.dll", ExactSpelling = true)]
+    private static extern IntPtr WindowFromPoint(Point point);
+
+    [DllImport("user32.dll", ExactSpelling = true, SetLastError = true)]
     private static extern uint SendInput(
         uint inputCount,
         NativeInput[] inputs,
@@ -454,6 +479,26 @@ public static class ProcmonNativeMenu
                 {
                     VirtualKey = virtualKey,
                     ScanCode = 0,
+                    Flags = flags,
+                    Time = 0,
+                    ExtraInfo = IntPtr.Zero
+                }
+            }
+        };
+    }
+
+    private static NativeInput CreateMouseInput(uint flags)
+    {
+        return new NativeInput
+        {
+            Type = INPUT_MOUSE,
+            Data = new InputUnion
+            {
+                Mouse = new MouseInput
+                {
+                    Dx = 0,
+                    Dy = 0,
+                    MouseData = 0,
                     Flags = flags,
                     Time = 0,
                     ExtraInfo = IntPtr.Zero
@@ -970,6 +1015,131 @@ public static class ProcmonNativeMenu
         )
         {
             throw new InvalidOperationException("Native button activation failed");
+        }
+    }
+
+    public static void ClickNativeButtonWithMouseExact(
+        IntPtr window,
+        IntPtr expectedRoot,
+        int expectedProcessId,
+        string expectedText
+    )
+    {
+        if (
+            string.IsNullOrEmpty(expectedText) ||
+            expectedText.Length > 128 ||
+            expectedRoot == IntPtr.Zero ||
+            expectedProcessId <= 0 ||
+            GetWindowProcessId(expectedRoot) != expectedProcessId ||
+            GetForegroundWindow() != expectedRoot ||
+            GetAncestor(window, GA_ROOT) != expectedRoot
+        )
+        {
+            throw new InvalidOperationException("Native button root was not foreground");
+        }
+        VerifyNativeControl(window, expectedProcessId, "button");
+        if (
+            !string.Equals(
+                NormalizeNativeButtonLabel(
+                    ReadNativeControlText(window, expectedProcessId, "button", 128)
+                ),
+                NormalizeNativeButtonLabel(expectedText),
+                StringComparison.OrdinalIgnoreCase
+            )
+        )
+        {
+            throw new InvalidOperationException("Native button label did not match");
+        }
+        Rect rootRect;
+        Rect buttonRect;
+        if (
+            !GetWindowRect(expectedRoot, out rootRect) ||
+            !GetWindowRect(window, out buttonRect)
+        )
+        {
+            throw new InvalidOperationException("Native button bounds could not be read");
+        }
+        var width = (long)buttonRect.Right - buttonRect.Left;
+        var height = (long)buttonRect.Bottom - buttonRect.Top;
+        if (
+            width < 1 ||
+            width > 2048 ||
+            height < 1 ||
+            height > 2048 ||
+            buttonRect.Left < rootRect.Left ||
+            buttonRect.Top < rootRect.Top ||
+            buttonRect.Right > rootRect.Right ||
+            buttonRect.Bottom > rootRect.Bottom
+        )
+        {
+            throw new InvalidOperationException("Native button bounds were outside the verified dialog");
+        }
+        Point originalCursor;
+        if (!GetCursorPos(out originalCursor))
+            throw new InvalidOperationException("Native cursor position could not be read");
+        var clickX = buttonRect.Left + (int)(width / 2);
+        var clickY = buttonRect.Top + (int)(height / 2);
+        if (!SetCursorPos(clickX, clickY))
+            throw new InvalidOperationException("Native button cursor positioning failed");
+        try
+        {
+            VerifyNativeControl(window, expectedProcessId, "button");
+            if (
+                !string.Equals(
+                    NormalizeNativeButtonLabel(
+                        ReadNativeControlText(window, expectedProcessId, "button", 128)
+                    ),
+                    NormalizeNativeButtonLabel(expectedText),
+                    StringComparison.OrdinalIgnoreCase
+                )
+            )
+            {
+                throw new InvalidOperationException("Native button label changed before activation");
+            }
+            Point clickPoint;
+            if (
+                !GetCursorPos(out clickPoint) ||
+                clickPoint.X != clickX ||
+                clickPoint.Y != clickY ||
+                WindowFromPoint(clickPoint) != window
+            )
+            {
+                throw new InvalidOperationException("Native button was not the mouse hit target");
+            }
+            if (
+                GetForegroundWindow() != expectedRoot ||
+                GetWindowProcessId(expectedRoot) != expectedProcessId
+            )
+            {
+                throw new InvalidOperationException("Native button lost its foreground owner");
+            }
+            var inputs = new[]
+            {
+                CreateMouseInput(MOUSEEVENTF_LEFTDOWN),
+                CreateMouseInput(MOUSEEVENTF_LEFTUP)
+            };
+            if (
+                SendInput(
+                    (uint)inputs.Length,
+                    inputs,
+                    Marshal.SizeOf(typeof(NativeInput))
+                ) != (uint)inputs.Length
+            )
+            {
+                var released = SendInput(
+                    1,
+                    new[] { CreateMouseInput(MOUSEEVENTF_LEFTUP) },
+                    Marshal.SizeOf(typeof(NativeInput))
+                );
+                if (released != 1)
+                    throw new InvalidOperationException("Native mouse button release failed");
+                throw new InvalidOperationException("Native button mouse activation failed");
+            }
+        }
+        finally
+        {
+            if (!SetCursorPos(originalCursor.X, originalCursor.Y))
+                throw new InvalidOperationException("Native cursor restoration failed");
         }
     }
 
@@ -2413,9 +2583,10 @@ function Clear-LoadedFilterRules(
       throw "Process Monitor native filter dialog lost the foreground before removal"
     }
     [Console]::Out.WriteLine("PROC_MON_FILTER_REMOVE=buttons:1;enabled:true")
-    Set-Stage "invoke-native-filter-remove"
-    [ProcmonNativeMenu]::ClickNativeButtonExact(
+    Set-Stage "invoke-native-filter-remove-mouse"
+    [ProcmonNativeMenu]::ClickNativeButtonWithMouseExact(
       $selectedControls.Buttons["Remove"],
+      $selectedControls.Root,
       $OwnerProcessId,
       "Remove"
     )

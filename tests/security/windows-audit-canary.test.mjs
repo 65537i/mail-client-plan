@@ -358,6 +358,14 @@ test("AC-05: Procmon main-window activation verifies its process-owned foregroun
     configuration,
     /SelectNativeComboItemExact[\s\S]*CB_SETCURSEL[\s\S]*CB_GETCURSEL[\s\S]*SetNativeEditTextExact[\s\S]*WM_SETTEXT[\s\S]*ClickNativeButtonExact[\s\S]*BM_CLICK[\s\S]*ReadNativeListColumnCount[\s\S]*HDM_GETITEMCOUNT[\s\S]*ReadNativeListItemText[\s\S]*OpenProcess[\s\S]*WriteProcessMemory[\s\S]*LVM_GETITEMTEXTW[\s\S]*ReadProcessMemory[\s\S]*VirtualFreeEx/,
   );
+  const nativeMouseButton = configuration.match(
+    /public static void ClickNativeButtonWithMouseExact\([\s\S]*?public static int ReadNativeListItemCount/,
+  )?.[0];
+  assert.ok(nativeMouseButton, "Native exact mouse-button helper is missing");
+  assert.match(
+    nativeMouseButton,
+    /GetWindowProcessId\(expectedRoot\) != expectedProcessId[\s\S]*GetForegroundWindow\(\) != expectedRoot[\s\S]*GetAncestor\(window, GA_ROOT\) != expectedRoot[\s\S]*NormalizeNativeButtonLabel[\s\S]*GetWindowRect\(expectedRoot[\s\S]*GetWindowRect\(window[\s\S]*buttonRect\.Left < rootRect\.Left[\s\S]*SetCursorPos\(clickX, clickY\)[\s\S]*WindowFromPoint\(clickPoint\) != window[\s\S]*SendInput[\s\S]*SetCursorPos\(originalCursor\.X, originalCursor\.Y\)/,
+  );
   const nativeListSelection = configuration.match(
     /public static int SelectNativeListItemsExact\([\s\S]*?private static int ReadNativeListSelectedCount/,
   )?.[0];
@@ -408,7 +416,7 @@ test("AC-05: Procmon main-window activation verifies its process-owned foregroun
   assert.ok(nativeRuleClear, "Filter-rule clearing gate is missing");
   assert.match(
     nativeRuleClear,
-    /Get-ProcmonNativeFilterRuleRows[\s\S]*SelectNativeListItemsExact[\s\S]*selectedCount -ne \$rows\.Count[\s\S]*\$selectedControls\.List -ne \$nativeControls\.List[\s\S]*reselect-native-filter-rows-before-remove[\s\S]*SelectNativeListItemsExact[\s\S]*ClickNativeButtonExact[\s\S]*\$selectedControls\.Buttons\["Remove"\][\s\S]*remainingRows\.Count -ne 0[\s\S]*Get-LoadedFilterRuleRows[\s\S]*SelectionItemPattern/,
+    /Get-ProcmonNativeFilterRuleRows[\s\S]*SelectNativeListItemsExact[\s\S]*selectedCount -ne \$rows\.Count[\s\S]*\$selectedControls\.List -ne \$nativeControls\.List[\s\S]*reselect-native-filter-rows-before-remove[\s\S]*SelectNativeListItemsExact[\s\S]*ClickNativeButtonWithMouseExact[\s\S]*\$selectedControls\.Buttons\["Remove"\][\s\S]*remainingRows\.Count -ne 0[\s\S]*Get-LoadedFilterRuleRows[\s\S]*SelectionItemPattern/,
   );
   assert.match(
     nativeRuleClear,
@@ -416,7 +424,7 @@ test("AC-05: Procmon main-window activation verifies its process-owned foregroun
   );
   assert.match(
     nativeRuleClear,
-    /PROC_MON_FILTER_RULE_CLEAR=rows:\$\(\$rows\.Count\);multi-select:true[\s\S]*SelectNativeListItemsExact[\s\S]*selectedCount -ne \$rows\.Count[\s\S]*\$selectedControls\.Root -ne \$nativeControls\.Root[\s\S]*\$selectedControls\.List -ne \$nativeControls\.List[\s\S]*reselect-native-filter-rows-before-remove[\s\S]*SelectNativeListItemsExact[\s\S]*PROC_MON_FILTER_RULE_SELECTION=selected:\$selectedCount;expected:\$\(\$rows\.Count\)[\s\S]*PROC_MON_FILTER_REMOVE=buttons:1;enabled:true[\s\S]*ClickNativeButtonExact[\s\S]*\$selectedControls\.Buttons\["Remove"\][\s\S]*read-native-filter-rows-after-remove[\s\S]*PROC_MON_FILTER_RULES_REMAINING=rows:\$\(\$remainingRows\.Count\)/,
+    /PROC_MON_FILTER_RULE_CLEAR=rows:\$\(\$rows\.Count\);multi-select:true[\s\S]*SelectNativeListItemsExact[\s\S]*selectedCount -ne \$rows\.Count[\s\S]*\$selectedControls\.Root -ne \$nativeControls\.Root[\s\S]*\$selectedControls\.List -ne \$nativeControls\.List[\s\S]*reselect-native-filter-rows-before-remove[\s\S]*SelectNativeListItemsExact[\s\S]*PROC_MON_FILTER_RULE_SELECTION=selected:\$selectedCount;expected:\$\(\$rows\.Count\)[\s\S]*PROC_MON_FILTER_REMOVE=buttons:1;enabled:true[\s\S]*invoke-native-filter-remove-mouse[\s\S]*ClickNativeButtonWithMouseExact[\s\S]*\$selectedControls\.Buttons\["Remove"\][\s\S]*read-native-filter-rows-after-remove[\s\S]*PROC_MON_FILTER_RULES_REMAINING=rows:\$\(\$remainingRows\.Count\)/,
   );
   assert.doesNotMatch(
     nativeRuleClear,

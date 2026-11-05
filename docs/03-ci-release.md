@@ -2,6 +2,8 @@
 
 ## 1. ワークフロー構成
 
+[Run 41945907430](https://github.com/65537i/mail-client-plan/actions/runs/41945907430)（`b3e7ee5`、Windows 2025 x64 / full）は、native ListView 24 rowsの全選択とRemove buttonのenabled確認を通過したが、`BM_CLICK`後も24 rowsが残りstrict capture前に失敗。通知メッセージだけでなく実際のマウス入力が必要な可能性を検証するため、同一Procmon PIDのforeground dialog、fixed-label・enabled button、dialog内bounds、移動先のhit-test対象HWNDを確認するbounded mouse clickを追加する。cursorを元位置へ戻し、操作後にrow count 0を引き続き必須とする。focused Node tests 72/72とPowerShell parseは成功。Windows synthetic control testとruntime validationは次run待ち。AC-05未達。
+
 [Run 41942603875](https://github.com/65537i/mail-client-plan/actions/runs/41942603875)（`8155702`、Windows 2025 x64 / full）は24 rowsを同一PID native ListViewで確認し、`selected:24;expected:24`とRemove enabled gate通過後もRemove後24 rowsとなりstrict capture前に失敗。完結したselection / Remove evidenceをretentionできた。再検査で選択が変わり得る窓を狭めるため、Remove button確認後に同じListViewでselectionを再確立し、再検査済み同一button HWNDを直接clickする。
 
 [Run 41939212215](https://github.com/65537i/mail-client-plan/actions/runs/41939212215)（`fe6cecd`、Windows 2025 x64 / full）はnative row selection / Remove pathを通過したが、post-Remove readbackで24 rowsが残り失敗。failure stageは`verify-native-filter-rows-after-remove`。incremental output truncationがnumeric evidenceを途中まで保持できるため、全marker lineが改行で完結した後にのみretainするよう修正。
