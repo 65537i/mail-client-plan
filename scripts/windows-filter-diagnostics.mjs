@@ -14,7 +14,7 @@ export function appendBoundedWindowsFilterOutput(current, chunk) {
   if (combined.length <= windowsFilterOutputLimit) return combined;
   const evidence = new Map();
   for (const match of combined.matchAll(
-    /^(PROC_MON_FILTER_CONFIG_PATHS|PROC_MON_FILTER_RELOADED_RULES|PROC_MON_FILTER_RELOADED_UI|PROC_MON_FILTER_RELOADED_DROP|PROC_MON_FILTER_NATIVE_CHILDREN|PROC_MON_FILTER_NATIVE_CHILD_UIA|PROC_MON_FILTER_NATIVE_CHILD_PATTERNS|PROC_MON_FILTER_NATIVE_CONTROLS|PROC_MON_FILTER_NATIVE_DIALOG_CANDIDATE|PROC_MON_FILTER_NATIVE_RULES|PROC_MON_FILTER_NATIVE_SHAPE)=[^\r\n]{1,1024}\r?$/gm,
+    /^(PROC_MON_FILTER_CONFIG_PATHS|PROC_MON_FILTER_RELOADED_RULES|PROC_MON_FILTER_RELOADED_UI|PROC_MON_FILTER_RELOADED_DROP|PROC_MON_FILTER_NATIVE_CHILDREN|PROC_MON_FILTER_NATIVE_CHILD_UIA|PROC_MON_FILTER_NATIVE_CHILD_PATTERNS|PROC_MON_FILTER_NATIVE_CONTROLS|PROC_MON_FILTER_NATIVE_DIALOG_CANDIDATE|PROC_MON_FILTER_NATIVE_RULES|PROC_MON_FILTER_NATIVE_SHAPE|PROC_MON_FILTER_RULE_CLEAR|PROC_MON_FILTER_RULE_SELECTION|PROC_MON_FILTER_REMOVE|PROC_MON_FILTER_RULES_REMAINING|PROC_MON_FILTER_RULE_RESET)=[^\r\n]{1,1024}\r?\n/gm,
   )) {
     const hasSource = match[1] === "PROC_MON_FILTER_NATIVE_CHILDREN"
       || match[1] === "PROC_MON_FILTER_NATIVE_CHILD_UIA"
@@ -28,7 +28,7 @@ export function appendBoundedWindowsFilterOutput(current, chunk) {
       : undefined;
     const evidenceKey = source ? `${match[1]}:${source}` : match[1];
     if (!evidence.has(evidenceKey) && describeWindowsFilterDiagnostics(match[0])) {
-      evidence.set(evidenceKey, match[0].replace(/\r$/, ""));
+      evidence.set(evidenceKey, match[0].replace(/\r?\n$/, ""));
     }
   }
   const retainedEvidence = evidence.size ? `${[...evidence.values()].join("\n")}\n` : "";

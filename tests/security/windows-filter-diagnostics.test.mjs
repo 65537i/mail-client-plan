@@ -1389,6 +1389,10 @@ test("AC-05: truncation preserves mandatory evidence across chunk boundaries wit
     "PROC_MON_FILTER_NATIVE_CONTROLS=source:visible-other;state:ready;combos:4;path-options:1;operator-options:1;include-options:1;edits:1;readable-edits:1;buttons:6;reset:1;add:1;ok:1;cancel:1;remove:1;lists:1;list-items:0;read-failures:0;truncated:false",
     "PROC_MON_FILTER_NATIVE_RULES=phase:reloaded;state:ready;rows:2;columns:4;path:2;is:2;include:2;exact-shape:2;unclassified:0;truncated:false",
     "PROC_MON_FILTER_NATIVE_SHAPE=expected-columns:4;actual-columns:3",
+    "PROC_MON_FILTER_RULE_CLEAR=rows:2;multi-select:true",
+    "PROC_MON_FILTER_RULE_SELECTION=selected:2;expected:2",
+    "PROC_MON_FILTER_REMOVE=buttons:1;enabled:true",
+    "PROC_MON_FILTER_RULES_REMAINING=rows:24",
   ];
   for (const chunkSize of [1, 7, 64, 4096, 65536]) {
     const stream = `${"x".repeat(9000)}\n${lines.join("\n")}\n${"y".repeat(12000)}\n`;
@@ -1411,6 +1415,10 @@ test("AC-05: truncation preserves mandatory evidence across chunk boundaries wit
     assert.ok(diagnostics.includes("; filter-native-controls=source:visible-other;state:ready"));
     assert.ok(diagnostics.includes("; filter-native-rules=phase:reloaded;state:ready;rows:2;columns:4"));
     assert.ok(diagnostics.includes("; filter-native-shape=expected-columns:4;actual-columns:3"));
+    assert.ok(diagnostics.includes("; filter-rule-clear=rows:2;multi-select:true"));
+    assert.ok(diagnostics.includes("; filter-rule-selection=selected:2;expected:2"));
+    assert.ok(diagnostics.includes("; filter-rule-remove=buttons:1;enabled:true"));
+    assert.ok(diagnostics.includes("; filter-rules-remaining=24"));
     const ui = diagnostics.split("; ").find(value => value.startsWith("reloaded-filter-ui="));
     assert.match(ui, reloadedFilterUiEvidencePattern);
     assert.equal(captured.length, windowsFilterOutputLimit);

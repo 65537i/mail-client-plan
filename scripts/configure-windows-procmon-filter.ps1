@@ -2422,6 +2422,7 @@ function Clear-LoadedFilterRules(
       "PROC_MON_FILTER_RULES_REMAINING=rows:$($remainingRows.Count)"
     )
     if ($remainingRows.Count -ne 0) {
+      Set-Stage "native-filter-rules-still-present"
       throw "Process Monitor native filter list did not become empty after removal"
     }
     [Console]::Out.WriteLine(
