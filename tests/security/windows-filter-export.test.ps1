@@ -968,6 +968,14 @@ try {
     $nativeForm.Handle,
     [int]$PID
   )
+  [System.Windows.Forms.Application]::DoEvents()
+  if (-not [ProcmonNativeMenu]::IsNativeListFocusedExact(
+      $nativeForm.Handle,
+      $nativeList,
+      [int]$PID
+    )) {
+    throw "Synthetic native list did not retain keyboard focus"
+  }
   [ProcmonNativeMenu]::SendControlAShortcutExact(
     $nativeForm.Handle,
     $nativeList,

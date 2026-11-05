@@ -372,7 +372,7 @@ test("AC-05: Procmon main-window activation verifies its process-owned foregroun
   assert.ok(nativeListInput, "Native list user-input selection helpers are missing");
   assert.match(
     nativeListInput,
-    /GetAncestor\(window, GA_ROOT\) != expectedRoot[\s\S]*WriteProcessMemory[\s\S]*LVM_GETITEMRECT[\s\S]*ClientToScreen\(window[\s\S]*WindowFromPoint\(actualPoint\) != window[\s\S]*SendInput[\s\S]*ReadFocusSnapshot\(expectedRoot\)[\s\S]*SendControlAShortcutExact[\s\S]*VK_A[\s\S]*AreNativeListItemsSelectedExact[\s\S]*LVM_GETITEMSTATE/,
+    /GetAncestor\(window, GA_ROOT\) != expectedRoot[\s\S]*WriteProcessMemory[\s\S]*LVM_GETITEMRECT[\s\S]*ClientToScreen\(window[\s\S]*WindowFromPoint\(actualPoint\) != window[\s\S]*SendInput[\s\S]*SendControlAShortcutExact[\s\S]*VK_A[\s\S]*IsNativeListFocusedExact[\s\S]*ReadFocusSnapshot\(expectedRoot\)[\s\S]*AreNativeListItemsSelectedExact[\s\S]*LVM_GETITEMSTATE/,
   );
   const nativeListSelection = configuration.match(
     /public static int SelectNativeListItemsExact\([\s\S]*?private static int ReadNativeListSelectedCount/,

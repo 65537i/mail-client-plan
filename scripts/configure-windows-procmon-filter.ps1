@@ -1359,9 +1359,6 @@ public static class ProcmonNativeMenu
                     throw new InvalidOperationException("Native list mouse button release failed");
                 throw new InvalidOperationException("Native list mouse activation failed");
             }
-            var focus = ReadFocusSnapshot(expectedRoot);
-            if (!focus.Available || focus.FocusWindow != window)
-                throw new InvalidOperationException("Native list did not retain keyboard focus");
         }
         finally
         {
@@ -1430,6 +1427,24 @@ public static class ProcmonNativeMenu
                 throw new InvalidOperationException("Native select-all key release failed");
             throw new InvalidOperationException("Native select-all keyboard input failed");
         }
+    }
+
+    public static bool IsNativeListFocusedExact(
+        IntPtr expectedRoot,
+        IntPtr expectedFocus,
+        int expectedProcessId
+    )
+    {
+        if (
+            GetWindowProcessId(expectedRoot) != expectedProcessId ||
+            GetAncestor(expectedFocus, GA_ROOT) != expectedRoot
+        )
+        {
+            throw new InvalidOperationException("Native list focus ownership changed");
+        }
+        VerifyNativeControl(expectedFocus, expectedProcessId, "list");
+        var focus = ReadFocusSnapshot(expectedRoot);
+        return focus.Available && focus.FocusWindow == expectedFocus;
     }
 
     public static bool AreNativeListItemsSelectedExact(
@@ -2852,6 +2867,23 @@ function Clear-LoadedFilterRules(
       $nativeControls.Root,
       $OwnerProcessId
     )
+    $listFocusDeadline = [DateTime]::UtcNow.AddSeconds(2)
+    while (
+      -not [ProcmonNativeMenu]::IsNativeListFocusedExact(
+        $nativeControls.Root,
+        $nativeControls.List,
+        $OwnerProcessId
+      ) -and [DateTime]::UtcNow -lt $listFocusDeadline
+    ) {
+      Start-Sleep -Milliseconds 50
+    }
+    if (-not [ProcmonNativeMenu]::IsNativeListFocusedExact(
+        $nativeControls.Root,
+        $nativeControls.List,
+        $OwnerProcessId
+      )) {
+      throw "Process Monitor native list did not receive mouse focus"
+    }
     Set-Stage "select-native-filter-rows-with-keyboard"
     [ProcmonNativeMenu]::SendControlAShortcutExact(
       $nativeControls.Root,
