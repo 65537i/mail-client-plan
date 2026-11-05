@@ -71,6 +71,7 @@ public static class ProcmonNativeMenu
     private const uint MOUSEEVENTF_LEFTDOWN = 0x00000002;
     private const uint MOUSEEVENTF_LEFTUP = 0x00000004;
     private const uint KEYEVENTF_KEYUP = 0x00000002;
+    private const uint LVM_GETITEMRECT = 0x100E;
     private const uint WM_GETTEXT = 0x000D;
     private const uint WM_GETTEXTLENGTH = 0x000E;
     private const uint WM_SETTEXT = 0x000C;
@@ -101,10 +102,12 @@ public static class ProcmonNativeMenu
     private const uint MemRelease = 0x8000;
     private const uint PageReadWrite = 0x04;
     private const ushort VK_CONTROL = 0x0011;
+    private const ushort VK_A = 0x0041;
     private const ushort VK_L = 0x004C;
     private const uint GA_ROOT = 2;
     private const int AccessibleMenuObjectId = -3;
     private const int AccessibleClientObjectId = -4;
+    private const int LVIR_BOUNDS = 0;
     private const uint MaximumTextCharacters = 255;
     private const int MaximumAccessibleMenuItems = 64;
     private const int MenuItemRole = 12;
@@ -441,6 +444,14 @@ public static class ProcmonNativeMenu
     [DllImport("user32.dll", ExactSpelling = true, SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool GetWindowRect(IntPtr hWnd, out Rect rect);
+
+    [DllImport("user32.dll", ExactSpelling = true, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetClientRect(IntPtr hWnd, out Rect rect);
+
+    [DllImport("user32.dll", ExactSpelling = true, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool ClientToScreen(IntPtr hWnd, ref Point point);
 
     [DllImport("user32.dll", ExactSpelling = true, SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
@@ -1166,6 +1177,296 @@ public static class ProcmonNativeMenu
         if (count < 0 || count > 64)
             throw new InvalidOperationException("Native list item count exceeded its bound");
         return count;
+    }
+
+    public static void ClickNativeListItemExact(
+        IntPtr window,
+        IntPtr expectedRoot,
+        int expectedProcessId
+    )
+    {
+        if (
+            expectedRoot == IntPtr.Zero ||
+            expectedProcessId <= 0 ||
+            GetWindowProcessId(expectedRoot) != expectedProcessId ||
+            GetForegroundWindow() != expectedRoot ||
+            GetAncestor(window, GA_ROOT) != expectedRoot ||
+            ReadNativeListItemCount(window, expectedProcessId) < 1
+        )
+        {
+            throw new InvalidOperationException("Native list root or first row was unavailable");
+        }
+        VerifyNativeControl(window, expectedProcessId, "list");
+        Rect rootRect;
+        Rect listRect;
+        Rect clientRect;
+        if (
+            !GetWindowRect(expectedRoot, out rootRect) ||
+            !GetWindowRect(window, out listRect) ||
+            !GetClientRect(window, out clientRect)
+        )
+        {
+            throw new InvalidOperationException("Native list bounds could not be read");
+        }
+        if (
+            listRect.Left < rootRect.Left ||
+            listRect.Top < rootRect.Top ||
+            listRect.Right > rootRect.Right ||
+            listRect.Bottom > rootRect.Bottom ||
+            clientRect.Right < 1 ||
+            clientRect.Right > 4096 ||
+            clientRect.Bottom < 1 ||
+            clientRect.Bottom > 4096
+        )
+        {
+            throw new InvalidOperationException("Native list bounds were outside the verified dialog");
+        }
+        var process = OpenProcess(
+            ProcessVmOperation |
+                ProcessVmRead |
+                ProcessVmWrite |
+                ProcessQueryLimitedInformation,
+            false,
+            (uint)expectedProcessId
+        );
+        if (process == IntPtr.Zero)
+            throw new InvalidOperationException("Native list process memory is unavailable");
+        IntPtr remoteRect = IntPtr.Zero;
+        IntPtr localRect = IntPtr.Zero;
+        Point originalCursor;
+        if (!GetCursorPos(out originalCursor))
+        {
+            if (!CloseHandle(process))
+                throw new InvalidOperationException("Native list process handle cleanup failed");
+            throw new InvalidOperationException("Native cursor position could not be read");
+        }
+        try
+        {
+            var rectSize = Marshal.SizeOf(typeof(Rect));
+            remoteRect = VirtualAllocEx(
+                process,
+                IntPtr.Zero,
+                new UIntPtr((uint)rectSize),
+                MemCommitReserve,
+                PageReadWrite
+            );
+            localRect = Marshal.AllocHGlobal(rectSize);
+            if (remoteRect == IntPtr.Zero)
+                throw new InvalidOperationException("Native list row buffer allocation failed");
+            Marshal.StructureToPtr(
+                new Rect { Left = LVIR_BOUNDS },
+                localRect,
+                false
+            );
+            var requestBytes = new byte[rectSize];
+            Marshal.Copy(localRect, requestBytes, 0, rectSize);
+            UIntPtr written;
+            if (
+                !WriteProcessMemory(
+                    process,
+                    remoteRect,
+                    requestBytes,
+                    new UIntPtr((uint)requestBytes.Length),
+                    out written
+                ) ||
+                written.ToUInt64() != (ulong)requestBytes.Length
+            )
+            {
+                throw new InvalidOperationException("Native list row bounds request could not be written");
+            }
+            IntPtr rectResult;
+            if (
+                SendMessageTimeoutRaw(
+                    window,
+                    LVM_GETITEMRECT,
+                    IntPtr.Zero,
+                    remoteRect,
+                    SMTO_ABORTIFHUNG,
+                    NativeControlMessageTimeout,
+                    out rectResult
+                ) == IntPtr.Zero ||
+                rectResult == IntPtr.Zero
+            )
+            {
+                throw new InvalidOperationException("Native first-row bounds could not be read");
+            }
+            var rectBytes = new byte[rectSize];
+            UIntPtr read;
+            if (
+                !ReadProcessMemory(
+                    process,
+                    remoteRect,
+                    rectBytes,
+                    new UIntPtr((uint)rectBytes.Length),
+                    out read
+                ) ||
+                read.ToUInt64() != (ulong)rectBytes.Length
+            )
+            {
+                throw new InvalidOperationException("Native first-row bounds readback failed");
+            }
+            Marshal.Copy(rectBytes, 0, localRect, rectSize);
+            var rowRect = (Rect)Marshal.PtrToStructure(localRect, typeof(Rect));
+            if (
+                rowRect.Left < 0 ||
+                rowRect.Top < 0 ||
+                rowRect.Right > clientRect.Right ||
+                rowRect.Bottom > clientRect.Bottom ||
+                rowRect.Right <= rowRect.Left ||
+                rowRect.Bottom <= rowRect.Top
+            )
+            {
+                throw new InvalidOperationException("Native first-row bounds were outside the list");
+            }
+            var clickPoint = new Point
+            {
+                X = rowRect.Left + (rowRect.Right - rowRect.Left) / 2,
+                Y = rowRect.Top + (rowRect.Bottom - rowRect.Top) / 2
+            };
+            if (!ClientToScreen(window, ref clickPoint) || !SetCursorPos(clickPoint.X, clickPoint.Y))
+                throw new InvalidOperationException("Native first-row cursor positioning failed");
+            VerifyNativeControl(window, expectedProcessId, "list");
+            Point actualPoint;
+            if (
+                !GetCursorPos(out actualPoint) ||
+                actualPoint.X != clickPoint.X ||
+                actualPoint.Y != clickPoint.Y ||
+                WindowFromPoint(actualPoint) != window ||
+                GetForegroundWindow() != expectedRoot
+            )
+            {
+                throw new InvalidOperationException("Native list was not the verified mouse target");
+            }
+            var inputs = new[]
+            {
+                CreateMouseInput(MOUSEEVENTF_LEFTDOWN),
+                CreateMouseInput(MOUSEEVENTF_LEFTUP)
+            };
+            if (
+                SendInput(
+                    (uint)inputs.Length,
+                    inputs,
+                    Marshal.SizeOf(typeof(NativeInput))
+                ) != (uint)inputs.Length
+            )
+            {
+                var released = SendInput(
+                    1,
+                    new[] { CreateMouseInput(MOUSEEVENTF_LEFTUP) },
+                    Marshal.SizeOf(typeof(NativeInput))
+                );
+                if (released != 1)
+                    throw new InvalidOperationException("Native list mouse button release failed");
+                throw new InvalidOperationException("Native list mouse activation failed");
+            }
+            var focus = ReadFocusSnapshot(expectedRoot);
+            if (!focus.Available || focus.FocusWindow != window)
+                throw new InvalidOperationException("Native list did not retain keyboard focus");
+        }
+        finally
+        {
+            if (localRect != IntPtr.Zero)
+                Marshal.FreeHGlobal(localRect);
+            var cleanupFailed = false;
+            if (
+                remoteRect != IntPtr.Zero &&
+                !VirtualFreeEx(process, remoteRect, UIntPtr.Zero, MemRelease)
+            )
+            {
+                cleanupFailed = true;
+            }
+            if (!CloseHandle(process))
+                cleanupFailed = true;
+            if (!SetCursorPos(originalCursor.X, originalCursor.Y))
+                cleanupFailed = true;
+            if (cleanupFailed)
+                throw new InvalidOperationException("Native list input cleanup failed");
+        }
+    }
+
+    public static void SendControlAShortcutExact(
+        IntPtr expectedRoot,
+        IntPtr expectedFocus,
+        int expectedProcessId
+    )
+    {
+        var focus = ReadFocusSnapshot(expectedRoot);
+        if (
+            GetForegroundWindow() != expectedRoot ||
+            GetWindowProcessId(expectedRoot) != expectedProcessId ||
+            GetAncestor(expectedFocus, GA_ROOT) != expectedRoot ||
+            !focus.Available ||
+            focus.FocusWindow != expectedFocus
+        )
+        {
+            throw new InvalidOperationException("Native list focus was not verified for select-all");
+        }
+        VerifyNativeControl(expectedFocus, expectedProcessId, "list");
+        var inputs = new[]
+        {
+            CreateKeyboardInput(VK_CONTROL, 0),
+            CreateKeyboardInput(VK_A, 0),
+            CreateKeyboardInput(VK_A, KEYEVENTF_KEYUP),
+            CreateKeyboardInput(VK_CONTROL, KEYEVENTF_KEYUP)
+        };
+        var inserted = SendInput(
+            (uint)inputs.Length,
+            inputs,
+            Marshal.SizeOf(typeof(NativeInput))
+        );
+        if (inserted != (uint)inputs.Length)
+        {
+            var releaseInputs = new[]
+            {
+                CreateKeyboardInput(VK_A, KEYEVENTF_KEYUP),
+                CreateKeyboardInput(VK_CONTROL, KEYEVENTF_KEYUP)
+            };
+            var released = SendInput(
+                (uint)releaseInputs.Length,
+                releaseInputs,
+                Marshal.SizeOf(typeof(NativeInput))
+            );
+            if (released != (uint)releaseInputs.Length)
+                throw new InvalidOperationException("Native select-all key release failed");
+            throw new InvalidOperationException("Native select-all keyboard input failed");
+        }
+    }
+
+    public static bool AreNativeListItemsSelectedExact(
+        IntPtr window,
+        int expectedProcessId,
+        int expectedCount
+    )
+    {
+        if (expectedCount < 1 || expectedCount > 64)
+            throw new ArgumentOutOfRangeException();
+        VerifyNativeControl(window, expectedProcessId, "list");
+        if (ReadNativeListItemCount(window, expectedProcessId) != expectedCount)
+            throw new InvalidOperationException("Native filter list changed during selection");
+        if (ReadNativeListSelectedCount(window, expectedProcessId) != expectedCount)
+            return false;
+        for (var itemIndex = 0; itemIndex < expectedCount; itemIndex++)
+        {
+            IntPtr itemState;
+            if (
+                SendMessageTimeoutRaw(
+                    window,
+                    LVM_GETITEMSTATE,
+                    new IntPtr(itemIndex),
+                    new IntPtr(LVIS_SELECTED),
+                    SMTO_ABORTIFHUNG,
+                    NativeControlMessageTimeout,
+                    out itemState
+                ) == IntPtr.Zero
+            )
+            {
+                throw new InvalidOperationException("Native filter row selection state could not be read");
+            }
+            if ((itemState.ToInt32() & LVIS_SELECTED) == 0)
+                return false;
+        }
+        VerifyNativeControl(window, expectedProcessId, "list");
+        return true;
     }
 
     public static int SelectNativeListItemsExact(
@@ -2545,14 +2846,34 @@ function Clear-LoadedFilterRules(
     ) {
       throw "Process Monitor native filter dialog lost the foreground before row selection"
     }
-    Set-Stage "select-native-filter-rows-for-clear"
-    $selectedCount = [ProcmonNativeMenu]::SelectNativeListItemsExact(
+    Set-Stage "focus-native-filter-list-with-mouse"
+    [ProcmonNativeMenu]::ClickNativeListItemExact(
+      $nativeControls.List,
+      $nativeControls.Root,
+      $OwnerProcessId
+    )
+    Set-Stage "select-native-filter-rows-with-keyboard"
+    [ProcmonNativeMenu]::SendControlAShortcutExact(
+      $nativeControls.Root,
+      $nativeControls.List,
+      $OwnerProcessId
+    )
+    $selectionDeadline = [DateTime]::UtcNow.AddSeconds(2)
+    $hasExactSelection = [ProcmonNativeMenu]::AreNativeListItemsSelectedExact(
       $nativeControls.List,
       $OwnerProcessId,
       $rows.Count
     )
-    if ($selectedCount -ne $rows.Count) {
-      throw "Process Monitor native filter rows were not selected exactly"
+    while (-not $hasExactSelection -and [DateTime]::UtcNow -lt $selectionDeadline) {
+      Start-Sleep -Milliseconds 50
+      $hasExactSelection = [ProcmonNativeMenu]::AreNativeListItemsSelectedExact(
+        $nativeControls.List,
+        $OwnerProcessId,
+        $rows.Count
+      )
+    }
+    if (-not $hasExactSelection) {
+      throw "Process Monitor native filter rows were not selected through the visible list"
     }
     Set-Stage "verify-native-remove-button"
     $selectedControls = Get-ProcmonNativeFilterDialogControls $Dialog $OwnerProcessId
@@ -2565,15 +2886,17 @@ function Clear-LoadedFilterRules(
     ) {
       throw "Process Monitor native Remove button was unavailable after exact row selection"
     }
-    Set-Stage "reselect-native-filter-rows-before-remove"
-    $selectedCount = [ProcmonNativeMenu]::SelectNativeListItemsExact(
-      $selectedControls.List,
-      $OwnerProcessId,
-      $rows.Count
-    )
-    if ($selectedCount -ne $rows.Count) {
+    Set-Stage "revalidate-native-filter-selection-before-remove"
+    if (
+      -not [ProcmonNativeMenu]::AreNativeListItemsSelectedExact(
+        $selectedControls.List,
+        $OwnerProcessId,
+        $rows.Count
+      )
+    ) {
       throw "Process Monitor native filter rows lost selection before removal"
     }
+    $selectedCount = $rows.Count
     [Console]::Out.WriteLine(
       "PROC_MON_FILTER_RULE_SELECTION=selected:$selectedCount;expected:$($rows.Count)"
     )

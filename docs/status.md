@@ -4,6 +4,8 @@
 
 ## 現在の範囲
 
+- [Run 41949832923](https://github.com/65537i/mail-client-plan/actions/runs/41949832923)（`5992615`、Windows 2025 x64 / full）はnative mouse-click helperのsynthetic control testを通過した一方、実Procmonで24 rowsの選択後にもRemove後のrow countが24のままでstrict capture前に失敗。focused Windows audit tests、configuration export wait / synthetic controls、build / Rust / dependency checksは成功。実際のListView操作を通すため、先頭rowをmouseでfocusし、focused ListViewにCtrl+Aを送り、全row selectionを再読取してからRemoveをクリックする経路を追加。AC-05未達。
+
 - [Run 41945907430](https://github.com/65537i/mail-client-plan/actions/runs/41945907430)（`b3e7ee5`、Windows 2025 x64 / full）はnative ListView 24 rowsの全選択とRemove buttonのenabled確認を通過したが、`BM_CLICK`後も24 rowsが残りstrict capture前に失敗。同一Procmon PIDのforeground dialogとfixed-label・enabled Remove buttonのbounds / mouse hit targetを検証するbounded mouse clickへ切り替え、cursor復元とrow count 0 readbackを維持する。focused Node tests 72/72とPowerShell parseは成功。Windows synthetic control testとruntime再検証前。AC-05未達。
 
 - [Run 41942603875](https://github.com/65537i/mail-client-plan/actions/runs/41942603875)（`8155702`、Windows 2025 x64 / full）はnative branchで24 rowsを確認し、`selected:24;expected:24`とRemove button enabled gateを通過したが、Remove後も24 rowsが残りstrict capture前に失敗。完結行をretentionする修正により selection / Remove counts が取得できた。button lookupによるコントロール再取得後に選択を再確立し、既に検証した同一Remove HWNDを直接クリックしてからreadbackするよう変更する。

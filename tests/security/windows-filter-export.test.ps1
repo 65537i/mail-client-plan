@@ -896,6 +896,10 @@ foreach ($columnIndex in 0..3) {
 [SyntheticListCount]::AddListCell($nativeList, 0, 1, "is", $false)
 [SyntheticListCount]::AddListCell($nativeList, 0, 2, "C:\audit\canary.png", $false)
 [SyntheticListCount]::AddListCell($nativeList, 0, 3, "Include", $false)
+[SyntheticListCount]::AddListCell($nativeList, 1, 0, "Path", $true)
+[SyntheticListCount]::AddListCell($nativeList, 1, 1, "is", $false)
+[SyntheticListCount]::AddListCell($nativeList, 1, 2, "C:\audit\sentinel.png", $false)
+[SyntheticListCount]::AddListCell($nativeList, 1, 3, "Exclude", $false)
 $nativeForm.Show()
 $nativeForm.Activate()
 [System.Windows.Forms.Application]::DoEvents()
@@ -951,13 +955,26 @@ try {
     throw "Native mouse button activation did not toggle its synthetic checked state"
   }
   if (
-    [ProcmonNativeMenu]::ReadNativeListItemCount($nativeList, [int]$PID) -ne 1 -or
+    [ProcmonNativeMenu]::ReadNativeListItemCount($nativeList, [int]$PID) -ne 2 -or
     [ProcmonNativeMenu]::ReadNativeListColumnCount($nativeList, [int]$PID) -ne 4
   ) {
     throw "Native list count or header count did not match the synthetic fixture"
   }
-  if ([ProcmonNativeMenu]::SelectNativeListItemsExact($nativeList, [int]$PID, 1) -ne 1) {
-    throw "Native list did not select the exact synthetic row"
+  if ([ProcmonNativeMenu]::SelectNativeListItemsExact($nativeList, [int]$PID, 2) -ne 2) {
+    throw "Native list did not select all synthetic rows"
+  }
+  [ProcmonNativeMenu]::ClickNativeListItemExact(
+    $nativeList,
+    $nativeForm.Handle,
+    [int]$PID
+  )
+  [ProcmonNativeMenu]::SendControlAShortcutExact(
+    $nativeForm.Handle,
+    $nativeList,
+    [int]$PID
+  )
+  if (-not [ProcmonNativeMenu]::AreNativeListItemsSelectedExact($nativeList, [int]$PID, 2)) {
+    throw "Native list keyboard selection did not match the synthetic row count"
   }
   $expectedCells = @("Path", "is", "C:\audit\canary.png", "Include")
   for ($columnIndex = 0; $columnIndex -lt $expectedCells.Count; $columnIndex++) {
