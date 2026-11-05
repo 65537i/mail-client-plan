@@ -1011,6 +1011,21 @@ test("AC-05: configuration save observations expose states, not paths or dialog 
     "; filter-shortcut-foreground-gate=passed; filter-menu-open-fallback=filter-dialog-shortcut",
   );
   assert.equal(
+    describeWindowsFilterDiagnostics([
+      "PROC_MON_FILTER_MENU_SHORTCUT_INPUT=state:sent;events:4;release-events:0",
+      "PROC_MON_FILTER_MENU_SHORTCUT_INPUT=state:incomplete;events:2;release-events:2",
+    ].join("\n")),
+    "; filter-menu-shortcut-input=state:sent;events:4;release-events:0"
+      + "; filter-menu-shortcut-input=state:incomplete;events:2;release-events:2",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics([
+      "PROC_MON_FILTER_MENU_SHORTCUT_INPUT=state:sent;events:3;release-events:0",
+      "PROC_MON_FILTER_MENU_SHORTCUT_INPUT=state:sent;events:4;release-events:0;path=C:\\private",
+    ].join("\n")),
+    "",
+  );
+  assert.equal(
     describeWindowsFilterDiagnostics("PROC_MON_FILTER_MENU_OPEN_FALLBACK=filter-dialog-shortcut;path=C:\\private"),
     "",
   );
@@ -1065,6 +1080,20 @@ test("AC-05: configuration save observations expose states, not paths or dialog 
       "PROC_MON_FILTER_RELOAD_MENU_SCAN=windows:2;menus:1;visible:1",
     ),
     "; reload-menu-scan=windows:2;menus:1;visible:1",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_PROCESS_MENU_SCAN=windows:2;menus:1;visible:1",
+    ),
+    "; process-menu-scan=windows:2;menus:1;visible:1",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics([
+      "PROC_MON_FILTER_PROCESS_MENU_SCAN=windows:10000;menus:1;visible:1",
+      "PROC_MON_FILTER_PROCESS_MENU_SCAN=windows:2;menus:1;visible:2",
+      "PROC_MON_FILTER_PROCESS_MENU_SCAN=windows:2;menus:1;visible:1;name=C:\\private",
+    ].join("\n")),
+    "",
   );
   assert.equal(
     describeWindowsFilterDiagnostics([

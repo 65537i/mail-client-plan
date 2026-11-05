@@ -102,7 +102,9 @@ public static class ProcmonNativeMenu
     private const uint MemRelease = 0x8000;
     private const uint PageReadWrite = 0x04;
     private const ushort VK_CONTROL = 0x0011;
+    private const ushort VK_MENU = 0x0012;
     private const ushort VK_A = 0x0041;
+    private const ushort VK_F = 0x0046;
     private const ushort VK_L = 0x004C;
     private const uint GA_ROOT = 2;
     private const int AccessibleMenuObjectId = -3;
@@ -556,6 +558,65 @@ public static class ProcmonNativeMenu
             {
                 CreateKeyboardInput(VK_L, KEYEVENTF_KEYUP),
                 CreateKeyboardInput(VK_CONTROL, KEYEVENTF_KEYUP)
+            };
+            var released = SendInput(
+                (uint)releaseInputs.Length,
+                releaseInputs,
+                Marshal.SizeOf(typeof(NativeInput))
+            );
+            return new ShortcutInputSnapshot
+            {
+                State = "incomplete",
+                Events = inserted,
+                ReleaseEvents = released
+            };
+        }
+        return new ShortcutInputSnapshot
+        {
+            State = "sent",
+            Events = inserted,
+            ReleaseEvents = 0
+        };
+    }
+
+    public static ShortcutInputSnapshot SendAltFShortcut(
+        IntPtr expectedWindow,
+        int expectedProcessId
+    )
+    {
+        if (
+            expectedWindow == IntPtr.Zero ||
+            expectedProcessId <= 0 ||
+            GetForegroundWindow() != expectedWindow ||
+            GetWindowProcessId(expectedWindow) != expectedProcessId
+        )
+        {
+            return new ShortcutInputSnapshot
+            {
+                State = "target-mismatch",
+                Events = 0,
+                ReleaseEvents = 0
+            };
+        }
+
+        var inputs = new[]
+        {
+            CreateKeyboardInput(VK_MENU, 0),
+            CreateKeyboardInput(VK_F, 0),
+            CreateKeyboardInput(VK_F, KEYEVENTF_KEYUP),
+            CreateKeyboardInput(VK_MENU, KEYEVENTF_KEYUP)
+        };
+        var inserted = SendInput(
+            (uint)inputs.Length,
+            inputs,
+            Marshal.SizeOf(typeof(NativeInput))
+        );
+        if (inserted != (uint)inputs.Length)
+        {
+            var releaseInputs = new[]
+            {
+                CreateKeyboardInput(VK_F, KEYEVENTF_KEYUP),
+                CreateKeyboardInput(VK_MENU, KEYEVENTF_KEYUP)
             };
             var released = SendInput(
                 (uint)releaseInputs.Length,
@@ -3772,9 +3833,104 @@ function Wait-ProcessMenu(
     Start-Sleep -Milliseconds 100
   } while ([DateTime]::UtcNow -lt $deadline)
   [Console]::Out.WriteLine(
-    "PROC_MON_FILTER_RELOAD_MENU_SCAN=windows:$([Math]::Min($ownedWindowCount, 9999));menus:$([Math]::Min($menuCount, 9999));visible:$([Math]::Min($visibleMenuCount, 9999))"
+    "PROC_MON_FILTER_PROCESS_MENU_SCAN=windows:$([Math]::Min($ownedWindowCount, 9999));menus:$([Math]::Min($menuCount, 9999));visible:$([Math]::Min($visibleMenuCount, 9999))"
   )
   throw "Process Monitor did not expose one visible menu in its own windows"
+}
+
+function Open-ProcmonFilterMenuFromMain(
+  [System.Windows.Automation.AutomationElement]$MainWindow,
+  [System.Diagnostics.Process]$Process
+) {
+  $mainState = $MainWindow.Current
+  $mainHandle = [IntPtr]$mainState.NativeWindowHandle
+  if (
+    $Process.Id -le 0 -or
+    $mainState.ProcessId -ne $Process.Id -or
+    $mainHandle -eq [IntPtr]::Zero -or
+    [ProcmonNativeMenu]::GetWindowProcessId($mainHandle) -ne $Process.Id -or
+    -not [ProcmonNativeMenu]::IsWindowVisible($mainHandle) -or
+    -not [ProcmonNativeMenu]::IsWindowEnabled($mainHandle)
+  ) {
+    throw "Process Monitor main window ownership is unavailable for opening its Filter menu"
+  }
+  Set-VerifiedProcmonMainWindowForeground $MainWindow $Process "MAIN"
+  $filterMenuCondition = [System.Windows.Automation.AndCondition]::new(
+    [System.Windows.Automation.PropertyCondition]::new(
+      [System.Windows.Automation.AutomationElement]::NameProperty, "Filter"
+    ),
+    [System.Windows.Automation.PropertyCondition]::new(
+      [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+      [System.Windows.Automation.ControlType]::MenuItem
+    )
+  )
+  $filterMenu = Wait-Element $MainWindow $filterMenuCondition 2 -AllowMissing
+  if ($null -eq $filterMenu) {
+    Set-Stage "fallback-open-filter-menu-with-keyboard"
+    $shortcutInput = [ProcmonNativeMenu]::SendAltFShortcut(
+      $mainHandle,
+      $Process.Id
+    )
+    [Console]::Out.WriteLine(
+      "PROC_MON_FILTER_MENU_SHORTCUT_INPUT=state:$($shortcutInput.State);events:$($shortcutInput.Events);release-events:$($shortcutInput.ReleaseEvents)"
+    )
+    if ($shortcutInput.State -ne "sent" -or $shortcutInput.Events -ne 4) {
+      throw "Process Monitor Filter menu keyboard fallback failed"
+    }
+    Set-Stage "wait-filter-menu-popup"
+    $menu = (Wait-ProcessMenu $Process).Menu
+    $menuState = $menu.Current
+    if (
+      $menuState.ProcessId -ne $Process.Id -or
+      -not $menuState.IsEnabled -or
+      $menuState.IsOffscreen
+    ) {
+      throw "Process Monitor Filter menu popup is not available in its own process"
+    }
+    return $menu
+  }
+
+  $filterMenuState = $filterMenu.Current
+  if (
+    $filterMenuState.ProcessId -ne $Process.Id -or
+    -not $filterMenuState.IsEnabled -or
+    $filterMenuState.IsOffscreen
+  ) {
+    throw "Process Monitor Filter menu item is unavailable"
+  }
+  $invokePattern = $null
+  if (-not $filterMenu.TryGetCurrentPattern(
+      [System.Windows.Automation.InvokePattern]::Pattern,
+      [ref]$invokePattern
+    )) {
+    throw "Process Monitor Filter menu does not expose InvokePattern"
+  }
+  Set-Stage "invoke-filter-menu-item"
+  $invokePattern.Invoke()
+  Set-Stage "resolve-opened-filter-menu"
+  $treeWalker = [System.Windows.Automation.TreeWalker]::ControlViewWalker
+  $menu = $null
+  $menuDeadline = [DateTime]::UtcNow.AddSeconds(5)
+  do {
+    $focused = [System.Windows.Automation.AutomationElement]::FocusedElement
+    for ($level = 0; $null -ne $focused -and $level -lt 5; $level++) {
+      $focusedState = $focused.Current
+      if (
+        $focusedState.ControlType -eq [System.Windows.Automation.ControlType]::Menu -and
+        $focusedState.ProcessId -eq $Process.Id
+      ) {
+        $menu = $focused
+        break
+      }
+      $focused = $treeWalker.GetParent($focused)
+    }
+    if ($null -ne $menu) { break }
+    Start-Sleep -Milliseconds 100
+  } while ([DateTime]::UtcNow -lt $menuDeadline)
+  if ($null -eq $menu) {
+    throw "Process Monitor did not expose its opened Filter menu"
+  }
+  return $menu
 }
 
 function Wait-FilterDialog([System.Diagnostics.Process]$Process, [System.Windows.Automation.AutomationElement]$MainWindow, [int]$TimeoutSeconds = 10) {
@@ -6375,42 +6531,7 @@ try {
   Set-Stage "focus-main-for-drop-filtered-events"
   Set-VerifiedProcmonMainWindowForeground $main $process "MAIN"
   Set-Stage "find-filter-menu-for-drop-filtered-events"
-  $filterMenu = Wait-Element $main ([System.Windows.Automation.AndCondition]::new(
-    [System.Windows.Automation.PropertyCondition]::new(
-      [System.Windows.Automation.AutomationElement]::NameProperty, "Filter"
-    ),
-    [System.Windows.Automation.PropertyCondition]::new(
-      [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
-      [System.Windows.Automation.ControlType]::MenuItem
-    )
-  )) 5
-  $dropMenuPattern = $null
-  if (-not $filterMenu.TryGetCurrentPattern(
-      [System.Windows.Automation.InvokePattern]::Pattern,
-      [ref]$dropMenuPattern
-    )) {
-    throw "Process Monitor Filter menu does not expose InvokePattern"
-  }
-  Set-Stage "open-drop-filtered-events-menu"
-  $dropMenuPattern.Invoke()
-  Set-Stage "resolve-drop-filtered-events-menu"
-  $dropMenu = $null
-  $dropMenuDeadline = [DateTime]::UtcNow.AddSeconds(5)
-  do {
-    $focused = [System.Windows.Automation.AutomationElement]::FocusedElement
-    for ($level = 0; $null -ne $focused -and $level -lt 5; $level++) {
-      if ($focused.Current.ControlType -eq [System.Windows.Automation.ControlType]::Menu) {
-        $dropMenu = $focused
-        break
-      }
-      $focused = $treeWalker.GetParent($focused)
-    }
-    if ($null -ne $dropMenu) { break }
-    Start-Sleep -Milliseconds 100
-  } while ([DateTime]::UtcNow -lt $dropMenuDeadline)
-  if ($null -eq $dropMenu) {
-    throw "Process Monitor did not expose the opened Filter menu"
-  }
+  $dropMenu = Open-ProcmonFilterMenuFromMain $main $process
   $dropMenuState = $dropMenu.Current
   $dropMenuOwned = ($dropMenuState.ProcessId -eq $process.Id)
   [Console]::Out.WriteLine(
@@ -6532,34 +6653,7 @@ try {
     Start-Sleep -Milliseconds 100
 
     Set-Stage "reopen-drop-filtered-events-menu"
-    $filterMenu = Wait-Element $main $filterMenuCondition 5
-    $reopenMenuPattern = $null
-    if (-not $filterMenu.TryGetCurrentPattern(
-        [System.Windows.Automation.InvokePattern]::Pattern,
-        [ref]$reopenMenuPattern
-      )) {
-      throw "Process Monitor Filter menu does not expose InvokePattern after toggle"
-    }
-    $reopenMenuPattern.Invoke()
-
-    Set-Stage "resolve-drop-filtered-events-menu-after-invoke"
-    $dropMenu = $null
-    $dropMenuDeadline = [DateTime]::UtcNow.AddSeconds(5)
-    do {
-      $focused = [System.Windows.Automation.AutomationElement]::FocusedElement
-      for ($level = 0; $null -ne $focused -and $level -lt 5; $level++) {
-        if ($focused.Current.ControlType -eq [System.Windows.Automation.ControlType]::Menu) {
-          $dropMenu = $focused
-          break
-        }
-        $focused = $treeWalker.GetParent($focused)
-      }
-      if ($null -ne $dropMenu) { break }
-      Start-Sleep -Milliseconds 100
-    } while ([DateTime]::UtcNow -lt $dropMenuDeadline)
-    if ($null -eq $dropMenu) {
-      throw "Process Monitor did not expose the reopened Filter menu"
-    }
+    $dropMenu = Open-ProcmonFilterMenuFromMain $main $process
     $dropMenuState = $dropMenu.Current
     if ($dropMenuState.ProcessId -ne $process.Id -or
       -not $dropMenuState.IsEnabled -or

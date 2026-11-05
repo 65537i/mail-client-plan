@@ -738,6 +738,39 @@ export function describeWindowsFilterDiagnostics(output) {
     }
   }
 
+  const processMenuScan = output.match(
+    /^PROC_MON_FILTER_PROCESS_MENU_SCAN=windows:(\d{1,4});menus:(\d{1,4});visible:(\d{1,4})\r?$/m,
+  );
+  if (processMenuScan) {
+    const [windows, menus, visibleMenus] = processMenuScan.slice(1).map(Number);
+    if (windows <= 9999 && menus <= 9999 && visibleMenus <= menus) {
+      diagnostics.push(
+        `process-menu-scan=windows:${windows};menus:${menus};visible:${visibleMenus}`,
+      );
+    }
+  }
+
+  for (const match of output.matchAll(
+    /^PROC_MON_FILTER_MENU_SHORTCUT_INPUT=state:(sent|target-mismatch|incomplete);events:(\d);release-events:(\d)\r?$/gm,
+  )) {
+    const [, state, rawEvents, rawReleaseEvents] = match;
+    const events = Number(rawEvents);
+    const releaseEvents = Number(rawReleaseEvents);
+    if (
+      events <= 4 &&
+      releaseEvents <= 2 &&
+      (
+        (state === "sent" && events === 4 && releaseEvents === 0) ||
+        (state === "target-mismatch" && events === 0 && releaseEvents === 0) ||
+        (state === "incomplete" && events < 4)
+      )
+    ) {
+      diagnostics.push(
+        `filter-menu-shortcut-input=state:${state};events:${events};release-events:${releaseEvents}`,
+      );
+    }
+  }
+
   const filterPathForegroundGates = Array.from(output.matchAll(
     /^PROC_MON_FILTER_PATH_FOREGROUND=gate:(passed|failed)\r?$/gm,
   ), (match) => match[1]);

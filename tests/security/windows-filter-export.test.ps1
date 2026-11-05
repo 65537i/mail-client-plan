@@ -997,6 +997,44 @@ try {
   $nativeForm.Close()
   $nativeForm.Dispose()
 }
+$menuForm = [System.Windows.Forms.Form]::new()
+$menuForm.ShowInTaskbar = $false
+$menuForm.Width = 320
+$menuForm.Height = 180
+$menuStrip = [System.Windows.Forms.MenuStrip]::new()
+$filterMenuItem = [System.Windows.Forms.ToolStripMenuItem]::new("&Filter")
+$dropMenuItem = [System.Windows.Forms.ToolStripMenuItem]::new("Drop Filtered Events")
+[void]$filterMenuItem.DropDownItems.Add($dropMenuItem)
+[void]$menuStrip.Items.Add($filterMenuItem)
+$menuForm.MainMenuStrip = $menuStrip
+[void]$menuForm.Controls.Add($menuStrip)
+$menuForm.Show()
+$menuForm.Activate()
+[System.Windows.Forms.Application]::DoEvents()
+try {
+  if ([ProcmonNativeMenu]::GetForegroundWindow() -ne $menuForm.Handle) {
+    throw "Synthetic menu form did not receive foreground activation"
+  }
+  $menuInput = [ProcmonNativeMenu]::SendAltFShortcut($menuForm.Handle, [int]$PID)
+  if ($menuInput.State -ne "sent" -or $menuInput.Events -ne 4) {
+    throw "Native Alt+F input did not satisfy the exact shortcut gate"
+  }
+  $menuDeadline = [DateTime]::UtcNow.AddSeconds(2)
+  while (-not $filterMenuItem.DropDown.Visible -and [DateTime]::UtcNow -lt $menuDeadline) {
+    [System.Windows.Forms.Application]::DoEvents()
+    Start-Sleep -Milliseconds 25
+  }
+  if (-not $filterMenuItem.DropDown.Visible) {
+    throw "Native Alt+F input did not open the synthetic Filter menu"
+  }
+  if ($dropMenuItem.Text -cne "Drop Filtered Events") {
+    throw "Synthetic Filter menu item label changed"
+  }
+  $filterMenuItem.DropDown.Close()
+} finally {
+  $menuForm.Close()
+  $menuForm.Dispose()
+}
 if (
   $sourceText -notmatch 'GetProcessById\(\$CaptureProcessId\)' -or
   $sourceText -notmatch '\$process.Path -cne \[IO.Path\]::GetFullPath\(\$ProcmonPath\)' -or

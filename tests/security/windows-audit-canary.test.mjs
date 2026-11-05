@@ -410,6 +410,22 @@ test("AC-05: Procmon main-window activation verifies its process-owned foregroun
     configuration,
     /private struct KeyboardInput[\s\S]*private struct MouseInput[\s\S]*LayoutKind\.Explicit[\s\S]*private struct InputUnion[\s\S]*FieldOffset\(0\)[\s\S]*MouseInput Mouse[\s\S]*FieldOffset\(0\)[\s\S]*KeyboardInput Keyboard[\s\S]*private struct NativeInput[\s\S]*private static extern uint SendInput[\s\S]*SendControlLShortcut\(\s*IntPtr expectedWindow,\s*int expectedProcessId\s*\)[\s\S]*GetForegroundWindow\(\) != expectedWindow[\s\S]*GetWindowProcessId\(expectedWindow\) != expectedProcessId[\s\S]*CreateKeyboardInput\(VK_CONTROL, 0\)[\s\S]*CreateKeyboardInput\(VK_L, 0\)[\s\S]*CreateKeyboardInput\(VK_L, KEYEVENTF_KEYUP\)[\s\S]*CreateKeyboardInput\(VK_CONTROL, KEYEVENTF_KEYUP\)[\s\S]*if \(inserted != \(uint\)inputs\.Length\)[\s\S]*releaseInputs/,
   );
+  const nativeFilterMenuShortcut = configuration.match(
+    /public static ShortcutInputSnapshot SendAltFShortcut\([\s\S]*?public static NativeChildSnapshot/,
+  )?.[0];
+  assert.ok(nativeFilterMenuShortcut, "Bounded native Filter-menu shortcut is missing");
+  assert.match(
+    nativeFilterMenuShortcut,
+    /GetForegroundWindow\(\) != expectedWindow[\s\S]*GetWindowProcessId\(expectedWindow\) != expectedProcessId[\s\S]*CreateKeyboardInput\(VK_MENU, 0\)[\s\S]*CreateKeyboardInput\(VK_F, 0\)[\s\S]*CreateKeyboardInput\(VK_F, KEYEVENTF_KEYUP\)[\s\S]*CreateKeyboardInput\(VK_MENU, KEYEVENTF_KEYUP\)[\s\S]*if \(inserted != \(uint\)inputs\.Length\)[\s\S]*CreateKeyboardInput\(VK_F, KEYEVENTF_KEYUP\)[\s\S]*CreateKeyboardInput\(VK_MENU, KEYEVENTF_KEYUP\)/,
+  );
+  const nativeFilterMenuOpen = configuration.match(
+    /function Open-ProcmonFilterMenuFromMain[\s\S]*?function Wait-FilterDialog/,
+  )?.[0];
+  assert.ok(nativeFilterMenuOpen, "Process-owned Filter-menu activation gate is missing");
+  assert.match(
+    nativeFilterMenuOpen,
+    /GetWindowProcessId\(\$mainHandle\) -ne \$Process\.Id[\s\S]*Set-VerifiedProcmonMainWindowForeground[\s\S]*Wait-Element \$MainWindow \$filterMenuCondition 2 -AllowMissing[\s\S]*if \(\$null -eq \$filterMenu\)[\s\S]*SendAltFShortcut[\s\S]*PROC_MON_FILTER_MENU_SHORTCUT_INPUT[\s\S]*Wait-ProcessMenu \$Process[\s\S]*\$menuState\.ProcessId -ne \$Process\.Id[\s\S]*InvokePattern/,
+  );
   assert.match(
     configuration,
     /EnumWindows\(EnumWindowsProc callback, IntPtr lParam\)[\s\S]*GetProcessTopLevelWindows\(int processId, int maximum\)[\s\S]*maximum > 257[\s\S]*function Find-ProcmonNativeFilterDialog[\s\S]*GetProcessTopLevelWindows\(\$Process\.Id, 257\)[\s\S]*Write-ProcmonNativeMenuSummary[\s\S]*-Source "all-top-level"[\s\S]*\$windowCount = \[Math\]::Min\(\$handles\.Length, 256\)[\s\S]*IsWindowVisible\(\$handle\)[\s\S]*candidateState\.ProcessId -ne \$Process\.Id[\s\S]*\[IntPtr\]\(\$candidateState\.NativeWindowHandle\) -ne \$handle[\s\S]*ControlType\]::Pane[\s\S]*Get-ProcmonNativeFilterDialogCandidate \$candidateWindow \$Process\.Id[\s\S]*return \$candidateWindow[\s\S]*ControlType\]::Window[\s\S]*candidateState\.IsEnabled[\s\S]*candidateState\.IsOffscreen[\s\S]*distinctRuntimeId -and[\s\S]*\$combos\.Count -ge 3[\s\S]*\$edits\.Count -ge 1[\s\S]*PROC_MON_FILTER_DIALOG_DISCOVERY=native-top-level-window[\s\S]*PROC_MON_FILTER_NATIVE_WINDOW_UIA=/,
