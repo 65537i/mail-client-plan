@@ -2,7 +2,7 @@
 
 ## 1. ワークフロー構成
 
-[Run 41955374112](https://github.com/65537i/mail-client-plan/actions/runs/41955374112)（`17ad768`、Windows 2025 x64 / full、failed-job rerun含む）はfocused Windows testsとconfiguration export / synthetic controlsを通過。実WebView stepは初回・rerunともnative filter ruleの最初のListView cell read（`read-native-filter-list-cells`）で失敗し、新しい実入力selection経路に達せずstrict capture未実施。read stageの原因は未特定。AC-05未達。
+[Run 41955374112](https://github.com/65537i/mail-client-plan/actions/runs/41955374112)（`17ad768`、Windows 2025 x64 / full、failed-job rerun含む）はfocused Windows testsとconfiguration export / synthetic controlsを通過。実WebView stepは既存24 rowsの4列read・全24 rows selection・Remove入力まで到達したが、直後の全cell再読取が`read-native-filter-list-cells`で失敗し、Remove後のrow countを確認できずstrict capture未実施。削除中のListView cell readを避けるため、bounded retry内で同一root/list identityを再検証しながらrow countだけを読む修正を追加。node audit regression / PowerShell parseは通過。Windows runtime再検証待ち、AC-05未達。
 
 [Run 41952637123](https://github.com/65537i/mail-client-plan/actions/runs/41952637123)（`0a89df1`、Windows 2025 x64 / full）はbuild、Rust checks、security dependencies、WebViewおよびWindows audit testsを通過したが、configuration export testでsynthetic ListView focus checkがmouse input後すぐの観測に失敗。target windowのmessage processing待ちをproduction pathでboundedにし、synthetic test側もWinForms message loopをpumpしてからfocusを確認する。Windows runtime / strict captureは未通過、AC-05未達。
 

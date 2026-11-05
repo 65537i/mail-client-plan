@@ -424,7 +424,19 @@ test("AC-05: Procmon main-window activation verifies its process-owned foregroun
   assert.ok(nativeRuleClear, "Filter-rule clearing gate is missing");
   assert.match(
     nativeRuleClear,
-    /Get-ProcmonNativeFilterRuleRows[\s\S]*ClickNativeListItemExact[\s\S]*SendControlAShortcutExact[\s\S]*AreNativeListItemsSelectedExact[\s\S]*\$selectedControls\.List -ne \$nativeControls\.List[\s\S]*ClickNativeButtonWithMouseExact[\s\S]*\$selectedControls\.Buttons\["Remove"\][\s\S]*remainingRows\.Count -ne 0[\s\S]*Get-LoadedFilterRuleRows[\s\S]*SelectionItemPattern/,
+    /Get-ProcmonNativeFilterRuleRows[\s\S]*ClickNativeListItemExact[\s\S]*SendControlAShortcutExact[\s\S]*AreNativeListItemsSelectedExact[\s\S]*\$selectedControls\.List -ne \$nativeControls\.List[\s\S]*ClickNativeButtonWithMouseExact[\s\S]*\$selectedControls\.Buttons\["Remove"\][\s\S]*ReadNativeListItemCount[\s\S]*\$remainingCount -ne 0[\s\S]*Get-LoadedFilterRuleRows[\s\S]*SelectionItemPattern/,
+  );
+  const nativeRemoveReadback = nativeRuleClear.match(
+    /Set-Stage "invoke-native-filter-remove-mouse"[\s\S]*?PROC_MON_FILTER_RULE_RESET=removed:[^\n]+/,
+  )?.[0];
+  assert.ok(nativeRemoveReadback, "Native remove row-count verification is missing");
+  assert.match(
+    nativeRemoveReadback,
+    /ReadNativeListItemCount[\s\S]*while \(\$remainingCount -ne 0[\s\S]*Get-ProcmonNativeFilterDialogControls[\s\S]*\$refreshedControls\.Root -ne \$selectedControls\.Root[\s\S]*\$refreshedControls\.List -ne \$selectedControls\.List[\s\S]*ReadNativeListItemCount[\s\S]*PROC_MON_FILTER_RULES_REMAINING=rows:\$remainingCount/,
+  );
+  assert.doesNotMatch(
+    nativeRemoveReadback,
+    /Get-ProcmonNativeFilterRuleRows|ReadNativeListItemText/,
   );
   assert.match(
     nativeRuleClear,
@@ -432,7 +444,7 @@ test("AC-05: Procmon main-window activation verifies its process-owned foregroun
   );
   assert.match(
     nativeRuleClear,
-    /PROC_MON_FILTER_RULE_CLEAR=rows:\$\(\$rows\.Count\);multi-select:true[\s\S]*ClickNativeListItemExact[\s\S]*SendControlAShortcutExact[\s\S]*AreNativeListItemsSelectedExact[\s\S]*\$selectedControls\.Root -ne \$nativeControls\.Root[\s\S]*\$selectedControls\.List -ne \$nativeControls\.List[\s\S]*PROC_MON_FILTER_RULE_SELECTION=selected:\$selectedCount;expected:\$\(\$rows\.Count\)[\s\S]*PROC_MON_FILTER_REMOVE=buttons:1;enabled:true[\s\S]*invoke-native-filter-remove-mouse[\s\S]*ClickNativeButtonWithMouseExact[\s\S]*\$selectedControls\.Buttons\["Remove"\][\s\S]*read-native-filter-rows-after-remove[\s\S]*PROC_MON_FILTER_RULES_REMAINING=rows:\$\(\$remainingRows\.Count\)/,
+    /PROC_MON_FILTER_RULE_CLEAR=rows:\$\(\$rows\.Count\);multi-select:true[\s\S]*ClickNativeListItemExact[\s\S]*SendControlAShortcutExact[\s\S]*AreNativeListItemsSelectedExact[\s\S]*\$selectedControls\.Root -ne \$nativeControls\.Root[\s\S]*\$selectedControls\.List -ne \$nativeControls\.List[\s\S]*PROC_MON_FILTER_RULE_SELECTION=selected:\$selectedCount;expected:\$\(\$rows\.Count\)[\s\S]*PROC_MON_FILTER_REMOVE=buttons:1;enabled:true[\s\S]*invoke-native-filter-remove-mouse[\s\S]*ClickNativeButtonWithMouseExact[\s\S]*\$selectedControls\.Buttons\["Remove"\][\s\S]*read-native-filter-row-count-after-remove[\s\S]*PROC_MON_FILTER_RULES_REMAINING=rows:\$remainingCount/,
   );
   assert.doesNotMatch(
     nativeRuleClear,

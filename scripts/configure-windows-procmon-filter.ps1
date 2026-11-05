@@ -2945,27 +2945,36 @@ function Clear-LoadedFilterRules(
       $OwnerProcessId,
       "Remove"
     )
-    Set-Stage "verify-native-filter-clear"
-    $remainingRows = Get-ProcmonNativeFilterRuleRows `
-      $selectedControls $OwnerProcessId -Quiet
-    Set-Stage "verify-native-filter-rows-after-remove"
+    Set-Stage "read-native-filter-row-count-after-remove"
+    $remainingCount = [ProcmonNativeMenu]::ReadNativeListItemCount(
+      $selectedControls.List,
+      $OwnerProcessId
+    )
+    Set-Stage "verify-native-filter-row-count-after-remove"
     $removeDeadline = [DateTime]::UtcNow.AddSeconds(2)
-    while ($remainingRows.Count -ne 0 -and [DateTime]::UtcNow -lt $removeDeadline) {
+    while ($remainingCount -ne 0 -and [DateTime]::UtcNow -lt $removeDeadline) {
       Start-Sleep -Milliseconds 50
       Set-Stage "refresh-native-filter-controls-after-remove"
-      $selectedControls = Get-ProcmonNativeFilterDialogControls $Dialog $OwnerProcessId
-      if ($null -eq $selectedControls) {
-        throw "Process Monitor native filter controls disappeared before removal was verified"
+      $refreshedControls = Get-ProcmonNativeFilterDialogControls $Dialog $OwnerProcessId
+      if (
+        $null -eq $refreshedControls -or
+        $refreshedControls.Root -ne $selectedControls.Root -or
+        $refreshedControls.List -ne $selectedControls.List
+      ) {
+        throw "Process Monitor native filter controls changed before removal was verified"
       }
-      Set-Stage "read-native-filter-rows-after-remove"
-      $remainingRows = Get-ProcmonNativeFilterRuleRows `
-        $selectedControls $OwnerProcessId -Quiet
-      Set-Stage "verify-native-filter-rows-after-remove"
+      $selectedControls = $refreshedControls
+      Set-Stage "read-native-filter-row-count-after-remove"
+      $remainingCount = [ProcmonNativeMenu]::ReadNativeListItemCount(
+        $selectedControls.List,
+        $OwnerProcessId
+      )
+      Set-Stage "verify-native-filter-row-count-after-remove"
     }
     [Console]::Out.WriteLine(
-      "PROC_MON_FILTER_RULES_REMAINING=rows:$($remainingRows.Count)"
+      "PROC_MON_FILTER_RULES_REMAINING=rows:$remainingCount"
     )
-    if ($remainingRows.Count -ne 0) {
+    if ($remainingCount -ne 0) {
       Set-Stage "native-filter-rules-still-present"
       throw "Process Monitor native filter list did not become empty after removal"
     }
