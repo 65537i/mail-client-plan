@@ -2384,9 +2384,6 @@ function Clear-LoadedFilterRules(
     if ($selectedCount -ne $rows.Count) {
       throw "Process Monitor native filter rows were not selected exactly"
     }
-    [Console]::Out.WriteLine(
-      "PROC_MON_FILTER_RULE_SELECTION=selected:$selectedCount;expected:$($rows.Count)"
-    )
     Set-Stage "verify-native-remove-button"
     $selectedControls = Get-ProcmonNativeFilterDialogControls $Dialog $OwnerProcessId
     if (
@@ -2398,9 +2395,30 @@ function Clear-LoadedFilterRules(
     ) {
       throw "Process Monitor native Remove button was unavailable after exact row selection"
     }
+    Set-Stage "reselect-native-filter-rows-before-remove"
+    $selectedCount = [ProcmonNativeMenu]::SelectNativeListItemsExact(
+      $selectedControls.List,
+      $OwnerProcessId,
+      $rows.Count
+    )
+    if ($selectedCount -ne $rows.Count) {
+      throw "Process Monitor native filter rows lost selection before removal"
+    }
+    [Console]::Out.WriteLine(
+      "PROC_MON_FILTER_RULE_SELECTION=selected:$selectedCount;expected:$($rows.Count)"
+    )
+    if (
+      [ProcmonNativeMenu]::GetForegroundWindow() -ne $selectedControls.Root
+    ) {
+      throw "Process Monitor native filter dialog lost the foreground before removal"
+    }
     [Console]::Out.WriteLine("PROC_MON_FILTER_REMOVE=buttons:1;enabled:true")
     Set-Stage "invoke-native-filter-remove"
-    Invoke-ProcmonNativeFilterButton $Dialog $OwnerProcessId "Remove"
+    [ProcmonNativeMenu]::ClickNativeButtonExact(
+      $selectedControls.Buttons["Remove"],
+      $OwnerProcessId,
+      "Remove"
+    )
     Set-Stage "verify-native-filter-clear"
     $remainingRows = Get-ProcmonNativeFilterRuleRows `
       $selectedControls $OwnerProcessId -Quiet

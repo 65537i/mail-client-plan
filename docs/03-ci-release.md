@@ -2,6 +2,8 @@
 
 ## 1. ワークフロー構成
 
+[Run 41942603875](https://github.com/65537i/mail-client-plan/actions/runs/41942603875)（`8155702`、Windows 2025 x64 / full）は24 rowsを同一PID native ListViewで確認し、`selected:24;expected:24`とRemove enabled gate通過後もRemove後24 rowsとなりstrict capture前に失敗。完結したselection / Remove evidenceをretentionできた。再検査で選択が変わり得る窓を狭めるため、Remove button確認後に同じListViewでselectionを再確立し、再検査済み同一button HWNDを直接clickする。
+
 [Run 41939212215](https://github.com/65537i/mail-client-plan/actions/runs/41939212215)（`fe6cecd`、Windows 2025 x64 / full）はnative row selection / Remove pathを通過したが、post-Remove readbackで24 rowsが残り失敗。failure stageは`verify-native-filter-rows-after-remove`。incremental output truncationがnumeric evidenceを途中まで保持できるため、全marker lineが改行で完結した後にのみretainするよう修正。
 
 [Run 41935298869](https://github.com/65537i/mail-client-plan/actions/runs/41935298869)（`c5c018d`、Windows 2025 x64 / full）はnative row shape (`actual-columns:4`) / stable root-list identityを通過したが、Remove後のreadbackで`filter-rules-remaining=24`となりstrict capture前に失敗。failure stageが古いrow-shape stageを示していたため、native row selection / Remove / subsequent readbackを独立stageにし、selection countsとRemove eligibilityをbounded markersで記録する。

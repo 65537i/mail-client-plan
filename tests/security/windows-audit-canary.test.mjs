@@ -408,7 +408,7 @@ test("AC-05: Procmon main-window activation verifies its process-owned foregroun
   assert.ok(nativeRuleClear, "Filter-rule clearing gate is missing");
   assert.match(
     nativeRuleClear,
-    /Get-ProcmonNativeFilterRuleRows[\s\S]*SelectNativeListItemsExact[\s\S]*selectedCount -ne \$rows\.Count[\s\S]*Invoke-ProcmonNativeFilterButton \$Dialog \$OwnerProcessId "Remove"[\s\S]*remainingRows\.Count -ne 0[\s\S]*Get-LoadedFilterRuleRows[\s\S]*SelectionItemPattern/,
+    /Get-ProcmonNativeFilterRuleRows[\s\S]*SelectNativeListItemsExact[\s\S]*selectedCount -ne \$rows\.Count[\s\S]*\$selectedControls\.List -ne \$nativeControls\.List[\s\S]*reselect-native-filter-rows-before-remove[\s\S]*SelectNativeListItemsExact[\s\S]*ClickNativeButtonExact[\s\S]*\$selectedControls\.Buttons\["Remove"\][\s\S]*remainingRows\.Count -ne 0[\s\S]*Get-LoadedFilterRuleRows[\s\S]*SelectionItemPattern/,
   );
   assert.match(
     nativeRuleClear,
@@ -416,7 +416,7 @@ test("AC-05: Procmon main-window activation verifies its process-owned foregroun
   );
   assert.match(
     nativeRuleClear,
-    /PROC_MON_FILTER_RULE_CLEAR=rows:\$\(\$rows\.Count\);multi-select:true[\s\S]*SelectNativeListItemsExact[\s\S]*PROC_MON_FILTER_RULE_SELECTION=selected:\$selectedCount;expected:\$\(\$rows\.Count\)[\s\S]*\$selectedControls\.Root -ne \$nativeControls\.Root[\s\S]*\$selectedControls\.List -ne \$nativeControls\.List[\s\S]*PROC_MON_FILTER_REMOVE=buttons:1;enabled:true[\s\S]*read-native-filter-rows-after-remove[\s\S]*PROC_MON_FILTER_RULES_REMAINING=rows:\$\(\$remainingRows\.Count\)/,
+    /PROC_MON_FILTER_RULE_CLEAR=rows:\$\(\$rows\.Count\);multi-select:true[\s\S]*SelectNativeListItemsExact[\s\S]*selectedCount -ne \$rows\.Count[\s\S]*\$selectedControls\.Root -ne \$nativeControls\.Root[\s\S]*\$selectedControls\.List -ne \$nativeControls\.List[\s\S]*reselect-native-filter-rows-before-remove[\s\S]*SelectNativeListItemsExact[\s\S]*PROC_MON_FILTER_RULE_SELECTION=selected:\$selectedCount;expected:\$\(\$rows\.Count\)[\s\S]*PROC_MON_FILTER_REMOVE=buttons:1;enabled:true[\s\S]*ClickNativeButtonExact[\s\S]*\$selectedControls\.Buttons\["Remove"\][\s\S]*read-native-filter-rows-after-remove[\s\S]*PROC_MON_FILTER_RULES_REMAINING=rows:\$\(\$remainingRows\.Count\)/,
   );
   assert.doesNotMatch(
     nativeRuleClear,

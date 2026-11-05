@@ -4,6 +4,8 @@
 
 ## 現在の範囲
 
+- [Run 41942603875](https://github.com/65537i/mail-client-plan/actions/runs/41942603875)（`8155702`、Windows 2025 x64 / full）はnative branchで24 rowsを確認し、`selected:24;expected:24`とRemove button enabled gateを通過したが、Remove後も24 rowsが残りstrict capture前に失敗。完結行をretentionする修正により selection / Remove counts が取得できた。button lookupによるコントロール再取得後に選択を再確立し、既に検証した同一Remove HWNDを直接クリックしてからreadbackするよう変更する。
+
 - [Run 41939212215](https://github.com/65537i/mail-client-plan/actions/runs/41939212215)（`fe6cecd`、Windows 2025 x64 / full）はnative controls stability、row selection / Remove pathに進み、post-Remove readbackで24 rowsのままstrict capture前に失敗。failure stageは`verify-native-filter-rows-after-remove`。selection / remove evidence retentionを追加したが、incremental truncationが数値markerの不完全なprefixを保持するため、改めて全文newline後にのみretainする。
 
 - [Run 41935298869](https://github.com/65537i/mail-client-plan/actions/runs/41935298869)（`c5c018d`、Windows 2025 x64 / full）はnative row shape (`actual-columns:4`)と同一root/list controls再取得に通過。Remove後のreadbackは`filter-rules-remaining=24`となり失敗し、strict capture未実施。failure stageはrow-shape verifierのままで、Remove / retry段階の個別stageがなかった。native selection count、Remove gate、post-Remove readback stageを記録し、選択と削除のどこで既存rowsが残るか確認する。
