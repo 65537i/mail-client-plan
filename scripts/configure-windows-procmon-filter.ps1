@@ -88,6 +88,12 @@ public static class ProcmonNativeMenu
     private const uint LVM_GETHEADER = 0x101F;
     private const uint LVM_GETSELECTEDCOUNT = 0x1032;
     private const uint LVM_GETITEMTEXTW = 0x1073;
+    private const uint TB_BUTTONCOUNT = 0x0418;
+    private const uint TB_GETBUTTON = 0x0417;
+    private const uint TB_GETBUTTONTEXTW = 0x044B;
+    private const byte TBSTATE_ENABLED = 0x04;
+    private const byte TBSTATE_HIDDEN = 0x08;
+    private const byte BTNS_SEP = 0x01;
     private const uint HDM_GETITEMCOUNT = 0x1200;
     private const uint SMTO_ABORTIFHUNG = 0x0002;
     private const uint NativeControlMessageTimeout = 1000;
@@ -107,10 +113,15 @@ public static class ProcmonNativeMenu
     private const ushort VK_F = 0x0046;
     private const ushort VK_L = 0x004C;
     private const uint GA_ROOT = 2;
+    private const int GWL_STYLE = -16;
+    private const uint WS_CHILD = 0x40000000;
+    private const uint WS_POPUP = 0x80000000;
     private const int AccessibleMenuObjectId = -3;
     private const int AccessibleClientObjectId = -4;
     private const int LVIR_BOUNDS = 0;
     private const uint MaximumTextCharacters = 255;
+    private const int MaximumToolbarButtons = 64;
+    private const int MaximumToolbarTextCharacters = 128;
     private const int MaximumAccessibleMenuItems = 64;
     private const int MenuItemRole = 12;
     private const int CheckedState = 0x10;
@@ -225,6 +236,7 @@ public static class ProcmonNativeMenu
     public sealed class ItemSnapshot
     {
         public string Text { get; set; }
+        public bool IsOwnerDrawn { get; set; }
         public bool IsChecked { get; set; }
         public bool IsHighlighted { get; set; }
         public bool IsEnabled { get; set; }
@@ -236,7 +248,9 @@ public static class ProcmonNativeMenu
         public bool ProcessKnown { get; set; }
         public bool ProcessSame { get; set; }
         public bool AccessibleAvailable { get; set; }
+        public int NodesVisited { get; set; }
         public int ItemCount { get; set; }
+        public int LabelMatchCount { get; set; }
         public int MatchCount { get; set; }
         public int EventCount { get; set; }
         public int FilterCount { get; set; }
@@ -246,11 +260,31 @@ public static class ProcmonNativeMenu
         public bool IsEnabled { get; set; }
     }
 
+    public sealed class AccessibleToolbarCommandSnapshot
+    {
+        public string ReadFailure { get; set; }
+        public int ItemCount { get; set; }
+        public int LabelMatchCount { get; set; }
+        public int MatchCount { get; set; }
+        public bool IsEnabled { get; set; }
+        public bool HasDefaultAction { get; set; }
+        public Accessibility.IAccessible Accessible { get; set; }
+        public object Child { get; set; }
+    }
+
+    private sealed class AccessibleNode
+    {
+        public Accessibility.IAccessible Accessible { get; set; }
+        public int Depth { get; set; }
+    }
+
     public sealed class FocusSnapshot
     {
         public bool Available { get; set; }
         public IntPtr ActiveWindow { get; set; }
         public IntPtr FocusWindow { get; set; }
+        public IntPtr CaptureWindow { get; set; }
+        public IntPtr MenuOwnerWindow { get; set; }
     }
 
     public sealed class ShortcutInputSnapshot
@@ -281,6 +315,16 @@ public static class ProcmonNativeMenu
     {
         public IntPtr Handle { get; set; }
         public string Kind { get; set; }
+    }
+
+    public sealed class NativeToolbarCommandSnapshot
+    {
+        public string ReadFailure { get; set; }
+        public int ButtonCount { get; set; }
+        public int ReadableLabelCount { get; set; }
+        public int LabelMatchCount { get; set; }
+        public int MatchCount { get; set; }
+        public bool IsEnabled { get; set; }
     }
 
     [DllImport("user32.dll", ExactSpelling = true, SetLastError = true)]
@@ -322,6 +366,124 @@ public static class ProcmonNativeMenu
     [DllImport("user32.dll", ExactSpelling = true, SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool IsWindowEnabled(IntPtr window);
+
+    [DllImport("user32.dll", ExactSpelling = true, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool IsMenu(IntPtr menu);
+
+    public static string GetWindowClassKind(
+        IntPtr window,
+        uint expectedProcessId,
+        IntPtr mainWindow
+    )
+    {
+        if (window == IntPtr.Zero || !IsWindow(window))
+        {
+            return "unavailable";
+        }
+        uint processId;
+        if (GetWindowThreadProcessId(window, out processId) == 0)
+        {
+            return "unavailable";
+        }
+        if (processId != expectedProcessId)
+        {
+            return "other-process";
+        }
+        if (window == mainWindow)
+        {
+            return "main";
+        }
+
+        var className = new System.Text.StringBuilder(64);
+        var length = GetClassName(window, className, className.Capacity);
+        if (length <= 0 || length >= className.Capacity)
+        {
+            return "unavailable";
+        }
+        switch (className.ToString())
+        {
+            case "#32768":
+                return "popup";
+            case "#32770":
+                return "dialog";
+            case "ToolbarWindow32":
+                return "toolbar";
+            case "SysListView32":
+                return "list";
+            case "Button":
+                return "button";
+            case "ComboBox":
+            case "ComboBoxEx32":
+                return "combo";
+            default:
+                return "other";
+        }
+    }
+
+    public static string GetParentWindowClassKind(
+        IntPtr window,
+        uint expectedProcessId,
+        IntPtr mainWindow
+    )
+    {
+        var windowKind = GetWindowClassKind(window, expectedProcessId, mainWindow);
+        if (windowKind == "unavailable" || windowKind == "other-process")
+        {
+            return windowKind;
+        }
+        var parent = GetParent(window);
+        return parent == IntPtr.Zero
+            ? "none"
+            : GetWindowClassKind(parent, expectedProcessId, mainWindow);
+    }
+
+    public static string GetRootWindowClassKind(
+        IntPtr window,
+        uint expectedProcessId,
+        IntPtr mainWindow
+    )
+    {
+        var windowKind = GetWindowClassKind(window, expectedProcessId, mainWindow);
+        if (windowKind == "unavailable" || windowKind == "other-process")
+        {
+            return windowKind;
+        }
+        var root = GetAncestor(window, GA_ROOT);
+        return root == IntPtr.Zero
+            ? "unavailable"
+            : GetWindowClassKind(root, expectedProcessId, mainWindow);
+    }
+
+    public static string GetWindowStyleKind(IntPtr window, uint expectedProcessId)
+    {
+        if (window == IntPtr.Zero || !IsWindow(window))
+        {
+            return "unavailable";
+        }
+        uint processId;
+        if (
+            GetWindowThreadProcessId(window, out processId) == 0 ||
+            processId != expectedProcessId
+        )
+        {
+            return "unavailable";
+        }
+        var style = unchecked((uint)GetWindowLongPtr(window, GWL_STYLE).ToInt64());
+        if ((style & WS_POPUP) != 0)
+        {
+            return "popup";
+        }
+        return (style & WS_CHILD) != 0 ? "child" : "standard";
+    }
+
+    [DllImport(
+        "user32.dll",
+        EntryPoint = "GetWindowLongPtrW",
+        ExactSpelling = true,
+        SetLastError = true
+    )]
+    private static extern IntPtr GetWindowLongPtr(IntPtr window, int index);
 
     [DllImport("user32.dll", ExactSpelling = true, SetLastError = true)]
     private static extern IntPtr GetParent(IntPtr window);
@@ -790,6 +952,7 @@ public static class ProcmonNativeMenu
                 (actualClassName == "ComboBox" || actualClassName == "ComboBoxEx32")) ||
             (expectedKind == "edit" && actualClassName == "Edit") ||
             (expectedKind == "button" && actualClassName == "Button") ||
+            (expectedKind == "static" && actualClassName == "Static") ||
             (expectedKind == "list" && actualClassName == "SysListView32");
         if (!classMatches)
         {
@@ -797,6 +960,317 @@ public static class ProcmonNativeMenu
         }
     }
 
+        public static NativeToolbarCommandSnapshot ReadNativeFilterToolbarCommand(
+            IntPtr toolbar,
+            int expectedProcessId
+        )
+        {
+            var snapshot = new NativeToolbarCommandSnapshot
+            {
+                ReadFailure = "owner-mismatch"
+            };
+            uint processId;
+            if (
+                toolbar == IntPtr.Zero ||
+                expectedProcessId <= 0 ||
+                !IsWindow(toolbar) ||
+                GetWindowThreadProcessId(toolbar, out processId) == 0 ||
+                processId != (uint)expectedProcessId
+            )
+            {
+                return snapshot;
+            }
+            var className = new System.Text.StringBuilder(128);
+            if (
+                GetClassName(toolbar, className, className.Capacity) == 0 ||
+                className.ToString() != "ToolbarWindow32"
+            )
+            {
+                snapshot.ReadFailure = "class-mismatch";
+                return snapshot;
+            }
+            if (!IsWindowVisible(toolbar) || !IsWindowEnabled(toolbar))
+            {
+                snapshot.ReadFailure = "state-invalid";
+                return snapshot;
+            }
+            IntPtr countResult;
+            if (
+                SendMessageTimeoutRaw(
+                    toolbar,
+                    TB_BUTTONCOUNT,
+                    IntPtr.Zero,
+                    IntPtr.Zero,
+                    SMTO_ABORTIFHUNG,
+                    NativeControlMessageTimeout,
+                    out countResult
+                ) == IntPtr.Zero
+            )
+            {
+                snapshot.ReadFailure = "count-invalid";
+                return snapshot;
+            }
+            var buttonCount = countResult.ToInt32();
+            if (buttonCount < 0)
+            {
+                snapshot.ReadFailure = "count-invalid";
+                return snapshot;
+            }
+            snapshot.ButtonCount = buttonCount;
+            if (buttonCount > MaximumToolbarButtons)
+            {
+                snapshot.ReadFailure = "count-limit";
+                return snapshot;
+            }
+            if (buttonCount == 0)
+            {
+                snapshot.ReadFailure = "no-match";
+                return snapshot;
+            }
+
+            var process = OpenProcess(
+                ProcessVmOperation |
+                    ProcessVmRead |
+                    ProcessVmWrite |
+                    ProcessQueryLimitedInformation,
+                false,
+                (uint)expectedProcessId
+            );
+            if (process == IntPtr.Zero)
+            {
+                snapshot.ReadFailure = "unavailable";
+                return snapshot;
+            }
+            IntPtr remoteButton = IntPtr.Zero;
+            IntPtr remoteText = IntPtr.Zero;
+            var cleanupFailed = false;
+            try
+            {
+                var buttonSize = IntPtr.Size == 8 ? 32 : 20;
+                var textBufferSize = (MaximumToolbarTextCharacters + 1) * 2;
+                remoteButton = VirtualAllocEx(
+                    process,
+                    IntPtr.Zero,
+                    new UIntPtr((uint)buttonSize),
+                    MemCommitReserve,
+                    PageReadWrite
+                );
+                remoteText = VirtualAllocEx(
+                    process,
+                    IntPtr.Zero,
+                    new UIntPtr((uint)textBufferSize),
+                    MemCommitReserve,
+                    PageReadWrite
+                );
+                if (remoteButton == IntPtr.Zero || remoteText == IntPtr.Zero)
+                {
+                    snapshot.ReadFailure = "unavailable";
+                    return snapshot;
+                }
+                var buttonBytes = new byte[buttonSize];
+                var textBytes = new byte[textBufferSize];
+                for (var index = 0; index < buttonCount; index++)
+                {
+                    IntPtr buttonResult;
+                    if (
+                        SendMessageTimeoutRaw(
+                            toolbar,
+                            TB_GETBUTTON,
+                            new IntPtr(index),
+                            remoteButton,
+                            SMTO_ABORTIFHUNG,
+                            NativeControlMessageTimeout,
+                            out buttonResult
+                        ) == IntPtr.Zero ||
+                        buttonResult == IntPtr.Zero
+                    )
+                    {
+                        snapshot.ReadFailure = "child-read-failed";
+                        return snapshot;
+                    }
+                    UIntPtr buttonRead;
+                    if (
+                        !ReadProcessMemory(
+                            process,
+                            remoteButton,
+                            buttonBytes,
+                            new UIntPtr((uint)buttonBytes.Length),
+                            out buttonRead
+                        ) ||
+                        buttonRead.ToUInt64() != (ulong)buttonBytes.Length
+                    )
+                    {
+                        snapshot.ReadFailure = "child-read-failed";
+                        return snapshot;
+                    }
+                    var commandId = BitConverter.ToInt32(buttonBytes, 4);
+                    var state = buttonBytes[8];
+                    var style = buttonBytes[9];
+                    if (commandId <= 0 || (style & BTNS_SEP) != 0)
+                    {
+                        continue;
+                    }
+                    IntPtr lengthResult;
+                    if (
+                        SendMessageTimeoutRaw(
+                            toolbar,
+                            TB_GETBUTTONTEXTW,
+                            new IntPtr(commandId),
+                            IntPtr.Zero,
+                            SMTO_ABORTIFHUNG,
+                            NativeControlMessageTimeout,
+                            out lengthResult
+                        ) == IntPtr.Zero
+                    )
+                    {
+                        snapshot.ReadFailure = "child-read-failed";
+                        return snapshot;
+                    }
+                    var textLength = lengthResult.ToInt64();
+                    if (textLength < 0)
+                    {
+                        continue;
+                    }
+                    if (textLength > MaximumToolbarTextCharacters)
+                    {
+                        snapshot.ReadFailure = "count-limit";
+                        return snapshot;
+                    }
+                    Array.Clear(textBytes, 0, textBytes.Length);
+                    UIntPtr textWritten;
+                    if (
+                        !WriteProcessMemory(
+                            process,
+                            remoteText,
+                            textBytes,
+                            new UIntPtr((uint)textBytes.Length),
+                            out textWritten
+                        ) ||
+                        textWritten.ToUInt64() != (ulong)textBytes.Length
+                    )
+                    {
+                        snapshot.ReadFailure = "child-read-failed";
+                        return snapshot;
+                    }
+                    IntPtr copiedLengthResult;
+                    if (
+                        SendMessageTimeoutRaw(
+                            toolbar,
+                            TB_GETBUTTONTEXTW,
+                            new IntPtr(commandId),
+                            remoteText,
+                            SMTO_ABORTIFHUNG,
+                            NativeControlMessageTimeout,
+                            out copiedLengthResult
+                        ) == IntPtr.Zero ||
+                        copiedLengthResult.ToInt64() != textLength
+                    )
+                    {
+                        snapshot.ReadFailure = "child-read-failed";
+                        return snapshot;
+                    }
+                    var copiedTextBytes = new byte[checked(((int)textLength + 1) * 2)];
+                    UIntPtr textRead;
+                    if (
+                        !ReadProcessMemory(
+                            process,
+                            remoteText,
+                            copiedTextBytes,
+                            new UIntPtr((uint)copiedTextBytes.Length),
+                            out textRead
+                        ) ||
+                        textRead.ToUInt64() != (ulong)copiedTextBytes.Length
+                    )
+                    {
+                        snapshot.ReadFailure = "child-read-failed";
+                        return snapshot;
+                    }
+                    var textByteLength = checked((int)textLength * 2);
+                    if (
+                        copiedTextBytes[textByteLength] != 0 ||
+                        copiedTextBytes[textByteLength + 1] != 0
+                    )
+                    {
+                        snapshot.ReadFailure = "state-invalid";
+                        return snapshot;
+                    }
+                    var text = System.Text.Encoding.Unicode.GetString(
+                        copiedTextBytes,
+                        0,
+                        (int)textLength * 2
+                    );
+                    if (text.Length == 0)
+                    {
+                        continue;
+                    }
+                    snapshot.ReadableLabelCount++;
+                    if (!string.Equals(text, "Filter", StringComparison.Ordinal))
+                    {
+                        continue;
+                    }
+                    snapshot.LabelMatchCount++;
+                    if (
+                        (state & TBSTATE_ENABLED) != 0 &&
+                        (state & TBSTATE_HIDDEN) == 0
+                    )
+                    {
+                        snapshot.MatchCount++;
+                        snapshot.IsEnabled = true;
+                    }
+                }
+                IntPtr verifiedButtonCountResult;
+                if (
+                    GetWindowProcessId(toolbar) != expectedProcessId ||
+                    !IsWindowVisible(toolbar) ||
+                    !IsWindowEnabled(toolbar) ||
+                    SendMessageTimeoutRaw(
+                        toolbar,
+                        TB_BUTTONCOUNT,
+                        IntPtr.Zero,
+                        IntPtr.Zero,
+                        SMTO_ABORTIFHUNG,
+                        NativeControlMessageTimeout,
+                        out verifiedButtonCountResult
+                    ) == IntPtr.Zero ||
+                    verifiedButtonCountResult.ToInt32() != buttonCount
+                )
+                {
+                    snapshot.ReadFailure = "state-invalid";
+                    return snapshot;
+                }
+                snapshot.ReadFailure = snapshot.LabelMatchCount > 1
+                    ? "ambiguous-match"
+                    : snapshot.LabelMatchCount == 1 && snapshot.MatchCount == 1
+                        ? "none"
+                        : "no-match";
+                return snapshot;
+            }
+            finally
+            {
+                if (
+                    remoteText != IntPtr.Zero &&
+                    !VirtualFreeEx(process, remoteText, UIntPtr.Zero, MemRelease)
+                )
+                {
+                    cleanupFailed = true;
+                }
+                if (
+                    remoteButton != IntPtr.Zero &&
+                    !VirtualFreeEx(process, remoteButton, UIntPtr.Zero, MemRelease)
+                )
+                {
+                    cleanupFailed = true;
+                }
+                if (!CloseHandle(process))
+                {
+                    cleanupFailed = true;
+                }
+                if (cleanupFailed)
+                {
+                    throw new InvalidOperationException("Native toolbar memory cleanup failed");
+                }
+            }
+        }
     private static string NormalizeNativeButtonLabel(string value)
     {
         return (value ?? string.Empty).Replace("&", string.Empty).Trim();
@@ -1931,7 +2405,9 @@ public static class ProcmonNativeMenu
         {
             Available = false,
             ActiveWindow = IntPtr.Zero,
-            FocusWindow = IntPtr.Zero
+            FocusWindow = IntPtr.Zero,
+            CaptureWindow = IntPtr.Zero,
+            MenuOwnerWindow = IntPtr.Zero
         };
         if (threadId == 0)
         {
@@ -1948,6 +2424,8 @@ public static class ProcmonNativeMenu
         snapshot.Available = true;
         snapshot.ActiveWindow = info.hwndActive;
         snapshot.FocusWindow = info.hwndFocus;
+        snapshot.CaptureWindow = info.hwndCapture;
+        snapshot.MenuOwnerWindow = info.hwndMenuOwner;
         return snapshot;
     }
 
@@ -2018,12 +2496,21 @@ public static class ProcmonNativeMenu
         var objectId = useWindowMenuObject
             ? unchecked((uint)AccessibleMenuObjectId)
             : unchecked((uint)AccessibleClientObjectId);
-        var result = AccessibleObjectFromWindow(
-            menuWindow,
-            objectId,
-            ref interfaceId,
-            out accessibleObject
-        );
+        int result;
+        try
+        {
+            result = AccessibleObjectFromWindow(
+                menuWindow,
+                objectId,
+                ref interfaceId,
+                out accessibleObject
+            );
+        }
+        catch (ArgumentException)
+        {
+            snapshot.ReadFailure = "object-invalid";
+            return snapshot;
+        }
         if (result != 0 || accessibleObject == null)
         {
             snapshot.ReadFailure = "object-unavailable";
@@ -2033,70 +2520,107 @@ public static class ProcmonNativeMenu
 
         try
         {
-            var itemCount = accessibleObject.accChildCount;
-            if (itemCount < 0)
+            var pending = new System.Collections.Generic.Queue<AccessibleNode>();
+            pending.Enqueue(new AccessibleNode
             {
-                snapshot.ReadFailure = "count-invalid";
-                return snapshot;
-            }
-            if (itemCount > MaximumAccessibleMenuItems)
-            {
-                snapshot.ReadFailure = "count-limit";
-                return snapshot;
-            }
-            snapshot.ItemCount = itemCount;
-
+                Accessible = accessibleObject,
+                Depth = 0
+            });
+            var scannedNodes = 0;
             var matchState = 0;
-            for (var childId = 1; childId <= itemCount; childId++)
+            while (pending.Count > 0)
             {
-                var child = (object)childId;
-                var name = accessibleObject.get_accName(child) ?? string.Empty;
-                var roleValue = accessibleObject.get_accRole(child);
-                int role;
-                if (!TryGetInteger(roleValue, out role))
+                if (scannedNodes >= MaximumAccessibleMenuItems)
                 {
-                    snapshot.ReadFailure = "child-read-failed";
+                    snapshot.ReadFailure = "count-limit";
                     return snapshot;
                 }
-                if (role != MenuItemRole)
+                var node = pending.Dequeue();
+                scannedNodes++;
+                snapshot.NodesVisited = scannedNodes;
+                var childCount = node.Accessible.accChildCount;
+                if (childCount < 0)
                 {
-                    continue;
-                }
-
-                var normalizedName = name.Replace("&", "");
-                var acceleratorIndex = normalizedName.IndexOf('\t');
-                if (acceleratorIndex >= 0)
-                {
-                    normalizedName = normalizedName.Substring(0, acceleratorIndex);
-                }
-                if (!string.Equals(
-                    normalizedName.Trim(),
-                    "Drop Filtered Events",
-                    StringComparison.Ordinal
-                ))
-                {
-                    continue;
-                }
-
-                snapshot.MatchCount++;
-                var stateValue = accessibleObject.get_accState(child);
-                int state;
-                if (!TryGetInteger(stateValue, out state) || (state & MixedState) != 0)
-                {
-                    snapshot.ReadFailure = "state-invalid";
+                    snapshot.ReadFailure = "count-invalid";
                     return snapshot;
                 }
-                matchState = state;
+                if (childCount > MaximumAccessibleMenuItems - snapshot.ItemCount)
+                {
+                    snapshot.ReadFailure = "count-limit";
+                    return snapshot;
+                }
+                snapshot.ItemCount += childCount;
+
+                for (var childId = 1; childId <= childCount; childId++)
+                {
+                    var child = (object)childId;
+                    var name = node.Accessible.get_accName(child) ?? string.Empty;
+                    var roleValue = node.Accessible.get_accRole(child);
+                    int role;
+                    if (!TryGetInteger(roleValue, out role))
+                    {
+                        snapshot.ReadFailure = "child-read-failed";
+                        return snapshot;
+                    }
+                    var normalizedName = name.Replace("&", "");
+                    var acceleratorIndex = normalizedName.IndexOf('\t');
+                    if (acceleratorIndex >= 0)
+                    {
+                        normalizedName = normalizedName.Substring(0, acceleratorIndex);
+                    }
+                    var exactLabel = string.Equals(
+                        normalizedName.Trim(),
+                        "Drop Filtered Events",
+                        StringComparison.Ordinal
+                    );
+                    if (exactLabel)
+                    {
+                        snapshot.LabelMatchCount++;
+                        if (role == MenuItemRole)
+                        {
+                            snapshot.MatchCount++;
+                            var stateValue = node.Accessible.get_accState(child);
+                            int state;
+                            if (!TryGetInteger(stateValue, out state) || (state & MixedState) != 0)
+                            {
+                                snapshot.ReadFailure = "state-invalid";
+                                return snapshot;
+                            }
+                            matchState = state;
+                        }
+                    }
+
+                    var childAccessible = node.Accessible.get_accChild(child)
+                        as Accessibility.IAccessible;
+                    if (childAccessible != null)
+                    {
+                        if (node.Depth >= 3 || pending.Count >= MaximumAccessibleMenuItems)
+                        {
+                            snapshot.ReadFailure = "count-limit";
+                            return snapshot;
+                        }
+                        pending.Enqueue(new AccessibleNode
+                        {
+                            Accessible = childAccessible,
+                            Depth = node.Depth + 1
+                        });
+                    }
+                }
             }
 
-            if (snapshot.MatchCount == 0)
+            if (snapshot.LabelMatchCount == 0)
             {
                 snapshot.ReadFailure = "no-match";
                 return snapshot;
             }
-            if (snapshot.MatchCount != 1)
+            if (snapshot.LabelMatchCount != 1)
             {
                 snapshot.ReadFailure = "duplicate-match";
+                return snapshot;
+            }
+            if (snapshot.MatchCount != 1)
+            {
+                snapshot.ReadFailure = "role-mismatch";
                 return snapshot;
             }
             snapshot.ReadFailure = "none";
@@ -2107,6 +2631,11 @@ public static class ProcmonNativeMenu
         catch (COMException)
         {
             snapshot.ReadFailure = "child-read-failed";
+            return snapshot;
+        }
+        catch (ArgumentException)
+        {
+            snapshot.ReadFailure = "object-invalid";
             return snapshot;
         }
     }
@@ -2136,12 +2665,21 @@ public static class ProcmonNativeMenu
 
         var interfaceId = new Guid("618736E0-3C3D-11CF-810C-00AA00389B71");
         Accessibility.IAccessible accessibleObject;
-        var result = AccessibleObjectFromWindow(
-            menuWindow,
-            unchecked((uint)AccessibleMenuObjectId),
-            ref interfaceId,
-            out accessibleObject
-        );
+        int result;
+        try
+        {
+            result = AccessibleObjectFromWindow(
+                menuWindow,
+                unchecked((uint)AccessibleMenuObjectId),
+                ref interfaceId,
+                out accessibleObject
+            );
+        }
+        catch (ArgumentException)
+        {
+            snapshot.ReadFailure = "object-invalid";
+            return snapshot;
+        }
         if (result != 0 || accessibleObject == null)
         {
             snapshot.ReadFailure = "object-unavailable";
@@ -2200,6 +2738,189 @@ public static class ProcmonNativeMenu
         {
             snapshot.ReadFailure = "child-read-failed";
             return snapshot;
+        }
+        catch (ArgumentException)
+        {
+            snapshot.ReadFailure = "object-invalid";
+            return snapshot;
+        }
+    }
+
+    public static AccessibleToolbarCommandSnapshot ReadAccessibleFilterToolbarCommand(
+        IntPtr toolbarWindow,
+        uint expectedProcessId
+    )
+    {
+        var snapshot = new AccessibleToolbarCommandSnapshot
+        {
+            ReadFailure = "window-unavailable"
+        };
+        uint toolbarProcessId;
+        if (
+            toolbarWindow == IntPtr.Zero ||
+            expectedProcessId == 0 ||
+            GetWindowThreadProcessId(toolbarWindow, out toolbarProcessId) == 0 ||
+            toolbarProcessId != expectedProcessId ||
+            !IsWindowVisible(toolbarWindow) ||
+            !IsWindowEnabled(toolbarWindow)
+        )
+        {
+            snapshot.ReadFailure = "owner-mismatch";
+            return snapshot;
+        }
+        var className = new System.Text.StringBuilder(64);
+        if (
+            GetClassName(toolbarWindow, className, className.Capacity) == 0 ||
+            className.ToString() != "ToolbarWindow32"
+        )
+        {
+            snapshot.ReadFailure = "class-mismatch";
+            return snapshot;
+        }
+
+        var interfaceId = new Guid("618736E0-3C3D-11CF-810C-00AA00389B71");
+        Accessibility.IAccessible accessibleObject;
+        int result;
+        try
+        {
+            result = AccessibleObjectFromWindow(
+                toolbarWindow,
+                unchecked((uint)AccessibleClientObjectId),
+                ref interfaceId,
+                out accessibleObject
+            );
+        }
+        catch (ArgumentException)
+        {
+            snapshot.ReadFailure = "object-invalid";
+            return snapshot;
+        }
+        if (result != 0 || accessibleObject == null)
+        {
+            snapshot.ReadFailure = "object-unavailable";
+            return snapshot;
+        }
+        snapshot.Accessible = accessibleObject;
+
+        try
+        {
+            var childCount = accessibleObject.accChildCount;
+            if (childCount < 0 || childCount > MaximumAccessibleMenuItems)
+            {
+                snapshot.ReadFailure = childCount < 0 ? "count-invalid" : "count-limit";
+                return snapshot;
+            }
+            snapshot.ItemCount = childCount;
+            for (var childId = 1; childId <= childCount; childId++)
+            {
+                var child = (object)childId;
+                var name = accessibleObject.get_accName(child) ?? string.Empty;
+                var normalizedName = name.Replace("&", "");
+                var acceleratorIndex = normalizedName.IndexOf('\t');
+                if (acceleratorIndex >= 0)
+                {
+                    normalizedName = normalizedName.Substring(0, acceleratorIndex);
+                }
+                if (!string.Equals(normalizedName.Trim(), "Filter", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+                snapshot.LabelMatchCount++;
+                int role;
+                if (
+                    !TryGetInteger(accessibleObject.get_accRole(child), out role) ||
+                    role != 0x2B
+                )
+                {
+                    continue;
+                }
+                snapshot.MatchCount++;
+                int state;
+                if (!TryGetInteger(accessibleObject.get_accState(child), out state))
+                {
+                    snapshot.ReadFailure = "state-invalid";
+                    return snapshot;
+                }
+                var defaultAction = accessibleObject.get_accDefaultAction(child);
+                snapshot.IsEnabled = (state & UnavailableState) == 0;
+                snapshot.HasDefaultAction =
+                    !string.IsNullOrWhiteSpace(defaultAction) &&
+                    defaultAction.Length <= 64;
+                snapshot.Child = child;
+            }
+            if (snapshot.LabelMatchCount == 0)
+            {
+                snapshot.ReadFailure = "no-match";
+                return snapshot;
+            }
+            if (snapshot.LabelMatchCount != 1 || snapshot.MatchCount != 1)
+            {
+                snapshot.ReadFailure = "ambiguous-match";
+                return snapshot;
+            }
+            snapshot.ReadFailure = "none";
+            return snapshot;
+        }
+        catch (COMException)
+        {
+            snapshot.ReadFailure = "child-read-failed";
+            return snapshot;
+        }
+        catch (ArgumentException)
+        {
+            snapshot.ReadFailure = "object-invalid";
+            return snapshot;
+        }
+    }
+
+    public static void InvokeAccessibleFilterToolbarCommand(
+        IntPtr toolbarWindow,
+        IntPtr expectedForegroundWindow,
+        uint expectedProcessId
+    )
+    {
+        uint foregroundProcessId;
+        if (
+            expectedForegroundWindow == IntPtr.Zero ||
+            GetForegroundWindow() != expectedForegroundWindow ||
+            GetWindowThreadProcessId(expectedForegroundWindow, out foregroundProcessId) == 0 ||
+            foregroundProcessId != expectedProcessId
+        )
+        {
+            throw new InvalidOperationException("Toolbar command foreground ownership is unavailable");
+        }
+        var snapshot = ReadAccessibleFilterToolbarCommand(toolbarWindow, expectedProcessId);
+        try
+        {
+            if (
+                snapshot.ReadFailure != "none" ||
+                snapshot.LabelMatchCount != 1 ||
+                snapshot.MatchCount != 1 ||
+                !snapshot.IsEnabled ||
+                !snapshot.HasDefaultAction ||
+                snapshot.Accessible == null ||
+                snapshot.Child == null
+            )
+            {
+                throw new InvalidOperationException("Accessible Filter toolbar command is not uniquely enabled");
+            }
+            uint toolbarProcessId;
+            if (
+                GetForegroundWindow() != expectedForegroundWindow ||
+                GetWindowThreadProcessId(toolbarWindow, out toolbarProcessId) == 0 ||
+                toolbarProcessId != expectedProcessId ||
+                !IsWindowVisible(toolbarWindow) ||
+                !IsWindowEnabled(toolbarWindow)
+            )
+            {
+                throw new InvalidOperationException("Filter toolbar command ownership changed before invocation");
+            }
+            snapshot.Accessible.accDoDefaultAction(snapshot.Child);
+        }
+        finally
+        {
+            if (snapshot.Accessible != null && Marshal.IsComObject(snapshot.Accessible))
+                Marshal.ReleaseComObject(snapshot.Accessible);
         }
     }
 
@@ -2290,9 +3011,8 @@ public static class ProcmonNativeMenu
         ref MenuItemInfo info
     );
 
-    public static ItemSnapshot ReadItem(IntPtr hMenu, uint position, out bool ownerDrawn)
+    public static ItemSnapshot ReadItemMetadata(IntPtr hMenu, uint position)
     {
-        ownerDrawn = false;
         var info = new MenuItemInfo
         {
             cbSize = (uint)Marshal.SizeOf(typeof(MenuItemInfo)),
@@ -2302,13 +3022,30 @@ public static class ProcmonNativeMenu
         {
             return null;
         }
-        var itemState = info.fState;
-        ownerDrawn = (info.fType & MFT_OWNERDRAW) != 0;
-        if (ownerDrawn)
+        return new ItemSnapshot
+        {
+            Text = string.Empty,
+            IsOwnerDrawn = (info.fType & MFT_OWNERDRAW) != 0,
+            IsChecked = (info.fState & MFS_CHECKED) != 0,
+            IsHighlighted = (info.fState & MFS_HILITE) != 0,
+            IsEnabled = (info.fState & MFS_DISABLED) == 0,
+            Submenu = info.hSubMenu
+        };
+    }
+
+    public static ItemSnapshot ReadItem(IntPtr hMenu, uint position, out bool ownerDrawn)
+    {
+        var metadata = ReadItemMetadata(hMenu, position);
+        ownerDrawn = metadata != null && metadata.IsOwnerDrawn;
+        if (metadata == null || ownerDrawn)
         {
             return null;
         }
-        info.fMask = MIIM_STRING;
+        var info = new MenuItemInfo
+        {
+            cbSize = (uint)Marshal.SizeOf(typeof(MenuItemInfo)),
+            fMask = MIIM_STRING
+        };
         info.dwTypeData = IntPtr.Zero;
         info.cch = 0;
         if (!GetMenuItemInfo(hMenu, position, true, ref info) ||
@@ -2330,10 +3067,11 @@ public static class ProcmonNativeMenu
             return new ItemSnapshot
             {
                 Text = Marshal.PtrToStringUni(buffer, (int)info.cch) ?? string.Empty,
-                IsChecked = (itemState & MFS_CHECKED) != 0,
-                IsHighlighted = (itemState & MFS_HILITE) != 0,
-                IsEnabled = (itemState & MFS_DISABLED) == 0,
-                Submenu = info.hSubMenu
+                IsOwnerDrawn = false,
+                IsChecked = metadata.IsChecked,
+                IsHighlighted = metadata.IsHighlighted,
+                IsEnabled = metadata.IsEnabled,
+                Submenu = metadata.Submenu
             };
         }
         finally
@@ -3692,6 +4430,153 @@ function Set-VerifiedProcmonMainWindowForeground(
   }
 }
 
+function Resolve-ProcmonMissingSnapshotDialog(
+  [System.Diagnostics.Process]$Process,
+  [System.IntPtr]$MainWindowHandle
+) {
+  [IntPtr[]]$handles = [ProcmonNativeMenu]::GetProcessTopLevelWindows(
+    $Process.Id,
+    257
+  )
+  if ($handles.Length -gt 256) {
+    throw "Process Monitor startup dialog scan exceeded its bound"
+  }
+  $candidates = [System.Collections.Generic.List[object]]::new()
+  foreach ($handle in $handles) {
+    if (
+      $handle -eq $MainWindowHandle -or
+      -not [ProcmonNativeMenu]::IsWindowVisible($handle) -or
+      [ProcmonNativeMenu]::GetWindowProcessId($handle) -ne $Process.Id
+    ) {
+      continue
+    }
+    $summary = [ProcmonNativeMenu]::ReadNativeChildSummary(
+      $handle,
+      $Process.Id,
+      256
+    )
+    if (
+      $summary.State -ne "ready" -or
+      $summary.Truncated -or
+      $summary.Windows -gt 256
+    ) {
+      continue
+    }
+    $matchingTexts = [System.Collections.Generic.List[string]]::new()
+    foreach ($child in $summary.ChildWindows) {
+      if (
+        $child.Kind -ne "static" -or
+        -not [ProcmonNativeMenu]::IsWindowVisible($child.Handle) -or
+        -not [ProcmonNativeMenu]::IsWindowEnabled($child.Handle) -or
+        [ProcmonNativeMenu]::GetWindowProcessId($child.Handle) -ne $Process.Id
+      ) {
+        continue
+      }
+      $text = [ProcmonNativeMenu]::ReadNativeControlText(
+        $child.Handle,
+        $Process.Id,
+        "static",
+        256
+      )
+      $snapshotMatch = [regex]::Match(
+        $text,
+        "(?is)^\s*An error occurred opening the snapshot\s+'([^']{1,512})'\s*$"
+      )
+      if (-not $snapshotMatch.Success) {
+        continue
+      }
+      $snapshotPath = [IO.Path]::GetFullPath($snapshotMatch.Groups[1].Value)
+      $profileRoot = [IO.Path]::GetFullPath(
+        [Environment]::GetFolderPath("UserProfile")
+      ).TrimEnd([IO.Path]::DirectorySeparatorChar) +
+        [IO.Path]::DirectorySeparatorChar
+      if (
+        -not $snapshotPath.StartsWith(
+          $profileRoot,
+          [System.StringComparison]::OrdinalIgnoreCase
+        ) -or
+        [IO.Path]::GetExtension($snapshotPath) -ine ".pml" -or
+        [IO.File]::Exists($snapshotPath)
+      ) {
+        continue
+      }
+      $matchingTexts.Add($snapshotPath)
+    }
+    if ($matchingTexts.Count -eq 1) {
+      $candidates.Add([pscustomobject]@{
+        Handle = $handle
+        Summary = $summary
+      })
+    }
+  }
+  if ($candidates.Count -eq 0) {
+    return $false
+  }
+  if ($candidates.Count -ne 1) {
+    throw "Process Monitor has ambiguous missing-snapshot dialogs"
+  }
+  $dialog = $candidates[0]
+  $okButtons = [System.Collections.Generic.List[System.IntPtr]]::new()
+  foreach ($child in $dialog.Summary.ChildWindows) {
+    if (
+      $child.Kind -ne "button" -or
+      -not [ProcmonNativeMenu]::IsWindowVisible($child.Handle) -or
+      -not [ProcmonNativeMenu]::IsWindowEnabled($child.Handle) -or
+      [ProcmonNativeMenu]::GetWindowProcessId($child.Handle) -ne $Process.Id
+    ) {
+      continue
+    }
+    $buttonText = [ProcmonNativeMenu]::ReadNativeControlText(
+      $child.Handle,
+      $Process.Id,
+      "button",
+      128
+    )
+    if ((Resolve-ProcmonNativeFixedButtonLabel $buttonText) -ceq "OK") {
+      $okButtons.Add($child.Handle)
+    }
+  }
+  if ($okButtons.Count -ne 1) {
+    throw "Process Monitor missing-snapshot dialog did not expose one enabled OK button"
+  }
+  [ProcmonNativeMenu]::SetForegroundWindow($dialog.Handle) | Out-Null
+  $foregroundDeadline = [DateTime]::UtcNow.AddSeconds(2)
+  $dialogForeground = $false
+  do {
+    $foregroundHandle = [ProcmonNativeMenu]::GetForegroundWindow()
+    if (
+      $foregroundHandle -eq $dialog.Handle -and
+      [ProcmonNativeMenu]::GetWindowProcessId($foregroundHandle) -eq $Process.Id
+    ) {
+      $dialogForeground = $true
+      break
+    }
+    Start-Sleep -Milliseconds 50
+  } while ([DateTime]::UtcNow -lt $foregroundDeadline)
+  if (-not $dialogForeground) {
+    throw "Process Monitor missing-snapshot dialog did not become the foreground window"
+  }
+  [ProcmonNativeMenu]::ClickNativeButtonExact(
+    $okButtons[0],
+    $Process.Id,
+    "OK"
+  )
+  $closeDeadline = [DateTime]::UtcNow.AddSeconds(2)
+  do {
+    if (
+      -not [ProcmonNativeMenu]::IsWindow($dialog.Handle) -or
+      -not [ProcmonNativeMenu]::IsWindowVisible($dialog.Handle)
+    ) {
+      [Console]::Out.WriteLine(
+        "PROC_MON_FILTER_STARTUP_SNAPSHOT=state:dismissed;kind:missing-profile-pml;button:unique-enabled-ok"
+      )
+      return $true
+    }
+    Start-Sleep -Milliseconds 50
+  } while ([DateTime]::UtcNow -lt $closeDeadline)
+  throw "Process Monitor missing-snapshot dialog did not close after OK"
+}
+
 function Open-FilterDialogByShortcut(
   [System.Windows.Automation.AutomationElement]$MainWindow,
   [System.Diagnostics.Process]$Process
@@ -3699,6 +4584,9 @@ function Open-FilterDialogByShortcut(
   Set-Stage "fallback-open-filter-dialog-shortcut"
   Set-VerifiedProcmonMainWindowForeground $MainWindow $Process "MAIN"
   $mainWindowHandle = [IntPtr]$MainWindow.Current.NativeWindowHandle
+  if (Resolve-ProcmonMissingSnapshotDialog $Process $mainWindowHandle) {
+    Set-VerifiedProcmonMainWindowForeground $MainWindow $Process "MAIN"
+  }
   $currentForegroundHandle = [ProcmonNativeMenu]::GetForegroundWindow()
   $shortcutForegroundGate = if (
     $currentForegroundHandle -eq $mainWindowHandle -and
@@ -3724,6 +4612,19 @@ function Open-FilterDialogByShortcut(
   if ($shortcutInput.State -ne "sent" -or $shortcutInput.Events -ne 4) {
     throw "Process Monitor filter shortcut input failed"
   }
+  if (Resolve-ProcmonMissingSnapshotDialog $Process $mainWindowHandle) {
+    Set-VerifiedProcmonMainWindowForeground $MainWindow $Process "MAIN"
+    $shortcutInput = [ProcmonNativeMenu]::SendControlLShortcut(
+      $mainWindowHandle,
+      $Process.Id
+    )
+    [Console]::Out.WriteLine(
+      "PROC_MON_FILTER_SHORTCUT_RETRY=state:$($shortcutInput.State);events:$($shortcutInput.Events)"
+    )
+    if ($shortcutInput.State -ne "sent" -or $shortcutInput.Events -ne 4) {
+      throw "Process Monitor filter shortcut retry failed"
+    }
+  }
   Write-ShortcutGuiFocusObservation "after" $Process $mainWindowHandle
   Write-FocusObservation "after-filter-dialog-shortcut" | Out-Null
   Write-FocusOwnerObservation "after-filter-dialog-shortcut" $Process $MainWindow
@@ -3744,9 +4645,25 @@ function Wait-ProcessMenu(
     [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
     [System.Windows.Automation.ControlType]::Menu
   )
+  $dropItemCondition = [System.Windows.Automation.AndCondition]::new(
+    [System.Windows.Automation.PropertyCondition]::new(
+      [System.Windows.Automation.AutomationElement]::NameProperty,
+      "Drop Filtered Events"
+    ),
+    [System.Windows.Automation.PropertyCondition]::new(
+      [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+      [System.Windows.Automation.ControlType]::MenuItem
+    )
+  )
   $ownedWindowCount = 0
   $menuCount = 0
   $visibleMenuCount = 0
+  $dropItemQueryCount = 0
+  $dropItemCount = 0
+  $dropItemMatches = 0
+  $dropItemEnabled = 0
+  $dropItemOffscreen = 0
+  $dropItemScanState = "ready"
   $menus = [System.Collections.Generic.List[System.Windows.Automation.AutomationElement]]::new()
   do {
     $rootMenus = [System.Windows.Automation.AutomationElement]::RootElement.FindAll(
@@ -3765,10 +4682,17 @@ function Wait-ProcessMenu(
     }
     $seenHandles = [System.Collections.Generic.HashSet[int]]::new()
     $seenMenuRuntimeIds = [System.Collections.Generic.HashSet[string]]::new()
+    $seenDropItemRuntimeIds = [System.Collections.Generic.HashSet[string]]::new()
     $menus.Clear()
     $ownedWindowCount = 0
     $menuCount = $rootMenus.Count
     $visibleMenuCount = 0
+    $dropItemQueryCount = 0
+    $dropItemCount = 0
+    $dropItemMatches = 0
+    $dropItemEnabled = 0
+    $dropItemOffscreen = 0
+    $dropItemScanState = "ready"
     foreach ($menu in $rootMenus) {
       $menuState = $menu.Current
       if (
@@ -3796,6 +4720,44 @@ function Wait-ProcessMenu(
         continue
       }
       $ownedWindowCount++
+      $dropItems = $window.FindAll(
+        [System.Windows.Automation.TreeScope]::Descendants,
+        $dropItemCondition
+      )
+      if (
+        $dropItems.Count -gt 64 -or
+        $dropItemQueryCount + $dropItems.Count -gt 256
+      ) {
+        throw "Process Monitor exact menu-item scan exceeded its bound"
+      }
+      $dropItemQueryCount += $dropItems.Count
+      foreach ($dropItem in $dropItems) {
+        $dropItemState = $dropItem.Current
+        if (
+          $dropItemState.ProcessId -ne $Process.Id -or
+          $dropItemState.Name -cne "Drop Filtered Events" -or
+          $dropItemState.ControlType -ne
+            [System.Windows.Automation.ControlType]::MenuItem
+        ) {
+          $dropItemScanState = "owner-or-label-mismatch"
+          continue
+        }
+        $dropItemRuntimeId = $dropItem.GetRuntimeId() -join ","
+        if ([string]::IsNullOrWhiteSpace($dropItemRuntimeId)) {
+          $dropItemScanState = "runtime-id-unavailable"
+          continue
+        }
+        if ($seenDropItemRuntimeIds.Add($dropItemRuntimeId)) {
+          $dropItemCount++
+          $dropItemMatches++
+          if ($dropItemState.IsEnabled) {
+            $dropItemEnabled++
+          }
+          if ($dropItemState.IsOffscreen) {
+            $dropItemOffscreen++
+          }
+        }
+      }
       $windowMenus = $window.FindAll(
         [System.Windows.Automation.TreeScope]::Descendants,
         $menuCondition
@@ -3833,27 +4795,274 @@ function Wait-ProcessMenu(
     Start-Sleep -Milliseconds 100
   } while ([DateTime]::UtcNow -lt $deadline)
   [Console]::Out.WriteLine(
+    "PROC_MON_FILTER_PROCESS_DROP_ITEM_SCAN=state:$dropItemScanState;windows:$([Math]::Min($ownedWindowCount, 9999));items:$([Math]::Min($dropItemCount, 9999));matches:$([Math]::Min($dropItemMatches, 9999));enabled:$([Math]::Min($dropItemEnabled, 9999));offscreen:$([Math]::Min($dropItemOffscreen, 9999))"
+  )
+  [Console]::Out.WriteLine(
     "PROC_MON_FILTER_PROCESS_MENU_SCAN=windows:$([Math]::Min($ownedWindowCount, 9999));menus:$([Math]::Min($menuCount, 9999));visible:$([Math]::Min($visibleMenuCount, 9999))"
   )
   throw "Process Monitor did not expose one visible menu in its own windows"
+}
+
+function Write-ProcmonMenuLoopUiaSummary(
+  [System.IntPtr]$WindowHandle,
+  [System.Diagnostics.Process]$Process,
+  [ValidateSet("main-after-shortcut", "focus", "capture", "menu-owner")][string]$Role
+) {
+  $available = $false
+  $failure = "unavailable"
+  $items = 0
+  $events = 0
+  $filters = 0
+  $filterCommands = 0
+  $drops = 0
+  $dropLabelMatches = 0
+  $dropMenuItems = 0
+  $dropEnabled = $false
+  if (
+    $WindowHandle -ne [System.IntPtr]::Zero -and
+    [ProcmonNativeMenu]::GetWindowProcessId($WindowHandle) -eq $Process.Id -and
+    [ProcmonNativeMenu]::IsWindowVisible($WindowHandle)
+  ) {
+    try {
+      $window = [System.Windows.Automation.AutomationElement]::FromHandle($WindowHandle)
+      if ($window.Current.ProcessId -eq $Process.Id) {
+        $menuItemCondition = [System.Windows.Automation.PropertyCondition]::new(
+          [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+          [System.Windows.Automation.ControlType]::MenuItem
+        )
+        $menuItems = $window.FindAll(
+          [System.Windows.Automation.TreeScope]::Descendants,
+          $menuItemCondition
+        )
+        if ($menuItems.Count -le 64) {
+          $available = $true
+          $failure = "none"
+          $items = $menuItems.Count
+          foreach ($menuItem in $menuItems) {
+            $itemState = $menuItem.Current
+            if ($itemState.ProcessId -ne $Process.Id) {
+              $available = $false
+              $failure = "owner-mismatch"
+              $items = 0
+              $events = 0
+              $filters = 0
+              $filterCommands = 0
+              $drops = 0
+              break
+            }
+            switch -CaseSensitive ($itemState.Name) {
+              "Event" { $events++ }
+              "Filter" { $filters++ }
+              "Filter..." { $filterCommands++ }
+              "Drop Filtered Events" { $drops++ }
+            }
+          }
+          if ($failure -eq "none") {
+            $dropLabelCondition = [System.Windows.Automation.PropertyCondition]::new(
+              [System.Windows.Automation.AutomationElement]::NameProperty,
+              "Drop Filtered Events"
+            )
+            $dropLabelItems = $window.FindAll(
+              [System.Windows.Automation.TreeScope]::Descendants,
+              $dropLabelCondition
+            )
+            if ($dropLabelItems.Count -le 64) {
+              foreach ($dropLabelItem in $dropLabelItems) {
+                $dropLabelState = $dropLabelItem.Current
+                if (
+                  $dropLabelState.ProcessId -ne $Process.Id -or
+                  $dropLabelState.Name -cne "Drop Filtered Events"
+                ) {
+                  $available = $false
+                  $failure = "owner-mismatch"
+                  $items = 0
+                  $events = 0
+                  $filters = 0
+                  $filterCommands = 0
+                  $drops = 0
+                  $dropLabelMatches = 0
+                  $dropMenuItems = 0
+                  $dropEnabled = $false
+                  break
+                }
+                $dropLabelMatches++
+                if (
+                  $dropLabelState.ControlType -eq
+                    [System.Windows.Automation.ControlType]::MenuItem
+                ) {
+                  $dropMenuItems++
+                  if ($dropLabelState.IsEnabled -and -not $dropLabelState.IsOffscreen) {
+                    $dropEnabled = $true
+                  }
+                }
+              }
+              if ($dropMenuItems -ne 1 -or $dropLabelMatches -ne 1) {
+                $dropEnabled = $false
+              }
+            } else {
+              $available = $false
+              $failure = "label-limit"
+              $items = 0
+              $events = 0
+              $filters = 0
+              $filterCommands = 0
+              $drops = 0
+            }
+          }
+        } else {
+          $failure = "item-limit"
+        }
+      } else {
+        $failure = "owner-mismatch"
+      }
+    } catch [System.Windows.Automation.ElementNotAvailableException] {
+      $available = $false
+      $failure = "element-unavailable"
+      $items = 0
+      $events = 0
+      $filters = 0
+      $filterCommands = 0
+      $drops = 0
+      $dropLabelMatches = 0
+      $dropMenuItems = 0
+      $dropEnabled = $false
+    } catch [System.Runtime.InteropServices.COMException] {
+      $available = $false
+      $failure = "com-exception"
+      $items = 0
+      $events = 0
+      $filters = 0
+      $filterCommands = 0
+      $drops = 0
+      $dropLabelMatches = 0
+      $dropMenuItems = 0
+      $dropEnabled = $false
+    }
+  } elseif (
+    $WindowHandle -ne [System.IntPtr]::Zero -and
+    [ProcmonNativeMenu]::GetWindowProcessId($WindowHandle) -ne $Process.Id
+  ) {
+    $failure = "owner-mismatch"
+  } else {
+    $failure = "window-unavailable"
+  }
+  [Console]::Out.WriteLine(
+    "PROC_MON_FILTER_MENU_LOOP_UIA=role:$Role;available:$($available.ToString().ToLowerInvariant());failure:$failure;items:$items;event:$events;filter:$filters;filter-command:$filterCommands;drop:$drops;drop-labels:$dropLabelMatches;drop-menu-items:$dropMenuItems;drop-enabled:$($dropEnabled.ToString().ToLowerInvariant())"
+  )
+}
+
+function Get-ProcmonMenuLoopWindowClassKind(
+  [System.IntPtr]$WindowHandle,
+  [System.Diagnostics.Process]$Process,
+  [System.IntPtr]$MainWindowHandle,
+  [ValidateSet("parent", "root")][string]$Relation
+) {
+  if ($Relation -eq "parent") {
+    return [ProcmonNativeMenu]::GetParentWindowClassKind(
+      $WindowHandle, [uint32]$Process.Id, $MainWindowHandle
+    )
+  }
+  if ($Relation -eq "root") {
+    return [ProcmonNativeMenu]::GetRootWindowClassKind(
+      $WindowHandle, [uint32]$Process.Id, $MainWindowHandle
+    )
+  }
+  return [ProcmonNativeMenu]::GetWindowClassKind(
+    $WindowHandle, [uint32]$Process.Id, $MainWindowHandle
+  )
 }
 
 function Open-ProcmonFilterMenuFromMain(
   [System.Windows.Automation.AutomationElement]$MainWindow,
   [System.Diagnostics.Process]$Process
 ) {
+  Set-Stage "refresh-filter-menu-process"
+  $Process.Refresh()
+  if ($Process.HasExited) {
+    throw "Process Monitor exited before its Filter menu could be opened"
+  }
+  Set-Stage "read-filter-menu-main-handle"
+  $processMainHandle = [IntPtr]$Process.MainWindowHandle
+  Set-Stage "check-filter-menu-main-handle"
+  if ($processMainHandle -eq [IntPtr]::Zero) {
+    throw "Process Monitor process main window handle is unavailable for its Filter menu"
+  }
+  Set-Stage "read-filter-menu-main-owner"
+  $processMainWindowProcessId = [ProcmonNativeMenu]::GetWindowProcessId(
+    $processMainHandle
+  )
+  Set-Stage "verify-filter-menu-main-owner"
+  if ($processMainWindowProcessId -ne $Process.Id) {
+    throw "Process Monitor process main window belongs to a different process"
+  }
+  Set-Stage "check-filter-menu-main-visible"
+  $processMainWindowVisible = [ProcmonNativeMenu]::IsWindowVisible(
+    $processMainHandle
+  )
+  if (-not $processMainWindowVisible) {
+    throw "Process Monitor process main window is not visible for its Filter menu"
+  }
+  Set-Stage "check-filter-menu-main-enabled"
+  $processMainWindowEnabled = [ProcmonNativeMenu]::IsWindowEnabled(
+    $processMainHandle
+  )
+  if (-not $processMainWindowEnabled) {
+    Set-Stage "resolve-filter-menu-blocking-snapshot-dialog"
+    if (-not (Resolve-ProcmonMissingSnapshotDialog $Process $processMainHandle)) {
+      throw "Process Monitor main window is disabled by an unverified dialog"
+    }
+    Set-Stage "verify-filter-menu-main-enabled-after-recovery"
+    $processMainWindowEnabled = [ProcmonNativeMenu]::IsWindowEnabled(
+      $processMainHandle
+    )
+  }
+  if (-not $processMainWindowEnabled) {
+    throw "Process Monitor process main window is not enabled for its Filter menu"
+  }
+  Set-Stage "resolve-filter-menu-main-uia"
+  $MainWindow = [System.Windows.Automation.AutomationElement]::FromHandle(
+    $processMainHandle
+  )
+  if ($null -eq $MainWindow) {
+    throw "Process Monitor process main window has no UI Automation element"
+  }
+  Set-Stage "read-filter-menu-main-state"
   $mainState = $MainWindow.Current
+  Set-Stage "classify-filter-menu-main-state"
   $mainHandle = [IntPtr]$mainState.NativeWindowHandle
+  $mainProcessState = if ($mainState.ProcessId -eq $Process.Id) { "same" } else { "other" }
+  $mainHandleState = if ($mainHandle -eq [IntPtr]::Zero) { "unavailable" } else { "available" }
+  $mainNativeProcessState = if ($mainHandle -eq [IntPtr]::Zero) {
+    "unavailable"
+  } elseif ([ProcmonNativeMenu]::GetWindowProcessId($mainHandle) -eq $Process.Id) {
+    "same"
+  } else {
+    "other"
+  }
+  $mainVisible = $mainHandle -ne [IntPtr]::Zero -and
+    [ProcmonNativeMenu]::IsWindowVisible($mainHandle)
+  $mainEnabled = $mainHandle -ne [IntPtr]::Zero -and
+    [ProcmonNativeMenu]::IsWindowEnabled($mainHandle)
+  $mainControlType = if (
+    $mainState.ControlType -eq [System.Windows.Automation.ControlType]::Window
+  ) { "window" } elseif (
+    $mainState.ControlType -eq [System.Windows.Automation.ControlType]::Pane
+  ) { "pane" } else { "other" }
+  [Console]::Out.WriteLine(
+    "PROC_MON_FILTER_MENU_MAIN=process:$mainProcessState;handle:$mainHandleState;native-process:$mainNativeProcessState;visible:$($mainVisible.ToString().ToLowerInvariant());enabled:$($mainEnabled.ToString().ToLowerInvariant());control:$mainControlType"
+  )
   if (
     $Process.Id -le 0 -or
-    $mainState.ProcessId -ne $Process.Id -or
+    $mainProcessState -ne "same" -or
     $mainHandle -eq [IntPtr]::Zero -or
-    [ProcmonNativeMenu]::GetWindowProcessId($mainHandle) -ne $Process.Id -or
-    -not [ProcmonNativeMenu]::IsWindowVisible($mainHandle) -or
-    -not [ProcmonNativeMenu]::IsWindowEnabled($mainHandle)
+    $mainHandle -ne $processMainHandle -or
+    $mainNativeProcessState -ne "same" -or
+    -not $mainVisible -or
+    -not $mainEnabled
   ) {
     throw "Process Monitor main window ownership is unavailable for opening its Filter menu"
   }
+  Set-Stage "focus-filter-menu-main"
   Set-VerifiedProcmonMainWindowForeground $MainWindow $Process "MAIN"
   $filterMenuCondition = [System.Windows.Automation.AndCondition]::new(
     [System.Windows.Automation.PropertyCondition]::new(
@@ -3864,8 +5073,323 @@ function Open-ProcmonFilterMenuFromMain(
       [System.Windows.Automation.ControlType]::MenuItem
     )
   )
+  Set-Stage "find-filter-menu-item"
   $filterMenu = Wait-Element $MainWindow $filterMenuCondition 2 -AllowMissing
   if ($null -eq $filterMenu) {
+    Set-Stage "find-filter-toolbar-command"
+    $filterToolbarCondition = [System.Windows.Automation.PropertyCondition]::new(
+      [System.Windows.Automation.AutomationElement]::NameProperty,
+      "Filter"
+    )
+    $filterToolbarCandidates = $MainWindow.FindAll(
+      [System.Windows.Automation.TreeScope]::Descendants,
+      $filterToolbarCondition
+    )
+    if ($filterToolbarCandidates.Count -gt 64) {
+      throw "Process Monitor Filter toolbar command scan exceeded its bound"
+    }
+    $verifiedFilterToolbarCommands = [System.Collections.Generic.List[object]]::new()
+    foreach ($candidate in $filterToolbarCandidates) {
+      $candidateState = $candidate.Current
+      if (
+        $candidateState.ProcessId -ne $Process.Id -or
+        $candidateState.Name -cne "Filter" -or
+        $candidateState.ControlType -notin @(
+          [System.Windows.Automation.ControlType]::Button,
+          [System.Windows.Automation.ControlType]::MenuItem
+        )
+      ) {
+        continue
+      }
+      $candidateParent = [System.Windows.Automation.TreeWalker]::ControlViewWalker.GetParent(
+        $candidate
+      )
+      if (
+        $null -eq $candidateParent -or
+        $candidateParent.Current.ProcessId -ne $Process.Id -or
+        $candidateParent.Current.ControlType -ne
+          [System.Windows.Automation.ControlType]::ToolBar
+      ) {
+        continue
+      }
+      if (
+        -not $candidateState.IsEnabled -or
+        $candidateState.IsOffscreen
+      ) {
+        continue
+      }
+      $candidateInvokePattern = $null
+      if (-not $candidate.TryGetCurrentPattern(
+          [System.Windows.Automation.InvokePattern]::Pattern,
+          [ref]$candidateInvokePattern
+        )) {
+        continue
+      }
+      $verifiedFilterToolbarCommands.Add([pscustomobject]@{
+        Element = $candidate
+        InvokePattern = $candidateInvokePattern
+      })
+    }
+    [Console]::Out.WriteLine(
+      "PROC_MON_FILTER_TOOLBAR_COMMAND=items:$([Math]::Min($filterToolbarCandidates.Count, 99));matches:$($verifiedFilterToolbarCommands.Count)"
+    )
+    if ($verifiedFilterToolbarCommands.Count -gt 1) {
+      throw "Process Monitor exposed ambiguous exact Filter toolbar commands"
+    }
+    if ($verifiedFilterToolbarCommands.Count -eq 1) {
+      Set-Stage "invoke-filter-toolbar-command"
+      if ([ProcmonNativeMenu]::GetForegroundWindow() -ne $mainHandle) {
+        throw "Process Monitor main window lost foreground before the Filter toolbar command"
+      }
+      $verifiedFilterToolbarCommands[0].InvokePattern.Invoke()
+      Set-Stage "wait-filter-toolbar-popup"
+      $toolbarPopup = (Wait-ProcessMenu $Process).Menu
+      $toolbarPopupState = $toolbarPopup.Current
+      if (
+        $toolbarPopupState.ProcessId -ne $Process.Id -or
+        -not $toolbarPopupState.IsEnabled -or
+        $toolbarPopupState.IsOffscreen
+      ) {
+        throw "Process Monitor Filter toolbar popup is unavailable"
+      }
+      return $toolbarPopup
+    }
+    Set-Stage "find-native-filter-toolbar-command"
+    $nativeToolbarSnapshot = [ProcmonNativeMenu]::ReadNativeChildSummary(
+      $mainHandle,
+      $Process.Id,
+      256
+    )
+    $nativeToolbarHandles = @(
+      $nativeToolbarSnapshot.ChildWindows | Where-Object { $_.Kind -eq "toolbar" }
+    )
+    $nativeToolbarCommands = [System.Collections.Generic.List[object]]::new()
+    $nativeToolbarItemCount = 0
+    if (
+      $nativeToolbarSnapshot.State -eq "ready" -and
+      -not $nativeToolbarSnapshot.Truncated -and
+      $nativeToolbarHandles.Count -eq 1
+    ) {
+      $nativeToolbarHandle = [IntPtr]$nativeToolbarHandles[0].Handle
+      if (
+        [ProcmonNativeMenu]::GetWindowProcessId($nativeToolbarHandle) -eq $Process.Id -and
+        [ProcmonNativeMenu]::IsWindowVisible($nativeToolbarHandle) -and
+        [ProcmonNativeMenu]::IsWindowEnabled($nativeToolbarHandle)
+      ) {
+        $nativeToolbar = [System.Windows.Automation.AutomationElement]::FromHandle(
+          $nativeToolbarHandle
+        )
+        $nativeToolbarState = $nativeToolbar.Current
+        if (
+          $nativeToolbarState.ProcessId -eq $Process.Id -and
+          $nativeToolbarState.ControlType -eq
+            [System.Windows.Automation.ControlType]::ToolBar -and
+          $nativeToolbarState.IsEnabled -and
+          -not $nativeToolbarState.IsOffscreen
+        ) {
+          $nativeToolbarCandidates = $nativeToolbar.FindAll(
+            [System.Windows.Automation.TreeScope]::Descendants,
+            $filterToolbarCondition
+          )
+          $nativeToolbarItemCount = [Math]::Min($nativeToolbarCandidates.Count, 99)
+          if ($nativeToolbarCandidates.Count -gt 64) {
+            throw "Process Monitor native Filter toolbar scan exceeded its bound"
+          }
+          foreach ($candidate in $nativeToolbarCandidates) {
+            $candidateState = $candidate.Current
+            if (
+              $candidateState.ProcessId -ne $Process.Id -or
+              $candidateState.Name -cne "Filter" -or
+              $candidateState.ControlType -notin @(
+                [System.Windows.Automation.ControlType]::Button,
+                [System.Windows.Automation.ControlType]::MenuItem
+              ) -or
+              -not $candidateState.IsEnabled -or
+              $candidateState.IsOffscreen
+            ) {
+              continue
+            }
+            $candidateParent = [System.Windows.Automation.TreeWalker]::ControlViewWalker.GetParent(
+              $candidate
+            )
+            if (
+              $null -eq $candidateParent -or
+              $candidateParent.Current.ProcessId -ne $Process.Id -or
+              $candidateParent.Current.ControlType -ne
+                [System.Windows.Automation.ControlType]::ToolBar
+            ) {
+              continue
+            }
+            $candidateInvokePattern = $null
+            if (-not $candidate.TryGetCurrentPattern(
+                [System.Windows.Automation.InvokePattern]::Pattern,
+                [ref]$candidateInvokePattern
+              )) {
+              continue
+            }
+            $nativeToolbarCommands.Add([pscustomobject]@{
+              Element = $candidate
+              InvokePattern = $candidateInvokePattern
+              ToolbarHandle = $nativeToolbarHandle
+            })
+          }
+        }
+      }
+    }
+    $nativeToolbarState = if (
+      $nativeToolbarSnapshot.State -eq "ready" -and
+      -not $nativeToolbarSnapshot.Truncated
+    ) { "ready" } else { "unavailable" }
+    $nativeToolbarMetadata = $null
+    if (
+      $nativeToolbarState -eq "ready" -and
+      $nativeToolbarHandles.Count -eq 1
+    ) {
+      $nativeToolbarMetadata = [ProcmonNativeMenu]::ReadNativeFilterToolbarCommand(
+        [IntPtr]$nativeToolbarHandles[0].Handle,
+        $Process.Id
+      )
+    }
+    $nativeToolbarMetadataRead = if ($null -eq $nativeToolbarMetadata) {
+      "unavailable"
+    } elseif ($nativeToolbarMetadata.ReadFailure -in @(
+        "none",
+        "no-match",
+        "ambiguous-match",
+        "owner-mismatch",
+        "class-mismatch",
+        "count-invalid",
+        "count-limit",
+        "state-invalid",
+        "child-read-failed",
+        "unavailable"
+      )) {
+      $nativeToolbarMetadata.ReadFailure
+    } else {
+      "unavailable"
+    }
+    [Console]::Out.WriteLine(
+      "PROC_MON_FILTER_NATIVE_TOOLBAR_METADATA=toolbars:$($nativeToolbarHandles.Count);buttons:$([int]$nativeToolbarMetadata.ButtonCount);labels:$([int]$nativeToolbarMetadata.ReadableLabelCount);matches:$([int]$nativeToolbarMetadata.LabelMatchCount);enabled-matches:$([int]$nativeToolbarMetadata.MatchCount);enabled:$(([bool]$nativeToolbarMetadata.IsEnabled).ToString().ToLowerInvariant());read:$nativeToolbarMetadataRead"
+    )
+    [Console]::Out.WriteLine(
+      "PROC_MON_FILTER_NATIVE_TOOLBAR_COMMAND=state:$nativeToolbarState;toolbars:$($nativeToolbarHandles.Count);items:$nativeToolbarItemCount;matches:$($nativeToolbarCommands.Count);truncated:$($nativeToolbarSnapshot.Truncated.ToString().ToLowerInvariant())"
+    )
+    if ($nativeToolbarCommands.Count -gt 1) {
+      throw "Process Monitor exposed ambiguous native Filter toolbar commands"
+    }
+    if ($nativeToolbarCommands.Count -eq 1) {
+      Set-Stage "invoke-native-filter-toolbar-command"
+      $nativeToolbarCommand = $nativeToolbarCommands[0]
+      $nativeToolbarHandle = [IntPtr]$nativeToolbarCommand.ToolbarHandle
+      $nativeToolbarCommandState = $nativeToolbarCommand.Element.Current
+      if (
+        [ProcmonNativeMenu]::GetForegroundWindow() -ne $mainHandle -or
+        [ProcmonNativeMenu]::GetWindowProcessId($nativeToolbarHandle) -ne $Process.Id -or
+        -not [ProcmonNativeMenu]::IsWindowVisible($nativeToolbarHandle) -or
+        -not [ProcmonNativeMenu]::IsWindowEnabled($nativeToolbarHandle) -or
+        $nativeToolbarCommandState.ProcessId -ne $Process.Id -or
+        $nativeToolbarCommandState.Name -cne "Filter" -or
+        -not $nativeToolbarCommandState.IsEnabled -or
+        $nativeToolbarCommandState.IsOffscreen
+      ) {
+        throw "Process Monitor native Filter toolbar command lost its verified state"
+      }
+      $nativeToolbarCommand.InvokePattern.Invoke()
+      Set-Stage "wait-native-filter-toolbar-popup"
+      $nativeToolbarPopup = (Wait-ProcessMenu $Process).Menu
+      $nativeToolbarPopupState = $nativeToolbarPopup.Current
+      if (
+        $nativeToolbarPopupState.ProcessId -ne $Process.Id -or
+        -not $nativeToolbarPopupState.IsEnabled -or
+        $nativeToolbarPopupState.IsOffscreen
+      ) {
+        throw "Process Monitor native Filter toolbar popup is unavailable"
+      }
+      return $nativeToolbarPopup
+    }
+    Set-Stage "read-accessible-filter-toolbar-command"
+    $accessibleToolbarCommand = $null
+    if (
+      $nativeToolbarSnapshot.State -eq "ready" -and
+      -not $nativeToolbarSnapshot.Truncated -and
+      $nativeToolbarHandles.Count -eq 1
+    ) {
+      $accessibleToolbarCommand = [ProcmonNativeMenu]::ReadAccessibleFilterToolbarCommand(
+        [IntPtr]$nativeToolbarHandles[0].Handle,
+        [uint32]$Process.Id
+      )
+    }
+    $accessibleToolbarFailure = if ($null -eq $accessibleToolbarCommand) {
+      "unavailable"
+    } elseif ($accessibleToolbarCommand.ReadFailure -in @(
+        "none",
+        "no-match",
+        "ambiguous-match",
+        "owner-mismatch",
+        "class-mismatch",
+        "object-invalid",
+        "object-unavailable",
+        "count-invalid",
+        "count-limit",
+        "state-invalid",
+        "child-read-failed"
+      )) {
+      $accessibleToolbarCommand.ReadFailure
+    } else {
+      "unavailable"
+    }
+    [Console]::Out.WriteLine(
+      "PROC_MON_FILTER_ACCESSIBLE_TOOLBAR_COMMAND=toolbars:$($nativeToolbarHandles.Count);items:$([int]$accessibleToolbarCommand.ItemCount);labels:$([int]$accessibleToolbarCommand.LabelMatchCount);matches:$([int]$accessibleToolbarCommand.MatchCount);enabled:$(([bool]$accessibleToolbarCommand.IsEnabled).ToString().ToLowerInvariant());default-action:$(([bool]$accessibleToolbarCommand.HasDefaultAction).ToString().ToLowerInvariant());read:$accessibleToolbarFailure"
+    )
+    try {
+      if (
+        $null -ne $accessibleToolbarCommand -and
+        $accessibleToolbarCommand.ReadFailure -eq "none" -and
+        $accessibleToolbarCommand.LabelMatchCount -eq 1 -and
+        $accessibleToolbarCommand.MatchCount -eq 1 -and
+        $accessibleToolbarCommand.IsEnabled -and
+        $accessibleToolbarCommand.HasDefaultAction
+      ) {
+        Set-Stage "invoke-accessible-filter-toolbar-command"
+        $accessibleToolbarHandle = [IntPtr]$nativeToolbarHandles[0].Handle
+        if (
+          [ProcmonNativeMenu]::GetForegroundWindow() -ne $mainHandle -or
+          [ProcmonNativeMenu]::GetWindowProcessId($accessibleToolbarHandle) -ne $Process.Id -or
+          -not [ProcmonNativeMenu]::IsWindowVisible($accessibleToolbarHandle) -or
+          -not [ProcmonNativeMenu]::IsWindowEnabled($accessibleToolbarHandle)
+        ) {
+          throw "Process Monitor accessible Filter toolbar lost its verified owner or foreground"
+        }
+        [ProcmonNativeMenu]::InvokeAccessibleFilterToolbarCommand(
+          $accessibleToolbarHandle,
+          $mainHandle,
+          [uint32]$Process.Id
+        )
+        Set-Stage "wait-accessible-filter-toolbar-popup"
+        $accessibleToolbarPopup = (Wait-ProcessMenu $Process).Menu
+        $accessibleToolbarPopupState = $accessibleToolbarPopup.Current
+        if (
+          $accessibleToolbarPopupState.ProcessId -ne $Process.Id -or
+          -not $accessibleToolbarPopupState.IsEnabled -or
+          $accessibleToolbarPopupState.IsOffscreen
+        ) {
+          throw "Process Monitor accessible Filter toolbar popup is unavailable"
+        }
+        return $accessibleToolbarPopup
+      }
+    } finally {
+      if (
+        $null -ne $accessibleToolbarCommand -and
+        $null -ne $accessibleToolbarCommand.Accessible -and
+        [System.Runtime.InteropServices.Marshal]::IsComObject(
+          $accessibleToolbarCommand.Accessible
+        )
+      ) {
+        [System.Runtime.InteropServices.Marshal]::ReleaseComObject(
+          $accessibleToolbarCommand.Accessible
+        ) | Out-Null
+      }
+    }
     Set-Stage "fallback-open-filter-menu-with-keyboard"
     $shortcutInput = [ProcmonNativeMenu]::SendAltFShortcut(
       $mainHandle,
@@ -3876,6 +5400,171 @@ function Open-ProcmonFilterMenuFromMain(
     )
     if ($shortcutInput.State -ne "sent" -or $shortcutInput.Events -ne 4) {
       throw "Process Monitor Filter menu keyboard fallback failed"
+    }
+    $menuWindowProcessKnown = $false
+    $menuWindowSameProcess = $false
+    $guiThreadInfoAvailable = $false
+    $menuModeActive = $false
+    $menuOwnerHandle = [ProcmonNativeMenu]::GetMenuOwnerWindow(
+      $mainHandle,
+      [uint32]$Process.Id,
+      [ref]$menuWindowProcessKnown,
+      [ref]$menuWindowSameProcess,
+      [ref]$guiThreadInfoAvailable,
+      [ref]$menuModeActive
+    )
+    [Console]::Out.WriteLine(
+      "PROC_MON_FILTER_MENU_GUI_STATE=process-known:$($menuWindowProcessKnown.ToString().ToLowerInvariant());same-process:$($menuWindowSameProcess.ToString().ToLowerInvariant());gui-info:$($guiThreadInfoAvailable.ToString().ToLowerInvariant());menu-mode:$($menuModeActive.ToString().ToLowerInvariant());owner:$([int]($menuOwnerHandle -ne [IntPtr]::Zero))"
+    )
+    if ($guiThreadInfoAvailable -and $menuWindowSameProcess) {
+      $mainMenuSnapshot = Get-AccessibleDropMenuSnapshot `
+        $mainHandle $Process.Id $true "filter-menu-fallback"
+      [Console]::Out.WriteLine(
+        "PROC_MON_FILTER_MENU_GUI_ACCESSIBLE=available:$($mainMenuSnapshot.AccessibleAvailable.ToString().ToLowerInvariant());failure:$($mainMenuSnapshot.ReadFailure);items:$($mainMenuSnapshot.ItemCount);matches:$($mainMenuSnapshot.MatchCount);enabled:$($mainMenuSnapshot.IsEnabled.ToString().ToLowerInvariant());checked:$($mainMenuSnapshot.CheckState)"
+      )
+      $focusSnapshot = [ProcmonNativeMenu]::ReadFocusSnapshot($mainHandle)
+      $activeHandle = [IntPtr]$focusSnapshot.ActiveWindow
+      $focusHandle = [IntPtr]$focusSnapshot.FocusWindow
+      $captureHandle = [IntPtr]$focusSnapshot.CaptureWindow
+      $snapshotMenuOwnerHandle = [IntPtr]$focusSnapshot.MenuOwnerWindow
+      $activeOwned = $focusSnapshot.Available -and
+        $activeHandle -ne [IntPtr]::Zero -and
+        [ProcmonNativeMenu]::GetWindowProcessId($activeHandle) -eq $Process.Id
+      $focusOwned = $focusSnapshot.Available -and
+        $focusHandle -ne [IntPtr]::Zero -and
+        [ProcmonNativeMenu]::GetWindowProcessId($focusHandle) -eq $Process.Id
+      $captureOwned = $focusSnapshot.Available -and
+        $captureHandle -ne [IntPtr]::Zero -and
+        [ProcmonNativeMenu]::GetWindowProcessId($captureHandle) -eq $Process.Id
+      $snapshotMenuOwnerOwned = $focusSnapshot.Available -and
+        $snapshotMenuOwnerHandle -ne [IntPtr]::Zero -and
+        [ProcmonNativeMenu]::GetWindowProcessId($snapshotMenuOwnerHandle) -eq $Process.Id
+      $activeVisible = $activeOwned -and
+        [ProcmonNativeMenu]::IsWindowVisible($activeHandle)
+      $focusVisible = $focusOwned -and
+        [ProcmonNativeMenu]::IsWindowVisible($focusHandle)
+      $captureVisible = $captureOwned -and
+        [ProcmonNativeMenu]::IsWindowVisible($captureHandle)
+      $snapshotMenuOwnerVisible = $snapshotMenuOwnerOwned -and
+        [ProcmonNativeMenu]::IsWindowVisible($snapshotMenuOwnerHandle)
+      $activeMenuAvailable = $activeVisible -and
+        [ProcmonNativeMenu]::GetMenu($activeHandle) -ne [IntPtr]::Zero
+      $focusMenuAvailable = $focusVisible -and
+        [ProcmonNativeMenu]::GetMenu($focusHandle) -ne [IntPtr]::Zero
+      $captureMenuAvailable = $captureVisible -and
+        [ProcmonNativeMenu]::GetMenu($captureHandle) -ne [IntPtr]::Zero
+      $menuOwnerAvailable = $snapshotMenuOwnerVisible -and
+        [ProcmonNativeMenu]::GetMenu($snapshotMenuOwnerHandle) -ne [IntPtr]::Zero
+      $activeClass = Get-ProcmonMenuLoopWindowClassKind $activeHandle $Process $mainHandle
+      $focusClass = Get-ProcmonMenuLoopWindowClassKind $focusHandle $Process $mainHandle
+      $captureClass = Get-ProcmonMenuLoopWindowClassKind $captureHandle $Process $mainHandle
+      $menuOwnerClass = Get-ProcmonMenuLoopWindowClassKind $snapshotMenuOwnerHandle $Process $mainHandle
+      $activeParentClass = Get-ProcmonMenuLoopWindowClassKind $activeHandle $Process $mainHandle "parent"
+      $focusParentClass = Get-ProcmonMenuLoopWindowClassKind $focusHandle $Process $mainHandle "parent"
+      $captureParentClass = Get-ProcmonMenuLoopWindowClassKind $captureHandle $Process $mainHandle "parent"
+      $menuOwnerParentClass = Get-ProcmonMenuLoopWindowClassKind $snapshotMenuOwnerHandle $Process $mainHandle "parent"
+      $activeRootClass = Get-ProcmonMenuLoopWindowClassKind $activeHandle $Process $mainHandle "root"
+      $focusRootClass = Get-ProcmonMenuLoopWindowClassKind $focusHandle $Process $mainHandle "root"
+      $captureRootClass = Get-ProcmonMenuLoopWindowClassKind $captureHandle $Process $mainHandle "root"
+      $menuOwnerRootClass = Get-ProcmonMenuLoopWindowClassKind $snapshotMenuOwnerHandle $Process $mainHandle "root"
+      $activeStyle = [ProcmonNativeMenu]::GetWindowStyleKind($activeHandle, [uint32]$Process.Id)
+      $focusStyle = [ProcmonNativeMenu]::GetWindowStyleKind($focusHandle, [uint32]$Process.Id)
+      $captureStyle = [ProcmonNativeMenu]::GetWindowStyleKind($captureHandle, [uint32]$Process.Id)
+      $menuOwnerStyle = [ProcmonNativeMenu]::GetWindowStyleKind($snapshotMenuOwnerHandle, [uint32]$Process.Id)
+      [Console]::Out.WriteLine(
+        "PROC_MON_FILTER_MENU_LOOP_WINDOWS=available:$($focusSnapshot.Available.ToString().ToLowerInvariant());active-same:$($activeOwned.ToString().ToLowerInvariant());focus-same:$($focusOwned.ToString().ToLowerInvariant());capture-same:$($captureOwned.ToString().ToLowerInvariant());menu-owner-same:$($snapshotMenuOwnerOwned.ToString().ToLowerInvariant());active-visible:$($activeVisible.ToString().ToLowerInvariant());focus-visible:$($focusVisible.ToString().ToLowerInvariant());capture-visible:$($captureVisible.ToString().ToLowerInvariant());menu-owner-visible:$($snapshotMenuOwnerVisible.ToString().ToLowerInvariant());active-menu:$($activeMenuAvailable.ToString().ToLowerInvariant());focus-menu:$($focusMenuAvailable.ToString().ToLowerInvariant());capture-menu:$($captureMenuAvailable.ToString().ToLowerInvariant());menu-owner-menu:$($menuOwnerAvailable.ToString().ToLowerInvariant());active-class:$activeClass;active-parent:$activeParentClass;focus-class:$focusClass;focus-parent:$focusParentClass;capture-class:$captureClass;capture-parent:$captureParentClass;menu-owner-class:$menuOwnerClass;menu-owner-parent:$menuOwnerParentClass"
+      )
+      [Console]::Out.WriteLine(
+        "PROC_MON_FILTER_MENU_LOOP_ROOTS=available:$($focusSnapshot.Available.ToString().ToLowerInvariant());active:$activeRootClass;focus:$focusRootClass;capture:$captureRootClass;menu-owner:$menuOwnerRootClass"
+      )
+      [Console]::Out.WriteLine(
+        "PROC_MON_FILTER_MENU_LOOP_STYLES=available:$($focusSnapshot.Available.ToString().ToLowerInvariant());active:$activeStyle;focus:$focusStyle;capture:$captureStyle;menu-owner:$menuOwnerStyle"
+      )
+      $menuLoopHandles = [System.Collections.Generic.List[IntPtr]]::new()
+      $menuLoopHandles.Add($mainHandle)
+      if ($activeVisible -and -not $menuLoopHandles.Contains($activeHandle)) {
+        $menuLoopHandles.Add($activeHandle)
+      }
+      if ($focusVisible -and -not $menuLoopHandles.Contains($focusHandle)) {
+        $menuLoopHandles.Add($focusHandle)
+      }
+      if ($captureVisible -and -not $menuLoopHandles.Contains($captureHandle)) {
+        $menuLoopHandles.Add($captureHandle)
+      }
+      if ($snapshotMenuOwnerVisible -and
+        -not $menuLoopHandles.Contains($snapshotMenuOwnerHandle)) {
+        $menuLoopHandles.Add($snapshotMenuOwnerHandle)
+      }
+      if (
+        $menuOwnerHandle -ne [IntPtr]::Zero -and
+        [ProcmonNativeMenu]::GetWindowProcessId($menuOwnerHandle) -eq $Process.Id -and
+        [ProcmonNativeMenu]::IsWindowVisible($menuOwnerHandle) -and
+        -not $menuLoopHandles.Contains($menuOwnerHandle)
+      ) {
+        $menuLoopHandles.Add($menuOwnerHandle)
+      }
+      Write-ProcmonNativeMenuSummary `
+        -WindowHandles $menuLoopHandles.ToArray() `
+        -Process $Process `
+        -Source "active-menu-loop"
+      $accessibleHandles = [System.Collections.Generic.List[object]]::new()
+      $accessibleHandles.Add([pscustomobject]@{
+        Role = "focus"
+        Handle = $focusHandle
+      })
+      $accessibleHandles.Add([pscustomobject]@{
+        Role = "capture"
+        Handle = $captureHandle
+      })
+      $accessibleHandles.Add([pscustomobject]@{
+        Role = "menu-owner"
+        Handle = $snapshotMenuOwnerHandle
+      })
+      $accessibleHandlesSeen = [System.Collections.Generic.HashSet[IntPtr]]::new()
+      foreach ($accessibleHandle in $accessibleHandles) {
+        $accessibleWindow = [IntPtr]$accessibleHandle.Handle
+        if (
+          $accessibleWindow -eq [IntPtr]::Zero -or
+          -not [ProcmonNativeMenu]::IsWindowVisible($accessibleWindow) -or
+          [ProcmonNativeMenu]::GetWindowProcessId($accessibleWindow) -ne $Process.Id -or
+          -not $accessibleHandlesSeen.Add($accessibleWindow)
+        ) {
+          continue
+        }
+        foreach ($useWindowMenuObject in @($true, $false)) {
+          $menuObject = if ($useWindowMenuObject) { "menu" } else { "client" }
+          $focusAccessible = [ProcmonNativeMenu]::ReadAccessibleDropMenuState(
+            $accessibleWindow,
+            [uint32]$Process.Id,
+            [bool]$useWindowMenuObject
+          )
+          [Console]::Out.WriteLine(
+            "PROC_MON_FILTER_MENU_LOOP_ACCESSIBLE=role:$($accessibleHandle.Role);object:$menuObject;available:$($focusAccessible.AccessibleAvailable.ToString().ToLowerInvariant());failure:$($focusAccessible.ReadFailure);nodes:$($focusAccessible.NodesVisited);items:$($focusAccessible.ItemCount);label-matches:$($focusAccessible.LabelMatchCount);matches:$($focusAccessible.MatchCount);enabled:$($focusAccessible.IsEnabled.ToString().ToLowerInvariant());checked:$($focusAccessible.CheckState)"
+          )
+        }
+      }
+      if (
+        [ProcmonNativeMenu]::IsWindowVisible($mainHandle) -and
+        [ProcmonNativeMenu]::GetWindowProcessId($mainHandle) -eq $Process.Id
+      ) {
+        $mainClientAccessible = [ProcmonNativeMenu]::ReadAccessibleDropMenuState(
+          $mainHandle,
+          [uint32]$Process.Id,
+          $false
+        )
+        [Console]::Out.WriteLine(
+          "PROC_MON_FILTER_MENU_LOOP_ACCESSIBLE=role:main-after-shortcut;object:client;available:$($mainClientAccessible.AccessibleAvailable.ToString().ToLowerInvariant());failure:$($mainClientAccessible.ReadFailure);nodes:$($mainClientAccessible.NodesVisited);items:$($mainClientAccessible.ItemCount);label-matches:$($mainClientAccessible.LabelMatchCount);matches:$($mainClientAccessible.MatchCount);enabled:$($mainClientAccessible.IsEnabled.ToString().ToLowerInvariant());checked:$($mainClientAccessible.CheckState)"
+        )
+      }
+      Write-ProcmonMenuLoopUiaSummary $focusHandle $Process "focus"
+      if ($captureHandle -ne $focusHandle) {
+        Write-ProcmonMenuLoopUiaSummary $captureHandle $Process "capture"
+      }
+      if ($snapshotMenuOwnerHandle -ne $focusHandle -and
+        $snapshotMenuOwnerHandle -ne $captureHandle) {
+        Write-ProcmonMenuLoopUiaSummary $snapshotMenuOwnerHandle $Process "menu-owner"
+      }
+      Write-ProcmonMenuLoopUiaSummary $mainHandle $Process "main-after-shortcut"
     }
     Set-Stage "wait-filter-menu-popup"
     $menu = (Wait-ProcessMenu $Process).Menu
@@ -3890,7 +5579,21 @@ function Open-ProcmonFilterMenuFromMain(
     return $menu
   }
 
+  Set-Stage "verify-filter-menu-item"
   $filterMenuState = $filterMenu.Current
+  $filterMenuOwner = if ($filterMenuState.ProcessId -eq $Process.Id) {
+    "same"
+  } else {
+    "other"
+  }
+  $filterMenuInvokePattern = $null
+  $filterMenuHasInvoke = $filterMenu.TryGetCurrentPattern(
+    [System.Windows.Automation.InvokePattern]::Pattern,
+    [ref]$filterMenuInvokePattern
+  )
+  [Console]::Out.WriteLine(
+    "PROC_MON_FILTER_MENU_COMMAND=state:candidate;owner:$filterMenuOwner;enabled:$($filterMenuState.IsEnabled.ToString().ToLowerInvariant());offscreen:$($filterMenuState.IsOffscreen.ToString().ToLowerInvariant());invoke:$($filterMenuHasInvoke.ToString().ToLowerInvariant())"
+  )
   if (
     $filterMenuState.ProcessId -ne $Process.Id -or
     -not $filterMenuState.IsEnabled -or
@@ -3898,15 +5601,11 @@ function Open-ProcmonFilterMenuFromMain(
   ) {
     throw "Process Monitor Filter menu item is unavailable"
   }
-  $invokePattern = $null
-  if (-not $filterMenu.TryGetCurrentPattern(
-      [System.Windows.Automation.InvokePattern]::Pattern,
-      [ref]$invokePattern
-    )) {
+  if (-not $filterMenuHasInvoke) {
     throw "Process Monitor Filter menu does not expose InvokePattern"
   }
   Set-Stage "invoke-filter-menu-item"
-  $invokePattern.Invoke()
+  $filterMenuInvokePattern.Invoke()
   Set-Stage "resolve-opened-filter-menu"
   $treeWalker = [System.Windows.Automation.TreeWalker]::ControlViewWalker
   $menu = $null
@@ -4455,7 +6154,7 @@ function Get-NativeMenuItemSnapshot(
 function Write-ProcmonNativeMenuSummary(
   [System.IntPtr[]]$WindowHandles,
   [System.Diagnostics.Process]$Process,
-  [ValidateSet("main", "focused-root", "all-top-level")][string]$Source = "main"
+  [ValidateSet("main", "focused-root", "all-top-level", "active-menu-loop")][string]$Source = "main"
 ) {
   $state = "ready"
   $menus = 0
@@ -4463,7 +6162,9 @@ function Write-ProcmonNativeMenuSummary(
   $eventMatches = 0
   $filterMatches = 0
   $filterCommandMatches = 0
+  $dropMatches = 0
   $unreadableItems = 0
+  $invalidMenuHandles = 0
   if ($null -eq $WindowHandles -or $WindowHandles.Length -gt 257) {
     $state = "over-limit"
   } else {
@@ -4496,6 +6197,11 @@ function Write-ProcmonNativeMenuSummary(
           continue
         }
         $menus++
+        if (-not [ProcmonNativeMenu]::IsMenu([IntPtr]$candidate.Handle)) {
+          $invalidMenuHandles++
+          $unreadableItems++
+          continue
+        }
         $itemCount = [ProcmonNativeMenu]::GetMenuItemCount([IntPtr]$candidate.Handle)
         if ($itemCount -lt 0) {
           $unreadableItems++
@@ -4507,38 +6213,71 @@ function Write-ProcmonNativeMenuSummary(
         }
         $items += $itemCount
         for ($position = 0; $position -lt $itemCount; $position++) {
-          $ownerDrawn = $false
-          $item = [ProcmonNativeMenu]::ReadItem(
+          $metadata = [ProcmonNativeMenu]::ReadItemMetadata(
             [IntPtr]$candidate.Handle,
-            [uint32]$position,
-            [ref]$ownerDrawn
+            [uint32]$position
           )
-          if ($null -eq $item) {
+          if ($null -eq $metadata) {
             $unreadableItems++
             continue
           }
-          $itemName = $item.Text.Replace("&", "")
-          $acceleratorIndex = $itemName.IndexOf("`t")
-          if ($acceleratorIndex -ge 0) {
-            $itemName = $itemName.Substring(0, $acceleratorIndex)
-          }
-          switch ($itemName.Trim()) {
-            "Event" { $eventMatches++ }
-            "Filter" { $filterMatches++ }
-            "Filter..." { $filterCommandMatches++ }
+          if ($metadata.IsOwnerDrawn) {
+            $unreadableItems++
+          } else {
+            $ownerDrawn = $false
+            $item = [ProcmonNativeMenu]::ReadItem(
+              [IntPtr]$candidate.Handle,
+              [uint32]$position,
+              [ref]$ownerDrawn
+            )
+            if ($null -eq $item) {
+              $unreadableItems++
+            } else {
+              $itemName = $item.Text.Replace("&", "")
+              $acceleratorIndex = $itemName.IndexOf("`t")
+              if ($acceleratorIndex -ge 0) {
+                $itemName = $itemName.Substring(0, $acceleratorIndex)
+              }
+              $normalizedItemName = $itemName.Trim()
+              if ([string]::Equals(
+                  $normalizedItemName,
+                  "Event",
+                  [System.StringComparison]::Ordinal
+                )) {
+                $eventMatches++
+              } elseif ([string]::Equals(
+                  $normalizedItemName,
+                  "Filter",
+                  [System.StringComparison]::Ordinal
+                )) {
+                $filterMatches++
+              } elseif ([string]::Equals(
+                  $normalizedItemName,
+                  "Filter...",
+                  [System.StringComparison]::Ordinal
+                )) {
+                $filterCommandMatches++
+              } elseif ([string]::Equals(
+                  $normalizedItemName,
+                  "Drop Filtered Events",
+                  [System.StringComparison]::Ordinal
+                )) {
+                $dropMatches++
+              }
+            }
           }
           if (
             $candidate.Depth -lt 2 -and
-            $item.Submenu -ne [IntPtr]::Zero -and
+            $metadata.Submenu -ne [IntPtr]::Zero -and
             $queue.Count -lt 64
           ) {
             $queue.Enqueue(@{
-              Handle = $item.Submenu
+              Handle = $metadata.Submenu
               Depth = $candidate.Depth + 1
             })
           } elseif (
             $candidate.Depth -lt 2 -and
-            $item.Submenu -ne [IntPtr]::Zero
+            $metadata.Submenu -ne [IntPtr]::Zero
           ) {
             $state = "over-limit"
             break
@@ -4554,7 +6293,7 @@ function Write-ProcmonNativeMenuSummary(
     }
   }
   [Console]::Out.WriteLine(
-    "PROC_MON_FILTER_NATIVE_MENU=source:$Source;state:$state;menus:$([Math]::Min($menus, 99));items:$([Math]::Min($items, 999));event:$([Math]::Min($eventMatches, 99));filter:$([Math]::Min($filterMatches, 99));filter-command:$([Math]::Min($filterCommandMatches, 99));unreadable:$([Math]::Min($unreadableItems, 999))"
+    "PROC_MON_FILTER_NATIVE_MENU=source:$Source;state:$state;menus:$([Math]::Min($menus, 99));items:$([Math]::Min($items, 999));event:$([Math]::Min($eventMatches, 99));filter:$([Math]::Min($filterMatches, 99));filter-command:$([Math]::Min($filterCommandMatches, 99));drop:$([Math]::Min($dropMatches, 99));invalid-handles:$([Math]::Min($invalidMenuHandles, 99));unreadable:$([Math]::Min($unreadableItems, 999))"
   )
 }
 
@@ -4725,6 +6464,81 @@ function Resolve-ProcmonNativeFixedButtonLabel([string]$Label) {
   return $null
 }
 
+function Get-ProcmonStaticTextCategories([string]$Text) {
+  if ($null -eq $Text -or $Text.Length -gt 256) {
+    throw "Process Monitor static text exceeded its bound"
+  }
+  $terms = [ordered]@{
+    filter = @("filter")
+    configuration = @("configuration", "configuration file", "config file")
+    capture = @("capture", "capturing")
+    driver = @("driver")
+    "driver-load" = @("load", "loaded", "loading", "initialize", "initialization")
+    service = @("service")
+    instance = @("instance", "already running", "already open", "another instance")
+    permission = @("administrator", "elevated", "permission", "access denied", "denied")
+    error = @("error", "failed", "failure", "cannot", "unable")
+    warning = @("warning")
+    license = @("license")
+    update = @("update")
+  }
+  $categories = [System.Collections.Generic.List[string]]::new()
+  foreach ($category in $terms.Keys) {
+    foreach ($term in $terms[$category]) {
+      if ($Text.IndexOf($term, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) {
+        $categories.Add($category)
+        break
+      }
+    }
+  }
+  if (
+    $categories.Contains("filter") -and
+    $categories.Contains("configuration")
+  ) {
+    $categories.Add("filter-configuration")
+  }
+  if (
+    $categories.Contains("filter") -and
+    $categories.Contains("error")
+  ) {
+    $categories.Add("filter-error")
+  }
+  if (
+    $categories.Contains("filter") -and
+    $categories.Contains("configuration") -and
+    $categories.Contains("error")
+  ) {
+    $categories.Add("filter-configuration-error")
+  }
+  if (
+    $categories.Contains("filter") -and
+    $categories.Contains("driver")
+  ) {
+    $categories.Add("filter-driver")
+  }
+  if (
+    $categories.Contains("filter") -and
+    $categories.Contains("driver") -and
+    $categories.Contains("error")
+  ) {
+    $categories.Add("filter-driver-error")
+  }
+  if (
+    $categories.Contains("driver") -and
+    $categories.Contains("driver-load") -and
+    $categories.Contains("error")
+  ) {
+    $categories.Add("driver-load-error")
+  }
+  if (
+    $categories.Contains("instance") -and
+    $categories.Contains("error")
+  ) {
+    $categories.Add("instance-error")
+  }
+  return ,$categories.ToArray()
+}
+
 function Write-ProcmonNativeChildSummary(
   [System.IntPtr]$Root,
   [ValidateSet("main", "visible-other")][string]$Source,
@@ -4876,6 +6690,10 @@ function Write-ProcmonNativeChildSummary(
   $nativeLists = 0
   $nativeListItems = 0
   $nativeReadFailures = 0
+  $staticTextControls = 0
+  $staticTextCategories = [System.Collections.Generic.HashSet[string]]::new(
+    [System.StringComparer]::Ordinal
+  )
   foreach ($child in $summary.ChildWindows) {
     if (-not [ProcmonNativeMenu]::IsWindowVisible($child.Handle)) {
       continue
@@ -4951,6 +6769,18 @@ function Write-ProcmonNativeChildSummary(
           if ($fixedLabel -ceq "Cancel") { $cancelButtons++ }
           if ($fixedLabel -ceq "Remove") { $removeButtons++ }
         }
+        "static" {
+          $staticTextControls++
+          $staticText = [ProcmonNativeMenu]::ReadNativeControlText(
+            $child.Handle,
+            $ProcessId,
+            "static",
+            256
+          )
+          foreach ($category in (Get-ProcmonStaticTextCategories $staticText)) {
+            $staticTextCategories.Add($category) | Out-Null
+          }
+        }
         "list" {
           $nativeLists++
           $listCount = [ProcmonNativeMenu]::ReadNativeListItemCount(
@@ -4980,6 +6810,19 @@ function Write-ProcmonNativeChildSummary(
   }
   [Console]::Out.WriteLine(
     "PROC_MON_FILTER_NATIVE_CONTROLS=source:$Source;state:$nativeControlState;combos:$nativeCombos;path-options:$pathOptions;operator-options:$operatorOptions;include-options:$includeOptions;edits:$nativeEdits;readable-edits:$readableEdits;buttons:$nativeButtons;reset:$resetButtons;add:$addButtons;ok:$okButtons;cancel:$cancelButtons;remove:$removeButtons;lists:$nativeLists;list-items:$nativeListItems;read-failures:$nativeReadFailures;truncated:$($summary.Truncated.ToString().ToLowerInvariant())"
+  )
+  $categoryOrder = @(
+    "filter", "configuration", "capture", "driver", "driver-load",
+    "service", "instance", "permission", "error", "warning", "license",
+    "update", "filter-configuration", "filter-driver",
+    "driver-load-error", "instance-error", "filter-error",
+    "filter-configuration-error", "filter-driver-error"
+  )
+  $reportedCategories = @(
+    $categoryOrder | Where-Object { $staticTextCategories.Contains($_) }
+  ) -join ","
+  [Console]::Out.WriteLine(
+    "PROC_MON_FILTER_STATIC_TEXT=source:$Source;controls:$staticTextControls;categories:$reportedCategories"
   )
 }
 
@@ -5278,9 +7121,42 @@ function Invoke-ProcmonNativeFilterButton(
   if ($null -eq $controls -or -not $controls.Buttons.ContainsKey($Label)) {
     throw "Process Monitor native filter button could not be identified exactly"
   }
+  $root = [IntPtr]$controls.Root
+  if (
+    $ProcessId -le 0 -or
+    [ProcmonNativeMenu]::GetWindowProcessId($root) -ne $ProcessId -or
+    -not [ProcmonNativeMenu]::IsWindowVisible($root) -or
+    -not [ProcmonNativeMenu]::IsWindowEnabled($root)
+  ) {
+    [Console]::Out.WriteLine(
+      "PROC_MON_FILTER_NATIVE_BUTTON_FOREGROUND=label:$Label;gate:dialog-unavailable"
+    )
+    throw "Process Monitor native filter dialog is unavailable for its button action"
+  }
+  if ([ProcmonNativeMenu]::GetForegroundWindow() -ne $root) {
+    [ProcmonNativeMenu]::SetForegroundWindow($root) | Out-Null
+  }
+  $foregroundDeadline = [DateTime]::UtcNow.AddSeconds(2)
+  $foregroundGate = "failed"
+  do {
+    $foregroundHandle = [ProcmonNativeMenu]::GetForegroundWindow()
+    if (
+      $foregroundHandle -eq $root -and
+      [ProcmonNativeMenu]::GetWindowProcessId($foregroundHandle) -eq $ProcessId
+    ) {
+      $foregroundGate = "passed"
+      break
+    }
+    Start-Sleep -Milliseconds 50
+  } while ([DateTime]::UtcNow -lt $foregroundDeadline)
+  [Console]::Out.WriteLine(
+    "PROC_MON_FILTER_NATIVE_BUTTON_FOREGROUND=label:$Label;gate:$foregroundGate"
+  )
+  if ($foregroundGate -ne "passed") {
+    throw "Process Monitor native filter dialog did not become the foreground window"
+  }
   $button = $controls.Buttons[$Label]
   if (
-    [ProcmonNativeMenu]::GetForegroundWindow() -ne $controls.Root -or
     -not [ProcmonNativeMenu]::IsWindowVisible($button) -or
     -not [ProcmonNativeMenu]::IsWindowEnabled($button) -or
     [ProcmonNativeMenu]::GetWindowProcessId($button) -ne $ProcessId
@@ -5336,10 +7212,75 @@ function Set-ProcmonNativeFilterPath(
   [ProcmonNativeMenu]::SetNativeEditTextExact($edit, $ProcessId, $Path)
 }
 
+function Write-ProcmonTopLevelWindowCategories(
+  [System.Diagnostics.Process]$Process,
+  [System.IntPtr]$MainWindowHandle
+) {
+  [IntPtr[]]$handles = [ProcmonNativeMenu]::GetProcessTopLevelWindows(
+    $Process.Id,
+    257
+  )
+  if ($handles.Length -gt 256) {
+    throw "Process Monitor top-level window scan exceeded its bound"
+  }
+  $classes = @{
+    main = 0
+    dialog = 0
+    popup = 0
+    toolbar = 0
+    list = 0
+    button = 0
+    combo = 0
+    other = 0
+    unavailable = 0
+  }
+  $styles = @{
+    popup = 0
+    child = 0
+    standard = 0
+    unavailable = 0
+  }
+  $visibleCount = 0
+  $enabledCount = 0
+  foreach ($handle in $handles) {
+    if ([ProcmonNativeMenu]::GetWindowProcessId($handle) -ne $Process.Id) {
+      throw "Process Monitor top-level window ownership changed during inspection"
+    }
+    if (-not [ProcmonNativeMenu]::IsWindowVisible($handle)) {
+      continue
+    }
+    $visibleCount++
+    if ([ProcmonNativeMenu]::IsWindowEnabled($handle)) {
+      $enabledCount++
+    }
+    $classKind = [ProcmonNativeMenu]::GetWindowClassKind(
+      $handle,
+      [uint32]$Process.Id,
+      $MainWindowHandle
+    )
+    if (-not $classes.ContainsKey($classKind)) {
+      $classKind = "unavailable"
+    }
+    $classes[$classKind]++
+    $styleKind = [ProcmonNativeMenu]::GetWindowStyleKind(
+      $handle,
+      [uint32]$Process.Id
+    )
+    if (-not $styles.ContainsKey($styleKind)) {
+      $styleKind = "unavailable"
+    }
+    $styles[$styleKind]++
+  }
+  [Console]::Out.WriteLine(
+    "PROC_MON_FILTER_NATIVE_TOPLEVEL=windows:$($handles.Length);visible:$visibleCount;enabled:$enabledCount;main:$($classes.main);dialog:$($classes.dialog);popup:$($classes.popup);toolbar:$($classes.toolbar);list:$($classes.list);button:$($classes.button);other:$($classes.other);unavailable:$($classes.unavailable);style-popup:$($styles.popup);style-child:$($styles.child);style-standard:$($styles.standard);style-unavailable:$($styles.unavailable)"
+  )
+}
+
 function Find-ProcmonNativeFilterDialog(
   [System.Diagnostics.Process]$Process,
   [System.IntPtr]$MainWindowHandle
 ) {
+  Write-ProcmonTopLevelWindowCategories $Process $MainWindowHandle
   [IntPtr[]]$handles = [ProcmonNativeMenu]::GetProcessTopLevelWindows($Process.Id, 257)
   Write-ProcmonNativeMenuSummary `
     -WindowHandles $handles `
@@ -6948,7 +8889,7 @@ try {
     [Console]::Out.WriteLine("PROC_MON_FILTER_LIVE_VERIFIED=rules:exact-two;drop:on")
   }
 } catch {
-  [Console]::Out.WriteLine("PROC_MON_FILTER_FAILED_STAGE=$stage")
+  [Console]::Out.WriteLine("PROC_MON_FILTER_FAILED_STAGE=$script:stage")
   $failureException = $_.Exception
   if (
     $failureException.GetType().Name -eq "MethodInvocationException" -and

@@ -18,7 +18,31 @@ Tauri 2 + Vue 3 + TypeScript + Rust + SQLiteで、macOS / Windows / Ubuntu向け
 
 ## 開発環境
 
-VS Codeでこのフォルダを開き、Dev Containers拡張から「Reopen in Container」を選びます。コンテナでは`pnpm install --frozen-lockfile`、`pnpm run build`、`cargo test --workspace --locked`を実行できます。ローカルで開発する場合も[固定ツールチェーン](docs/adr/ADR-001-platform-toolchains.md)に従ってください。
+VS Codeでこのフォルダを開き、Dev Containers拡張から「Reopen in Container」を選べます。Dockerが利用できないWindowsホストでは、以下のネイティブ手順を使ってください。ツールチェーンは[固定ツールチェーン](docs/adr/ADR-001-platform-toolchains.md)に合わせます。
+
+### Windows（Dockerなし）
+
+1. [Node.js 24.22.0 x64](https://nodejs.org/dist/v24.22.0/node-v24.22.0-x64.msi)をインストールし、PowerShellで`npm install --global pnpm@12.14.0`を実行します。
+2. [Rustup](https://www.rust-lang.org/tools/install)をインストールし、次を実行します。
+
+   ```powershell
+   rustup toolchain install 1.99.1 --profile minimal --component clippy --component rustfmt
+   ```
+
+3. [Visual Studio C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/)で「Desktop development with C++」ワークロード（MSVC x64/x86 toolsとWindows SDK）を追加します。[WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/)も必要です。
+4. VS Codeを開き直し、PowerShellで以下を実行します。
+
+   ```powershell
+   .\scripts\setup-windows-dev.ps1
+   ```
+
+このスクリプトは固定版Node/pnpm/Rust、MSVC、WebView2を検査し、`pnpm install --frozen-lockfile`、`cargo fetch --locked`、フロントエンドbuild、Rust workspace testsを実行します。ツールやOSコンポーネントのグローバルインストールは行いません。版が違う場合や前提ツールが不足する場合は、依存を変更せず不足項目を表示して停止します。
+
+開発アプリは`pnpm run tauri dev`で起動します。
+
+### Dev Container
+
+Dockerが利用できる環境では、Dev Containers拡張から「Reopen in Container」を選びます。コンテナにはLinux向けTauri依存と固定版ツールチェーンが含まれます。
 
 1回の依頼で1つの縦切り機能を実装し、受け入れ基準・テスト・制限を確認します。Phase全体を一度に実装せず、未実行の試験を合格にしないでください。
 

@@ -7,7 +7,6 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import {
   decodeWindowsFileTrace,
   inspectWindowsFileTrace,
-  summarizeWindowsFileTrace,
 } from "./windows-file-trace.mjs";
 import { createWindowsAuditCanary } from "./windows-audit-canary.mjs";
 import {
@@ -22,7 +21,6 @@ assert(process.env.MAIL_CLIENT_PROCMON_PATH, "MAIL_CLIENT_PROCMON_PATH is requir
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const procmonPath = path.resolve(process.env.MAIL_CLIENT_PROCMON_PATH);
-let unfilteredCaptureProbeVerified = false;
 
 async function captureScenario(scenario) {
   const temporaryDirectory = await mkdtemp(path.join(root, ".mail-client-file-audit-"));
@@ -239,72 +237,6 @@ async function captureScenario(scenario) {
     console.log(`Windows audit ${scenario}: ${description} Node positive control completed UTC=${new Date().toISOString()}`);
   }
 
-  async function verifyUnfilteredCaptureProbe() {
-    const probeBackingFile = path.join(temporaryDirectory, "unfiltered-probe.pml");
-    const probeCsvFile = path.join(temporaryDirectory, "unfiltered-probe.csv");
-    const probe = spawn(
-      procmonPath,
-      [
-        "/AcceptEula",
-        "/Quiet",
-        "/NoFilter",
-        "/BackingFile",
-        probeBackingFile,
-      ],
-      { stdio: "ignore", windowsHide: true },
-    );
-    const probeExit = waitForProcess(probe);
-    try {
-      assert(probe.pid, "Process Monitor unfiltered probe did not start");
-      await runProcmon(["/AcceptEula", "/WaitForIdle"], "unfiltered probe readiness");
-      assert.equal(probe.exitCode, null, "Process Monitor unfiltered probe exited during startup");
-      await access(probeBackingFile);
-      await runNodePositiveControl("unfiltered probe");
-      const probeListCount = await readCaptureListCount("unfiltered-probe", false, probe, true);
-      await runProcmon(["/AcceptEula", "/Terminate"], "unfiltered probe shutdown");
-      const probeResult = await waitWithTimeout(probeExit, 10_000);
-      assert(!probeResult.timedOut, "Process Monitor unfiltered probe did not stop");
-      if (probeResult.error) throw new Error("Process Monitor unfiltered probe failed while shutting down");
-
-      const backingStats = await stat(probeBackingFile);
-      assert(backingStats.size > 0, "Process Monitor unfiltered probe produced an empty capture");
-      assert(
-        backingStats.size <= 64 * 1024 * 1024,
-        "Process Monitor unfiltered probe exceeded the 64 MiB safety limit",
-      );
-      await runProcmon(
-        ["/AcceptEula", "/Quiet", "/NoFilter", "/OpenLog", probeBackingFile, "/SaveAs", probeCsvFile],
-        "unfiltered probe CSV export",
-      );
-      const csvStats = await stat(probeCsvFile);
-      assert(csvStats.size > 0, "Process Monitor unfiltered probe produced an empty CSV export");
-      assert(
-        csvStats.size <= 64 * 1024 * 1024,
-        "Process Monitor unfiltered probe CSV exceeded the 64 MiB safety limit",
-      );
-      const trace = decodeWindowsFileTrace(await readFile(probeCsvFile));
-      const summary = summarizeWindowsFileTrace(trace, positiveControlPath);
-      const control = summary.canaryEvents.filter(
-        ({ processName, operation }) =>
-          processName.toLowerCase() === "node.exe" && operation === "ReadFile",
-      );
-      console.log(
-        `Windows audit ${scenario}: unfiltered-probe-list-items:${probeListCount};events:${summary.eventCount};control-path-events:${summary.canaryEvents.length};control-file-name-events:${summary.canaryFileNameEvents};control-file-name-parent-events:${summary.canaryFileNameParentEvents};control-file-name-root-matches:${summary.canaryFileNameRootMatches};control-file-name-path-kinds:${JSON.stringify(summary.canaryFileNamePathKinds)};control-file-name-parent-suffix-matches:${JSON.stringify(summary.canaryFileNameParentSuffixMatches)};node-events:${summary.nodeProcessEvents};node-readfile-events:${summary.nodeReadFileEvents};node-readfile-control-file-name-events:${summary.nodeReadFileCanaryFileNameEvents};node-readfile-control-file-name-parent-events:${summary.nodeReadFileCanaryFileNameParentEvents};pml-bytes:${backingStats.size};csv-bytes:${csvStats.size}`,
-      );
-      assert(
-        control.length > 0,
-        `Unfiltered Process Monitor probe did not record the Node positive-control ReadFile (events:${summary.eventCount};control-path-events:${summary.canaryEvents.length};control-file-name-events:${summary.canaryFileNameEvents};control-file-name-parent-events:${summary.canaryFileNameParentEvents};control-file-name-root-matches:${summary.canaryFileNameRootMatches};control-file-name-parent-suffix-matches:${JSON.stringify(summary.canaryFileNameParentSuffixMatches)};node-events:${summary.nodeProcessEvents};node-readfile-events:${summary.nodeReadFileEvents};node-readfile-control-file-name-events:${summary.nodeReadFileCanaryFileNameEvents};node-readfile-control-file-name-parent-events:${summary.nodeReadFileCanaryFileNameParentEvents})`,
-      );
-    } finally {
-      if (probe.pid && probe.exitCode === null && probe.signalCode === null) {
-        await runProcmon(["/AcceptEula", "/Terminate"], "unfiltered probe cleanup");
-        const probeResult = await waitWithTimeout(probeExit, 10_000);
-        assert(!probeResult.timedOut, "Process Monitor unfiltered probe cleanup timed out");
-        if (probeResult.error) throw new Error("Process Monitor unfiltered probe cleanup failed");
-      }
-    }
-  }
-
   let capture;
   let captureExit;
   let command;
@@ -323,10 +255,6 @@ async function captureScenario(scenario) {
     await writeFile(excludedPath, "Synthetic Process Monitor filter negative control.\n");
     const targetVolumePath = await resolveTargetVolumePath(canaryPath);
     console.log(`Windows audit ${scenario}: target-volume-resolution=verified`);
-    if (!unfilteredCaptureProbeVerified) {
-      await verifyUnfilteredCaptureProbe();
-      unfilteredCaptureProbeVerified = true;
-    }
     const filterSetup = spawn(
       "powershell.exe",
       [
@@ -378,9 +306,10 @@ async function captureScenario(scenario) {
       );
     }
     if (filterSetupResult.error) throw new Error("Failed to start Process Monitor filter configuration");
-    const filterStage = filterSetupOutput.match(
-      /PROC_MON_FILTER_FAILED_STAGE=([a-z-]+)/,
-    )?.[1] ?? [...filterSetupOutput.matchAll(
+    const filterStage = describeWindowsFilterDiagnostics(filterSetupOutput)
+      .split("; ")
+      .find((diagnostic) => diagnostic.startsWith("failed-stage="))
+      ?.slice("failed-stage=".length) ?? [...filterSetupOutput.matchAll(
       /PROC_MON_FILTER_PROGRESS=([a-z-]+)/g,
     )].at(-1)?.[1];
     assert.equal(

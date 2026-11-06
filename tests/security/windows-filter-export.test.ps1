@@ -672,6 +672,75 @@ public static class SyntheticListCount
     public static extern bool DestroyWindow(IntPtr window);
     [DllImport("user32.dll", EntryPoint = "SendMessageW", ExactSpelling = true)]
     public static extern IntPtr SetCount(IntPtr window, uint message, IntPtr count, IntPtr flags);
+    [StructLayout(LayoutKind.Sequential)]
+    private struct InitCommonControls
+    {
+        public uint Size;
+        public uint Classes;
+    }
+    [StructLayout(LayoutKind.Sequential)]
+    private struct ToolbarButton
+    {
+        public int Bitmap;
+        public int Command;
+        public byte State;
+        public byte Style;
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 6)]
+        public byte[] Reserved;
+        public IntPtr Data;
+        public IntPtr Text;
+    }
+    [DllImport("comctl32.dll", EntryPoint = "InitCommonControlsEx", ExactSpelling = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool InitializeCommonControls(ref InitCommonControls controls);
+    public static IntPtr CreateToolbar(IntPtr parent)
+    {
+        var controls = new InitCommonControls
+        {
+            Size = (uint)Marshal.SizeOf(typeof(InitCommonControls)),
+            Classes = 0x00000004
+        };
+        if (!InitializeCommonControls(ref controls))
+            throw new InvalidOperationException("Synthetic toolbar common controls failed");
+        var toolbar = Create(
+            0, "ToolbarWindow32", "", 0x50000001, 8, 8, 240, 32,
+            parent, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero
+        );
+        if (toolbar == IntPtr.Zero)
+            throw new InvalidOperationException("Synthetic native toolbar creation failed");
+        var size = Marshal.SizeOf(typeof(ToolbarButton));
+        SendRaw(toolbar, 0x041E, new IntPtr(size), IntPtr.Zero);
+        return toolbar;
+    }
+    public static void AddToolbarButton(IntPtr toolbar, int command, string value, bool enabled)
+    {
+        var text = Marshal.StringToHGlobalUni(value + "\0");
+        var memory = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(ToolbarButton)));
+        try
+        {
+            var stringIndex = SendRaw(toolbar, 0x044D, IntPtr.Zero, text).ToInt32();
+            if (stringIndex < 0)
+                throw new InvalidOperationException("Synthetic toolbar label could not be added");
+            var button = new ToolbarButton
+            {
+                Bitmap = 0,
+                Command = command,
+                State = (byte)(enabled ? 0x04 : 0),
+                Style = 0x40,
+                Reserved = new byte[6],
+                Data = IntPtr.Zero,
+                Text = new IntPtr(stringIndex)
+            };
+            Marshal.StructureToPtr(button, memory, false);
+            if (SendRaw(toolbar, 0x0414, new IntPtr(1), memory).ToInt32() == 0)
+                throw new InvalidOperationException("Synthetic toolbar button could not be added");
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(memory);
+            Marshal.FreeHGlobal(text);
+        }
+    }
     [DllImport("user32.dll", EntryPoint = "SendMessageW", CharSet = CharSet.Unicode, ExactSpelling = true)]
     private static extern IntPtr SendText(
         IntPtr window, uint message, IntPtr wParam,
@@ -842,8 +911,93 @@ if ($null -eq $nativeMenuLiteral) {
 }
 Add-Type -AssemblyName Accessibility
 Add-Type -AssemblyName System.Windows.Forms
+Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+public static class SyntheticOwnerDrawMenu
+{
+    [DllImport("user32.dll", EntryPoint = "CreatePopupMenu", ExactSpelling = true, SetLastError = true)]
+    public static extern IntPtr CreatePopupMenu();
+    [DllImport("user32.dll", EntryPoint = "AppendMenuW", CharSet = CharSet.Unicode, ExactSpelling = true, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool AppendMenu(IntPtr menu, uint flags, IntPtr item, IntPtr data);
+    [DllImport("user32.dll", EntryPoint = "DestroyMenu", ExactSpelling = true, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool DestroyMenu(IntPtr menu);
+}
+'@
 Add-Type -TypeDefinition $nativeMenuLiteral.Value `
   -ReferencedAssemblies ([Accessibility.IAccessible].Assembly.Location)
+$classProbeForm = [System.Windows.Forms.Form]::new()
+try {
+  $classProbeChild = [System.Windows.Forms.TextBox]::new()
+  $classProbeForm.Controls.Add($classProbeChild)
+  $classProbeRoot = $classProbeForm.Handle
+  $classProbeChildHandle = $classProbeChild.Handle
+  if (
+    [ProcmonNativeMenu]::GetWindowClassKind($classProbeRoot, [uint32]$PID, $classProbeRoot) -cne "main" -or
+    [ProcmonNativeMenu]::GetParentWindowClassKind($classProbeRoot, [uint32]$PID, $classProbeRoot) -cne "none" -or
+    [ProcmonNativeMenu]::GetWindowClassKind($classProbeChildHandle, [uint32]$PID, $classProbeRoot) -cne "other" -or
+    [ProcmonNativeMenu]::GetRootWindowClassKind($classProbeChildHandle, [uint32]$PID, $classProbeRoot) -cne "main" -or
+    [ProcmonNativeMenu]::GetWindowStyleKind($classProbeChildHandle, [uint32]$PID) -cne "child" -or
+    [ProcmonNativeMenu]::GetWindowStyleKind($classProbeChildHandle, [uint32]0) -cne "unavailable" -or
+    [ProcmonNativeMenu]::GetWindowClassKind($classProbeRoot, [uint32]0, $classProbeRoot) -cne "other-process"
+  ) {
+    throw "Native window class categories must be bounded and process-scoped"
+  }
+} finally {
+  $classProbeForm.Dispose()
+}
+$ownerDrawRootMenu = [SyntheticOwnerDrawMenu]::CreatePopupMenu()
+$ownerDrawSubmenu = [SyntheticOwnerDrawMenu]::CreatePopupMenu()
+$menuLabelPointer = [Runtime.InteropServices.Marshal]::StringToHGlobalUni("Drop Filtered Events")
+$ownerDrawAttached = $false
+try {
+  if (
+    $ownerDrawRootMenu -eq [IntPtr]::Zero -or
+    $ownerDrawSubmenu -eq [IntPtr]::Zero -or
+    -not [SyntheticOwnerDrawMenu]::AppendMenu(
+      $ownerDrawSubmenu, 0, [IntPtr]::new(1), $menuLabelPointer
+    ) -or
+    -not [SyntheticOwnerDrawMenu]::AppendMenu(
+      $ownerDrawRootMenu, 0x110, $ownerDrawSubmenu, [IntPtr]::new(123)
+    )
+  ) {
+    throw "Synthetic owner-drawn menu fixture could not be created"
+  }
+  $ownerDrawAttached = $true
+  $ownerDrawSnapshot = [ProcmonNativeMenu]::ReadItemMetadata($ownerDrawRootMenu, 0)
+  $ownerDrawFlag = $false
+  $ownerDrawTextItem = [ProcmonNativeMenu]::ReadItem(
+    $ownerDrawRootMenu, 0, [ref]$ownerDrawFlag
+  )
+  $dropOwnerDrawFlag = $false
+  $dropMenuSnapshot = [ProcmonNativeMenu]::ReadItem(
+    $ownerDrawSnapshot.Submenu, 0, [ref]$dropOwnerDrawFlag
+  )
+  if (
+    $null -eq $ownerDrawSnapshot -or
+    -not $ownerDrawSnapshot.IsOwnerDrawn -or
+    $ownerDrawSnapshot.Submenu -ne $ownerDrawSubmenu -or
+    $null -ne $ownerDrawTextItem -or
+    -not $ownerDrawFlag -or
+    $null -eq $dropMenuSnapshot -or
+    $dropOwnerDrawFlag -or
+    $dropMenuSnapshot.Text -cne "Drop Filtered Events" -or
+    -not $dropMenuSnapshot.IsEnabled
+  ) {
+    throw "Owner-drawn parent metadata did not preserve its safe submenu handle"
+  }
+  Write-Host "PASS AC-05: bounded native menu metadata traverses owner-drawn parents without reading item data"
+} finally {
+  [Runtime.InteropServices.Marshal]::FreeHGlobal($menuLabelPointer)
+  if ($ownerDrawRootMenu -ne [IntPtr]::Zero) {
+    [SyntheticOwnerDrawMenu]::DestroyMenu($ownerDrawRootMenu) | Out-Null
+  }
+  if (-not $ownerDrawAttached -and $ownerDrawSubmenu -ne [IntPtr]::Zero) {
+    [SyntheticOwnerDrawMenu]::DestroyMenu($ownerDrawSubmenu) | Out-Null
+  }
+}
 $nativeForm = [System.Windows.Forms.Form]::new()
 $nativeForm.ShowInTaskbar = $false
 $nativeForm.Opacity = 0.05
@@ -903,7 +1057,30 @@ foreach ($columnIndex in 0..3) {
 $nativeForm.Show()
 $nativeForm.Activate()
 [System.Windows.Forms.Application]::DoEvents()
+$nativeToolbarHandle = [SyntheticListCount]::CreateToolbar($nativeForm.Handle)
+[SyntheticListCount]::AddToolbarButton($nativeToolbarHandle, 301, "Filter", $true)
+[SyntheticListCount]::AddToolbarButton($nativeToolbarHandle, 302, "Other", $true)
+[System.Windows.Forms.Application]::DoEvents()
 try {
+  $toolbarSnapshot = [ProcmonNativeMenu]::ReadNativeFilterToolbarCommand(
+    $nativeToolbarHandle, [int]$PID
+  )
+  if (
+    $toolbarSnapshot.ReadFailure -cne "none" -or
+    $toolbarSnapshot.ButtonCount -ne 2 -or
+    $toolbarSnapshot.ReadableLabelCount -ne 2 -or
+    $toolbarSnapshot.LabelMatchCount -ne 1 -or
+    $toolbarSnapshot.MatchCount -ne 1 -or
+    -not $toolbarSnapshot.IsEnabled
+  ) {
+    throw "Native toolbar metadata did not identify one exact enabled Filter label"
+  }
+  $foreignToolbarSnapshot = [ProcmonNativeMenu]::ReadNativeFilterToolbarCommand(
+    $nativeToolbarHandle, 0
+  )
+  if ($foreignToolbarSnapshot.ReadFailure -cne "owner-mismatch") {
+    throw "Native toolbar metadata accepted a foreign process"
+  }
   if ([ProcmonNativeMenu]::ReadNativeComboItemCount($nativeComboHandle, [int]$PID) -ne 3) {
     throw "Native combo count did not read the synthetic options"
   }
@@ -994,9 +1171,14 @@ try {
     }
   }
 } finally {
+  if ($nativeToolbarHandle -ne [IntPtr]::Zero -and
+    -not [SyntheticListCount]::DestroyWindow($nativeToolbarHandle)) {
+    throw "Synthetic native toolbar cleanup failed"
+  }
   $nativeForm.Close()
   $nativeForm.Dispose()
 }
+Write-Host "PASS AC-05: bounded native toolbar metadata reads exact labels and rejects foreign owners"
 $menuForm = [System.Windows.Forms.Form]::new()
 $menuForm.ShowInTaskbar = $false
 $menuForm.Width = 320
@@ -1035,6 +1217,226 @@ try {
   $menuForm.Close()
   $menuForm.Dispose()
 }
+$openFilterMenuFunction = $ast.Find({
+  param($node)
+  $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+    $node.Name -eq "Open-ProcmonFilterMenuFromMain"
+}, $true)
+if (
+  $null -eq $openFilterMenuFunction -or
+  ([regex]::Matches($openFilterMenuFunction.Extent.Text, 'SendAltFShortcut')).Count -ne 1 -or
+  $openFilterMenuFunction.Extent.Text -notmatch '(?s)Set-VerifiedProcmonMainWindowForeground \$MainWindow \$Process "MAIN"[\s\S]*Set-Stage "find-filter-menu-item"[\s\S]*\$filterMenu = Wait-Element \$MainWindow \$filterMenuCondition 2 -AllowMissing[\s\S]*if \(\$null -eq \$filterMenu\) \{[\s\S]*Set-Stage "find-filter-toolbar-command"[\s\S]*NameProperty,[\s\S]*"Filter"[\s\S]*\$filterToolbarCandidates.Count -gt 64[\s\S]*candidateState.ProcessId -ne \$Process.Id[\s\S]*candidateState.Name -cne "Filter"[\s\S]*ControlType\]::Button[\s\S]*ControlType\]::MenuItem[\s\S]*candidateParent.Current.ProcessId -ne \$Process.Id[\s\S]*ControlType\]::ToolBar[\s\S]*candidateState.IsEnabled[\s\S]*candidateState.IsOffscreen[\s\S]*InvokePattern\]::Pattern[\s\S]*\$verifiedFilterToolbarCommands.Count -gt 1[\s\S]*GetForegroundWindow\(\) -ne \$mainHandle[\s\S]*InvokePattern.Invoke\(\)[\s\S]*Wait-ProcessMenu \$Process[\s\S]*\$toolbarPopupState.ProcessId -ne \$Process.Id[\s\S]*return \$toolbarPopup[\s\S]*SendAltFShortcut\(\s*\$mainHandle,\s*\$Process\.Id\s*\)[\s\S]*\$shortcutInput.State -ne "sent" -or \$shortcutInput.Events -ne 4[\s\S]*Wait-ProcessMenu \$Process[\s\S]*\$menuState.ProcessId -ne \$Process.Id[\s\S]*return \$menu[\s\S]*\}\s*\r?\n\s*Set-Stage "verify-filter-menu-item"\s+\$filterMenuState = \$filterMenu\.Current[\s\S]*TryGetCurrentPattern\([\s\S]*InvokePattern\]::Pattern'
+) {
+  throw "Filter activation must verify an exact toolbar command or use the gated keyboard fallback"
+}
+Write-Host "PASS AC-05: Filter command activation verifies a same-process exact toolbar command or gated fallback"
+$nativeToolbarPath = $openFilterMenuFunction.Extent.Text
+if (
+  $nativeToolbarPath -notmatch '(?s)ReadNativeChildSummary\(\s*\$mainHandle,\s*\$Process\.Id,\s*256\s*\)' -or
+  $nativeToolbarPath -notmatch '(?s)Kind -eq "toolbar"[\s\S]*\$nativeToolbarHandles\.Count -eq 1' -or
+  $nativeToolbarPath -notmatch '(?s)GetWindowProcessId\(\$nativeToolbarHandle\) -eq \$Process\.Id[\s\S]*AutomationElement\]::FromHandle' -or
+  $nativeToolbarPath -notmatch '(?s)nativeToolbarState\.ControlType -eq[\s\S]*ControlType\]::ToolBar' -or
+  $nativeToolbarPath -notmatch '(?s)candidateState\.Name -cne "Filter"[\s\S]*candidateState\.IsEnabled[\s\S]*candidateState\.IsOffscreen[\s\S]*ControlType\]::ToolBar' -or
+  $nativeToolbarPath -notmatch '(?s)\$nativeToolbarCommands\.Count -gt 1[\s\S]*\$nativeToolbarCommands\.Count -eq 1[\s\S]*invoke-native-filter-toolbar-command[\s\S]*GetForegroundWindow\(\) -ne \$mainHandle[\s\S]*Wait-ProcessMenu \$Process'
+) {
+  throw "Native toolbar fallback must verify bounded same-process exact Filter UIA state before invoking"
+}
+Write-Host "PASS AC-05: native ToolbarWindow32 discovery is bounded and exact-label gated"
+$nativeToolbarMetadataStart = $sourceText.IndexOf(
+  "public static NativeToolbarCommandSnapshot ReadNativeFilterToolbarCommand",
+  [StringComparison]::Ordinal
+)
+$nativeToolbarMetadataEnd = if ($nativeToolbarMetadataStart -ge 0) {
+  $sourceText.IndexOf(
+    "private static string NormalizeNativeButtonLabel",
+    $nativeToolbarMetadataStart,
+    [StringComparison]::Ordinal
+  )
+} else { -1 }
+if (
+  $nativeToolbarMetadataStart -lt 0 -or
+  $nativeToolbarMetadataEnd -le $nativeToolbarMetadataStart
+) {
+  throw "Native toolbar metadata probe is missing"
+}
+$nativeToolbarMetadataSource = $sourceText.Substring(
+  $nativeToolbarMetadataStart,
+  $nativeToolbarMetadataEnd - $nativeToolbarMetadataStart
+)
+if (
+  $nativeToolbarMetadataSource -notmatch '(?s)TB_BUTTONCOUNT[\s\S]*TB_GETBUTTON[\s\S]*TB_GETBUTTONTEXTW' -or
+  $nativeToolbarMetadataSource -notmatch '(?s)ToolbarWindow32[\s\S]*MaximumToolbarButtons[\s\S]*MaximumToolbarTextCharacters' -or
+  $nativeToolbarMetadataSource -notmatch '(?s)SendMessageTimeoutRaw[\s\S]*ReadProcessMemory[\s\S]*WriteProcessMemory' -or
+  $nativeToolbarMetadataSource -notmatch '(?s)"Filter"[\s\S]*StringComparison\.Ordinal[\s\S]*TBSTATE_ENABLED[\s\S]*TBSTATE_HIDDEN' -or
+  $nativeToolbarMetadataSource -match 'SendInput|WM_COMMAND|accDoDefaultAction'
+) {
+  throw "Native toolbar metadata must be bounded, exact-label, ownership-checked and read-only"
+}
+Write-Host "PASS AC-05: native ToolbarWindow32 metadata remains bounded, exact-label and read-only"
+$accessibleToolbarPath = $openFilterMenuFunction.Extent.Text
+if (
+  $sourceText -notmatch '(?s)public static AccessibleToolbarCommandSnapshot ReadAccessibleFilterToolbarCommand\([\s\S]*ToolbarWindow32[\s\S]*AccessibleObjectFromWindow\([\s\S]*AccessibleClientObjectId[\s\S]*MaximumAccessibleMenuItems[\s\S]*"Filter"[\s\S]*role != 0x2B[\s\S]*get_accState[\s\S]*get_accDefaultAction' -or
+  $sourceText -notmatch '(?s)public static void InvokeAccessibleFilterToolbarCommand\([\s\S]*GetForegroundWindow\(\) != expectedForegroundWindow[\s\S]*ReadAccessibleFilterToolbarCommand\([\s\S]*snapshot\.LabelMatchCount != 1[\s\S]*snapshot\.MatchCount != 1[\s\S]*!snapshot\.IsEnabled[\s\S]*!snapshot\.HasDefaultAction[\s\S]*accDoDefaultAction' -or
+  $accessibleToolbarPath -notmatch '(?s)ReadAccessibleFilterToolbarCommand\([\s\S]*LabelMatchCount -eq 1[\s\S]*MatchCount -eq 1[\s\S]*IsEnabled[\s\S]*HasDefaultAction[\s\S]*invoke-accessible-filter-toolbar-command[\s\S]*GetForegroundWindow\(\) -ne \$mainHandle[\s\S]*InvokeAccessibleFilterToolbarCommand\([\s\S]*Wait-ProcessMenu \$Process'
+) {
+  throw "MSAA toolbar activation must verify one exact enabled same-process Filter command and action"
+}
+Write-Host "PASS AC-05: MSAA toolbar command is exact-label, enabled-state, and foreground gated"
+if (
+  $sourceText -notmatch '(?s)function Set-Stage\(\[string\]\$Name\) \{\s*\$script:stage = \$Name' -or
+  $sourceText -notmatch 'PROC_MON_FILTER_FAILED_STAGE=\$script:stage'
+) {
+  throw "Failure-stage reporting must read the same script-scoped stage that progress updates write"
+}
+Write-Host "PASS AC-05: failed-stage diagnostics report the current script-scoped stage"
+$processMenuFunction = $ast.Find({
+  param($node)
+  $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+    $node.Name -eq "Wait-ProcessMenu"
+}, $true)
+if (
+  $null -eq $processMenuFunction -or
+  $processMenuFunction.Extent.Text -notmatch '(?s)NameProperty,[\s\S]*"Drop Filtered Events"[\s\S]*ControlTypeProperty,[\s\S]*ControlType\]::MenuItem[\s\S]*\$window\.FindAll\([\s\S]*TreeScope\]::Descendants[\s\S]*\$dropItems\.Count -gt 64[\s\S]*\$dropItemState\.ProcessId -ne \$Process\.Id[\s\S]*\$dropItemState\.Name -cne "Drop Filtered Events"[\s\S]*ControlType\]::MenuItem[\s\S]*\$seenDropItemRuntimeIds\.Add\(\$dropItemRuntimeId\)[\s\S]*PROC_MON_FILTER_PROCESS_DROP_ITEM_SCAN='
+) {
+  throw "Procmon direct exact-label menu-item scans must be bounded and same-process"
+}
+Write-Host "PASS AC-05: exact Drop Filtered Events UIA item scans are bounded and process-scoped"
+$nativeFilterButtonFunction = $ast.Find({
+  param($node)
+  $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+    $node.Name -eq "Invoke-ProcmonNativeFilterButton"
+}, $true)
+if (
+  $null -eq $nativeFilterButtonFunction -or
+  $nativeFilterButtonFunction.Extent.Text -notmatch '(?s)\[ProcmonNativeMenu\]::GetWindowProcessId\(\$root\) -ne \$ProcessId[\s\S]*IsWindowVisible\(\$root\)[\s\S]*IsWindowEnabled\(\$root\)[\s\S]*SetForegroundWindow\(\$root\)[\s\S]*GetForegroundWindow\(\)[\s\S]*\$foregroundHandle -eq \$root[\s\S]*GetWindowProcessId\(\$foregroundHandle\) -eq \$ProcessId[\s\S]*\$foregroundGate -ne "passed"[\s\S]*IsWindowVisible\(\$button\)[\s\S]*IsWindowEnabled\(\$button\)[\s\S]*ClickNativeButtonExact'
+) {
+  throw "Native filter buttons must require verified dialog foreground, process ownership, visibility, and enabled state"
+}
+Write-Host "PASS AC-05: native filter buttons require verified same-process dialog foreground"
+if (
+  $openFilterMenuFunction.Extent.Text -notmatch '(?s)GetMenuOwnerWindow\([\s\S]*\[ref\]\$menuModeActive[\s\S]*if \(\$guiThreadInfoAvailable -and \$menuWindowSameProcess\)[\s\S]*Get-AccessibleDropMenuSnapshot[\s\S]*\$mainHandle \$Process\.Id \$true "filter-menu-fallback"[\s\S]*ReadFocusSnapshot\(\$mainHandle\)[\s\S]*CaptureWindow[\s\S]*MenuOwnerWindow[\s\S]*\$captureVisible -and -not \$menuLoopHandles\.Contains\(\$captureHandle\)[\s\S]*\$snapshotMenuOwnerVisible[\s\S]*Write-ProcmonNativeMenuSummary[\s\S]*-Source "active-menu-loop"[\s\S]*Write-ProcmonMenuLoopUiaSummary \$focusHandle \$Process "focus"[\s\S]*Write-ProcmonMenuLoopUiaSummary \$captureHandle \$Process "capture"[\s\S]*Write-ProcmonMenuLoopUiaSummary \$snapshotMenuOwnerHandle \$Process "menu-owner"[\s\S]*Write-ProcmonMenuLoopUiaSummary \$mainHandle \$Process "main-after-shortcut"'
+) {
+  throw "Fallback diagnostics must inspect bounded fixed-label UIA/MSAA data on visible same-process windows"
+}
+$menuLoopAccessibleBlock = [regex]::Match(
+  $openFilterMenuFunction.Extent.Text,
+  '(?s)\$accessibleHandles = .*?Write-ProcmonMenuLoopUiaSummary \$focusHandle'
+)
+if (
+  -not $menuLoopAccessibleBlock.Success -or
+  $menuLoopAccessibleBlock.Value -notmatch 'Role = "focus"' -or
+  $menuLoopAccessibleBlock.Value -notmatch 'Role = "capture"' -or
+  $menuLoopAccessibleBlock.Value -notmatch 'Role = "menu-owner"' -or
+  $menuLoopAccessibleBlock.Value -notmatch 'GetWindowProcessId\(\$accessibleWindow\) -ne \$Process\.Id' -or
+  $menuLoopAccessibleBlock.Value -notmatch 'IsWindowVisible\(\$accessibleWindow\)' -or
+  $menuLoopAccessibleBlock.Value -notmatch '\$accessibleHandlesSeen\.Add\(\$accessibleWindow\)' -or
+  $menuLoopAccessibleBlock.Value -notmatch 'ReadAccessibleDropMenuState\([\s\S]*\$accessibleWindow' -or
+  $menuLoopAccessibleBlock.Value -notmatch 'object:\$menuObject' -or
+  $openFilterMenuFunction.Extent.Text -notmatch '(?s)IsWindowVisible\(\$mainHandle\)[\s\S]*GetWindowProcessId\(\$mainHandle\) -eq \$Process\.Id[\s\S]*ReadAccessibleDropMenuState\(\s*\$mainHandle,\s*\[uint32\]\$Process\.Id,\s*\$false\s*\)[\s\S]*role:main-after-shortcut;object:client'
+) {
+  throw "MSAA must inspect unique visible same-process menu-loop windows and the main client object using fixed labels"
+}
+$menuLoopUiaFunction = $ast.Find({
+  param($node)
+  $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+    $node.Name -eq "Write-ProcmonMenuLoopUiaSummary"
+}, $true)
+if (
+  $null -eq $menuLoopUiaFunction -or
+  $menuLoopUiaFunction.Extent.Text -notmatch 'GetWindowProcessId\(\$WindowHandle\) -eq \$Process\.Id' -or
+  $menuLoopUiaFunction.Extent.Text -notmatch 'IsWindowVisible\(\$WindowHandle\)' -or
+  $menuLoopUiaFunction.Extent.Text -notmatch '(?s)FromHandle\(\$WindowHandle\)[\s\S]*\$window\.Current\.ProcessId -eq \$Process\.Id[\s\S]*FindAll\([\s\S]*\$menuItems\.Count -le 64' -or
+  $menuLoopUiaFunction.Extent.Text -notmatch '(?s)NameProperty,[\s\S]*"Drop Filtered Events"[\s\S]*\$dropLabelItems\.Count -le 64[\s\S]*\$dropLabelState\.ProcessId -ne \$Process\.Id[\s\S]*\$dropLabelState\.Name -cne "Drop Filtered Events"[\s\S]*\$dropLabelState\.ControlType -eq[\s\S]*ControlType\]::MenuItem[\s\S]*\$dropLabelState\.IsEnabled' -or
+  $menuLoopUiaFunction.Extent.Text -notmatch '\$itemState\.ProcessId -ne \$Process\.Id' -or
+  $menuLoopUiaFunction.Extent.Text -notmatch '(?s)switch -CaseSensitive \(\$itemState\.Name\)[\s\S]*"Drop Filtered Events" \{ \$drops\+\+' -or
+  $menuLoopUiaFunction.Extent.Text -notmatch 'ValidateSet\("main-after-shortcut", "focus", "capture", "menu-owner"\)'
+) {
+  throw "Menu-loop UIA inspection must be bounded, same-process, and exact-label only"
+}
+$topLevelWindowCategoryFunction = $ast.Find({
+  param($node)
+  $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+    $node.Name -eq "Write-ProcmonTopLevelWindowCategories"
+}, $true)
+if (
+  $null -eq $topLevelWindowCategoryFunction -or
+  $topLevelWindowCategoryFunction.Extent.Text -notmatch '(?s)GetProcessTopLevelWindows\(\s*\$Process\.Id,\s*257\s*\)[\s\S]*\$handles\.Length -gt 256[\s\S]*GetWindowProcessId\(\$handle\) -ne \$Process\.Id[\s\S]*IsWindowVisible\(\$handle\)[\s\S]*IsWindowEnabled\(\$handle\)[\s\S]*GetWindowClassKind\([\s\S]*GetWindowStyleKind\([\s\S]*PROC_MON_FILTER_NATIVE_TOPLEVEL=' -or
+  $sourceText -notmatch '(?s)function Find-ProcmonNativeFilterDialog[\s\S]*Write-ProcmonTopLevelWindowCategories \$Process \$MainWindowHandle[\s\S]*GetProcessTopLevelWindows'
+) {
+  throw "Filter-dialog discovery must retain only bounded same-process top-level class and style categories"
+}
+$staticTextSummaryFunction = $ast.Find({
+  param($node)
+  $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+    $node.Name -eq "Write-ProcmonNativeChildSummary"
+}, $true)
+if (
+  $null -eq $staticTextSummaryFunction -or
+  $sourceText -notmatch '(?s)expectedKind == "static" && actualClassName == "Static"' -or
+  $staticTextSummaryFunction.Extent.Text -notmatch '(?s)"static"\s*\{[\s\S]*ReadNativeControlText\([\s\S]*"static"[\s\S]*256[\s\S]*Get-ProcmonStaticTextCategories[\s\S]*\}' -or
+  $staticTextSummaryFunction.Extent.Text -notmatch 'PROC_MON_FILTER_STATIC_TEXT=source:\$Source;controls:\$staticTextControls;categories:\$reportedCategories' -or
+  $staticTextSummaryFunction.Extent.Text -match 'PROC_MON_FILTER_STATIC_TEXT=.*\$staticText\b'
+) {
+  throw "Procmon dialog static text must be same-process, bounded, and reduced to fixed categories"
+}
+$missingSnapshotRecoveryFunction = $ast.Find({
+  param($node)
+  $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+    $node.Name -eq "Resolve-ProcmonMissingSnapshotDialog"
+}, $true)
+if (
+  $null -eq $missingSnapshotRecoveryFunction -or
+  $missingSnapshotRecoveryFunction.Extent.Text -notmatch '(?s)GetProcessTopLevelWindows\(\s*\$Process\.Id,\s*257\s*\)[\s\S]*ReadNativeChildSummary\([\s\S]*256[\s\S]*An error occurred opening the snapshot[\s\S]*GetFolderPath\("UserProfile"\)[\s\S]*GetExtension\(\$snapshotPath\) -ine "\.pml"[\s\S]*File\]::Exists\(\$snapshotPath\)[\s\S]*GetForegroundWindow\(\)[\s\S]*ClickNativeButtonExact[\s\S]*"OK"[\s\S]*button:unique-enabled-ok' -or
+  $missingSnapshotRecoveryFunction.Extent.Text -match 'WriteLine\([\s\S]{0,300}\$snapshotPath' -or
+  $sourceText -notmatch '(?s)function Open-FilterDialogByShortcut[\s\S]*Resolve-ProcmonMissingSnapshotDialog \$Process \$mainWindowHandle[\s\S]*SendControlLShortcut[\s\S]*Resolve-ProcmonMissingSnapshotDialog \$Process \$mainWindowHandle[\s\S]*SendControlLShortcut'
+) {
+  throw "Only a unique verified missing profile PML dialog may be dismissed before one shortcut retry"
+}
+$accessibleDropReader = [regex]::Match(
+  $sourceText,
+  '(?s)public static AccessibleMenuSnapshot ReadAccessibleDropMenuState\(.*?public static AccessibleMenuSnapshot ReadAccessibleFilterMenuSummary'
+)
+if (
+  -not $accessibleDropReader.Success -or
+  $accessibleDropReader.Value -notmatch 'Queue<AccessibleNode>' -or
+  $accessibleDropReader.Value -notmatch 'MaximumAccessibleMenuItems' -or
+  $accessibleDropReader.Value -notmatch 'node\.Accessible\.get_accChild\(child\)' -or
+  $accessibleDropReader.Value -notmatch 'node\.Depth \+ 1' -or
+  $accessibleDropReader.Value -notmatch '(?s)if \(role == MenuItemRole\)[\s\S]*snapshot\.MatchCount\+\+[\s\S]*get_accState\(child\)' -or
+  $accessibleDropReader.Value -notmatch 'snapshot\.LabelMatchCount\+\+' -or
+  $accessibleDropReader.Value -notmatch 'node\.Depth >= 3' -or
+  $accessibleDropReader.Value -notmatch '(?s)LabelMatchCount == 0[\s\S]*"no-match"[\s\S]*LabelMatchCount != 1[\s\S]*"duplicate-match"[\s\S]*MatchCount != 1[\s\S]*"role-mismatch"' -or
+  $accessibleDropReader.Value -notmatch '(?s)catch \(ArgumentException\)[\s\S]*snapshot\.ReadFailure = "object-invalid"' -or
+  $sourceText -notmatch 'nodes:\$\(\$focusAccessible\.NodesVisited\);items:\$\(\$focusAccessible\.ItemCount\);label-matches:\$\(\$focusAccessible\.LabelMatchCount\)'
+) {
+  throw "MSAA label candidates must be counted independently and state reads must require the exact menu-item role"
+}
+Write-Host "PASS AC-05: MSAA exact-label candidates remain read-only and role-gated"
+$nativeMenuSummaryFunction = $ast.Find({
+  param($node)
+  $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+    $node.Name -eq "Write-ProcmonNativeMenuSummary"
+}, $true)
+if (
+  $null -eq $nativeMenuSummaryFunction -or
+  $nativeMenuSummaryFunction.Extent.Text -notmatch 'GetWindowProcessId\(\$windowHandle\) -ne \$Process\.Id' -or
+  $nativeMenuSummaryFunction.Extent.Text -notmatch 'GetMenu\(\$windowHandle\)' -or
+  $nativeMenuSummaryFunction.Extent.Text -notmatch 'GetMenuItemCount' -or
+  $nativeMenuSummaryFunction.Extent.Text -notmatch 'IsMenu\(\[IntPtr\]\$candidate\.Handle\)' -or
+  $nativeMenuSummaryFunction.Extent.Text -notmatch 'invalidMenuHandles\+\+' -or
+  $nativeMenuSummaryFunction.Extent.Text -notmatch 'ReadItem' -or
+  $nativeMenuSummaryFunction.Extent.Text -notmatch '(?s)\[string\]::Equals\([\s\S]*"Drop Filtered Events"[\s\S]*StringComparison\]::Ordinal[\s\S]*\$dropMatches\+\+' -or
+  $nativeMenuSummaryFunction.Extent.Text -notmatch '\$candidate\.Depth -lt 2' -or
+  $nativeMenuSummaryFunction.Extent.Text -notmatch '\$items \+ \$itemCount -gt 256' -or
+  $nativeMenuSummaryFunction.Extent.Text -notmatch 'drop:\$\(\[Math\]::Min\(\$dropMatches, 99\)\)' -or
+  $nativeMenuSummaryFunction.Extent.Text -match 'SendMessage|PostMessage|SendKeys|Invoke\(|Toggle\('
+) {
+  throw "Active menu traversal must be same-process, bounded, fixed-label, and read-only"
+}
+if ($nativeMenuSummaryFunction.Extent.Text -notmatch 'invalid-handles:\$\(\[Math\]::Min\(\$invalidMenuHandles, 99\)\)') {
+  throw "Native menu diagnostics must distinguish invalid handles from unreadable items"
+}
+Write-Host "PASS AC-05: fallback menu diagnostics inspect bounded fixed-label menus on visible same-process windows only"
 if (
   $sourceText -notmatch 'GetProcessById\(\$CaptureProcessId\)' -or
   $sourceText -notmatch '\$process.Path -cne \[IO.Path\]::GetFullPath\(\$ProcmonPath\)' -or

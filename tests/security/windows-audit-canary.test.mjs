@@ -262,10 +262,45 @@ test("AC-05: Procmon main-window activation verifies its process-owned foregroun
     initialActivation,
     /Set-Stage "find-main-window"\s+\$main = Wait-MainWindow \$process\s+Set-Stage "activate-main-window"\s+Set-VerifiedProcmonMainWindowForeground \$main \$process "MAIN"/,
   );
-  assert.match(
-    configuration,
-    /function Write-ProcmonNativeMenuSummary[\s\S]*GetWindowProcessId\(\$windowHandle\) -ne \$Process\.Id[\s\S]*GetMenu\(\$windowHandle\)[\s\S]*GetMenuItemCount[\s\S]*ReadItem[\s\S]*"Event" \{ \$eventMatches\+\+ \}[\s\S]*"Filter" \{ \$filterMatches\+\+ \}[\s\S]*"Filter\.\.\." \{ \$filterCommandMatches\+\+ \}[\s\S]*PROC_MON_FILTER_NATIVE_MENU=/,
-  );
+  const nativeMenuSummary = configuration.match(
+    /function Write-ProcmonNativeMenuSummary[\s\S]*?function Write-ProcmonAccessibleMenuSummary/,
+  )?.[0];
+  assert.ok(nativeMenuSummary, "Bounded native menu summary is missing");
+  assert.match(nativeMenuSummary, /GetWindowProcessId\(\$windowHandle\) -ne \$Process\.Id/);
+  assert.match(nativeMenuSummary, /GetMenu\(\$windowHandle\)/);
+  assert.match(nativeMenuSummary, /IsMenu\(\[IntPtr\]\$candidate\.Handle\)/);
+  assert.match(nativeMenuSummary, /GetMenuItemCount/);
+  assert.match(nativeMenuSummary, /ReadItemMetadata[\s\S]*metadata\.IsOwnerDrawn/);
+  assert.match(nativeMenuSummary, /ReadItem/);
+  for (const [label, counter] of [
+    ["Event", "eventMatches"],
+    ["Filter", "filterMatches"],
+    ["Filter...", "filterCommandMatches"],
+    ["Drop Filtered Events", "dropMatches"],
+  ]) {
+    assert.ok(nativeMenuSummary.includes(`"${label}"`), `Native menu label gate is missing: ${label}`);
+    assert.ok(nativeMenuSummary.includes(`$${counter}++`), `Native menu counter is missing: ${counter}`);
+  }
+  assert.match(nativeMenuSummary, /StringComparison\]::Ordinal/);
+  assert.match(nativeMenuSummary, /metadata\.Submenu[\s\S]*queue\.Enqueue/);
+  assert.match(nativeMenuSummary, /invalid-handles:\$\(\[Math\]::Min\(\$invalidMenuHandles, 99\)\)/);
+  assert.match(nativeMenuSummary, /PROC_MON_FILTER_NATIVE_MENU=/);
+  const nativeWindowClassProbe = configuration.match(
+    /public static string GetWindowClassKind\([\s\S]*?public static string GetParentWindowClassKind\([\s\S]*?public static string GetRootWindowClassKind\([\s\S]*?public static string GetWindowStyleKind\([\s\S]*?private static extern IntPtr GetWindowLongPtr/,
+  )?.[0];
+  assert.ok(nativeWindowClassProbe, "Bounded native window class probe is missing");
+  assert.match(nativeWindowClassProbe, /!IsWindow\(window\)[\s\S]*processId != expectedProcessId/);
+  assert.match(nativeWindowClassProbe, /case "#32768":[\s\S]*return "popup"/);
+  assert.match(nativeWindowClassProbe, /GetParent\(window\)[\s\S]*GetWindowClassKind\(parent/);
+  assert.match(nativeWindowClassProbe, /GetAncestor\(window, GA_ROOT\)[\s\S]*GetWindowClassKind\(root/);
+  assert.match(nativeWindowClassProbe, /processId != expectedProcessId[\s\S]*WS_POPUP[\s\S]*WS_CHILD/);
+  assert.doesNotMatch(nativeWindowClassProbe, /return className\.ToString\(\)/);
+  const nativeItemMetadata = configuration.match(
+    /public static ItemSnapshot ReadItemMetadata\([\s\S]*?public static ItemSnapshot ReadItem\(/,
+  )?.[0];
+  assert.ok(nativeItemMetadata, "Bounded native menu metadata reader is missing");
+  assert.match(nativeItemMetadata, /MIIM_STATE \| MIIM_SUBMENU \| MIIM_FTYPE/);
+  assert.doesNotMatch(nativeItemMetadata, /MIIM_STRING|dwItemData/);
   assert.match(
     configuration,
     /ReadAccessibleFilterMenuSummary[\s\S]*AccessibleObjectFromWindow[\s\S]*MaximumAccessibleMenuItems[\s\S]*"Event"[\s\S]*"Filter"[\s\S]*"Filter\.\.\."[\s\S]*function Write-ProcmonAccessibleMenuSummary[\s\S]*ReadAccessibleFilterMenuSummary\([\s\S]*PROC_MON_FILTER_ACCESSIBLE_MENU=/,
@@ -424,7 +459,19 @@ test("AC-05: Procmon main-window activation verifies its process-owned foregroun
   assert.ok(nativeFilterMenuOpen, "Process-owned Filter-menu activation gate is missing");
   assert.match(
     nativeFilterMenuOpen,
-    /GetWindowProcessId\(\$mainHandle\) -ne \$Process\.Id[\s\S]*Set-VerifiedProcmonMainWindowForeground[\s\S]*Wait-Element \$MainWindow \$filterMenuCondition 2 -AllowMissing[\s\S]*if \(\$null -eq \$filterMenu\)[\s\S]*SendAltFShortcut[\s\S]*PROC_MON_FILTER_MENU_SHORTCUT_INPUT[\s\S]*Wait-ProcessMenu \$Process[\s\S]*\$menuState\.ProcessId -ne \$Process\.Id[\s\S]*InvokePattern/,
+    /GetWindowProcessId\(\$mainHandle\) -eq \$Process\.Id[\s\S]*mainNativeProcessState -ne "same"[\s\S]*Set-VerifiedProcmonMainWindowForeground[\s\S]*Set-Stage "find-filter-menu-item"[\s\S]*Wait-Element \$MainWindow \$filterMenuCondition 2 -AllowMissing[\s\S]*if \(\$null -eq \$filterMenu\)[\s\S]*Set-Stage "find-filter-toolbar-command"[\s\S]*candidateState\.ProcessId -ne \$Process\.Id[\s\S]*candidateState\.Name -cne "Filter"[\s\S]*ControlType\]::ToolBar[\s\S]*candidateState\.IsEnabled[\s\S]*candidateState\.IsOffscreen[\s\S]*InvokePattern\]::Pattern[\s\S]*\$verifiedFilterToolbarCommands.Count -gt 1[\s\S]*GetForegroundWindow\(\) -ne \$mainHandle[\s\S]*Wait-ProcessMenu \$Process[\s\S]*\$toolbarPopupState\.ProcessId -ne \$Process\.Id[\s\S]*SendAltFShortcut[\s\S]*PROC_MON_FILTER_MENU_SHORTCUT_INPUT[\s\S]*\$menuState\.ProcessId -ne \$Process\.Id[\s\S]*InvokePattern/,
+  );
+  assert.match(
+    nativeFilterMenuOpen,
+    /ReadNativeChildSummary\(\s*\$mainHandle,\s*\$Process\.Id,\s*256\s*\)[\s\S]*Kind -eq "toolbar"[\s\S]*nativeToolbarHandles\.Count -eq 1[\s\S]*GetWindowProcessId\(\$nativeToolbarHandle\) -eq \$Process\.Id[\s\S]*AutomationElement\]::FromHandle\([\s\S]*nativeToolbarState\.ControlType -eq[\s\S]*ControlType\]::ToolBar[\s\S]*candidateState\.Name -cne "Filter"[\s\S]*candidateState\.IsEnabled[\s\S]*candidateState\.IsOffscreen[\s\S]*candidateParent\.Current\.ControlType -ne[\s\S]*ControlType\]::ToolBar[\s\S]*InvokePattern\]::Pattern[\s\S]*nativeToolbarCommands\.Count -gt 1[\s\S]*nativeToolbarCommands\.Count -eq 1[\s\S]*invoke-native-filter-toolbar-command[\s\S]*GetForegroundWindow\(\) -ne \$mainHandle[\s\S]*Wait-ProcessMenu \$Process/,
+  );
+  assert.match(
+    nativeFilterMenuOpen,
+    /nativeToolbarHandles\.Count -eq 1[\s\S]*ReadAccessibleFilterToolbarCommand\([\s\S]*PROC_MON_FILTER_ACCESSIBLE_TOOLBAR_COMMAND=[\s\S]*ReadFailure -eq "none"[\s\S]*LabelMatchCount -eq 1[\s\S]*MatchCount -eq 1[\s\S]*IsEnabled[\s\S]*HasDefaultAction[\s\S]*invoke-accessible-filter-toolbar-command[\s\S]*GetForegroundWindow\(\) -ne \$mainHandle[\s\S]*InvokeAccessibleFilterToolbarCommand\([\s\S]*Wait-ProcessMenu \$Process/,
+  );
+  assert.match(
+    nativeFilterMenuOpen,
+    /IsWindowEnabled\(\s*\$processMainHandle\s*\)[\s\S]*if \(-not \$processMainWindowEnabled\)[\s\S]*Resolve-ProcmonMissingSnapshotDialog \$Process \$processMainHandle[\s\S]*Process Monitor main window is disabled by an unverified dialog[\s\S]*verify-filter-menu-main-enabled-after-recovery/,
   );
   assert.match(
     configuration,
@@ -501,6 +548,10 @@ test("AC-05: Procmon main-window activation verifies its process-owned foregroun
   );
   assert.match(
     configuration,
+    /function Resolve-ProcmonMissingSnapshotDialog[\s\S]*GetProcessTopLevelWindows\(\s*\$Process\.Id,\s*257\s*\)[\s\S]*ReadNativeChildSummary\([\s\S]*256[\s\S]*An error occurred opening the snapshot[\s\S]*GetFolderPath\("UserProfile"\)[\s\S]*GetExtension\(\$snapshotPath\) -ine "\.pml"[\s\S]*File\]::Exists\(\$snapshotPath\)[\s\S]*ReadNativeControlText\([\s\S]*"button"[\s\S]*GetForegroundWindow\(\)[\s\S]*ClickNativeButtonExact[\s\S]*"OK"[\s\S]*unique-enabled-ok[\s\S]*function Open-FilterDialogByShortcut[\s\S]*Resolve-ProcmonMissingSnapshotDialog \$Process \$mainWindowHandle[\s\S]*Resolve-ProcmonMissingSnapshotDialog \$Process \$mainWindowHandle[\s\S]*SendControlLShortcut/,
+  );
+  assert.match(
+    configuration,
     /function Write-FocusOwnerObservation[\s\S]*\$focusedWindowHandle = \[IntPtr\]\$focused\.Current\.NativeWindowHandle[\s\S]*Get-ProcmonFocusHandleClass[\s\S]*PROC_MON_FILTER_FOCUS_NATIVE_ROOT=\$Phase;root:\$nativeRoot/,
   );
   assert.match(
@@ -554,18 +605,16 @@ test("AC-05: Procmon main-window activation verifies its process-owned foregroun
   );
 });
 
-test("AC-05: unfiltered probe stays separate from strict capture and exported paths remain validated", async () => {
+test("AC-05: strict filtered capture proves the positive control and exported paths remain validated", async () => {
   const source = await readFile(new URL("../../scripts/test-windows-file-access.mjs", import.meta.url), "utf8");
-  assert.equal((source.match(/"\/NoFilter"/g) ?? []).length, 3);
+  assert.equal((source.match(/"\/NoFilter"/g) ?? []).length, 1);
   assert.match(source, /mkdtemp\(path\.join\(root, "\.mail-client-file-audit-"\)\)/);
   assert.doesNotMatch(source, /os\.tmpdir\(\)/);
-  assert.match(source, /async function verifyUnfilteredCaptureProbe\(\)[\s\S]*"\/NoFilter"[\s\S]*readCaptureListCount\("unfiltered-probe", false, probe, true\)/);
+  assert.doesNotMatch(source, /unfiltered-probe|verifyUnfilteredCaptureProbe|unfilteredCaptureProbeVerified/);
   assert.match(source, /function reportUnavailable\(reason\)[\s\S]*if \(!allowUnavailable\)[\s\S]*inspection=\$\{reason\}/);
-  assert.match(source, /backingStats\.size <= 64 \* 1024 \* 1024[\s\S]*csvStats\.size <= 64 \* 1024 \* 1024/);
-  assert.match(source, /events:\$\{summary\.eventCount\}[\s\S]*control-file-name-root-matches:\$\{summary\.canaryFileNameRootMatches\}[\s\S]*control-file-name-parent-suffix-matches:\$\{JSON\.stringify\(summary\.canaryFileNameParentSuffixMatches\)\}[\s\S]*Unfiltered Process Monitor probe did not record the Node positive-control ReadFile/);
-  assert.match(source, /if \(!unfilteredCaptureProbeVerified\) \{\s*await verifyUnfilteredCaptureProbe\(\);\s*unfilteredCaptureProbeVerified = true;\s*\}[\s\S]*"\/LoadConfig",\s*filterConfig,\s*"\/BackingFile",\s*backingFile/);
-  assert.match(source, /\["\/AcceptEula", "\/Quiet", "\/NoFilter", "\/OpenLog", backingFile, "\/SaveAs", csvFile\]/);
   assert.match(source, /capture = spawn\([\s\S]*"\/LoadConfig",\s*filterConfig,\s*"\/BackingFile",\s*backingFile/);
+  assert.match(source, /await verifyLiveCaptureFilter\("before-controls"\);[\s\S]*await runNodePositiveControl\("exact-path audit"\);[\s\S]*inspectWindowsFileTrace\(trace, canaryPath, positiveControlPath, excludedPath\)/);
+  assert.match(source, /\["\/AcceptEula", "\/Quiet", "\/NoFilter", "\/OpenLog", backingFile, "\/SaveAs", csvFile\]/);
   assert.match(source, /CSV export[\s\S]*csvStats.size <= 256 \* 1024 \* 1024[\s\S]*inspectWindowsFileTrace\(trace, canaryPath, positiveControlPath, excludedPath\)/);
 });
 

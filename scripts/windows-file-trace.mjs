@@ -100,11 +100,13 @@ export function summarizeWindowsFileTrace(traceOutput, canaryPath) {
   let eventCount = 0;
   let nodeProcessEvents = 0;
   let nodeReadFileEvents = 0;
+  let nodeReadFileExactPathEvents = 0;
   let canaryFileNameEvents = 0;
   let canaryFileNameParentEvents = 0;
   let canaryFileNameRootMatches = 0;
   let nodeReadFileCanaryFileNameEvents = 0;
   let nodeReadFileCanaryFileNameParentEvents = 0;
+  const nodeReadFilePathKinds = { drive: 0, device: 0, unc: 0, other: 0 };
   const canaryFileNamePathKinds = { drive: 0, device: 0, unc: 0, other: 0 };
   const canaryFileNameParentSuffixMatches = {
     none: 0,
@@ -168,6 +170,17 @@ export function summarizeWindowsFileTrace(traceOutput, canaryPath) {
       nodeProcessEvents += 1;
       if (operation === "ReadFile") {
         nodeReadFileEvents += 1;
+        if (eventPath === normalizedCanaryPath) {
+          nodeReadFileExactPathEvents += 1;
+        }
+        const nodeReadFilePathKind = /^\\\\/.test(eventPath)
+          ? "unc"
+          : /^\\device\\/i.test(eventPath)
+            ? "device"
+            : /^[a-z]:\\/i.test(eventPath)
+              ? "drive"
+              : "other";
+        nodeReadFilePathKinds[nodeReadFilePathKind] += 1;
         if (path.win32.basename(eventPath) === canaryFileName) {
           nodeReadFileCanaryFileNameEvents += 1;
         }
@@ -200,11 +213,13 @@ export function summarizeWindowsFileTrace(traceOutput, canaryPath) {
     eventCount,
     nodeProcessEvents,
     nodeReadFileEvents,
+    nodeReadFileExactPathEvents,
     canaryFileNameEvents,
     canaryFileNameParentEvents,
     canaryFileNameRootMatches,
     nodeReadFileCanaryFileNameEvents,
     nodeReadFileCanaryFileNameParentEvents,
+    nodeReadFilePathKinds,
     canaryFileNamePathKinds,
     canaryFileNameParentSuffixMatches,
   };

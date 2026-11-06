@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { createServer } from "node:http";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 const maliciousFixture = await readFile(
   new URL("../../fixtures/security/malicious-email.html", import.meta.url),
@@ -11,7 +14,7 @@ const requests = [];
 let server;
 let probeUrl;
 
-describe("AC-05: real WebView HTML isolation", () => {
+describe("AC-05 and AC-23: real WebView security and accessibility", () => {
   before(async () => {
     server = createServer((request, response) => {
       requests.push(request.url);
@@ -39,6 +42,245 @@ describe("AC-05: real WebView HTML isolation", () => {
       });
       console.log("AC-05: probe server closed");
     }
+  });
+
+  it("AC-23: exposes named controls as focusable controls", async () => {
+    await browser.$("h1").waitForDisplayed();
+    const semantics = await browser.execute(() => {
+      const commandRegion = document.querySelector(
+        'section[aria-labelledby="command-title"]',
+      );
+      const messageRegion = document.querySelector(
+        'section[aria-labelledby="message-title"]',
+      );
+      const button = commandRegion?.querySelector("button");
+      const output = commandRegion?.querySelector("output");
+      const frame = messageRegion?.querySelector("iframe");
+      return {
+        initialFocus: document.activeElement?.tagName ?? "none",
+        commandRegionLabel: commandRegion?.getAttribute("aria-labelledby"),
+        buttonType: button?.type ?? "missing",
+        buttonName: button?.textContent?.trim() ?? "missing",
+        buttonTabIndex: button?.tabIndex ?? -999,
+        buttonDisabled: button?.disabled ?? true,
+        outputLive: output?.getAttribute("aria-live") ?? "missing",
+        messageRegionLabel: messageRegion?.getAttribute("aria-labelledby"),
+        frameTitle: frame?.title ?? "missing",
+        frameTabIndex: frame?.tabIndex ?? -999,
+      };
+    });
+    assert.ok(
+      semantics.initialFocus === "BODY" || semantics.initialFocus === "HTML",
+      `Expected the document to start without a control focused, got ${semantics.initialFocus}`,
+    );
+    assert.deepEqual(
+      {
+        commandRegionLabel: semantics.commandRegionLabel,
+        buttonType: semantics.buttonType,
+        buttonName: semantics.buttonName,
+        buttonTabIndex: semantics.buttonTabIndex,
+        buttonDisabled: semantics.buttonDisabled,
+        outputLive: semantics.outputLive,
+        messageRegionLabel: semantics.messageRegionLabel,
+        frameTitle: semantics.frameTitle,
+        frameTabIndex: semantics.frameTabIndex,
+      },
+      {
+        commandRegionLabel: "command-title",
+        buttonType: "button",
+        buttonName: "Invoke security probe",
+        buttonTabIndex: 0,
+        buttonDisabled: false,
+        outputLive: "polite",
+        messageRegionLabel: "message-title",
+        frameTitle: "Sandboxed synthetic hostile email",
+        frameTabIndex: 0,
+      },
+    );
+
+    const focusability = await browser.execute(() => {
+      const button = document.querySelector(
+        'section[aria-labelledby="command-title"] button',
+      );
+      const frame = document.querySelector(
+        'section[aria-labelledby="message-title"] iframe',
+      );
+      if (
+        !(button instanceof HTMLButtonElement) ||
+        !(frame instanceof HTMLIFrameElement)
+      ) {
+        return { buttonFocused: false, frameFocused: false };
+      }
+
+      button.focus();
+      const buttonFocused = document.activeElement === button;
+      frame.focus();
+      return {
+        buttonFocused,
+        frameFocused: document.activeElement === frame,
+      };
+    });
+    assert.deepEqual(focusability, {
+      buttonFocused: true,
+      frameFocused: true,
+    });
+  });
+
+  it("AC-23: native keyboard focus and activation", async function () {
+    if (process.platform !== "win32") {
+      this.skip();
+    }
+
+    await browser.$("h1").waitForDisplayed();
+    await browser.execute(() => {
+      window.__nativeKeyEvents = [];
+      window.addEventListener(
+        "keydown",
+        (event) => {
+          window.__nativeKeyEvents.push({
+            key: event.key,
+            trusted: event.isTrusted,
+          });
+        },
+        true,
+      );
+    });
+
+    const applicationPath = process.env.MAIL_CLIENT_WDIO_BINARY ??
+      path.resolve("target", "release", "mail-client.exe");
+    const sendNativeKey = (key, shift = false) => {
+      const args = [
+        "-NoLogo",
+        "-NoProfile",
+        "-NonInteractive",
+        "-WindowStyle",
+        "Hidden",
+        "-File",
+        fileURLToPath(new URL("./windows-send-tab.ps1", import.meta.url)),
+        "-ApplicationPath",
+        applicationPath,
+        "-Key",
+        key,
+      ];
+      if (shift) {
+        args.push("-Shift");
+      }
+      const output = execFileSync(
+        "powershell.exe",
+        args,
+        {
+          encoding: "utf8",
+          timeout: 10_000,
+          windowsHide: true,
+        },
+      );
+      assert.equal(output.trim(), "NATIVE_KEY_SENT");
+    };
+
+    const documentFocus = await browser.execute(() => {
+      const activeElement = document.activeElement;
+      if (activeElement instanceof HTMLElement) {
+        activeElement.blur();
+      }
+      return document.activeElement?.tagName ?? "none";
+    });
+    assert.ok(
+      documentFocus === "BODY" || documentFocus === "HTML",
+      `Expected no control to be focused before native Tab, got ${documentFocus}`,
+    );
+
+    sendNativeKey("Tab");
+    await browser.pause(100);
+    const firstTabResult = await browser.execute(() => ({
+      buttonFocused:
+        document.activeElement ===
+        document.querySelector('section[aria-labelledby="command-title"] button'),
+      activeElement: document.activeElement?.tagName ?? "none",
+      documentHasFocus: document.hasFocus(),
+      trusted:
+        window.__nativeKeyEvents.at(-1)?.key === "Tab" &&
+        window.__nativeKeyEvents.at(-1)?.trusted === true,
+    }));
+    assert.equal(firstTabResult.trusted, true);
+    assert.equal(firstTabResult.documentHasFocus, true);
+    assert.ok(
+      firstTabResult.buttonFocused || firstTabResult.activeElement === "BODY",
+      `Expected native Tab to leave focus on BODY or move to the command button, got ${firstTabResult.activeElement}`,
+    );
+    if (!firstTabResult.buttonFocused) {
+      sendNativeKey("Tab");
+      await browser.pause(100);
+      const secondTabFromDocument = await browser.execute(() => ({
+        focused:
+          document.activeElement ===
+          document.querySelector(
+            'section[aria-labelledby="command-title"] button',
+          ),
+        trusted:
+          window.__nativeKeyEvents.at(-1)?.key === "Tab" &&
+          window.__nativeKeyEvents.at(-1)?.trusted === true,
+      }));
+      assert.deepEqual(
+        secondTabFromDocument,
+        { focused: true, trusted: true },
+        "A subsequent native Tab should focus the named command button",
+      );
+    }
+
+    sendNativeKey("Tab");
+    await browser.pause(100);
+    const secondTabResult = await browser.execute(() => ({
+      focused:
+        document.activeElement ===
+        document.querySelector('section[aria-labelledby="message-title"] iframe'),
+      trusted:
+        window.__nativeKeyEvents.at(-1)?.key === "Tab" &&
+        window.__nativeKeyEvents.at(-1)?.trusted === true,
+    }));
+    assert.deepEqual(
+      secondTabResult,
+      { focused: true, trusted: true },
+      "Native Tab should move focus from the command button to the titled iframe",
+    );
+
+    sendNativeKey("Tab", true);
+    await browser.pause(100);
+    const reverseTabResult = await browser.execute(() => ({
+      focused:
+        document.activeElement ===
+        document.querySelector(
+          'section[aria-labelledby="command-title"] button',
+        ),
+    }));
+    assert.deepEqual(
+      reverseTabResult,
+      { focused: true },
+      "Native Shift+Tab should return focus to the named command button",
+    );
+
+    sendNativeKey("Enter");
+    await browser.waitUntil(
+      async () =>
+        (await browser.$("output").getText()).startsWith("IPC rejected:"),
+      {
+        timeout: 5_000,
+        timeoutMsg: "Enter did not activate the focused command button",
+      },
+    );
+    const activation = await browser.execute(() => ({
+      focused:
+        document.activeElement ===
+        document.querySelector(
+          'section[aria-labelledby="command-title"] button',
+        ),
+      trusted:
+        window.__nativeKeyEvents.at(-1)?.key === "Enter" &&
+        window.__nativeKeyEvents.at(-1)?.trusted === true,
+      output: document.querySelector("output")?.textContent?.trim() ?? "",
+    }));
+    assert.equal(activation.focused, true);
+    assert.equal(activation.trusted, true);
+    assert.match(activation.output, /^IPC rejected:/);
   });
 
   it("allows the explicit IPC permission through the trusted main UI", async () => {

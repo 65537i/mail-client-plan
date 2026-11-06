@@ -167,6 +167,7 @@ test("AC-05: canary diagnostics expose only bounded allowlisted metadata", () =>
   assert.equal(summary.eventCount, 12);
   assert.equal(summary.nodeProcessEvents, 0);
   assert.equal(summary.nodeReadFileEvents, 0);
+  assert.equal(summary.nodeReadFileExactPathEvents, 0);
   assert.equal(summary.canaryFileNameEvents, 12);
   assert.equal(summary.canaryFileNameParentEvents, 12);
   assert.equal(summary.canaryFileNameRootMatches, 12);
@@ -202,11 +203,13 @@ test("AC-05: trace summary counts Node ReadFile events", () => {
   assert.equal(summary.canaryEvents.length, 1);
   assert.equal(summary.nodeProcessEvents, 2);
   assert.equal(summary.nodeReadFileEvents, 2);
+  assert.equal(summary.nodeReadFileExactPathEvents, 1);
   assert.equal(summary.canaryFileNameEvents, 1);
   assert.equal(summary.canaryFileNameParentEvents, 1);
   assert.equal(summary.canaryFileNameRootMatches, 1);
   assert.equal(summary.nodeReadFileCanaryFileNameEvents, 1);
   assert.equal(summary.nodeReadFileCanaryFileNameParentEvents, 1);
+  assert.deepEqual(summary.nodeReadFilePathKinds, { drive: 2, device: 0, unc: 0, other: 0 });
 });
 
 test("AC-05: trace summary diagnoses matching filenames without treating them as exact paths", () => {
@@ -219,6 +222,8 @@ test("AC-05: trace summary diagnoses matching filenames without treating them as
   assert.equal(summary.canaryFileNameRootMatches, 1);
   assert.equal(summary.nodeReadFileCanaryFileNameEvents, 1);
   assert.equal(summary.nodeReadFileCanaryFileNameParentEvents, 0);
+  assert.equal(summary.nodeReadFileExactPathEvents, 0);
+  assert.deepEqual(summary.nodeReadFilePathKinds, { drive: 1, device: 0, unc: 0, other: 0 });
   assert.deepEqual(summary.canaryFileNamePathKinds, { drive: 1, device: 0, unc: 0, other: 0 });
   assert.deepEqual(summary.canaryFileNameParentSuffixMatches, {
     none: 1, one: 0, two: 0, three: 0, fourOrMore: 0,

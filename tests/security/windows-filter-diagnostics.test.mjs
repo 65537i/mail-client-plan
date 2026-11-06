@@ -22,6 +22,56 @@ test("AC-05: export timeout observations distinguish missing dialogs from failed
   assert.equal(describeWindowsFilterDiagnostics("PROC_MON_FILTER_SAVE_RESULT_FAILED=phase:private"), "");
 });
 
+test("AC-05: bounded output retains verified native toolbar evidence", () => {
+  const marker = "PROC_MON_FILTER_NATIVE_TOOLBAR_COMMAND="
+    + "state:ready;toolbars:1;items:1;matches:1;truncated:false";
+  const captured = appendBoundedWindowsFilterOutput(
+    `${"x".repeat(9000)}\n${marker}\n`,
+    "y".repeat(9000),
+  );
+  assert.ok(captured.includes(marker));
+  assert.ok(
+    describeWindowsFilterDiagnostics(captured).includes(
+      "filter-native-toolbar-command=state:ready;toolbars:1;items:1;matches:1;truncated:false",
+    ),
+  );
+});
+
+test("AC-05: native toolbar metadata diagnostics retain only bounded exact-label counts", () => {
+  const marker = "PROC_MON_FILTER_NATIVE_TOOLBAR_METADATA="
+    + "toolbars:1;buttons:2;labels:2;matches:1;enabled-matches:1;enabled:true;read:none";
+  const captured = appendBoundedWindowsFilterOutput(
+    `${"x".repeat(9000)}\n${marker}\n`,
+    "y".repeat(9000),
+  );
+  assert.ok(captured.includes(marker));
+  assert.ok(
+    describeWindowsFilterDiagnostics(captured).includes(
+      "filter-native-toolbar-metadata=toolbars:1;buttons:2;labels:2;"
+        + "matches:1;enabled-matches:1;enabled:true;read:none",
+    ),
+  );
+  const ambiguous = marker
+    .replace("matches:1", "matches:2")
+    .replace("enabled-matches:1", "enabled-matches:2")
+    .replace("read:none", "read:ambiguous-match");
+  assert.ok(
+    describeWindowsFilterDiagnostics(ambiguous).includes(
+      "matches:2;enabled-matches:2;enabled:true;read:ambiguous-match",
+    ),
+  );
+  for (const invalid of [
+    marker.replace("buttons:2", "buttons:65"),
+    marker.replace("labels:2", "labels:3"),
+    marker.replace("enabled-matches:1", "enabled-matches:2"),
+    marker.replace("enabled:true", "enabled:false"),
+    marker.replace("read:none", "read:C:\\private"),
+    `${marker};label=private`,
+  ]) {
+    assert.equal(describeWindowsFilterDiagnostics(invalid), "");
+  }
+});
+
 test("AC-05: Windows filter diagnostics retain only allowlisted UIA and native menu state", () => {
   const output = [
     "PROC_MON_FILTER_MENU_STATE=enabled:true;offscreen:false;keyboard-focusable:true",
@@ -104,6 +154,42 @@ test("AC-05: Windows filter diagnostics retain bounded focused-window ownership 
     "",
   );
   assert.equal(
+    describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_NATIVE_TOOLBAR_COMMAND="
+        + "state:ready;toolbars:1;items:2;matches:1;truncated:false",
+    ),
+    "; filter-native-toolbar-command=state:ready;toolbars:1;items:2;matches:1;truncated:false",
+  );
+  for (const invalid of [
+    "state:ready;toolbars:65;items:2;matches:1;truncated:false",
+    "state:ready;toolbars:1;items:65;matches:1;truncated:false",
+    "state:ready;toolbars:1;items:1;matches:2;truncated:false",
+    "state:ready;toolbars:1;items:1;matches:1;truncated:true",
+  ]) {
+    assert.equal(
+      describeWindowsFilterDiagnostics(
+        `PROC_MON_FILTER_NATIVE_TOOLBAR_COMMAND=${invalid}`,
+      ),
+      "",
+    );
+  }
+  const accessibleToolbarLine = "PROC_MON_FILTER_ACCESSIBLE_TOOLBAR_COMMAND="
+    + "toolbars:1;items:4;labels:1;matches:1;enabled:true;"
+    + "default-action:true;read:none";
+  assert.equal(
+    describeWindowsFilterDiagnostics(accessibleToolbarLine),
+    "; filter-accessible-toolbar-command=toolbars:1;items:4;labels:1;matches:1;"
+      + "enabled:true;default-action:true;read:none",
+  );
+  for (const invalid of [
+    accessibleToolbarLine.replace("toolbars:1", "toolbars:65"),
+    accessibleToolbarLine.replace("items:4", "items:65"),
+    accessibleToolbarLine.replace("labels:1", "labels:2"),
+    accessibleToolbarLine.replace("read:none", "read:C:\\private"),
+  ]) {
+    assert.equal(describeWindowsFilterDiagnostics(invalid), "");
+  }
+  assert.equal(
     describeWindowsFilterDiagnostics(`${scan};path=C:\\private\\mail`),
     "",
   );
@@ -181,18 +267,18 @@ test("AC-05: Windows focused-window diagnostics retain only native root ownershi
 
 test("AC-05: Windows native menu diagnostics retain bounded command counts only", () => {
   const line = "PROC_MON_FILTER_NATIVE_MENU=source:main;"
-    + "state:ready;menus:3;items:18;event:1;filter:1;filter-command:1;unreadable:0";
+    + "state:ready;menus:3;items:18;event:1;filter:1;filter-command:1;drop:0;invalid-handles:0;unreadable:0";
   assert.equal(
     describeWindowsFilterDiagnostics(line),
     "; filter-native-menu=state:ready;menus:3;items:18;event:1;filter:1;"
-      + "filter-command:1;unreadable:0",
+      + "filter-command:1;drop:0;invalid-handles:0;unreadable:0",
   );
   assert.equal(
     describeWindowsFilterDiagnostics(
       line.replace("state:ready", "state:partial").replace("unreadable:0", "unreadable:1"),
     ),
     "; filter-native-menu=state:partial;menus:3;items:18;event:1;filter:1;"
-      + "filter-command:1;unreadable:1",
+      + "filter-command:1;drop:0;invalid-handles:0;unreadable:1",
   );
   assert.equal(
     describeWindowsFilterDiagnostics(
@@ -205,25 +291,31 @@ test("AC-05: Windows native menu diagnostics retain bounded command counts only"
         .replace("unreadable:0", "unreadable:1"),
     ),
     "; filter-native-menu-all-top-level=state:partial;menus:3;items:0;event:0;filter:0;"
-      + "filter-command:0;unreadable:1",
+      + "filter-command:0;drop:0;invalid-handles:0;unreadable:1",
   );
   assert.equal(
     describeWindowsFilterDiagnostics(
       line.replace("source:main", "source:focused-root"),
     ),
     "; filter-native-menu-focused-root=state:ready;menus:3;items:18;event:1;filter:1;"
-      + "filter-command:1;unreadable:0",
+      + "filter-command:1;drop:0;invalid-handles:0;unreadable:0",
   );
   assert.equal(
     describeWindowsFilterDiagnostics(
       line.replace("source:main", "source:all-top-level"),
     ),
     "; filter-native-menu-all-top-level=state:ready;menus:3;items:18;event:1;filter:1;"
-      + "filter-command:1;unreadable:0",
+      + "filter-command:1;drop:0;invalid-handles:0;unreadable:0",
   );
   assert.equal(
     describeWindowsFilterDiagnostics(
       line.replace("items:18", "items:257"),
+    ),
+    "",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      line.replace("invalid-handles:0", "invalid-handles:4"),
     ),
     "",
   );
@@ -254,6 +346,31 @@ test("AC-05: Windows native window diagnostics retain consistent bounded counts"
   );
   assert.equal(
     describeWindowsFilterDiagnostics(`${line};handle=0x1234`),
+    "",
+  );
+});
+
+test("AC-05: Procmon top-level window diagnostics retain only bounded class and style categories", () => {
+  const line = "PROC_MON_FILTER_NATIVE_TOPLEVEL="
+    + "windows:4;visible:2;enabled:1;main:1;dialog:0;popup:1;toolbar:0;list:0;"
+    + "button:0;other:0;unavailable:0;style-popup:1;style-child:0;"
+    + "style-standard:1;style-unavailable:0";
+  assert.equal(
+    describeWindowsFilterDiagnostics(line),
+    "; filter-native-toplevel=windows:4;visible:2;enabled:1;main:1;dialog:0;"
+      + "popup:1;toolbar:0;list:0;button:0;other:0;unavailable:0;"
+      + "style-popup:1;style-child:0;style-standard:1;style-unavailable:0",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(line.replace("enabled:1", "enabled:3")),
+    "",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(line.replace("style-popup:1", "style-popup:0")),
+    "",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(`${line};title=C:\\private`),
     "",
   );
 });
@@ -904,6 +1021,77 @@ test("AC-05: Windows filter diagnostics retain only snapshot handoff state", () 
   );
 });
 
+test("AC-05: Windows filter diagnostics retain allowlisted failure stages", () => {
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_FAILED_STAGE=wait-filter-menu-popup",
+    ),
+    "; failed-stage=wait-filter-menu-popup",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_FAILED_STAGE=C:\\private",
+    ),
+    "",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_FAILED_STAGE=verify-filter-menu-item",
+    ),
+    "; failed-stage=verify-filter-menu-item",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics([
+      "PROC_MON_FILTER_FAILED_STAGE=wait-filter-dialog-shortcut",
+      "PROC_MON_FILTER_FAILED_STAGE=wait-filter-toolbar-popup",
+    ].join("\n")),
+    "; failed-stage=wait-filter-toolbar-popup",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_FAILED_STAGE=invoke-filter-toolbar-command",
+    ),
+    "; failed-stage=invoke-filter-toolbar-command",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_TOOLBAR_COMMAND=items:2;matches:1",
+      "PROC_MON_FILTER_NATIVE_TOOLBAR_COMMAND=state:ready;toolbars:1;items:1;matches:1;truncated:false",
+    ),
+    "; filter-toolbar-command=items:2;matches:1",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_TOOLBAR_COMMAND=items:2;matches:1;name=private",
+    ),
+    "",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_MENU_COMMAND=state:candidate;owner:same;enabled:false;offscreen:false;invoke:true",
+    ),
+    "; filter-menu-command=state:candidate;owner:same;enabled:false;offscreen:false;invoke:true",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_MENU_COMMAND=state:candidate;owner:same;enabled:false;offscreen:false;invoke:true;path=C:\\private",
+    ),
+    "",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_MENU_MAIN=process:same;handle:available;native-process:same;visible:true;enabled:true;control:window",
+    ),
+    "; filter-menu-main=process:same;handle:available;native-process:same;visible:true;enabled:true;control:window",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_MENU_MAIN=process:same;handle:available;native-process:same;visible:true;enabled:true;control:window;title=private",
+    ),
+    "",
+  );
+});
+
 test("AC-05: configuration file wait reports states without file paths or contents", () => {
   assert.equal(
     describeWindowsFilterDiagnostics([
@@ -1088,6 +1276,21 @@ test("AC-05: configuration save observations expose states, not paths or dialog 
     "; process-menu-scan=windows:2;menus:1;visible:1",
   );
   assert.equal(
+    describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_PROCESS_DROP_ITEM_SCAN=state:ready;windows:2;items:1;matches:1;enabled:0;offscreen:0",
+    ),
+    "; process-drop-item-scan=state:ready;windows:2;items:1;matches:1;enabled:0;offscreen:0",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics([
+      "PROC_MON_FILTER_PROCESS_DROP_ITEM_SCAN=state:ready;windows:129;items:1;matches:1;enabled:1;offscreen:0",
+      "PROC_MON_FILTER_PROCESS_DROP_ITEM_SCAN=state:ready;windows:2;items:2;matches:1;enabled:1;offscreen:0",
+      "PROC_MON_FILTER_PROCESS_DROP_ITEM_SCAN=state:ready;windows:2;items:1;matches:1;enabled:2;offscreen:0",
+      "PROC_MON_FILTER_PROCESS_DROP_ITEM_SCAN=state:ready;windows:2;items:1;matches:1;enabled:1;offscreen:0;path=C:\\private",
+    ].join("\n")),
+    "",
+  );
+  assert.equal(
     describeWindowsFilterDiagnostics([
       "PROC_MON_FILTER_PROCESS_MENU_SCAN=windows:10000;menus:1;visible:1",
       "PROC_MON_FILTER_PROCESS_MENU_SCAN=windows:2;menus:1;visible:2",
@@ -1232,6 +1435,22 @@ test("AC-05: Windows filter diagnostics retain bounded dialog scan counts", () =
   );
 });
 
+test("AC-05: native filter button foreground diagnostics retain fixed labels only", () => {
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_NATIVE_BUTTON_FOREGROUND=label:Reset;gate:passed",
+    ),
+    "; native-button-foreground=label:Reset;gate:passed",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics([
+      "PROC_MON_FILTER_NATIVE_BUTTON_FOREGROUND=label:Other;gate:passed",
+      "PROC_MON_FILTER_NATIVE_BUTTON_FOREGROUND=label:Reset;gate:other;path=C:\\private",
+    ].join("\n")),
+    "",
+  );
+});
+
 test("AC-05: Windows embedded-dialog diagnostics retain bounded UIA counts only", () => {
   assert.equal(
     describeWindowsFilterDiagnostics(
@@ -1350,6 +1569,117 @@ test("AC-05: Windows native menu diagnostics retain safe owner fallback and unav
   );
 });
 
+test("AC-05: Procmon static dialog text is reduced to bounded allowlisted categories", () => {
+  const line = "PROC_MON_FILTER_STATIC_TEXT="
+    + "source:visible-other;controls:2;categories:filter,error,permission,filter-error";
+  assert.equal(
+    describeWindowsFilterDiagnostics(line),
+    "; filter-static-text=source:visible-other;controls:2;categories:filter,error,permission,filter-error",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(line.replace("controls:2", "controls:257")),
+    "",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(line.replace(
+      "filter,error,permission,filter-error",
+      "filter,filter",
+    )),
+    "",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics("PROC_MON_FILTER_STATIC_TEXT=source:visible-other;controls:1;categories=raw-text"),
+    "",
+  );
+  const captured = appendBoundedWindowsFilterOutput(
+    `${"x".repeat(9000)}\n${line}\n`,
+    "y".repeat(9000),
+  );
+  assert.ok(captured.includes(line));
+  assert.doesNotMatch(captured, /raw dialog text|window title/i);
+});
+
+test("AC-05: Procmon missing snapshot recovery retains only fixed safe evidence", () => {
+  const marker = "PROC_MON_FILTER_STARTUP_SNAPSHOT="
+    + "state:dismissed;kind:missing-profile-pml;button:unique-enabled-ok";
+  assert.equal(
+    describeWindowsFilterDiagnostics(marker),
+    "; startup-snapshot=state:dismissed;kind:missing-profile-pml;button:unique-enabled-ok",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(marker.replace("missing-profile-pml", "other")),
+    "",
+  );
+  const captured = appendBoundedWindowsFilterOutput(
+    `${"x".repeat(9000)}\n${marker}\n`,
+    "y".repeat(9000),
+  );
+  assert.ok(captured.includes(marker));
+  assert.doesNotMatch(captured, /C:\\Users\\|\.pml/i);
+});
+
+test("AC-05: menu fallback diagnostics retain only bounded process and menu state", () => {
+  const output = [
+    "PROC_MON_FILTER_MENU_GUI_STATE=process-known:true;same-process:true;gui-info:true;menu-mode:true;owner:1",
+    "PROC_MON_FILTER_MENU_GUI_ACCESSIBLE=available:true;failure:no-match;items:0;matches:0;enabled:false;checked:unavailable",
+    "PROC_MON_FILTER_MENU_LOOP_WINDOWS=available:true;active-same:true;focus-same:true;capture-same:true;menu-owner-same:true;active-visible:true;focus-visible:true;capture-visible:true;menu-owner-visible:true;active-menu:false;focus-menu:false;capture-menu:false;menu-owner-menu:true;active-class:main;active-parent:none;focus-class:popup;focus-parent:main;capture-class:unavailable;capture-parent:unavailable;menu-owner-class:main;menu-owner-parent:none",
+    "PROC_MON_FILTER_MENU_LOOP_ROOTS=available:true;active:main;focus:main;capture:unavailable;menu-owner:main",
+    "PROC_MON_FILTER_MENU_LOOP_STYLES=available:true;active:standard;focus:popup;capture:unavailable;menu-owner:standard",
+    "PROC_MON_FILTER_NATIVE_TOPLEVEL=windows:4;visible:2;enabled:1;main:1;dialog:0;popup:1;toolbar:0;list:0;button:0;other:0;unavailable:0;style-popup:1;style-child:0;style-standard:1;style-unavailable:0",
+    "PROC_MON_FILTER_NATIVE_MENU=source:active-menu-loop;state:ready;menus:1;items:2;event:0;filter:1;filter-command:0;drop:1;invalid-handles:0;unreadable:0",
+    "PROC_MON_FILTER_MENU_LOOP_ACCESSIBLE=role:focus;object:menu;available:true;failure:none;nodes:1;items:2;label-matches:1;matches:1;enabled:true;checked:off",
+    "PROC_MON_FILTER_MENU_LOOP_ACCESSIBLE=role:focus;object:client;available:true;failure:no-match;nodes:1;items:0;label-matches:0;matches:0;enabled:false;checked:unavailable",
+    "PROC_MON_FILTER_MENU_LOOP_ACCESSIBLE=role:focus;object:client;available:true;failure:role-mismatch;nodes:4;items:7;label-matches:1;matches:0;enabled:false;checked:unavailable",
+    "PROC_MON_FILTER_MENU_LOOP_ACCESSIBLE=role:capture;object:menu;available:true;failure:no-match;nodes:1;items:0;label-matches:0;matches:0;enabled:false;checked:unavailable",
+    "PROC_MON_FILTER_MENU_LOOP_ACCESSIBLE=role:menu-owner;object:client;available:true;failure:duplicate-match;nodes:3;items:4;label-matches:2;matches:0;enabled:false;checked:unavailable",
+    "PROC_MON_FILTER_MENU_LOOP_ACCESSIBLE=role:main-after-shortcut;object:client;available:true;failure:no-match;nodes:1;items:7;label-matches:0;matches:0;enabled:false;checked:unavailable",
+    "PROC_MON_FILTER_MENU_LOOP_UIA=role:focus;available:true;failure:none;items:4;event:1;filter:1;filter-command:0;drop:1;drop-labels:1;drop-menu-items:1;drop-enabled:false",
+    "PROC_MON_FILTER_MENU_LOOP_UIA=role:capture;available:true;failure:none;items:1;event:0;filter:0;filter-command:0;drop:1;drop-labels:1;drop-menu-items:1;drop-enabled:true",
+    "PROC_MON_FILTER_MENU_LOOP_UIA=role:main-after-shortcut;available:true;failure:none;items:2;event:0;filter:1;filter-command:0;drop:1;drop-labels:1;drop-menu-items:1;drop-enabled:false",
+    "PROC_MON_FILTER_MENU_LOOP_WINDOWS=available:true;active-same:false;focus-same:true;capture-same:true;menu-owner-same:false;active-visible:false;focus-visible:true;capture-visible:true;menu-owner-visible:false;active-menu:false;focus-menu:false;capture-menu:true;menu-owner-menu:false;active-class:unavailable;active-parent:unavailable;focus-class:other;focus-parent:main;capture-class:popup;capture-parent:main;menu-owner-class:unavailable;menu-owner-parent:unavailable",
+    "PROC_MON_FILTER_MENU_LOOP_ROOTS=available:true;active:unavailable;focus:main;capture:main;menu-owner:unavailable",
+    "PROC_MON_FILTER_MENU_LOOP_STYLES=available:true;active:unavailable;focus:child;capture:popup;menu-owner:unavailable",
+    "PROC_MON_FILTER_MENU_LOOP_ACCESSIBLE=role:focus;object:menu;available:true;failure:none;nodes:1;items:1;label-matches:1;matches:1;enabled:true;checked:on;path=C:\\private",
+    "PROC_MON_FILTER_MENU_LOOP_UIA=role:focus;available:false;failure:owner-mismatch;items:1;event:1;filter:0;filter-command:0;drop:0;path=C:\\private",
+  ].join("\n");
+  assert.equal(
+    describeWindowsFilterDiagnostics(output),
+    "; filter-native-menu-active-menu-loop=state:ready;menus:1;items:2;event:0;filter:1;filter-command:0;drop:1;invalid-handles:0;unreadable:0"
+      + "; filter-menu-loop-windows=available:true;active-same:true;focus-same:true;capture-same:true;menu-owner-same:true;active-visible:true;focus-visible:true;capture-visible:true;menu-owner-visible:true;active-menu:false;focus-menu:false;capture-menu:false;menu-owner-menu:true;active-class:main;active-parent:none;focus-class:popup;focus-parent:main;capture-class:unavailable;capture-parent:unavailable;menu-owner-class:main;menu-owner-parent:none"
+      + "; filter-menu-loop-roots=available:true;active:main;focus:main;capture:unavailable;menu-owner:main"
+      + "; filter-menu-loop-styles=available:true;active:standard;focus:popup;capture:unavailable;menu-owner:standard"
+      + "; filter-menu-loop-msaa=role:focus;object:menu;available:true;failure:none;nodes:1;items:2;label-matches:1;matches:1;enabled:true;checked:off"
+      + "; filter-menu-loop-msaa=role:focus;object:client;available:true;failure:no-match;nodes:1;items:0;label-matches:0;matches:0;enabled:false;checked:unavailable"
+      + "; filter-menu-loop-msaa=role:focus;object:client;available:true;failure:role-mismatch;nodes:4;items:7;label-matches:1;matches:0;enabled:false;checked:unavailable"
+      + "; filter-menu-loop-msaa=role:capture;object:menu;available:true;failure:no-match;nodes:1;items:0;label-matches:0;matches:0;enabled:false;checked:unavailable"
+      + "; filter-menu-loop-msaa=role:menu-owner;object:client;available:true;failure:duplicate-match;nodes:3;items:4;label-matches:2;matches:0;enabled:false;checked:unavailable"
+      + "; filter-menu-loop-msaa=role:main-after-shortcut;object:client;available:true;failure:no-match;nodes:1;items:7;label-matches:0;matches:0;enabled:false;checked:unavailable"
+      + "; filter-native-toplevel=windows:4;visible:2;enabled:1;main:1;dialog:0;popup:1;toolbar:0;list:0;button:0;other:0;unavailable:0;style-popup:1;style-child:0;style-standard:1;style-unavailable:0"
+      + "; filter-menu-loop-uia=role:focus;available:true;failure:none;items:4;event:1;filter:1;filter-command:0;drop:1;drop-labels:1;drop-menu-items:1;drop-enabled:false"
+      + "; filter-menu-loop-uia=role:capture;available:true;failure:none;items:1;event:0;filter:0;filter-command:0;drop:1;drop-labels:1;drop-menu-items:1;drop-enabled:true"
+      + "; filter-menu-loop-uia=role:main-after-shortcut;available:true;failure:none;items:2;event:0;filter:1;filter-command:0;drop:1;drop-labels:1;drop-menu-items:1;drop-enabled:false"
+      + "; filter-menu-gui-state=process-known:true;same-process:true;gui-info:true;menu-mode:true;owner:1"
+      + "; filter-menu-accessible=available:true;failure:no-match;items:0;matches:0;enabled:false;checked:unavailable",
+  );
+  const captured = appendBoundedWindowsFilterOutput(`${"x".repeat(9000)}\n${output}\n`, "y".repeat(9000));
+  assert.ok(captured.includes("PROC_MON_FILTER_MENU_GUI_STATE="));
+  assert.ok(captured.includes("PROC_MON_FILTER_MENU_GUI_ACCESSIBLE="));
+  assert.ok(captured.includes("PROC_MON_FILTER_NATIVE_MENU=source:active-menu-loop;"));
+  assert.ok(captured.includes("PROC_MON_FILTER_MENU_LOOP_WINDOWS="));
+  assert.ok(captured.includes("PROC_MON_FILTER_MENU_LOOP_ROOTS="));
+  assert.ok(captured.includes("PROC_MON_FILTER_MENU_LOOP_STYLES="));
+  assert.ok(captured.includes("PROC_MON_FILTER_NATIVE_TOPLEVEL="));
+  assert.ok(captured.includes("PROC_MON_FILTER_MENU_LOOP_ACCESSIBLE=role:focus;object:menu;"));
+  assert.ok(captured.includes("PROC_MON_FILTER_MENU_LOOP_ACCESSIBLE=role:capture;object:menu;"));
+  assert.ok(captured.includes("PROC_MON_FILTER_MENU_LOOP_ACCESSIBLE=role:menu-owner;object:client;"));
+  assert.ok(captured.includes("PROC_MON_FILTER_MENU_LOOP_ACCESSIBLE=role:main-after-shortcut;object:client;"));
+  assert.ok(captured.includes("PROC_MON_FILTER_MENU_LOOP_UIA=role:focus;"));
+  assert.ok(captured.includes("PROC_MON_FILTER_MENU_LOOP_UIA=role:capture;"));
+  assert.ok(captured.includes("PROC_MON_FILTER_MENU_LOOP_UIA=role:main-after-shortcut;"));
+  assert.ok(captured.length <= windowsFilterOutputLimit);
+  assert.doesNotMatch(captured, /[A-Z]:\\/);
+});
+
 test("AC-05: Windows MSAA diagnostics retain only exact, same-process menu state", () => {
   assert.equal(
     describeWindowsFilterDiagnostics([
@@ -1358,6 +1688,7 @@ test("AC-05: Windows MSAA diagnostics retain only exact, same-process menu state
       "PROC_MON_FILTER_MSAA_MENU_STATE=observation:before;process:same;object:available;items:11;matches:0;read-failure:no-match;checked:unavailable",
       "PROC_MON_FILTER_MSAA_MENU_STATE=observation:before;process:unavailable;object:unavailable;items:0;matches:0;read-failure:window-unavailable;checked:unavailable",
       "PROC_MON_FILTER_MSAA_MENU_STATE=observation:after-invoke;process:unavailable;object:unavailable;items:0;matches:0;read-failure:window-unavailable;checked:unavailable",
+      "PROC_MON_FILTER_MSAA_MENU_STATE=observation:before;process:same;object:unavailable;items:0;matches:0;read-failure:object-invalid;checked:unavailable",
       "PROC_MON_FILTER_MSAA_MENU_STATE=observation:after-reload;process:same;object:available;items:11;matches:1;read-failure:none;checked:on",
     ].join("\n")),
     "; drop-msaa-menu-state=observation:before;process:same;object:available;items:11;matches:1;read-failure:none;checked:off"
@@ -1365,7 +1696,23 @@ test("AC-05: Windows MSAA diagnostics retain only exact, same-process menu state
       + "; drop-msaa-menu-state=observation:before;process:same;object:available;items:11;matches:0;read-failure:no-match;checked:unavailable"
       + "; drop-msaa-menu-state=observation:before;process:unavailable;object:unavailable;items:0;matches:0;read-failure:window-unavailable;checked:unavailable"
       + "; drop-msaa-menu-state=observation:after-invoke;process:unavailable;object:unavailable;items:0;matches:0;read-failure:window-unavailable;checked:unavailable"
+      + "; drop-msaa-menu-state=observation:before;process:same;object:unavailable;items:0;matches:0;read-failure:object-invalid;checked:unavailable"
       + "; drop-msaa-menu-state=observation:after-reload;process:same;object:available;items:11;matches:1;read-failure:none;checked:on",
+  );
+});
+
+test("AC-05: UIA exact-label diagnostics distinguish non-menu items without enabling them", () => {
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_MENU_LOOP_UIA=role:main-after-shortcut;available:true;failure:none;items:0;event:0;filter:0;filter-command:0;drop:0;drop-labels:1;drop-menu-items:0;drop-enabled:false",
+    ),
+    "; filter-menu-loop-uia=role:main-after-shortcut;available:true;failure:none;items:0;event:0;filter:0;filter-command:0;drop:0;drop-labels:1;drop-menu-items:0;drop-enabled:false",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_MENU_LOOP_UIA=role:focus;available:true;failure:none;items:0;event:0;filter:0;filter-command:0;drop:0;drop-labels:2;drop-menu-items:1;drop-enabled:true",
+    ),
+    "",
   );
 });
 
@@ -1381,6 +1728,21 @@ test("AC-05: Windows MSAA diagnostics reject inconsistent or unsafe state", () =
       "PROC_MON_FILTER_MSAA_MENU_STATE=observation:before;process:same;object:available;items:11;matches:1;read-failure:none;checked:C:\\private\\mail",
     ].join("\n")),
     "",
+  );
+});
+
+test("AC-05: MSAA diagnostics report invalid accessible-object arguments explicitly", () => {
+  const result = describeWindowsFilterDiagnostics([
+    "PROC_MON_FILTER_MENU_GUI_ACCESSIBLE=available:false;failure:object-invalid;items:0;matches:0;enabled:false;checked:unavailable",
+    "PROC_MON_FILTER_MENU_LOOP_ACCESSIBLE=role:main-after-shortcut;object:client;available:false;failure:object-invalid;nodes:0;items:0;label-matches:0;matches:0;enabled:false;checked:unavailable",
+  ].join("\n"));
+  assert.equal(
+    result.includes("; filter-menu-accessible=available:false;failure:object-invalid;items:0;matches:0;enabled:false;checked:unavailable"),
+    true,
+  );
+  assert.match(
+    result,
+    /; filter-menu-loop-msaa=role:main-after-shortcut;object:client;available:false;failure:object-invalid;nodes:0;items:0;label-matches:0;matches:0;enabled:false;checked:unavailable/,
   );
 });
 
@@ -1422,6 +1784,8 @@ test("AC-05: truncation preserves mandatory evidence across chunk boundaries wit
     "PROC_MON_FILTER_RULE_SELECTION=selected:2;expected:2",
     "PROC_MON_FILTER_REMOVE=buttons:1;enabled:true",
     "PROC_MON_FILTER_RULES_REMAINING=rows:24",
+    "PROC_MON_FILTER_MENU_GUI_STATE=process-known:true;same-process:true;gui-info:true;menu-mode:true;owner:1",
+    "PROC_MON_FILTER_MENU_GUI_ACCESSIBLE=available:true;failure:no-match;items:0;matches:0;enabled:false;checked:unavailable",
   ];
   for (const chunkSize of [1, 7, 64, 4096, 65536]) {
     const stream = `${"x".repeat(9000)}\n${lines.join("\n")}\n${"y".repeat(12000)}\n`;
@@ -1448,10 +1812,26 @@ test("AC-05: truncation preserves mandatory evidence across chunk boundaries wit
     assert.ok(diagnostics.includes("; filter-rule-selection=selected:2;expected:2"));
     assert.ok(diagnostics.includes("; filter-rule-remove=buttons:1;enabled:true"));
     assert.ok(diagnostics.includes("; filter-rules-remaining=24"));
+    assert.ok(diagnostics.includes("; filter-menu-gui-state=process-known:true;same-process:true;gui-info:true;menu-mode:true;owner:1"));
+    assert.ok(diagnostics.includes("; filter-menu-accessible=available:true;failure:no-match;items:0;matches:0;enabled:false;checked:unavailable"));
     const ui = diagnostics.split("; ").find(value => value.startsWith("reloaded-filter-ui="));
     assert.match(ui, reloadedFilterUiEvidencePattern);
     assert.equal(captured.length, windowsFilterOutputLimit);
   }
+});
+
+test("AC-05: bounded output retains the latest allowlisted failure stage", () => {
+  const first = "PROC_MON_FILTER_FAILED_STAGE=wait-filter-dialog-shortcut\n";
+  const last = "PROC_MON_FILTER_FAILED_STAGE=wait-filter-toolbar-popup\n";
+  const captured = appendBoundedWindowsFilterOutput(
+    `${"x".repeat(9000)}\n${first}`,
+    `${"y".repeat(9000)}\n${last}`,
+  );
+  assert.ok(captured.includes(last.trim()));
+  assert.equal(
+    describeWindowsFilterDiagnostics(captured),
+    "; failed-stage=wait-filter-toolbar-popup",
+  );
 });
 
 test("AC-05: retained mandatory evidence does not preserve unsafe values or upgrade failed gates", () => {
