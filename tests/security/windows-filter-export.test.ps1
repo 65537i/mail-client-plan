@@ -916,6 +916,8 @@ using System;
 using System.Runtime.InteropServices;
 public static class SyntheticOwnerDrawMenu
 {
+    [DllImport("user32.dll", EntryPoint = "CreateMenu", ExactSpelling = true, SetLastError = true)]
+    public static extern IntPtr CreateMenu();
     [DllImport("user32.dll", EntryPoint = "CreatePopupMenu", ExactSpelling = true, SetLastError = true)]
     public static extern IntPtr CreatePopupMenu();
     [DllImport("user32.dll", EntryPoint = "AppendMenuW", CharSet = CharSet.Unicode, ExactSpelling = true, SetLastError = true)]
@@ -924,21 +926,34 @@ public static class SyntheticOwnerDrawMenu
     [DllImport("user32.dll", EntryPoint = "DestroyMenu", ExactSpelling = true, SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool DestroyMenu(IntPtr menu);
+    [DllImport("user32.dll", EntryPoint = "SetMenu", ExactSpelling = true, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool SetMenu(IntPtr window, IntPtr menu);
 }
 '@
 Add-Type -TypeDefinition $nativeMenuLiteral.Value `
   -ReferencedAssemblies ([Accessibility.IAccessible].Assembly.Location)
 $classProbeForm = [System.Windows.Forms.Form]::new()
+$classProbeMenu = [IntPtr]::Zero
 try {
   $classProbeChild = [System.Windows.Forms.TextBox]::new()
   $classProbeForm.Controls.Add($classProbeChild)
   $classProbeRoot = $classProbeForm.Handle
   $classProbeChildHandle = $classProbeChild.Handle
+  $classProbeMenu = [SyntheticOwnerDrawMenu]::CreateMenu()
+  if (
+    $classProbeMenu -eq [IntPtr]::Zero -or
+    -not [SyntheticOwnerDrawMenu]::SetMenu($classProbeRoot, $classProbeMenu)
+  ) {
+    throw "Synthetic top-level menu fixture could not be attached"
+  }
   if (
     [ProcmonNativeMenu]::GetWindowClassKind($classProbeRoot, [uint32]$PID, $classProbeRoot) -cne "main" -or
     [ProcmonNativeMenu]::GetParentWindowClassKind($classProbeRoot, [uint32]$PID, $classProbeRoot) -cne "none" -or
     [ProcmonNativeMenu]::GetWindowClassKind($classProbeChildHandle, [uint32]$PID, $classProbeRoot) -cne "other" -or
     [ProcmonNativeMenu]::GetRootWindowClassKind($classProbeChildHandle, [uint32]$PID, $classProbeRoot) -cne "main" -or
+    [ProcmonNativeMenu]::GetMenuForTopLevelWindow($classProbeRoot) -ne $classProbeMenu -or
+    [ProcmonNativeMenu]::GetMenuForTopLevelWindow($classProbeChildHandle) -ne [IntPtr]::Zero -or
     [ProcmonNativeMenu]::GetWindowStyleKind($classProbeChildHandle, [uint32]$PID) -cne "child" -or
     [ProcmonNativeMenu]::GetWindowStyleKind($classProbeChildHandle, [uint32]0) -cne "unavailable" -or
     [ProcmonNativeMenu]::GetWindowClassKind($classProbeRoot, [uint32]0, $classProbeRoot) -cne "other-process"
@@ -946,6 +961,10 @@ try {
     throw "Native window class categories must be bounded and process-scoped"
   }
 } finally {
+  if ($classProbeMenu -ne [IntPtr]::Zero) {
+    [SyntheticOwnerDrawMenu]::SetMenu($classProbeRoot, [IntPtr]::Zero) | Out-Null
+    [SyntheticOwnerDrawMenu]::DestroyMenu($classProbeMenu) | Out-Null
+  }
   $classProbeForm.Dispose()
 }
 $ownerDrawRootMenu = [SyntheticOwnerDrawMenu]::CreatePopupMenu()
@@ -1314,12 +1333,21 @@ if (
 }
 Write-Host "PASS AC-05: native filter buttons require verified same-process dialog foreground"
 if (
+  $sourceText -notmatch '(?s)public static IntPtr GetMenuForTopLevelWindow\(IntPtr window\)[\s\S]*!IsWindow\(window\)[\s\S]*GetAncestor\(window, GA_ROOT\) != window[\s\S]*return GetMenu\(window\)' -or
+  $sourceText -match '\[ProcmonNativeMenu\]::GetMenu\(' -or
+  $sourceText -notmatch '(?s)function Write-ProcmonNativeMenuSummary[\s\S]*GetMenuForTopLevelWindow\(\$windowHandle\)' -or
+  $sourceText -notmatch '(?s)function Write-ProcmonAccessibleMenuSummary[\s\S]*GetMenuForTopLevelWindow\(\$handle\)'
+) {
+  throw "Native menu reads must reject child HWNDs through the shared top-level guard"
+}
+Write-Host "PASS AC-05: native GetMenu calls are restricted to verified top-level HWNDs"
+if (
   $openFilterMenuFunction.Extent.Text -notmatch '(?s)GetMenuOwnerWindow\([\s\S]*\[ref\]\$menuModeActive[\s\S]*if \(\$guiThreadInfoAvailable -and \$menuWindowSameProcess\)[\s\S]*Get-AccessibleDropMenuSnapshot[\s\S]*\$mainHandle \$Process\.Id \$true "filter-menu-fallback"[\s\S]*ReadFocusSnapshot\(\$mainHandle\)[\s\S]*CaptureWindow[\s\S]*MenuOwnerWindow[\s\S]*Write-ProcmonNativeMenuSummary[\s\S]*-Source "active-menu-loop"[\s\S]*Write-ProcmonMenuLoopUiaSummary \$focusHandle \$Process "focus"[\s\S]*Write-ProcmonMenuLoopUiaSummary \$captureHandle \$Process "capture"[\s\S]*Write-ProcmonMenuLoopUiaSummary \$snapshotMenuOwnerHandle \$Process "menu-owner"[\s\S]*Write-ProcmonMenuLoopUiaSummary \$mainHandle \$Process "main-after-shortcut"'
 ) {
   throw "Fallback diagnostics must inspect bounded fixed-label UIA/MSAA data on visible same-process windows"
 }
 if (
-  $openFilterMenuFunction.Extent.Text -notmatch '(?s)# GetMenu is undefined for child HWNDs; inspect only the verified top-level window\.\s+Write-ProcmonNativeMenuSummary `\s+-WindowHandles \(\[IntPtr\[\]\]@\(\$mainHandle\)\)' -or
+  $openFilterMenuFunction.Extent.Text -notmatch '(?s)GetMenuForTopLevelWindow\(\$activeHandle\)[\s\S]*GetMenuForTopLevelWindow\(\$focusHandle\)[\s\S]*GetMenuForTopLevelWindow\(\$captureHandle\)[\s\S]*GetMenuForTopLevelWindow\(\$snapshotMenuOwnerHandle\)[\s\S]*Write-ProcmonNativeMenuSummary `\s+-WindowHandles \(\[IntPtr\[\]\]@\(\$mainHandle\)\)' -or
   $openFilterMenuFunction.Extent.Text -match '\$menuLoopHandles'
 ) {
   throw "Active-menu native inspection must not call GetMenu on child HWNDs"

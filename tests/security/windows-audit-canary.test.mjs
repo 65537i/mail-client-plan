@@ -266,8 +266,13 @@ test("AC-05: Procmon main-window activation verifies its process-owned foregroun
     /function Write-ProcmonNativeMenuSummary[\s\S]*?function Write-ProcmonAccessibleMenuSummary/,
   )?.[0];
   assert.ok(nativeMenuSummary, "Bounded native menu summary is missing");
+  assert.match(
+    configuration,
+    /public static IntPtr GetMenuForTopLevelWindow\(IntPtr window\)[\s\S]*!IsWindow\(window\)[\s\S]*GetAncestor\(window, GA_ROOT\) != window[\s\S]*return GetMenu\(window\)/,
+  );
+  assert.doesNotMatch(configuration, /\[ProcmonNativeMenu\]::GetMenu\(/);
+  assert.match(nativeMenuSummary, /GetMenuForTopLevelWindow\(\$windowHandle\)/);
   assert.match(nativeMenuSummary, /GetWindowProcessId\(\$windowHandle\) -ne \$Process\.Id/);
-  assert.match(nativeMenuSummary, /GetMenu\(\$windowHandle\)/);
   assert.match(nativeMenuSummary, /IsMenu\(\[IntPtr\]\$candidate\.Handle\)/);
   assert.match(nativeMenuSummary, /GetMenuItemCount/);
   assert.match(nativeMenuSummary, /ReadItemMetadata[\s\S]*metadata\.IsOwnerDrawn/);
@@ -278,7 +283,7 @@ test("AC-05: Procmon main-window activation verifies its process-owned foregroun
   assert.ok(activeMenuLoop, "Active Filter-menu diagnostics are missing");
   assert.match(
     activeMenuLoop,
-    /# GetMenu is undefined for child HWNDs; inspect only the verified top-level window\.\s+Write-ProcmonNativeMenuSummary `\s+-WindowHandles \(\[IntPtr\[\]\]@\(\$mainHandle\)\)/,
+    /GetMenuForTopLevelWindow\(\$activeHandle\)[\s\S]*GetMenuForTopLevelWindow\(\$focusHandle\)[\s\S]*GetMenuForTopLevelWindow\(\$captureHandle\)[\s\S]*GetMenuForTopLevelWindow\(\$snapshotMenuOwnerHandle\)[\s\S]*Write-ProcmonNativeMenuSummary `\s+-WindowHandles \(\[IntPtr\[\]\]@\(\$mainHandle\)\)/,
   );
   assert.doesNotMatch(activeMenuLoop, /\$menuLoopHandles/);
   for (const [label, counter] of [

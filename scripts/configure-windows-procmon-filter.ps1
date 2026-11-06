@@ -329,6 +329,19 @@ public static class ProcmonNativeMenu
     [DllImport("user32.dll", ExactSpelling = true, SetLastError = true)]
     public static extern IntPtr GetMenu(IntPtr hWnd);
 
+    public static IntPtr GetMenuForTopLevelWindow(IntPtr window)
+    {
+        if (
+            window == IntPtr.Zero ||
+            !IsWindow(window) ||
+            GetAncestor(window, GA_ROOT) != window
+        )
+        {
+            return IntPtr.Zero;
+        }
+        return GetMenu(window);
+    }
+
     private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
 
     [DllImport("user32.dll", ExactSpelling = true, SetLastError = true)]
@@ -5447,13 +5460,13 @@ function Open-ProcmonFilterMenuFromMain(
       $snapshotMenuOwnerVisible = $snapshotMenuOwnerOwned -and
         [ProcmonNativeMenu]::IsWindowVisible($snapshotMenuOwnerHandle)
       $activeMenuAvailable = $activeVisible -and
-        [ProcmonNativeMenu]::GetMenu($activeHandle) -ne [IntPtr]::Zero
+        [ProcmonNativeMenu]::GetMenuForTopLevelWindow($activeHandle) -ne [IntPtr]::Zero
       $focusMenuAvailable = $focusVisible -and
-        [ProcmonNativeMenu]::GetMenu($focusHandle) -ne [IntPtr]::Zero
+        [ProcmonNativeMenu]::GetMenuForTopLevelWindow($focusHandle) -ne [IntPtr]::Zero
       $captureMenuAvailable = $captureVisible -and
-        [ProcmonNativeMenu]::GetMenu($captureHandle) -ne [IntPtr]::Zero
+        [ProcmonNativeMenu]::GetMenuForTopLevelWindow($captureHandle) -ne [IntPtr]::Zero
       $menuOwnerAvailable = $snapshotMenuOwnerVisible -and
-        [ProcmonNativeMenu]::GetMenu($snapshotMenuOwnerHandle) -ne [IntPtr]::Zero
+        [ProcmonNativeMenu]::GetMenuForTopLevelWindow($snapshotMenuOwnerHandle) -ne [IntPtr]::Zero
       $activeClass = Get-ProcmonMenuLoopWindowClassKind $activeHandle $Process $mainHandle
       $focusClass = Get-ProcmonMenuLoopWindowClassKind $focusHandle $Process $mainHandle
       $captureClass = Get-ProcmonMenuLoopWindowClassKind $captureHandle $Process $mainHandle
@@ -5479,7 +5492,6 @@ function Open-ProcmonFilterMenuFromMain(
       [Console]::Out.WriteLine(
         "PROC_MON_FILTER_MENU_LOOP_STYLES=available:$($focusSnapshot.Available.ToString().ToLowerInvariant());active:$activeStyle;focus:$focusStyle;capture:$captureStyle;menu-owner:$menuOwnerStyle"
       )
-      # GetMenu is undefined for child HWNDs; inspect only the verified top-level window.
       Write-ProcmonNativeMenuSummary `
         -WindowHandles ([IntPtr[]]@($mainHandle)) `
         -Process $Process `
@@ -6155,7 +6167,7 @@ function Write-ProcmonNativeMenuSummary(
         $state = "owner-mismatch"
         break
       }
-      $rootMenu = [ProcmonNativeMenu]::GetMenu($windowHandle)
+      $rootMenu = [ProcmonNativeMenu]::GetMenuForTopLevelWindow($windowHandle)
       if ($rootMenu -ne [IntPtr]::Zero) {
         $queue.Enqueue(@{ Handle = $rootMenu; Depth = 0 })
       }
@@ -6289,7 +6301,7 @@ function Write-ProcmonAccessibleMenuSummary(
   $truncated = $WindowHandles.Length -gt 256
   for ($index = 0; $index -lt $windowLimit; $index++) {
     $handle = [IntPtr]$WindowHandles[$index]
-    if ([ProcmonNativeMenu]::GetMenu($handle) -eq [IntPtr]::Zero) {
+    if ([ProcmonNativeMenu]::GetMenuForTopLevelWindow($handle) -eq [IntPtr]::Zero) {
       continue
     }
     $menuWindowCount++
@@ -7325,7 +7337,7 @@ function Find-ProcmonNativeFilterDialog(
     if ([ProcmonNativeMenu]::IsWindowVisible($handle)) {
       $visibleWindowCount++
     }
-    if ([ProcmonNativeMenu]::GetMenu($handle) -ne [IntPtr]::Zero) {
+    if ([ProcmonNativeMenu]::GetMenuForTopLevelWindow($handle) -ne [IntPtr]::Zero) {
       $menuHandleCount++
     }
     if (
@@ -7566,7 +7578,7 @@ function Get-ReloadedNativeDropCheckState(
   }
 
   Set-Stage "read-reloaded-native-main-menu"
-  $menuHandle = [ProcmonNativeMenu]::GetMenu($MainWindowHandle)
+  $menuHandle = [ProcmonNativeMenu]::GetMenuForTopLevelWindow($MainWindowHandle)
   $checkState = "unavailable"
   $dropEnabled = $false
   if (-not $menuHandle.Equals([System.IntPtr]::Zero)) {
@@ -7645,7 +7657,7 @@ function Get-NativeDropMenuSnapshot(
   [uint32]$ProcessId
 ) {
   Set-Stage "get-native-menu-handle"
-  $menuHandle = [ProcmonNativeMenu]::GetMenu($WindowHandle)
+  $menuHandle = [ProcmonNativeMenu]::GetMenuForTopLevelWindow($WindowHandle)
   $menuSource = "main"
   $menuOwnerWindowHandle = [System.IntPtr]::Zero
   $menuWindowProcessKnown = $false
@@ -7662,9 +7674,9 @@ function Get-NativeDropMenuSnapshot(
       [ref]$menuModeActive
     )
     if (-not $menuOwnerWindowHandle.Equals([System.IntPtr]::Zero)) {
-      $menuHandle = [ProcmonNativeMenu]::GetMenu($MenuWindowHandle)
+      $menuHandle = [ProcmonNativeMenu]::GetMenuForTopLevelWindow($MenuWindowHandle)
       if ($menuHandle.Equals([System.IntPtr]::Zero)) {
-        $menuHandle = [ProcmonNativeMenu]::GetMenu($menuOwnerWindowHandle)
+        $menuHandle = [ProcmonNativeMenu]::GetMenuForTopLevelWindow($menuOwnerWindowHandle)
         if ($menuHandle.Equals([System.IntPtr]::Zero)) {
           $menuSource = "unavailable"
         } else {
