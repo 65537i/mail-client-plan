@@ -1184,7 +1184,7 @@ $menuForm.ShowInTaskbar = $false
 $menuForm.Width = 320
 $menuForm.Height = 180
 $menuStrip = [System.Windows.Forms.MenuStrip]::new()
-$filterMenuItem = [System.Windows.Forms.ToolStripMenuItem]::new("&Filter")
+$filterMenuItem = [System.Windows.Forms.ToolStripMenuItem]::new("Fi&lter")
 $dropMenuItem = [System.Windows.Forms.ToolStripMenuItem]::new("Drop Filtered Events")
 [void]$filterMenuItem.DropDownItems.Add($dropMenuItem)
 [void]$menuStrip.Items.Add($filterMenuItem)
@@ -1197,9 +1197,9 @@ try {
   if ([ProcmonNativeMenu]::GetForegroundWindow() -ne $menuForm.Handle) {
     throw "Synthetic menu form did not receive foreground activation"
   }
-  $menuInput = [ProcmonNativeMenu]::SendAltFShortcut($menuForm.Handle, [int]$PID)
+  $menuInput = [ProcmonNativeMenu]::SendAltLShortcut($menuForm.Handle, [int]$PID)
   if ($menuInput.State -ne "sent" -or $menuInput.Events -ne 4) {
-    throw "Native Alt+F input did not satisfy the exact shortcut gate"
+    throw "Native Alt+L input did not satisfy the exact shortcut gate"
   }
   $menuDeadline = [DateTime]::UtcNow.AddSeconds(2)
   while (-not $filterMenuItem.DropDown.Visible -and [DateTime]::UtcNow -lt $menuDeadline) {
@@ -1207,7 +1207,7 @@ try {
     Start-Sleep -Milliseconds 25
   }
   if (-not $filterMenuItem.DropDown.Visible) {
-    throw "Native Alt+F input did not open the synthetic Filter menu"
+    throw "Native Alt+L input did not open the synthetic Filter menu"
   }
   if ($dropMenuItem.Text -cne "Drop Filtered Events") {
     throw "Synthetic Filter menu item label changed"
@@ -1224,8 +1224,8 @@ $openFilterMenuFunction = $ast.Find({
 }, $true)
 if (
   $null -eq $openFilterMenuFunction -or
-  ([regex]::Matches($openFilterMenuFunction.Extent.Text, 'SendAltFShortcut')).Count -ne 1 -or
-  $openFilterMenuFunction.Extent.Text -notmatch '(?s)Set-VerifiedProcmonMainWindowForeground \$MainWindow \$Process "MAIN"[\s\S]*Set-Stage "find-filter-menu-item"[\s\S]*\$filterMenu = Wait-Element \$MainWindow \$filterMenuCondition 2 -AllowMissing[\s\S]*if \(\$null -eq \$filterMenu\) \{[\s\S]*Set-Stage "find-filter-toolbar-command"[\s\S]*NameProperty,[\s\S]*"Filter"[\s\S]*\$filterToolbarCandidates.Count -gt 64[\s\S]*candidateState.ProcessId -ne \$Process.Id[\s\S]*candidateState.Name -cne "Filter"[\s\S]*ControlType\]::Button[\s\S]*ControlType\]::MenuItem[\s\S]*candidateParent.Current.ProcessId -ne \$Process.Id[\s\S]*ControlType\]::ToolBar[\s\S]*candidateState.IsEnabled[\s\S]*candidateState.IsOffscreen[\s\S]*InvokePattern\]::Pattern[\s\S]*\$verifiedFilterToolbarCommands.Count -gt 1[\s\S]*GetForegroundWindow\(\) -ne \$mainHandle[\s\S]*InvokePattern.Invoke\(\)[\s\S]*Wait-ProcessMenu \$Process[\s\S]*\$toolbarPopupState.ProcessId -ne \$Process.Id[\s\S]*return \$toolbarPopup[\s\S]*SendAltFShortcut\(\s*\$mainHandle,\s*\$Process\.Id\s*\)[\s\S]*\$shortcutInput.State -ne "sent" -or \$shortcutInput.Events -ne 4[\s\S]*Wait-ProcessMenu \$Process[\s\S]*\$menuState.ProcessId -ne \$Process.Id[\s\S]*return \$menu[\s\S]*\}\s*\r?\n\s*Set-Stage "verify-filter-menu-item"\s+\$filterMenuState = \$filterMenu\.Current[\s\S]*TryGetCurrentPattern\([\s\S]*InvokePattern\]::Pattern'
+  ([regex]::Matches($openFilterMenuFunction.Extent.Text, 'SendAltLShortcut')).Count -ne 1 -or
+  $openFilterMenuFunction.Extent.Text -notmatch '(?s)Set-VerifiedProcmonMainWindowForeground \$MainWindow \$Process "MAIN"[\s\S]*Set-Stage "find-filter-menu-item"[\s\S]*\$filterMenu = Wait-Element \$MainWindow \$filterMenuCondition 2 -AllowMissing[\s\S]*if \(\$null -eq \$filterMenu\) \{[\s\S]*Set-Stage "find-filter-toolbar-command"[\s\S]*NameProperty,[\s\S]*"Filter"[\s\S]*\$filterToolbarCandidates.Count -gt 64[\s\S]*candidateState.ProcessId -ne \$Process.Id[\s\S]*candidateState.Name -cne "Filter"[\s\S]*ControlType\]::Button[\s\S]*ControlType\]::MenuItem[\s\S]*candidateParent.Current.ProcessId -ne \$Process.Id[\s\S]*ControlType\]::ToolBar[\s\S]*candidateState.IsEnabled[\s\S]*candidateState.IsOffscreen[\s\S]*InvokePattern\]::Pattern[\s\S]*\$verifiedFilterToolbarCommands.Count -gt 1[\s\S]*GetForegroundWindow\(\) -ne \$mainHandle[\s\S]*InvokePattern.Invoke\(\)[\s\S]*Wait-ProcessMenu \$Process[\s\S]*\$toolbarPopupState.ProcessId -ne \$Process.Id[\s\S]*return \$toolbarPopup[\s\S]*SendAltLShortcut\(\s*\$mainHandle,\s*\$Process\.Id\s*\)[\s\S]*\$shortcutInput.State -ne "sent" -or \$shortcutInput.Events -ne 4[\s\S]*Wait-ProcessMenu \$Process[\s\S]*\$menuState.ProcessId -ne \$Process.Id[\s\S]*return \$menu[\s\S]*\}\s*\r?\n\s*Set-Stage "verify-filter-menu-item"\s+\$filterMenuState = \$filterMenu\.Current[\s\S]*TryGetCurrentPattern\([\s\S]*InvokePattern\]::Pattern'
 ) {
   throw "Filter activation must verify an exact toolbar command or use the gated keyboard fallback"
 }

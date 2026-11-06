@@ -110,7 +110,6 @@ public static class ProcmonNativeMenu
     private const ushort VK_CONTROL = 0x0011;
     private const ushort VK_MENU = 0x0012;
     private const ushort VK_A = 0x0041;
-    private const ushort VK_F = 0x0046;
     private const ushort VK_L = 0x004C;
     private const uint GA_ROOT = 2;
     private const int GWL_STYLE = -16;
@@ -741,7 +740,7 @@ public static class ProcmonNativeMenu
         };
     }
 
-    public static ShortcutInputSnapshot SendAltFShortcut(
+    public static ShortcutInputSnapshot SendAltLShortcut(
         IntPtr expectedWindow,
         int expectedProcessId
     )
@@ -764,8 +763,8 @@ public static class ProcmonNativeMenu
         var inputs = new[]
         {
             CreateKeyboardInput(VK_MENU, 0),
-            CreateKeyboardInput(VK_F, 0),
-            CreateKeyboardInput(VK_F, KEYEVENTF_KEYUP),
+            CreateKeyboardInput(VK_L, 0),
+            CreateKeyboardInput(VK_L, KEYEVENTF_KEYUP),
             CreateKeyboardInput(VK_MENU, KEYEVENTF_KEYUP)
         };
         var inserted = SendInput(
@@ -777,7 +776,7 @@ public static class ProcmonNativeMenu
         {
             var releaseInputs = new[]
             {
-                CreateKeyboardInput(VK_F, KEYEVENTF_KEYUP),
+                CreateKeyboardInput(VK_L, KEYEVENTF_KEYUP),
                 CreateKeyboardInput(VK_MENU, KEYEVENTF_KEYUP)
             };
             var released = SendInput(
@@ -5391,7 +5390,7 @@ function Open-ProcmonFilterMenuFromMain(
       }
     }
     Set-Stage "fallback-open-filter-menu-with-keyboard"
-    $shortcutInput = [ProcmonNativeMenu]::SendAltFShortcut(
+    $shortcutInput = [ProcmonNativeMenu]::SendAltLShortcut(
       $mainHandle,
       $Process.Id
     )
