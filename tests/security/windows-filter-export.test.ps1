@@ -1314,9 +1314,15 @@ if (
 }
 Write-Host "PASS AC-05: native filter buttons require verified same-process dialog foreground"
 if (
-  $openFilterMenuFunction.Extent.Text -notmatch '(?s)GetMenuOwnerWindow\([\s\S]*\[ref\]\$menuModeActive[\s\S]*if \(\$guiThreadInfoAvailable -and \$menuWindowSameProcess\)[\s\S]*Get-AccessibleDropMenuSnapshot[\s\S]*\$mainHandle \$Process\.Id \$true "filter-menu-fallback"[\s\S]*ReadFocusSnapshot\(\$mainHandle\)[\s\S]*CaptureWindow[\s\S]*MenuOwnerWindow[\s\S]*\$captureVisible -and -not \$menuLoopHandles\.Contains\(\$captureHandle\)[\s\S]*\$snapshotMenuOwnerVisible[\s\S]*Write-ProcmonNativeMenuSummary[\s\S]*-Source "active-menu-loop"[\s\S]*Write-ProcmonMenuLoopUiaSummary \$focusHandle \$Process "focus"[\s\S]*Write-ProcmonMenuLoopUiaSummary \$captureHandle \$Process "capture"[\s\S]*Write-ProcmonMenuLoopUiaSummary \$snapshotMenuOwnerHandle \$Process "menu-owner"[\s\S]*Write-ProcmonMenuLoopUiaSummary \$mainHandle \$Process "main-after-shortcut"'
+  $openFilterMenuFunction.Extent.Text -notmatch '(?s)GetMenuOwnerWindow\([\s\S]*\[ref\]\$menuModeActive[\s\S]*if \(\$guiThreadInfoAvailable -and \$menuWindowSameProcess\)[\s\S]*Get-AccessibleDropMenuSnapshot[\s\S]*\$mainHandle \$Process\.Id \$true "filter-menu-fallback"[\s\S]*ReadFocusSnapshot\(\$mainHandle\)[\s\S]*CaptureWindow[\s\S]*MenuOwnerWindow[\s\S]*Write-ProcmonNativeMenuSummary[\s\S]*-Source "active-menu-loop"[\s\S]*Write-ProcmonMenuLoopUiaSummary \$focusHandle \$Process "focus"[\s\S]*Write-ProcmonMenuLoopUiaSummary \$captureHandle \$Process "capture"[\s\S]*Write-ProcmonMenuLoopUiaSummary \$snapshotMenuOwnerHandle \$Process "menu-owner"[\s\S]*Write-ProcmonMenuLoopUiaSummary \$mainHandle \$Process "main-after-shortcut"'
 ) {
   throw "Fallback diagnostics must inspect bounded fixed-label UIA/MSAA data on visible same-process windows"
+}
+if (
+  $openFilterMenuFunction.Extent.Text -notmatch '(?s)# GetMenu is undefined for child HWNDs; inspect only the verified top-level window\.\s+Write-ProcmonNativeMenuSummary `\s+-WindowHandles \(\[IntPtr\[\]\]@\(\$mainHandle\)\)' -or
+  $openFilterMenuFunction.Extent.Text -match '\$menuLoopHandles'
+) {
+  throw "Active-menu native inspection must not call GetMenu on child HWNDs"
 }
 $menuLoopAccessibleBlock = [regex]::Match(
   $openFilterMenuFunction.Extent.Text,

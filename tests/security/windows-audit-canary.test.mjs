@@ -272,6 +272,15 @@ test("AC-05: Procmon main-window activation verifies its process-owned foregroun
   assert.match(nativeMenuSummary, /GetMenuItemCount/);
   assert.match(nativeMenuSummary, /ReadItemMetadata[\s\S]*metadata\.IsOwnerDrawn/);
   assert.match(nativeMenuSummary, /ReadItem/);
+  const activeMenuLoop = configuration.match(
+    /function Open-ProcmonFilterMenuFromMain[\s\S]*?function Wait-FilterDialog/,
+  )?.[0];
+  assert.ok(activeMenuLoop, "Active Filter-menu diagnostics are missing");
+  assert.match(
+    activeMenuLoop,
+    /# GetMenu is undefined for child HWNDs; inspect only the verified top-level window\.\s+Write-ProcmonNativeMenuSummary `\s+-WindowHandles \(\[IntPtr\[\]\]@\(\$mainHandle\)\)/,
+  );
+  assert.doesNotMatch(activeMenuLoop, /\$menuLoopHandles/);
   for (const [label, counter] of [
     ["Event", "eventMatches"],
     ["Filter", "filterMatches"],

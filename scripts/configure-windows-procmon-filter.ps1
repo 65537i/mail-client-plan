@@ -5479,31 +5479,9 @@ function Open-ProcmonFilterMenuFromMain(
       [Console]::Out.WriteLine(
         "PROC_MON_FILTER_MENU_LOOP_STYLES=available:$($focusSnapshot.Available.ToString().ToLowerInvariant());active:$activeStyle;focus:$focusStyle;capture:$captureStyle;menu-owner:$menuOwnerStyle"
       )
-      $menuLoopHandles = [System.Collections.Generic.List[IntPtr]]::new()
-      $menuLoopHandles.Add($mainHandle)
-      if ($activeVisible -and -not $menuLoopHandles.Contains($activeHandle)) {
-        $menuLoopHandles.Add($activeHandle)
-      }
-      if ($focusVisible -and -not $menuLoopHandles.Contains($focusHandle)) {
-        $menuLoopHandles.Add($focusHandle)
-      }
-      if ($captureVisible -and -not $menuLoopHandles.Contains($captureHandle)) {
-        $menuLoopHandles.Add($captureHandle)
-      }
-      if ($snapshotMenuOwnerVisible -and
-        -not $menuLoopHandles.Contains($snapshotMenuOwnerHandle)) {
-        $menuLoopHandles.Add($snapshotMenuOwnerHandle)
-      }
-      if (
-        $menuOwnerHandle -ne [IntPtr]::Zero -and
-        [ProcmonNativeMenu]::GetWindowProcessId($menuOwnerHandle) -eq $Process.Id -and
-        [ProcmonNativeMenu]::IsWindowVisible($menuOwnerHandle) -and
-        -not $menuLoopHandles.Contains($menuOwnerHandle)
-      ) {
-        $menuLoopHandles.Add($menuOwnerHandle)
-      }
+      # GetMenu is undefined for child HWNDs; inspect only the verified top-level window.
       Write-ProcmonNativeMenuSummary `
-        -WindowHandles $menuLoopHandles.ToArray() `
+        -WindowHandles ([IntPtr[]]@($mainHandle)) `
         -Process $Process `
         -Source "active-menu-loop"
       $accessibleHandles = [System.Collections.Generic.List[object]]::new()
