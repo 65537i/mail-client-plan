@@ -1454,7 +1454,7 @@ $nativeMenuSummaryFunction = $ast.Find({
 if (
   $null -eq $nativeMenuSummaryFunction -or
   $nativeMenuSummaryFunction.Extent.Text -notmatch 'GetWindowProcessId\(\$windowHandle\) -ne \$Process\.Id' -or
-  $nativeMenuSummaryFunction.Extent.Text -notmatch 'GetMenu\(\$windowHandle\)' -or
+  $nativeMenuSummaryFunction.Extent.Text -notmatch 'GetMenuForTopLevelWindow\(\$windowHandle\)' -or
   $nativeMenuSummaryFunction.Extent.Text -notmatch 'GetMenuItemCount' -or
   $nativeMenuSummaryFunction.Extent.Text -notmatch 'IsMenu\(\[IntPtr\]\$candidate\.Handle\)' -or
   $nativeMenuSummaryFunction.Extent.Text -notmatch 'invalidMenuHandles\+\+' -or
