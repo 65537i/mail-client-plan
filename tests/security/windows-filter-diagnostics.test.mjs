@@ -1699,9 +1699,16 @@ test("AC-05: Windows menu-bar diagnostics reject inconsistent and unbounded stat
     "PROC_MON_FILTER_MENU_BAR=object:client;read:none;menu:false;popup-same:true;popup-visible:false;popup-enabled:true",
     "PROC_MON_FILTER_MENU_BAR=object:client;read:none;menu:false;popup-same:false;popup-visible:false;popup-enabled:false;path=C:\\private",
   ].join("\n");
-  assert.equal(describeWindowsFilterDiagnostics(output), "");
+  assert.equal(
+    describeWindowsFilterDiagnostics(output),
+    "; filter-menu-bar-record=object:client;state:inconsistent"
+      + "; filter-menu-bar-record=object:client;state:inconsistent"
+      + "; filter-menu-bar-record=object:client;state:inconsistent"
+      + "; filter-menu-bar-record=object:client;state:unparsed",
+  );
   const captured = appendBoundedWindowsFilterOutput(`${"x".repeat(9000)}\n${output}\n`, "y".repeat(9000));
-  assert.doesNotMatch(captured, /PROC_MON_FILTER_MENU_BAR=/);
+  assert.ok(captured.includes("PROC_MON_FILTER_MENU_BAR_DIAGNOSTIC=object:client;state:inconsistent"));
+  assert.ok(captured.includes("PROC_MON_FILTER_MENU_BAR_DIAGNOSTIC=object:client;state:unparsed"));
   assert.doesNotMatch(captured, /C:\\private/);
 });
 

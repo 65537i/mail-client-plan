@@ -14,7 +14,7 @@ export function appendBoundedWindowsFilterOutput(current, chunk) {
   if (combined.length <= windowsFilterOutputLimit) return combined;
   const evidence = new Map();
   for (const match of combined.matchAll(
-    /^(PROC_MON_FILTER_STARTUP_SNAPSHOT|PROC_MON_FILTER_CONFIG_PATHS|PROC_MON_FILTER_RELOADED_RULES|PROC_MON_FILTER_RELOADED_UI|PROC_MON_FILTER_RELOADED_DROP|PROC_MON_FILTER_NATIVE_CHILDREN|PROC_MON_FILTER_NATIVE_CHILD_UIA|PROC_MON_FILTER_NATIVE_CHILD_PATTERNS|PROC_MON_FILTER_NATIVE_CONTROLS|PROC_MON_FILTER_STATIC_TEXT|PROC_MON_FILTER_NATIVE_DIALOG_CANDIDATE|PROC_MON_FILTER_NATIVE_RULES|PROC_MON_FILTER_NATIVE_SHAPE|PROC_MON_FILTER_RULE_CLEAR|PROC_MON_FILTER_RULE_SELECTION|PROC_MON_FILTER_REMOVE|PROC_MON_FILTER_RULES_REMAINING|PROC_MON_FILTER_RULE_RESET|PROC_MON_FILTER_NATIVE_BUTTON_FOREGROUND|PROC_MON_FILTER_PROCESS_DROP_ITEM_SCAN|PROC_MON_FILTER_PROCESS_MENU_SCAN|PROC_MON_FILTER_MENU_SHORTCUT_INPUT|PROC_MON_FILTER_MENU_GUI_STATE|PROC_MON_FILTER_MENU_GUI_ACCESSIBLE|PROC_MON_FILTER_MENU_COMMAND|PROC_MON_FILTER_TOOLBAR_COMMAND|PROC_MON_FILTER_NATIVE_TOOLBAR_COMMAND|PROC_MON_FILTER_NATIVE_TOOLBAR_METADATA|PROC_MON_FILTER_ACCESSIBLE_TOOLBAR_COMMAND|PROC_MON_FILTER_MENU_MAIN|PROC_MON_FILTER_NATIVE_MENU|PROC_MON_FILTER_NATIVE_TOPLEVEL|PROC_MON_FILTER_MENU_LOOP_WINDOWS|PROC_MON_FILTER_MENU_LOOP_ROOTS|PROC_MON_FILTER_MENU_LOOP_STYLES|PROC_MON_FILTER_MENU_BAR|PROC_MON_FILTER_MENU_LOOP_ACCESSIBLE|PROC_MON_FILTER_MENU_LOOP_UIA|PROC_MON_FILTER_FAILED_STAGE)=[^\r\n]{1,1024}\r?\n/gm,
+    /^(PROC_MON_FILTER_STARTUP_SNAPSHOT|PROC_MON_FILTER_CONFIG_PATHS|PROC_MON_FILTER_RELOADED_RULES|PROC_MON_FILTER_RELOADED_UI|PROC_MON_FILTER_RELOADED_DROP|PROC_MON_FILTER_NATIVE_CHILDREN|PROC_MON_FILTER_NATIVE_CHILD_UIA|PROC_MON_FILTER_NATIVE_CHILD_PATTERNS|PROC_MON_FILTER_NATIVE_CONTROLS|PROC_MON_FILTER_STATIC_TEXT|PROC_MON_FILTER_NATIVE_DIALOG_CANDIDATE|PROC_MON_FILTER_NATIVE_RULES|PROC_MON_FILTER_NATIVE_SHAPE|PROC_MON_FILTER_RULE_CLEAR|PROC_MON_FILTER_RULE_SELECTION|PROC_MON_FILTER_REMOVE|PROC_MON_FILTER_RULES_REMAINING|PROC_MON_FILTER_RULE_RESET|PROC_MON_FILTER_NATIVE_BUTTON_FOREGROUND|PROC_MON_FILTER_PROCESS_DROP_ITEM_SCAN|PROC_MON_FILTER_PROCESS_MENU_SCAN|PROC_MON_FILTER_MENU_SHORTCUT_INPUT|PROC_MON_FILTER_MENU_GUI_STATE|PROC_MON_FILTER_MENU_GUI_ACCESSIBLE|PROC_MON_FILTER_MENU_COMMAND|PROC_MON_FILTER_TOOLBAR_COMMAND|PROC_MON_FILTER_NATIVE_TOOLBAR_COMMAND|PROC_MON_FILTER_NATIVE_TOOLBAR_METADATA|PROC_MON_FILTER_ACCESSIBLE_TOOLBAR_COMMAND|PROC_MON_FILTER_MENU_MAIN|PROC_MON_FILTER_NATIVE_MENU|PROC_MON_FILTER_NATIVE_TOPLEVEL|PROC_MON_FILTER_MENU_LOOP_WINDOWS|PROC_MON_FILTER_MENU_LOOP_ROOTS|PROC_MON_FILTER_MENU_LOOP_STYLES|PROC_MON_FILTER_MENU_BAR|PROC_MON_FILTER_MENU_BAR_DIAGNOSTIC|PROC_MON_FILTER_MENU_LOOP_ACCESSIBLE|PROC_MON_FILTER_MENU_LOOP_UIA|PROC_MON_FILTER_FAILED_STAGE)=[^\r\n]{1,1024}\r?\n/gm,
   )) {
     if (
       match[1] === "PROC_MON_FILTER_FAILED_STAGE"
@@ -43,9 +43,20 @@ export function appendBoundedWindowsFilterOutput(current, chunk) {
       : match[1] === "PROC_MON_FILTER_MENU_LOOP_ACCESSIBLE"
         ? match[0].match(/^PROC_MON_FILTER_MENU_LOOP_ACCESSIBLE=role:(main-after-shortcut|focus|capture|menu-owner|menu-popup);object:(menu|client);/)?.slice(1).join(":")
       : undefined;
-    const evidenceKey = source ? `${match[1]}:${source}` : match[1];
-    if (!evidence.has(evidenceKey) && describeWindowsFilterDiagnostics(match[0])) {
-      evidence.set(evidenceKey, match[0].replace(/\r?\n$/, ""));
+    const diagnostic = describeWindowsFilterDiagnostics(match[0]);
+    const menuBarDiagnostic = match[1] === "PROC_MON_FILTER_MENU_BAR"
+      ? diagnostic.match(/filter-menu-bar-record=object:(client|menu);state:(unparsed|inconsistent)/)
+      : undefined;
+    const evidenceKey = source
+      ? `${match[1]}:${source}${menuBarDiagnostic ? `:${menuBarDiagnostic[2]}` : ""}`
+      : match[1];
+    if (!evidence.has(evidenceKey) && diagnostic) {
+      evidence.set(
+        evidenceKey,
+        menuBarDiagnostic
+          ? `PROC_MON_FILTER_MENU_BAR_DIAGNOSTIC=object:${menuBarDiagnostic[1]};state:${menuBarDiagnostic[2]}`
+          : match[0].replace(/\r?\n$/, ""),
+      );
     }
   }
   const retainedEvidence = evidence.size ? `${[...evidence.values()].join("\n")}\n` : "";
@@ -728,10 +739,16 @@ export function describeWindowsFilterDiagnostics(output) {
       `filter-menu-loop-styles=available:${menuLoopStyles[1]};active:${menuLoopStyles[2]};focus:${menuLoopStyles[3]};capture:${menuLoopStyles[4]};menu-owner:${menuLoopStyles[5]}`,
     );
   }
-  for (const menuBar of output.matchAll(
-    /^PROC_MON_FILTER_MENU_BAR=object:(client|menu);read:(none|window-unavailable|window-not-top-level|owner-mismatch|not-available|invalid-menu|popup-owner-mismatch);menu:(true|false);popup-same:(true|false);popup-visible:(true|false);popup-enabled:(true|false)\r?$/gm,
+  for (const menuBarLine of output.matchAll(
+    /^PROC_MON_FILTER_MENU_BAR=object:(client|menu);([^\r\n]{1,1024})\r?$/gm,
   )) {
-    const [, object, read, menu, popupSame, popupVisible, popupEnabled] = menuBar;
+    const [, object, payload] = menuBarLine;
+    const menuBar = /^read:(none|window-unavailable|window-not-top-level|owner-mismatch|not-available|invalid-menu|popup-owner-mismatch);menu:(true|false);popup-same:(true|false);popup-visible:(true|false);popup-enabled:(true|false)$/.exec(payload);
+    if (!menuBar) {
+      diagnostics.push(`filter-menu-bar-record=object:${object};state:unparsed`);
+      continue;
+    }
+    const [, read, menu, popupSame, popupVisible, popupEnabled] = menuBar;
     if (
       (read === "none" || popupSame === "false")
       && (popupSame === "true" || (popupVisible === "false" && popupEnabled === "false"))
@@ -741,7 +758,16 @@ export function describeWindowsFilterDiagnostics(output) {
       diagnostics.push(
         `filter-menu-bar=object:${object};read:${read};menu:${menu};popup-same:${popupSame};popup-visible:${popupVisible};popup-enabled:${popupEnabled}`,
       );
+    } else {
+      diagnostics.push(`filter-menu-bar-record=object:${object};state:inconsistent`);
     }
+  }
+  for (const menuBarDiagnostic of output.matchAll(
+    /^PROC_MON_FILTER_MENU_BAR_DIAGNOSTIC=object:(client|menu);state:(unparsed|inconsistent)\r?$/gm,
+  )) {
+    diagnostics.push(
+      `filter-menu-bar-record=object:${menuBarDiagnostic[1]};state:${menuBarDiagnostic[2]}`,
+    );
   }
   for (const accessible of output.matchAll(
     /^PROC_MON_FILTER_MENU_LOOP_ACCESSIBLE=role:(main-after-shortcut|focus|capture|menu-owner|menu-popup);object:(menu|client);available:(true|false);failure:(none|window-unavailable|process-mismatch|object-unavailable|object-invalid|count-invalid|count-limit|child-read-failed|no-match|duplicate-match|role-mismatch|state-invalid);nodes:(\d{1,2});items:(\d{1,3});label-matches:(\d{1,3});matches:(\d{1,3});enabled:(true|false);checked:(unavailable|on|off)\r?$/gm,
