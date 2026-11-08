@@ -1627,15 +1627,19 @@ test("AC-05: menu fallback diagnostics retain only bounded process and menu stat
     "PROC_MON_FILTER_MENU_LOOP_STYLES=available:true;active:standard;focus:popup;capture:unavailable;menu-owner:standard",
     "PROC_MON_FILTER_NATIVE_TOPLEVEL=windows:4;visible:2;enabled:1;main:1;dialog:0;popup:1;toolbar:0;list:0;button:0;other:0;unavailable:0;style-popup:1;style-child:0;style-standard:1;style-unavailable:0",
     "PROC_MON_FILTER_NATIVE_MENU=source:active-menu-loop;state:ready;menus:1;items:2;event:0;filter:1;filter-command:0;drop:1;invalid-handles:0;unreadable:0",
+    "PROC_MON_FILTER_MENU_BAR=object:client;read:none;menu:false;popup-same:true;popup-visible:true;popup-enabled:false",
+    "PROC_MON_FILTER_MENU_BAR=object:menu;read:not-available;menu:false;popup-same:false;popup-visible:false;popup-enabled:false",
     "PROC_MON_FILTER_MENU_LOOP_ACCESSIBLE=role:focus;object:menu;available:true;failure:none;nodes:1;items:2;label-matches:1;matches:1;enabled:true;checked:off",
     "PROC_MON_FILTER_MENU_LOOP_ACCESSIBLE=role:focus;object:client;available:true;failure:no-match;nodes:1;items:0;label-matches:0;matches:0;enabled:false;checked:unavailable",
     "PROC_MON_FILTER_MENU_LOOP_ACCESSIBLE=role:focus;object:client;available:true;failure:role-mismatch;nodes:4;items:7;label-matches:1;matches:0;enabled:false;checked:unavailable",
     "PROC_MON_FILTER_MENU_LOOP_ACCESSIBLE=role:capture;object:menu;available:true;failure:no-match;nodes:1;items:0;label-matches:0;matches:0;enabled:false;checked:unavailable",
     "PROC_MON_FILTER_MENU_LOOP_ACCESSIBLE=role:menu-owner;object:client;available:true;failure:duplicate-match;nodes:3;items:4;label-matches:2;matches:0;enabled:false;checked:unavailable",
     "PROC_MON_FILTER_MENU_LOOP_ACCESSIBLE=role:main-after-shortcut;object:client;available:true;failure:no-match;nodes:1;items:7;label-matches:0;matches:0;enabled:false;checked:unavailable",
+    "PROC_MON_FILTER_MENU_LOOP_ACCESSIBLE=role:menu-popup;object:menu;available:true;failure:none;nodes:1;items:2;label-matches:1;matches:1;enabled:true;checked:off",
     "PROC_MON_FILTER_MENU_LOOP_UIA=role:focus;available:true;failure:none;items:4;event:1;filter:1;filter-command:0;drop:1;drop-labels:1;drop-menu-items:1;drop-enabled:false",
     "PROC_MON_FILTER_MENU_LOOP_UIA=role:capture;available:true;failure:none;items:1;event:0;filter:0;filter-command:0;drop:1;drop-labels:1;drop-menu-items:1;drop-enabled:true",
     "PROC_MON_FILTER_MENU_LOOP_UIA=role:main-after-shortcut;available:true;failure:none;items:2;event:0;filter:1;filter-command:0;drop:1;drop-labels:1;drop-menu-items:1;drop-enabled:false",
+    "PROC_MON_FILTER_MENU_LOOP_UIA=role:menu-popup;available:true;failure:none;items:2;event:0;filter:1;filter-command:0;drop:1;drop-labels:1;drop-menu-items:1;drop-enabled:true",
     "PROC_MON_FILTER_MENU_LOOP_WINDOWS=available:true;active-same:false;focus-same:true;capture-same:true;menu-owner-same:false;active-visible:false;focus-visible:true;capture-visible:true;menu-owner-visible:false;active-menu:false;focus-menu:false;capture-menu:true;menu-owner-menu:false;active-class:unavailable;active-parent:unavailable;focus-class:other;focus-parent:main;capture-class:popup;capture-parent:main;menu-owner-class:unavailable;menu-owner-parent:unavailable",
     "PROC_MON_FILTER_MENU_LOOP_ROOTS=available:true;active:unavailable;focus:main;capture:main;menu-owner:unavailable",
     "PROC_MON_FILTER_MENU_LOOP_STYLES=available:true;active:unavailable;focus:child;capture:popup;menu-owner:unavailable",
@@ -1648,16 +1652,20 @@ test("AC-05: menu fallback diagnostics retain only bounded process and menu stat
       + "; filter-menu-loop-windows=available:true;active-same:true;focus-same:true;capture-same:true;menu-owner-same:true;active-visible:true;focus-visible:true;capture-visible:true;menu-owner-visible:true;active-menu:false;focus-menu:false;capture-menu:false;menu-owner-menu:true;active-class:main;active-parent:none;focus-class:popup;focus-parent:main;capture-class:unavailable;capture-parent:unavailable;menu-owner-class:main;menu-owner-parent:none"
       + "; filter-menu-loop-roots=available:true;active:main;focus:main;capture:unavailable;menu-owner:main"
       + "; filter-menu-loop-styles=available:true;active:standard;focus:popup;capture:unavailable;menu-owner:standard"
+      + "; filter-menu-bar=object:client;read:none;menu:false;popup-same:true;popup-visible:true;popup-enabled:false"
+      + "; filter-menu-bar=object:menu;read:not-available;menu:false;popup-same:false;popup-visible:false;popup-enabled:false"
       + "; filter-menu-loop-msaa=role:focus;object:menu;available:true;failure:none;nodes:1;items:2;label-matches:1;matches:1;enabled:true;checked:off"
       + "; filter-menu-loop-msaa=role:focus;object:client;available:true;failure:no-match;nodes:1;items:0;label-matches:0;matches:0;enabled:false;checked:unavailable"
       + "; filter-menu-loop-msaa=role:focus;object:client;available:true;failure:role-mismatch;nodes:4;items:7;label-matches:1;matches:0;enabled:false;checked:unavailable"
       + "; filter-menu-loop-msaa=role:capture;object:menu;available:true;failure:no-match;nodes:1;items:0;label-matches:0;matches:0;enabled:false;checked:unavailable"
       + "; filter-menu-loop-msaa=role:menu-owner;object:client;available:true;failure:duplicate-match;nodes:3;items:4;label-matches:2;matches:0;enabled:false;checked:unavailable"
       + "; filter-menu-loop-msaa=role:main-after-shortcut;object:client;available:true;failure:no-match;nodes:1;items:7;label-matches:0;matches:0;enabled:false;checked:unavailable"
+      + "; filter-menu-loop-msaa=role:menu-popup;object:menu;available:true;failure:none;nodes:1;items:2;label-matches:1;matches:1;enabled:true;checked:off"
       + "; filter-native-toplevel=windows:4;visible:2;enabled:1;main:1;dialog:0;popup:1;toolbar:0;list:0;button:0;other:0;unavailable:0;style-popup:1;style-child:0;style-standard:1;style-unavailable:0"
       + "; filter-menu-loop-uia=role:focus;available:true;failure:none;items:4;event:1;filter:1;filter-command:0;drop:1;drop-labels:1;drop-menu-items:1;drop-enabled:false"
       + "; filter-menu-loop-uia=role:capture;available:true;failure:none;items:1;event:0;filter:0;filter-command:0;drop:1;drop-labels:1;drop-menu-items:1;drop-enabled:true"
       + "; filter-menu-loop-uia=role:main-after-shortcut;available:true;failure:none;items:2;event:0;filter:1;filter-command:0;drop:1;drop-labels:1;drop-menu-items:1;drop-enabled:false"
+      + "; filter-menu-loop-uia=role:menu-popup;available:true;failure:none;items:2;event:0;filter:1;filter-command:0;drop:1;drop-labels:1;drop-menu-items:1;drop-enabled:true"
       + "; filter-menu-gui-state=process-known:true;same-process:true;gui-info:true;menu-mode:true;owner:1"
       + "; filter-menu-accessible=available:true;failure:no-match;items:0;matches:0;enabled:false;checked:unavailable",
   );
@@ -1676,8 +1684,25 @@ test("AC-05: menu fallback diagnostics retain only bounded process and menu stat
   assert.ok(captured.includes("PROC_MON_FILTER_MENU_LOOP_UIA=role:focus;"));
   assert.ok(captured.includes("PROC_MON_FILTER_MENU_LOOP_UIA=role:capture;"));
   assert.ok(captured.includes("PROC_MON_FILTER_MENU_LOOP_UIA=role:main-after-shortcut;"));
+  assert.ok(captured.includes("PROC_MON_FILTER_MENU_BAR=object:client;"));
+  assert.ok(captured.includes("PROC_MON_FILTER_MENU_BAR=object:menu;"));
+  assert.ok(captured.includes("PROC_MON_FILTER_MENU_LOOP_ACCESSIBLE=role:menu-popup;"));
+  assert.ok(captured.includes("PROC_MON_FILTER_MENU_LOOP_UIA=role:menu-popup;"));
   assert.ok(captured.length <= windowsFilterOutputLimit);
   assert.doesNotMatch(captured, /[A-Z]:\\/);
+});
+
+test("AC-05: Windows menu-bar diagnostics reject inconsistent and unbounded state", () => {
+  const output = [
+    "PROC_MON_FILTER_MENU_BAR=object:client;read:not-available;menu:false;popup-same:true;popup-visible:true;popup-enabled:true",
+    "PROC_MON_FILTER_MENU_BAR=object:client;read:none;menu:false;popup-same:false;popup-visible:true;popup-enabled:false",
+    "PROC_MON_FILTER_MENU_BAR=object:client;read:none;menu:false;popup-same:true;popup-visible:false;popup-enabled:true",
+    "PROC_MON_FILTER_MENU_BAR=object:client;read:none;menu:false;popup-same:false;popup-visible:false;popup-enabled:false;path=C:\\private",
+  ].join("\n");
+  assert.equal(describeWindowsFilterDiagnostics(output), "");
+  const captured = appendBoundedWindowsFilterOutput(`${"x".repeat(9000)}\n${output}\n`, "y".repeat(9000));
+  assert.doesNotMatch(captured, /PROC_MON_FILTER_MENU_BAR=/);
+  assert.doesNotMatch(captured, /C:\\private/);
 });
 
 test("AC-05: Windows MSAA diagnostics retain only exact, same-process menu state", () => {
