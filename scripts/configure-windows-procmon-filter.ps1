@@ -358,7 +358,7 @@ public static class ProcmonNativeMenu
     [DllImport("user32.dll", ExactSpelling = true, SetLastError = true)]
     public static extern IntPtr GetMenu(IntPtr hWnd);
 
-    [DllImport("user32.dll", ExactSpelling = true, SetLastError = true)]
+    [DllImport("user32.dll", EntryPoint = "GetMenuBarInfo", ExactSpelling = true, SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool GetMenuBarInfoNative(
         IntPtr window,

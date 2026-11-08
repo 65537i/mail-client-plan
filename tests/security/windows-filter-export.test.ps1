@@ -961,6 +961,18 @@ try {
   ) {
     throw "Native window class categories must be bounded and process-scoped"
   }
+  foreach ($objectId in @(-4, -3)) {
+    $menuBarProbe = [ProcmonNativeMenu]::ReadMenuBarInfo(
+      $classProbeRoot, [uint32]$PID, $objectId
+    )
+    if ($menuBarProbe.ReadFailure -notin @("none", "not-available")) {
+      throw "Native menu-bar API did not return a supported result for the owned top-level window"
+    }
+  }
+  if ([ProcmonNativeMenu]::ReadMenuBarInfo($classProbeRoot, [uint32]0, -3).ReadFailure -cne "owner-mismatch") {
+    throw "Native menu-bar API accepted a foreign top-level window owner"
+  }
+  Write-Host "PASS AC-05: native menu-bar API resolves its Windows entry point and rejects foreign owners"
 } finally {
   if ($classProbeMenu -ne [IntPtr]::Zero) {
     [SyntheticOwnerDrawMenu]::SetMenu($classProbeRoot, [IntPtr]::Zero) | Out-Null

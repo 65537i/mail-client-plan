@@ -274,6 +274,10 @@ test("AC-05: Procmon main-window activation verifies its process-owned foregroun
     configuration,
     /public static MenuBarProbeSnapshot ReadMenuBarInfo\([\s\S]*GetAncestor\(window, GA_ROOT\) != window[\s\S]*windowProcessId != expectedProcessId[\s\S]*GetMenuBarInfoNative\(window, objectId, 0, ref info\)[\s\S]*popupProcessId != expectedProcessId/,
   );
+  assert.match(
+    configuration,
+    /\[DllImport\("user32\.dll", EntryPoint = "GetMenuBarInfo", ExactSpelling = true, SetLastError = true\)\]\s*\[return: MarshalAs\(UnmanagedType\.Bool\)\]\s*private static extern bool GetMenuBarInfoNative\(/,
+  );
   assert.doesNotMatch(configuration, /\[ProcmonNativeMenu\]::GetMenu\(/);
   assert.match(nativeMenuSummary, /GetMenuForTopLevelWindow\(\$windowHandle\)/);
   assert.match(nativeMenuSummary, /GetWindowProcessId\(\$windowHandle\) -ne \$Process\.Id/);

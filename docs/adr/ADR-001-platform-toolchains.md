@@ -55,6 +55,19 @@ GitHub-hosted runnerの公式一覧でラベルとarchを確認した（2026-11-
 
 開発環境はNode公式Debian Bookwormイメージのdigest固定Dev Containerとし、Linux向けTauri依存、Xvfb、D-Bus、Rust toolchainを含める。Docker Desktop上ではlinux/arm64で動作するが、これはLinux arm64の製品サポートを意味しない。
 
+### Windows ARM64ローカル検証
+
+Visual Studio Build ToolsのARM64 C++ toolsとWindows SDKに加え、`ring`のビルドにはC++ Clang component（`Microsoft.VisualStudio.Component.VC.Llvm.Clang`）が必要。MSVC環境を初期化するだけでは`clang`が見つからない場合があるため、ARM64 Clangの`bin`を同じプロセスのPATHへ追加する。2026-11-09のローカル検証では次の手順でsecurity-test buildと実WebView試験が成功した。インストール先は環境に合わせて変更する。
+
+```powershell
+$env:PATH = 'C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\VC\Tools\Llvm\ARM64\bin;' + $env:PATH
+& $env:ComSpec /c 'call "C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\VC\Auxiliary\Build\vcvarsarm64.bat" >nul && pnpm exec tauri build --no-bundle --ci --features security-test --config src-tauri/tauri.security-test.conf.json'
+if ($LASTEXITCODE -ne 0) { throw 'ARM64 security-test build failed' }
+pnpm exec wdio run .\wdio.security.conf.mjs
+```
+
+実Procmon監査は管理者権限と操作可能なデスクトップが必要。Microsoft署名を検証した`Procmon64a.exe`を`MAIL_CLIENT_PROCMON_PATH`へ設定して`pnpm run test:security:file-access:windows`を実行する。他のProcmon captureが動作中なら実行しない。実WebView試験単体の成功や合成foreground拒否fixtureの成功を、Procmon file-access auditの成功へ読み替えない。`security-test`バイナリは配布用ではなく、通常本番buildでは引き続きテストplugin除外を検証する。
+
 ## 選択肢
 
 - OS標準の最新node/rustをそのまま使う: 再現性が低いため不採用。
