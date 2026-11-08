@@ -7,7 +7,14 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { nativeCiPlan } from "../../scripts/native-ci-plan.mjs";
 
-const targets = ["ubuntu-24.04-x64", "windows-2025-x64", "macos-14-arm64", "macos-15-intel"];
+const targets = [
+  "ubuntu-24.04-x64",
+  "ubuntu-24.04-arm64",
+  "windows-2025-x64",
+  "windows-11-arm64",
+  "macos-14-arm64",
+  "macos-15-intel",
+];
 const modes = ["basic", "webview", "full"];
 
 test("native CI: pushes run basic Linux checks and PRs retain full cross-OS validation", () => {
@@ -39,6 +46,16 @@ test("native CI: rejects unsupported events and inputs rather than silently runn
   ]) {
     assert.throws(() => nativeCiPlan(...args));
   }
+});
+
+test("native CI: architecture-specific runners and Procmon executables are wired", async () => {
+  const workflow = await readFile(
+    new URL("../../.github/workflows/native.yml", import.meta.url),
+    "utf8",
+  );
+  assert.match(workflow, /ubuntu-24\.04-arm64[\s\S]*?windows-2025-x64[\s\S]*?windows-11-arm64/);
+  assert.match(workflow, /"ARM64"\s*\{\s*"Procmon64a\.exe"\s*\}/);
+  assert.match(workflow, /"X64"\s*\{\s*"Procmon64\.exe"\s*\}/);
 });
 
 test("native CI: CLI writes valid matrix outputs and an explicit partial-validation summary", async () => {

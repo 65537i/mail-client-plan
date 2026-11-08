@@ -14,9 +14,9 @@
 
 ### 00A: 最小起動と依存固定
 
-実装: Tauri 2 + Vue 3 + TypeScript strictの最小アプリとRust workspaceを用意する。Node/Rust/package managerとlockfileを固定し、3OS native build CIを作る。OS/arch/最低版とrunnerを実機候補付きでADR-001へ記録する。
+実装: Tauri 2 + Vue 3 + TypeScript strictの最小アプリとRust workspaceを用意する。Node/Rust/package managerとlockfileを固定し、サポート候補の全OS / architectureをnative build CIへ含める。OS/arch/最低版とrunnerを実機候補付きでADR-001へ記録する。
 
-検証: 3OSでbuild、起動、終了できる。古いTauri 1の設定を混ぜない。
+検証: Windows x64 / ARM64、Ubuntu x64 / ARM64、macOS arm64 / x64でnative build、起動、終了できる。古いTauri 1の設定を混ぜない。
 
 ### 00B: 危険な境界のPoC
 

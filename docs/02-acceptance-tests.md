@@ -10,12 +10,12 @@
 
 | ID | Phase / 要件 | Given / When / Thenの要旨 |
 |---|---|---|
-| AC-00 | 00 / NFR-03 | 空の開発環境からlockfile通りに3OSでbuildし、起動できる。依存選定ADR、OS対象、脅威モデル、禁止権限が確定する |
+| AC-00 | 00 / NFR-03 | 空の開発環境からlockfile通りにWindows x64 / ARM64、Ubuntu x64 / ARM64、macOS arm64 / x64でnative buildし、起動できる。依存選定ADR、OS対象、脅威モデル、禁止権限が確定する |
 | AC-01 | 01 / NFR-01 | 不正IPC payload、別accountのfolder ID、未知commandを送っても、検証エラーになりデータへ到達しない |
 | AC-02 | 01 / NFR-02 | DB初期化・migration・途中強制終了後に整合性を保つ。失敗時は元DBが残る |
 | AC-03 | 02 / FR-01,02 | 独立した2アカウントを登録し、同じUID/Message-IDのメールを別々に表示する。切替時に他アカウントの本文が混ざらない |
 | AC-04 | 02 / FR-02 | 日本語、multipart/alternative、添付、壊れた文字コードのfixtureを表示し、本文取得だけではサーバのSeenが変化しない |
-| AC-05 | 02 / NFR-01 | HTML攻撃fixtureでscript/IPC/外部通信/ファイル読取/トップ画面遷移が全て0回。3OSの実WebViewで確認する |
+| AC-05 | 02 / NFR-01 | HTML攻撃fixtureでscript/IPC/外部通信/ファイル読取/トップ画面遷移が全て0回。サポート候補の全OS / architectureの実WebViewで確認する |
 | AC-06 | 02 / NFR-01 | 不正証明書・ホスト名不一致・STARTTLS拒否で認証情報送信が0回。秘密ストア不能時に平文ファイルが作られない |
 | AC-07 | 03 / FR-03 | 同期中切断・再起動後、新着/削除/flagsが最終的にサーバと一致し、重複レコードがない |
 | AC-08 | 03 / FR-03 | UIDVALIDITY変更後、古いUID参照が新メールへ適用されない。IDLEなし・拡張なしでもpolling/UID照合で収束する |

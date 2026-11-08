@@ -12,13 +12,15 @@ on:
   workflow_dispatch:
     inputs:
       target:
-        description: Target OS (all for cross-OS validation)
+        description: Target OS/architecture (all for cross-OS validation)
         type: choice
         default: all
         options:
           - all
           - ubuntu-24.04-x64
+          - ubuntu-24.04-arm64
           - windows-2025-x64
+          - windows-11-arm64
           - macos-14-arm64
           - macos-15-intel
       mode:
@@ -215,7 +217,15 @@ jobs:
             -Uri "https://download.sysinternals.com/files/ProcessMonitor.zip" `
             -OutFile $archive
           Expand-Archive -LiteralPath $archive -DestinationPath $toolDirectory -Force
-          $procmon = Join-Path $toolDirectory "Procmon64.exe"
+          $procmonExecutable = switch ($env:RUNNER_ARCH) {
+            "X64" { "Procmon64.exe" }
+            "ARM64" { "Procmon64a.exe" }
+            default { throw "Unsupported Process Monitor runner architecture" }
+          }
+          $procmon = Join-Path $toolDirectory $procmonExecutable
+          if (-not (Test-Path -LiteralPath $procmon -PathType Leaf)) {
+            throw "Process Monitor executable for this runner architecture is missing"
+          }
           $signature = Get-AuthenticodeSignature -FilePath $procmon
           if ($signature.Status -ne "Valid" -or
               $signature.SignerCertificate.Subject -notmatch "^CN=Microsoft Corporation,") {

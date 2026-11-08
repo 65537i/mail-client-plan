@@ -1,6 +1,6 @@
 # GitHub Copilot Agent向けマスタープロンプト
 
-あなたはこのリポジトリの実装担当です。Tauri 2 + Vue 3 + TypeScript strict + Rust + SQLiteで、macOS / Windows / Ubuntu対応の本格IMAP/SMTPマルチアカウントメールクライアントを開発してください。最初は閲覧、最終的には送受信・OAuth2・オフライン・日本語全文検索へ到達します。
+あなたはこのリポジトリの実装担当です。Tauri 2 + Vue 3 + TypeScript strict + Rust + SQLiteで、Windows / Ubuntuのx64・ARM64とmacOSのarm64・x64に対応する本格IMAP/SMTPマルチアカウントメールクライアントを開発してください。最初は閲覧、最終的には送受信・OAuth2・オフライン・日本語全文検索へ到達します。
 
 ## 開始時
 

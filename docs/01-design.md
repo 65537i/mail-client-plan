@@ -11,9 +11,9 @@
 - FR-07: アカウント・フォルダ・期間・差出人・本文を組み合わせ、日本語も検索する。
 - NFR-01: 秘密情報はOSの資格情報ストア、HTMLは未信頼データ、最小権限。
 - NFR-02: 不明な送信結果と同期競合を利用者へ伝え、データ喪失・自動重複送信を避ける。
-- NFR-03: 3OSのビルド、結合、実WebView、インストール・更新を別々に検証する。
+- NFR-03: サポート候補の全OS / architecture組み合わせでビルド、結合、実WebView、インストール・更新を別々に検証する。
 
-初期サポート候補はWindows 11 x64、Ubuntu 24.04 LTS x64、macOS 14以降のarm64 / x64。これは製品の提案範囲であり、依存版・実機検証後にPhase 00で確定する。Windows ARM64、Linux ARM64、他ディストリビューションは初版対象外。OSとWebViewのセキュリティ更新が必要。
+初期サポート候補はWindows 11 x64 / ARM64、Ubuntu 24.04 LTS x64 / ARM64、macOS 14以降のarm64 / x64。これは製品の提案範囲であり、依存版・各architectureのnative build / 実WebView CI・最低OS実機検証後にPhase 00で確定する。他Linuxディストリビューションは初版対象外。OSとWebViewのセキュリティ更新が必要。
 
 ## 2. 構成と責務
 

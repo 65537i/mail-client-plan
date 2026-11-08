@@ -1,11 +1,11 @@
 # ADR-001: 対象OS・runner・初期ツールチェーン
 
-- 状態: Phase 00Aの候補を採用。GitHub CIと最低対応OSの実機検証後に確定する
-- 決定日: 2026-10-20
+- 状態: ARM64対象を追加。GitHub CIと最低対応OSの実機検証後に確定する
+- 決定日: 2026-11-08
 
 ## 背景
 
-初版はWindows 11 x64、Ubuntu 24.04 LTS x64、macOS 14以降のarm64 / x64を候補とする。Tauriのネイティブ依存とWebViewはOSごとに異なるため、クロスコンパイルだけで対応可とは判定しない。
+初版はWindows 11 x64 / ARM64、Ubuntu 24.04 LTS x64 / ARM64、macOS 14以降のarm64 / x64を候補とする。Tauriのネイティブ依存とWebViewはOS・architectureごとに異なるため、クロスコンパイルだけで対応可とは判定しない。
 
 ## 決定
 
@@ -14,22 +14,26 @@
 | OS / arch | 最低版候補 | WebView | 実機候補 |
 |---|---|---|---|
 | Windows x64 | Windows 11 | WebView2 Evergreen | Windows 11 x64のIntel / AMDノートPC |
+| Windows ARM64 | Windows 11 | WebView2 Evergreen ARM64 | Windows 11 ARM64のSnapdragon搭載PC |
 | Ubuntu x64 | Ubuntu 24.04 LTS | WebKitGTK 4.1 | Ubuntu 24.04 x64をクリーンインストールしたIntel / AMDノートPC |
+| Ubuntu ARM64 | Ubuntu 24.04 LTS | WebKitGTK 4.1 | Ubuntu 24.04 ARM64をクリーンインストールした対応SoC機 |
 | macOS arm64 | macOS 14 | WKWebView | Apple Silicon MacBook Air (M1以降) |
 | macOS x64 | macOS 14 | WKWebView | Intel Mac mini (2018)またはmacOS 14対応Intel MacBook Pro |
 
-上記は実機の合格証跡ではなく、調達・借用する試験候補。実機でOS更新、起動、WebView、SecretStore、IME、インストールを検証してから最低版を確定する。Windows ARM64、Linux ARM64、他Linuxディストリビューションは初版の製品対象外。
+上記は実機の合格証跡ではなく、調達・借用する試験候補。各OS / architectureでnative build、起動、WebView、SecretStore、IME、インストールを検証してから最低版を確定する。LinuxはUbuntu 24.04 LTS以外のディストリビューションを初版対象外とする。
 
 ### CI runner候補
 
 | 検証対象 | GitHub-hosted runner |
 |---|---|
 | Ubuntu x64 | `ubuntu-24.04` |
+| Ubuntu ARM64 | `ubuntu-24.04-arm` |
 | Windows x64 | `windows-2025` |
+| Windows ARM64 | `windows-11-arm` |
 | macOS arm64 | `macos-14` |
 | macOS x64 | `macos-15-intel` |
 
-公開GitHub-hosted runnerの公式一覧でラベルとarchを確認した（2026-10-20）。private repositoryでの利用可否・料金はリポジトリのプランで別途確認する。runnerの新しいOSは最低対応OSの実機検証を代替しない。
+GitHub-hosted runnerの公式一覧でラベルとarchを確認した（2026-11-08）。ARM64 runnerは対象リポジトリのプランで利用可能性・料金を確認する。runner上の成功は最低対応OSの実機検証を代替しない。
 
 ### 固定ツールチェーン
 
@@ -59,9 +63,9 @@
 
 ## 結果と制限
 
-- `native.yml`は4 runner候補でformat、Rust test/clippy、frontend build、native build、smoke launch/exitを実行する。
+- `native.yml`は6 runner候補でformat、Rust test/clippy、frontend build、native build、smoke launch/exitを実行する。Windows ARM64ではnative Procmon executable `Procmon64a.exe`を使用する。
 - Linux CIはWebKitGTK 4.1依存を導入する。Windows runnerのWebView2 / MSVC、macOS runnerのXcode提供環境はGitHub-hosted imageに依存する。
-- CI workflowはこの作業環境から実行できないため、4 runnerの実行結果は未確認。
+- ARM64を含む追加matrixは設定済みだが、runner上のnative build / WebView / smokeの実行結果と最低OS実機試験は未確認。
 - Tauri起動smoke testは`smoke-test` Cargo featureでのみ自動終了処理を有効にする。通常buildにはfeatureを含めない。
 - 署名、公証、installer、最低OSの実機確認は本ADRの対象外。
 
@@ -72,7 +76,7 @@ runnerラベルの廃止、OS/WebViewのサポート終了、Rust/Node/Tauriの�
 ## 根拠
 
 - [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/)
-- [GitHub-hosted runners reference](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)
+- [GitHub-hosted runners reference](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)（ubuntu-24.04-arm / windows-11-armを含むrunner architecture一覧）
 - [Tauri configuration reference](https://v2.tauri.app/reference/config/)
 - [Node.js release index](https://nodejs.org/dist/index.json)
 - [Rust stable channel manifest](https://static.rust-lang.org/dist/channel-rust-stable.toml)

@@ -172,13 +172,13 @@ Run513で得た`wait-export-config-dialog`停止の切り分け用に、UIA wind
 | Workflow | 起動 | 必須処理 |
 |---|---|---|
 | verify | PR / main | format、lint、typecheck、unit、UI component、依存監査、secret scan、設定検査 |
-| native | main pushはUbuntuのbasic、PRは4 runnerのfull。手動は対象OS・モードを選択（既定all / full）。`docs/status.md`のみの変更では起動しない | basic / webview / fullを区別。fullでは従来のnative build・production検査・起動・protocol・実WebView試験を維持 |
+| native | main pushはUbuntu x64のbasic、PRは6 runner（Ubuntu / Windows x64・ARM64、macOS arm64・x64）のfull。手動は対象OS・architecture・モードを選択（既定all / full）。`docs/status.md`のみの変更では起動しない | basic / webview / fullを区別。fullでは従来のnative build・production検査・起動・protocol・実WebView試験を維持 |
 | protocol | PR / main、Ubuntu | pinned IMAP/SMTP fixtureサーバ、TLS、fault injection、オフライン収束 |
 | desktop | PR / main、3OS | 実WebView E2E、HTML攻撃、IPC拒否、再起動。GUI環境が必要 |
-| compatibility | nightly / release | OS最低版/現行版、macOS 2 arch、WebView差異、長時間同期、fuzz corpus |
+| compatibility | nightly / release | OS最低版/現行版、Windows / Ubuntu / macOSの各対象architecture、WebView差異、長時間同期、fuzz corpus |
 | release | protected tag + environment | 承認済みcommitの再ビルド、署名、公証、SBOM、hash、更新署名、draft release |
 
-初期runner候補: ubuntu-24.04 / windows-2022 / macOSは利用可能なarm64・x64ラベルをPhase 00で検証して固定する。runnerラベルや内蔵OSは変更されうるため、対応する実機の最低OS試験を別に持つ。latestを製品の最低動作OSの証明にしない。
+runner候補: Ubuntu x64 / ARM64は`ubuntu-24.04` / `ubuntu-24.04-arm`、Windows x64 / ARM64は`windows-2025` / `windows-11-arm`、macOS arm64 / x64は`macos-14` / `macos-15-intel`。GitHub-hosted runnerのarchitecture対応表で確認するが、runnerラベルや内蔵OSは変更されうるため、各architectureの最低OS試験を別に持つ。latestやhosted runnerを製品の最低動作OSの証明にしない。
 
 Linux: Tauri公式prerequisitesに従うWebKitGTK 4.1等を固定された環境に導入し、GUI試験はXvfb + D-Bus + Secret Serviceのセッションを準備する。コンテナfixtureはUbuntuで動かし、他OSはネイティブのscripted protocol serverを使う。全OSでDocker利用可能と仮定しない。
 
@@ -488,7 +488,8 @@ Run 238（`2f48084`、Windows / webview）はExport Configurationの発見・Inv
 
 Actions → native → Run workflowで最新のmainを選び、以下を指定する。旧runのRe-run jobsは旧commitを使うため、修正確認には新規実行を使う。
 
-- `target`: `all` / `ubuntu-24.04-x64` / `windows-2025-x64` / `macos-14-arm64` / `macos-15-intel`
+- `target`: `all` / `ubuntu-24.04-x64` / `ubuntu-24.04-arm64` / `windows-2025-x64` / `windows-11-arm64` / `macos-14-arm64` / `macos-15-intel`
+- GitHub-hosted ARM64 labels: Ubuntu `ubuntu-24.04-arm`、Windows `windows-11-arm`。Windows Procmon auditはrunner architectureに対応するMicrosoft署名済み`Procmon64.exe` / `Procmon64a.exe`を選択する。
 - `mode`:
   - `basic`: Rust format / workspace test / clippy、frontend typecheck / build。native release build、起動、protocol、実WebViewは未実行。
   - `webview`: security-test用Tauri build（frontend typecheck / buildを含む）と実WebView / SecretStore試験。Linux `strace`、macOS `fs_usage`、Windows Process Monitorによるfile-access監査を実行する。WindowsはRun 232までに初期MSAA stateからInvoke後の`checked:on`を確認したが、Save Filter command発見がtimeoutした。Alt+F後のfocused MenuItemは取得できたが、正確なmenu item一覧は未取得。保存経路は未完了で、次はallowlisted menu item summaryを確認する。canary event / capacity問題およびprocess coverageも未解決。production build、起動smoke、protocol、Rust workspace test / clippyは未実行。
@@ -741,8 +742,8 @@ Phase 00で固定版によるPoCを行い、以下を証明する。
 | 対象 | 成果物候補 | release gate |
 |---|---|---|
 | macOS arm64 / x64 | .app / .dmg、必要ならuniversal | Developer ID署名、hardened runtime、公証、staple、Gatekeeper起動 |
-| Windows x64 | NSIS installer、必要時MSI | Authenticode署名・timestamp、クリーンVMインストール、更新・削除 |
-| Ubuntu x64 | .deb + AppImage | package依存検証、hash/署名情報、実機起動、更新導線 |
+| Windows x64 / ARM64 | architecture別NSIS installer、必要時MSI | Authenticode署名・timestamp、各architectureのクリーンVMインストール、更新・削除 |
+| Ubuntu x64 / ARM64 | architecture別.deb + AppImage | package依存検証、hash/署名情報、各architecture実機起動、更新導線 |
 
 OS署名とTauri updaterの署名は別の鍵・目的として管理する。updaterはHTTPSと署名検証を必須とし、改変・別製品・古い配信情報を拒否するアプリ側方針も試験する。秘密鍵をアプリへ同梱しない。キーrotationと紛失時の手動更新手順を用意する。
 
