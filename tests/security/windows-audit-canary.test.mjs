@@ -633,10 +633,14 @@ test("AC-05: hosted Windows fixture verifies foreground rejection without clicki
     /if \(\$foregroundHandle -ne \$nativeForm\.Handle\) \{[\s\S]*?\n  \} else \{[\s\S]*?\n  \}/,
   )?.[0];
   assert.ok(foregroundFallback, "Synthetic mouse fixture foreground branch is missing");
+  assert.match(
+    fixture,
+    /PROC_MON_TEST_FORCE_FOREGROUND_DENIAL[\s\S]*nativeForegroundBlocker[\s\S]*GetForegroundWindow\(\)[\s\S]*Local foreground-denial simulation did not activate its blocker window/,
+  );
   assert.match(foregroundFallback, /\$env:GITHUB_ACTIONS -cne "true"[\s\S]*throw "Synthetic native filter window could not be activated for mouse input"/);
   assert.match(
     foregroundFallback,
-    /ClickNativeButtonWithMouseExact[\s\S]*catch \[System\.InvalidOperationException\][\s\S]*Native button root was not foreground[\s\S]*GetButtonCheck\(\$nativeButtonHandle\) -ne 1[\s\S]*BLOCKED AC-05: hosted desktop denied foreground activation/,
+    /ClickNativeButtonWithMouseExact[\s\S]*catch \[System\.InvalidOperationException\][\s\S]*Native button root was not foreground[\s\S]*GetButtonCheck\(\$nativeButtonHandle\) -ne 1[\s\S]*BLOCKED AC-05: \$foregroundDenialContext denied foreground activation/,
   );
   assert.match(
     foregroundFallback,
@@ -660,7 +664,10 @@ test("AC-05: hosted Windows fixture verifies foreground rejection without clicki
     foregroundPath,
     /SelectNativeListItemsExact[\s\S]*ClickNativeListItemExact[\s\S]*SendControlAShortcutExact[\s\S]*AreNativeListItemsSelectedExact/,
   );
-  assert.match(blockedPath, /BLOCKED AC-05: hosted desktop did not foreground synthetic window/);
+  assert.match(
+    blockedPath,
+    /BLOCKED AC-05: \$foregroundDenialContext did not foreground synthetic window/,
+  );
   assert.doesNotMatch(blockedPath, /SelectNativeListItemsExact|ClickNativeListItemExact|SendControlAShortcutExact/);
   const menuFixture = fixture.slice(
     fixture.indexOf("$menuForm = [System.Windows.Forms.Form]::new()"),
@@ -668,7 +675,7 @@ test("AC-05: hosted Windows fixture verifies foreground rejection without clicki
   );
   assert.match(
     menuFixture,
-    /if \(\[ProcmonNativeMenu\]::GetForegroundWindow\(\) -ne \$menuForm\.Handle\) \{[\s\S]*\$env:GITHUB_ACTIONS -cne "true"[\s\S]*SendAltLShortcut[\s\S]*State -cne "target-mismatch"[\s\S]*Events -ne 0[\s\S]*DropDown\.Visible[\s\S]*BLOCKED AC-05: hosted desktop denied foreground activation; Alt\+L helper rejected input without opening the menu[\s\S]*\} else \{[\s\S]*SendAltLShortcut[\s\S]*State -ne "sent"[\s\S]*Events -ne 4[\s\S]*DropDown\.Visible/,
+    /menuForegroundBlocker[\s\S]*Local foreground-denial simulation did not keep the menu out of foreground[\s\S]*if \(\[ProcmonNativeMenu\]::GetForegroundWindow\(\) -ne \$menuForm\.Handle\) \{[\s\S]*\$env:GITHUB_ACTIONS -cne "true"[\s\S]*SendAltLShortcut[\s\S]*State -cne "target-mismatch"[\s\S]*Events -ne 0[\s\S]*DropDown\.Visible[\s\S]*BLOCKED AC-05: \$foregroundDenialContext denied foreground activation; Alt\+L helper rejected input without opening the menu[\s\S]*\} else \{[\s\S]*SendAltLShortcut[\s\S]*State -ne "sent"[\s\S]*Events -ne 4[\s\S]*DropDown\.Visible/,
   );
 });
 

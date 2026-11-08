@@ -1018,6 +1018,13 @@ try {
     [SyntheticOwnerDrawMenu]::DestroyMenu($ownerDrawSubmenu) | Out-Null
   }
 }
+$forceForegroundDenial = $env:PROC_MON_TEST_FORCE_FOREGROUND_DENIAL -ceq "true"
+$foregroundDenialContext = if ($forceForegroundDenial) {
+  "local foreground-denial simulation"
+} else {
+  "hosted desktop"
+}
+$nativeForegroundBlocker = $null
 $nativeForm = [System.Windows.Forms.Form]::new()
 $nativeForm.ShowInTaskbar = $false
 $nativeForm.Opacity = 0.05
@@ -1141,8 +1148,15 @@ try {
   if ([SyntheticListCount]::GetButtonCheck($nativeButtonHandle) -ne 1) {
     throw "Native button activation did not toggle its synthetic checked state"
   }
-  $nativeForm.Activate()
-  [ProcmonNativeMenu]::SetForegroundWindow($nativeForm.Handle) | Out-Null
+  if ($forceForegroundDenial) {
+    $nativeForegroundBlocker = [System.Windows.Forms.Form]::new()
+    $nativeForegroundBlocker.ShowInTaskbar = $false
+    $nativeForegroundBlocker.Show()
+    $nativeForegroundBlocker.Activate()
+  } else {
+    $nativeForm.Activate()
+    [ProcmonNativeMenu]::SetForegroundWindow($nativeForm.Handle) | Out-Null
+  }
   $foregroundDeadline = [DateTime]::UtcNow.AddSeconds(2)
   do {
     [System.Windows.Forms.Application]::DoEvents()
@@ -1150,8 +1164,11 @@ try {
     if ($foregroundHandle -eq $nativeForm.Handle) { break }
     Start-Sleep -Milliseconds 50
   } while ([DateTime]::UtcNow -lt $foregroundDeadline)
+  if ($forceForegroundDenial -and $foregroundHandle -eq $nativeForm.Handle) {
+    throw "Local foreground-denial simulation did not activate its blocker window"
+  }
   if ($foregroundHandle -ne $nativeForm.Handle) {
-    if ($env:GITHUB_ACTIONS -cne "true") {
+    if ($env:GITHUB_ACTIONS -cne "true" -and -not $forceForegroundDenial) {
       throw "Synthetic native filter window could not be activated for mouse input"
     }
     $foregroundGateRejected = $false
@@ -1171,7 +1188,7 @@ try {
     ) {
       throw "Mouse input was not rejected by the foreground gate without changing the control"
     }
-    Write-Host "BLOCKED AC-05: hosted desktop denied foreground activation; native mouse helper rejected input without changing the control"
+    Write-Host "BLOCKED AC-05: $foregroundDenialContext denied foreground activation; native mouse helper rejected input without changing the control"
   } else {
     [ProcmonNativeMenu]::ClickNativeButtonWithMouseExact(
       $nativeButtonHandle,
@@ -1217,7 +1234,7 @@ try {
       throw "Native list keyboard selection did not match the synthetic row count"
     }
   } else {
-    Write-Host "BLOCKED AC-05: hosted desktop did not foreground synthetic window; native list input gate was not exercised"
+    Write-Host "BLOCKED AC-05: $foregroundDenialContext did not foreground synthetic window; native list input gate was not exercised"
   }
   $expectedCells = @("Path", "is", "C:\audit\canary.png", "Include")
   for ($columnIndex = 0; $columnIndex -lt $expectedCells.Count; $columnIndex++) {
@@ -1232,6 +1249,10 @@ try {
   if ($nativeToolbarHandle -ne [IntPtr]::Zero -and
     -not [SyntheticListCount]::DestroyWindow($nativeToolbarHandle)) {
     throw "Synthetic native toolbar cleanup failed"
+  }
+  if ($null -ne $nativeForegroundBlocker) {
+    $nativeForegroundBlocker.Close()
+    $nativeForegroundBlocker.Dispose()
   }
   $nativeForm.Close()
   $nativeForm.Dispose()
@@ -1249,11 +1270,22 @@ $dropMenuItem = [System.Windows.Forms.ToolStripMenuItem]::new("Drop Filtered Eve
 $menuForm.MainMenuStrip = $menuStrip
 [void]$menuForm.Controls.Add($menuStrip)
 $menuForm.Show()
-$menuForm.Activate()
+$menuForegroundBlocker = $null
+if ($forceForegroundDenial) {
+  $menuForegroundBlocker = [System.Windows.Forms.Form]::new()
+  $menuForegroundBlocker.ShowInTaskbar = $false
+  $menuForegroundBlocker.Show()
+  $menuForegroundBlocker.Activate()
+} else {
+  $menuForm.Activate()
+}
 [System.Windows.Forms.Application]::DoEvents()
 try {
+  if ($forceForegroundDenial -and [ProcmonNativeMenu]::GetForegroundWindow() -eq $menuForm.Handle) {
+    throw "Local foreground-denial simulation did not keep the menu out of foreground"
+  }
   if ([ProcmonNativeMenu]::GetForegroundWindow() -ne $menuForm.Handle) {
-    if ($env:GITHUB_ACTIONS -cne "true") {
+    if ($env:GITHUB_ACTIONS -cne "true" -and -not $forceForegroundDenial) {
       throw "Synthetic menu form did not receive foreground activation"
     }
     $menuInput = [ProcmonNativeMenu]::SendAltLShortcut($menuForm.Handle, [int]$PID)
@@ -1264,7 +1296,7 @@ try {
     ) {
       throw "Native Alt+L shortcut was not rejected without opening the synthetic menu"
     }
-    Write-Host "BLOCKED AC-05: hosted desktop denied foreground activation; Alt+L helper rejected input without opening the menu"
+    Write-Host "BLOCKED AC-05: $foregroundDenialContext denied foreground activation; Alt+L helper rejected input without opening the menu"
   } else {
     $menuInput = [ProcmonNativeMenu]::SendAltLShortcut($menuForm.Handle, [int]$PID)
     if ($menuInput.State -ne "sent" -or $menuInput.Events -ne 4) {
@@ -1284,6 +1316,10 @@ try {
   }
   $filterMenuItem.DropDown.Close()
 } finally {
+  if ($null -ne $menuForegroundBlocker) {
+    $menuForegroundBlocker.Close()
+    $menuForegroundBlocker.Dispose()
+  }
   $menuForm.Close()
   $menuForm.Dispose()
 }
