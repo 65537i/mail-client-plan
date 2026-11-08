@@ -1143,8 +1143,14 @@ try {
   }
   $nativeForm.Activate()
   [ProcmonNativeMenu]::SetForegroundWindow($nativeForm.Handle) | Out-Null
-  [System.Windows.Forms.Application]::DoEvents()
-  if ([ProcmonNativeMenu]::GetForegroundWindow() -ne $nativeForm.Handle) {
+  $foregroundDeadline = [DateTime]::UtcNow.AddSeconds(2)
+  do {
+    [System.Windows.Forms.Application]::DoEvents()
+    $foregroundHandle = [ProcmonNativeMenu]::GetForegroundWindow()
+    if ($foregroundHandle -eq $nativeForm.Handle) { break }
+    Start-Sleep -Milliseconds 50
+  } while ([DateTime]::UtcNow -lt $foregroundDeadline)
+  if ($foregroundHandle -ne $nativeForm.Handle) {
     throw "Synthetic native filter window could not be activated for mouse input"
   }
   [ProcmonNativeMenu]::ClickNativeButtonWithMouseExact(
