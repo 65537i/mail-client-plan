@@ -1151,17 +1151,39 @@ try {
     Start-Sleep -Milliseconds 50
   } while ([DateTime]::UtcNow -lt $foregroundDeadline)
   if ($foregroundHandle -ne $nativeForm.Handle) {
-    throw "Synthetic native filter window could not be activated for mouse input"
-  }
-  [ProcmonNativeMenu]::ClickNativeButtonWithMouseExact(
-    $nativeButtonHandle,
-    $nativeForm.Handle,
-    [int]$PID,
-    "Add"
-  )
-  [System.Windows.Forms.Application]::DoEvents()
-  if ([SyntheticListCount]::GetButtonCheck($nativeButtonHandle) -ne 0) {
-    throw "Native mouse button activation did not toggle its synthetic checked state"
+    if ($env:GITHUB_ACTIONS -cne "true") {
+      throw "Synthetic native filter window could not be activated for mouse input"
+    }
+    $foregroundGateRejected = $false
+    try {
+      [ProcmonNativeMenu]::ClickNativeButtonWithMouseExact(
+        $nativeButtonHandle,
+        $nativeForm.Handle,
+        [int]$PID,
+        "Add"
+      )
+    } catch [System.InvalidOperationException] {
+      $foregroundGateRejected = $_.Exception.Message -ceq "Native button root was not foreground"
+    }
+    if (
+      -not $foregroundGateRejected -or
+      [SyntheticListCount]::GetButtonCheck($nativeButtonHandle) -ne 1
+    ) {
+      throw "Mouse input was not rejected by the foreground gate without changing the control"
+    }
+    Write-Host "BLOCKED AC-05: hosted desktop denied foreground activation; native mouse helper rejected input without changing the control"
+  } else {
+    [ProcmonNativeMenu]::ClickNativeButtonWithMouseExact(
+      $nativeButtonHandle,
+      $nativeForm.Handle,
+      [int]$PID,
+      "Add"
+    )
+    [System.Windows.Forms.Application]::DoEvents()
+    if ([SyntheticListCount]::GetButtonCheck($nativeButtonHandle) -ne 0) {
+      throw "Native mouse button activation did not toggle its synthetic checked state"
+    }
+    Write-Host "PASS AC-05: native mouse button activation toggled its synthetic checked state"
   }
   if (
     [ProcmonNativeMenu]::ReadNativeListItemCount($nativeList, [int]$PID) -ne 2 -or

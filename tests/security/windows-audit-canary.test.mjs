@@ -624,6 +624,26 @@ test("AC-05: Procmon main-window activation verifies its process-owned foregroun
   );
 });
 
+test("AC-05: hosted Windows fixture verifies foreground rejection without clicking", async () => {
+  const fixture = await readFile(
+    new URL("../../tests/security/windows-filter-export.test.ps1", import.meta.url),
+    "utf8",
+  );
+  const foregroundFallback = fixture.match(
+    /if \(\$foregroundHandle -ne \$nativeForm\.Handle\) \{[\s\S]*?\n  \} else \{[\s\S]*?\n  \}/,
+  )?.[0];
+  assert.ok(foregroundFallback, "Synthetic mouse fixture foreground branch is missing");
+  assert.match(foregroundFallback, /\$env:GITHUB_ACTIONS -cne "true"[\s\S]*throw "Synthetic native filter window could not be activated for mouse input"/);
+  assert.match(
+    foregroundFallback,
+    /ClickNativeButtonWithMouseExact[\s\S]*catch \[System\.InvalidOperationException\][\s\S]*Native button root was not foreground[\s\S]*GetButtonCheck\(\$nativeButtonHandle\) -ne 1[\s\S]*BLOCKED AC-05: hosted desktop denied foreground activation/,
+  );
+  assert.match(
+    foregroundFallback,
+    /\} else \{[\s\S]*ClickNativeButtonWithMouseExact[\s\S]*GetButtonCheck\(\$nativeButtonHandle\) -ne 0[\s\S]*PASS AC-05: native mouse button activation/,
+  );
+});
+
 test("AC-05: strict filtered capture proves the positive control and exported paths remain validated", async () => {
   const source = await readFile(new URL("../../scripts/test-windows-file-access.mjs", import.meta.url), "utf8");
   assert.equal((source.match(/"\/NoFilter"/g) ?? []).length, 1);
