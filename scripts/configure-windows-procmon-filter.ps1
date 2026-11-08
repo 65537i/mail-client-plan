@@ -326,8 +326,112 @@ public static class ProcmonNativeMenu
         public bool IsEnabled { get; set; }
     }
 
+    public sealed class MenuBarProbeSnapshot
+    {
+        public string ReadFailure { get; set; }
+        public bool MenuAvailable { get; set; }
+        public IntPtr PopupWindow { get; set; }
+        public bool PopupSameProcess { get; set; }
+        public bool PopupVisible { get; set; }
+        public bool PopupEnabled { get; set; }
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativeRect
+    {
+        public int Left;
+        public int Top;
+        public int Right;
+        public int Bottom;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativeMenuBarInfo
+    {
+        public uint Size;
+        public NativeRect Bar;
+        public IntPtr Menu;
+        public IntPtr MenuWindow;
+        public uint FocusFlags;
+    }
+
     [DllImport("user32.dll", ExactSpelling = true, SetLastError = true)]
     public static extern IntPtr GetMenu(IntPtr hWnd);
+
+    [DllImport("user32.dll", ExactSpelling = true, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetMenuBarInfoNative(
+        IntPtr window,
+        int objectId,
+        int itemId,
+        ref NativeMenuBarInfo info
+    );
+
+    public static MenuBarProbeSnapshot ReadMenuBarInfo(
+        IntPtr window,
+        uint expectedProcessId,
+        int objectId
+    )
+    {
+        var snapshot = new MenuBarProbeSnapshot
+        {
+            ReadFailure = "window-unavailable",
+            PopupWindow = IntPtr.Zero
+        };
+        if (window == IntPtr.Zero || !IsWindow(window))
+        {
+            return snapshot;
+        }
+        if (GetAncestor(window, GA_ROOT) != window)
+        {
+            snapshot.ReadFailure = "window-not-top-level";
+            return snapshot;
+        }
+        uint windowProcessId;
+        if (
+            GetWindowThreadProcessId(window, out windowProcessId) == 0 ||
+            windowProcessId != expectedProcessId
+        )
+        {
+            snapshot.ReadFailure = "owner-mismatch";
+            return snapshot;
+        }
+        var info = new NativeMenuBarInfo
+        {
+            Size = (uint)Marshal.SizeOf(typeof(NativeMenuBarInfo))
+        };
+        if (!GetMenuBarInfoNative(window, objectId, 0, ref info))
+        {
+            snapshot.ReadFailure = "not-available";
+            return snapshot;
+        }
+        if (info.Menu != IntPtr.Zero && !IsMenu(info.Menu))
+        {
+            snapshot.ReadFailure = "invalid-menu";
+            return snapshot;
+        }
+        snapshot.MenuAvailable = info.Menu != IntPtr.Zero;
+        snapshot.PopupWindow = info.MenuWindow;
+        if (info.MenuWindow != IntPtr.Zero)
+        {
+            uint popupProcessId;
+            if (
+                !IsWindow(info.MenuWindow) ||
+                GetWindowThreadProcessId(info.MenuWindow, out popupProcessId) == 0 ||
+                popupProcessId != expectedProcessId
+            )
+            {
+                snapshot.PopupWindow = IntPtr.Zero;
+                snapshot.ReadFailure = "popup-owner-mismatch";
+                return snapshot;
+            }
+            snapshot.PopupSameProcess = true;
+            snapshot.PopupVisible = IsWindowVisible(info.MenuWindow);
+            snapshot.PopupEnabled = IsWindowEnabled(info.MenuWindow);
+        }
+        snapshot.ReadFailure = "none";
+        return snapshot;
+    }
 
     public static IntPtr GetMenuForTopLevelWindow(IntPtr window)
     {
@@ -4818,7 +4922,7 @@ function Wait-ProcessMenu(
 function Write-ProcmonMenuLoopUiaSummary(
   [System.IntPtr]$WindowHandle,
   [System.Diagnostics.Process]$Process,
-  [ValidateSet("main-after-shortcut", "focus", "capture", "menu-owner")][string]$Role
+  [ValidateSet("main-after-shortcut", "focus", "capture", "menu-owner", "menu-popup")][string]$Role
 ) {
   $available = $false
   $failure = "unavailable"
@@ -5496,6 +5600,42 @@ function Open-ProcmonFilterMenuFromMain(
         -WindowHandles ([IntPtr[]]@($mainHandle)) `
         -Process $Process `
         -Source "active-menu-loop"
+      $clientMenuInfo = [ProcmonNativeMenu]::ReadMenuBarInfo(
+        $mainHandle,
+        [uint32]$Process.Id,
+        -4
+      )
+      $menuBarInfo = [ProcmonNativeMenu]::ReadMenuBarInfo(
+        $mainHandle,
+        [uint32]$Process.Id,
+        -3
+      )
+      foreach ($menuInfo in @(
+          [pscustomobject]@{
+            Object = "client"
+            Snapshot = $clientMenuInfo
+          },
+          [pscustomobject]@{
+            Object = "menu"
+            Snapshot = $menuBarInfo
+          }
+        )) {
+        [Console]::Out.WriteLine(
+          "PROC_MON_FILTER_MENU_BAR=object:$($menuInfo.Object);read:$($menuInfo.Snapshot.ReadFailure);menu:$($menuInfo.Snapshot.MenuAvailable.ToString().ToLowerInvariant());popup-same:$($menuInfo.Snapshot.PopupSameProcess.ToString().ToLowerInvariant());popup-visible:$($menuInfo.Snapshot.PopupVisible.ToString().ToLowerInvariant());popup-enabled:$($menuInfo.Snapshot.PopupEnabled.ToString().ToLowerInvariant())"
+        )
+      }
+      $menuPopupHandle = [IntPtr]::Zero
+      if (
+        $clientMenuInfo.PopupSameProcess -and
+        $clientMenuInfo.PopupVisible
+      ) {
+        $menuPopupHandle = [IntPtr]$clientMenuInfo.PopupWindow
+      } elseif (
+        $menuBarInfo.PopupSameProcess -and
+        $menuBarInfo.PopupVisible
+      ) {
+        $menuPopupHandle = [IntPtr]$menuBarInfo.PopupWindow
+      }
       $accessibleHandles = [System.Collections.Generic.List[object]]::new()
       $accessibleHandles.Add([pscustomobject]@{
         Role = "focus"
@@ -5509,6 +5649,12 @@ function Open-ProcmonFilterMenuFromMain(
         Role = "menu-owner"
         Handle = $snapshotMenuOwnerHandle
       })
+      if ($menuPopupHandle -ne [IntPtr]::Zero) {
+        $accessibleHandles.Add([pscustomobject]@{
+          Role = "menu-popup"
+          Handle = $menuPopupHandle
+        })
+      }
       $accessibleHandlesSeen = [System.Collections.Generic.HashSet[IntPtr]]::new()
       foreach ($accessibleHandle in $accessibleHandles) {
         $accessibleWindow = [IntPtr]$accessibleHandle.Handle
@@ -5552,6 +5698,14 @@ function Open-ProcmonFilterMenuFromMain(
       if ($snapshotMenuOwnerHandle -ne $focusHandle -and
         $snapshotMenuOwnerHandle -ne $captureHandle) {
         Write-ProcmonMenuLoopUiaSummary $snapshotMenuOwnerHandle $Process "menu-owner"
+      }
+      if (
+        $menuPopupHandle -ne [IntPtr]::Zero -and
+        $menuPopupHandle -ne $focusHandle -and
+        $menuPopupHandle -ne $captureHandle -and
+        $menuPopupHandle -ne $snapshotMenuOwnerHandle
+      ) {
+        Write-ProcmonMenuLoopUiaSummary $menuPopupHandle $Process "menu-popup"
       }
       Write-ProcmonMenuLoopUiaSummary $mainHandle $Process "main-after-shortcut"
     }

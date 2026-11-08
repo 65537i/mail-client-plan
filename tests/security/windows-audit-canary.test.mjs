@@ -270,6 +270,10 @@ test("AC-05: Procmon main-window activation verifies its process-owned foregroun
     configuration,
     /public static IntPtr GetMenuForTopLevelWindow\(IntPtr window\)[\s\S]*!IsWindow\(window\)[\s\S]*GetAncestor\(window, GA_ROOT\) != window[\s\S]*return GetMenu\(window\)/,
   );
+  assert.match(
+    configuration,
+    /public static MenuBarProbeSnapshot ReadMenuBarInfo\([\s\S]*GetAncestor\(window, GA_ROOT\) != window[\s\S]*windowProcessId != expectedProcessId[\s\S]*GetMenuBarInfoNative\(window, objectId, 0, ref info\)[\s\S]*popupProcessId != expectedProcessId/,
+  );
   assert.doesNotMatch(configuration, /\[ProcmonNativeMenu\]::GetMenu\(/);
   assert.match(nativeMenuSummary, /GetMenuForTopLevelWindow\(\$windowHandle\)/);
   assert.match(nativeMenuSummary, /GetWindowProcessId\(\$windowHandle\) -ne \$Process\.Id/);
@@ -283,8 +287,9 @@ test("AC-05: Procmon main-window activation verifies its process-owned foregroun
   assert.ok(activeMenuLoop, "Active Filter-menu diagnostics are missing");
   assert.match(
     activeMenuLoop,
-    /GetMenuForTopLevelWindow\(\$activeHandle\)[\s\S]*GetMenuForTopLevelWindow\(\$focusHandle\)[\s\S]*GetMenuForTopLevelWindow\(\$captureHandle\)[\s\S]*GetMenuForTopLevelWindow\(\$snapshotMenuOwnerHandle\)[\s\S]*Write-ProcmonNativeMenuSummary `\s+-WindowHandles \(\[IntPtr\[\]\]@\(\$mainHandle\)\)/,
+    /GetMenuForTopLevelWindow\(\$activeHandle\)[\s\S]*GetMenuForTopLevelWindow\(\$focusHandle\)[\s\S]*GetMenuForTopLevelWindow\(\$captureHandle\)[\s\S]*GetMenuForTopLevelWindow\(\$snapshotMenuOwnerHandle\)[\s\S]*Write-ProcmonNativeMenuSummary `\s+-WindowHandles \(\[IntPtr\[\]\]@\(\$mainHandle\)\)[\s\S]*ReadMenuBarInfo\([\s\S]*-4[\s\S]*ReadMenuBarInfo\([\s\S]*-3[\s\S]*Role = "menu-popup"/,
   );
+  assert.match(activeMenuLoop, /PROC_MON_FILTER_MENU_BAR=object:/);
   assert.doesNotMatch(activeMenuLoop, /\$menuLoopHandles/);
   for (const [label, counter] of [
     ["Event", "eventMatches"],

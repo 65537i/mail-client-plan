@@ -954,6 +954,7 @@ try {
     [ProcmonNativeMenu]::GetRootWindowClassKind($classProbeChildHandle, [uint32]$PID, $classProbeRoot) -cne "main" -or
     [ProcmonNativeMenu]::GetMenuForTopLevelWindow($classProbeRoot) -ne $classProbeMenu -or
     [ProcmonNativeMenu]::GetMenuForTopLevelWindow($classProbeChildHandle) -ne [IntPtr]::Zero -or
+    [ProcmonNativeMenu]::ReadMenuBarInfo($classProbeChildHandle, [uint32]$PID, -3).ReadFailure -cne "window-not-top-level" -or
     [ProcmonNativeMenu]::GetWindowStyleKind($classProbeChildHandle, [uint32]$PID) -cne "child" -or
     [ProcmonNativeMenu]::GetWindowStyleKind($classProbeChildHandle, [uint32]0) -cne "unavailable" -or
     [ProcmonNativeMenu]::GetWindowClassKind($classProbeRoot, [uint32]0, $classProbeRoot) -cne "other-process"
@@ -1334,6 +1335,7 @@ if (
 Write-Host "PASS AC-05: native filter buttons require verified same-process dialog foreground"
 if (
   $sourceText -notmatch '(?s)public static IntPtr GetMenuForTopLevelWindow\(IntPtr window\)[\s\S]*!IsWindow\(window\)[\s\S]*GetAncestor\(window, GA_ROOT\) != window[\s\S]*return GetMenu\(window\)' -or
+  $sourceText -notmatch '(?s)public static MenuBarProbeSnapshot ReadMenuBarInfo\([\s\S]*GetAncestor\(window, GA_ROOT\) != window[\s\S]*windowProcessId != expectedProcessId[\s\S]*GetMenuBarInfoNative\(window, objectId, 0, ref info\)[\s\S]*popupProcessId != expectedProcessId' -or
   $sourceText -match '\[ProcmonNativeMenu\]::GetMenu\(' -or
   $sourceText -notmatch '(?s)function Write-ProcmonNativeMenuSummary[\s\S]*GetMenuForTopLevelWindow\(\$windowHandle\)' -or
   $sourceText -notmatch '(?s)function Write-ProcmonAccessibleMenuSummary[\s\S]*GetMenuForTopLevelWindow\(\$handle\)'
@@ -1342,7 +1344,7 @@ if (
 }
 Write-Host "PASS AC-05: native GetMenu calls are restricted to verified top-level HWNDs"
 if (
-  $openFilterMenuFunction.Extent.Text -notmatch '(?s)GetMenuOwnerWindow\([\s\S]*\[ref\]\$menuModeActive[\s\S]*if \(\$guiThreadInfoAvailable -and \$menuWindowSameProcess\)[\s\S]*Get-AccessibleDropMenuSnapshot[\s\S]*\$mainHandle \$Process\.Id \$true "filter-menu-fallback"[\s\S]*ReadFocusSnapshot\(\$mainHandle\)[\s\S]*CaptureWindow[\s\S]*MenuOwnerWindow[\s\S]*Write-ProcmonNativeMenuSummary[\s\S]*-Source "active-menu-loop"[\s\S]*Write-ProcmonMenuLoopUiaSummary \$focusHandle \$Process "focus"[\s\S]*Write-ProcmonMenuLoopUiaSummary \$captureHandle \$Process "capture"[\s\S]*Write-ProcmonMenuLoopUiaSummary \$snapshotMenuOwnerHandle \$Process "menu-owner"[\s\S]*Write-ProcmonMenuLoopUiaSummary \$mainHandle \$Process "main-after-shortcut"'
+  $openFilterMenuFunction.Extent.Text -notmatch '(?s)GetMenuOwnerWindow\([\s\S]*\[ref\]\$menuModeActive[\s\S]*if \(\$guiThreadInfoAvailable -and \$menuWindowSameProcess\)[\s\S]*Get-AccessibleDropMenuSnapshot[\s\S]*\$mainHandle \$Process\.Id \$true "filter-menu-fallback"[\s\S]*ReadFocusSnapshot\(\$mainHandle\)[\s\S]*CaptureWindow[\s\S]*MenuOwnerWindow[\s\S]*Write-ProcmonNativeMenuSummary[\s\S]*-Source "active-menu-loop"[\s\S]*ReadMenuBarInfo\(\s*\$mainHandle,[\s\S]*-4[\s\S]*ReadMenuBarInfo\(\s*\$mainHandle,[\s\S]*-3[\s\S]*Role = "menu-popup"[\s\S]*Write-ProcmonMenuLoopUiaSummary \$focusHandle \$Process "focus"[\s\S]*Write-ProcmonMenuLoopUiaSummary \$captureHandle \$Process "capture"[\s\S]*Write-ProcmonMenuLoopUiaSummary \$snapshotMenuOwnerHandle \$Process "menu-owner"[\s\S]*Write-ProcmonMenuLoopUiaSummary \$menuPopupHandle \$Process "menu-popup"[\s\S]*Write-ProcmonMenuLoopUiaSummary \$mainHandle \$Process "main-after-shortcut"'
 ) {
   throw "Fallback diagnostics must inspect bounded fixed-label UIA/MSAA data on visible same-process windows"
 }
@@ -1361,6 +1363,7 @@ if (
   $menuLoopAccessibleBlock.Value -notmatch 'Role = "focus"' -or
   $menuLoopAccessibleBlock.Value -notmatch 'Role = "capture"' -or
   $menuLoopAccessibleBlock.Value -notmatch 'Role = "menu-owner"' -or
+  $menuLoopAccessibleBlock.Value -notmatch 'Role = "menu-popup"' -or
   $menuLoopAccessibleBlock.Value -notmatch 'GetWindowProcessId\(\$accessibleWindow\) -ne \$Process\.Id' -or
   $menuLoopAccessibleBlock.Value -notmatch 'IsWindowVisible\(\$accessibleWindow\)' -or
   $menuLoopAccessibleBlock.Value -notmatch '\$accessibleHandlesSeen\.Add\(\$accessibleWindow\)' -or
@@ -1383,7 +1386,7 @@ if (
   $menuLoopUiaFunction.Extent.Text -notmatch '(?s)NameProperty,[\s\S]*"Drop Filtered Events"[\s\S]*\$dropLabelItems\.Count -le 64[\s\S]*\$dropLabelState\.ProcessId -ne \$Process\.Id[\s\S]*\$dropLabelState\.Name -cne "Drop Filtered Events"[\s\S]*\$dropLabelState\.ControlType -eq[\s\S]*ControlType\]::MenuItem[\s\S]*\$dropLabelState\.IsEnabled' -or
   $menuLoopUiaFunction.Extent.Text -notmatch '\$itemState\.ProcessId -ne \$Process\.Id' -or
   $menuLoopUiaFunction.Extent.Text -notmatch '(?s)switch -CaseSensitive \(\$itemState\.Name\)[\s\S]*"Drop Filtered Events" \{ \$drops\+\+' -or
-  $menuLoopUiaFunction.Extent.Text -notmatch 'ValidateSet\("main-after-shortcut", "focus", "capture", "menu-owner"\)'
+  $menuLoopUiaFunction.Extent.Text -notmatch 'ValidateSet\("main-after-shortcut", "focus", "capture", "menu-owner", "menu-popup"\)'
 ) {
   throw "Menu-loop UIA inspection must be bounded, same-process, and exact-label only"
 }
