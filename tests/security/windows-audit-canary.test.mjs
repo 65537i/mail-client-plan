@@ -662,6 +662,14 @@ test("AC-05: hosted Windows fixture verifies foreground rejection without clicki
   );
   assert.match(blockedPath, /BLOCKED AC-05: hosted desktop did not foreground synthetic window/);
   assert.doesNotMatch(blockedPath, /SelectNativeListItemsExact|ClickNativeListItemExact|SendControlAShortcutExact/);
+  const menuFixture = fixture.slice(
+    fixture.indexOf("$menuForm = [System.Windows.Forms.Form]::new()"),
+    fixture.indexOf("$openFilterMenuFunction ="),
+  );
+  assert.match(
+    menuFixture,
+    /if \(\[ProcmonNativeMenu\]::GetForegroundWindow\(\) -ne \$menuForm\.Handle\) \{[\s\S]*\$env:GITHUB_ACTIONS -cne "true"[\s\S]*SendAltLShortcut[\s\S]*State -cne "target-mismatch"[\s\S]*Events -ne 0[\s\S]*DropDown\.Visible[\s\S]*BLOCKED AC-05: hosted desktop denied foreground activation; Alt\+L helper rejected input without opening the menu[\s\S]*\} else \{[\s\S]*SendAltLShortcut[\s\S]*State -ne "sent"[\s\S]*Events -ne 4[\s\S]*DropDown\.Visible/,
+  );
 });
 
 test("AC-05: strict filtered capture proves the positive control and exported paths remain validated", async () => {

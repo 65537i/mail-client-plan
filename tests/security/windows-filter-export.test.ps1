@@ -1253,19 +1253,31 @@ $menuForm.Activate()
 [System.Windows.Forms.Application]::DoEvents()
 try {
   if ([ProcmonNativeMenu]::GetForegroundWindow() -ne $menuForm.Handle) {
-    throw "Synthetic menu form did not receive foreground activation"
-  }
-  $menuInput = [ProcmonNativeMenu]::SendAltLShortcut($menuForm.Handle, [int]$PID)
-  if ($menuInput.State -ne "sent" -or $menuInput.Events -ne 4) {
-    throw "Native Alt+L input did not satisfy the exact shortcut gate"
-  }
-  $menuDeadline = [DateTime]::UtcNow.AddSeconds(2)
-  while (-not $filterMenuItem.DropDown.Visible -and [DateTime]::UtcNow -lt $menuDeadline) {
-    [System.Windows.Forms.Application]::DoEvents()
-    Start-Sleep -Milliseconds 25
-  }
-  if (-not $filterMenuItem.DropDown.Visible) {
-    throw "Native Alt+L input did not open the synthetic Filter menu"
+    if ($env:GITHUB_ACTIONS -cne "true") {
+      throw "Synthetic menu form did not receive foreground activation"
+    }
+    $menuInput = [ProcmonNativeMenu]::SendAltLShortcut($menuForm.Handle, [int]$PID)
+    if (
+      $menuInput.State -cne "target-mismatch" -or
+      $menuInput.Events -ne 0 -or
+      $filterMenuItem.DropDown.Visible
+    ) {
+      throw "Native Alt+L shortcut was not rejected without opening the synthetic menu"
+    }
+    Write-Host "BLOCKED AC-05: hosted desktop denied foreground activation; Alt+L helper rejected input without opening the menu"
+  } else {
+    $menuInput = [ProcmonNativeMenu]::SendAltLShortcut($menuForm.Handle, [int]$PID)
+    if ($menuInput.State -ne "sent" -or $menuInput.Events -ne 4) {
+      throw "Native Alt+L input did not satisfy the exact shortcut gate"
+    }
+    $menuDeadline = [DateTime]::UtcNow.AddSeconds(2)
+    while (-not $filterMenuItem.DropDown.Visible -and [DateTime]::UtcNow -lt $menuDeadline) {
+      [System.Windows.Forms.Application]::DoEvents()
+      Start-Sleep -Milliseconds 25
+    }
+    if (-not $filterMenuItem.DropDown.Visible) {
+      throw "Native Alt+L input did not open the synthetic Filter menu"
+    }
   }
   if ($dropMenuItem.Text -cne "Drop Filtered Events") {
     throw "Synthetic Filter menu item label changed"
