@@ -642,6 +642,26 @@ test("AC-05: hosted Windows fixture verifies foreground rejection without clicki
     foregroundFallback,
     /\} else \{[\s\S]*ClickNativeButtonWithMouseExact[\s\S]*GetButtonCheck\(\$nativeButtonHandle\) -ne 0[\s\S]*PASS AC-05: native mouse button activation/,
   );
+  const nativeListInputEnd = fixture.indexOf("  $expectedCells = ");
+  const nativeListInputStart = fixture.lastIndexOf(
+    "if ($foregroundHandle -eq $nativeForm.Handle) {",
+    nativeListInputEnd,
+  );
+  assert.ok(
+    nativeListInputStart >= 0 && nativeListInputEnd > nativeListInputStart,
+    "Synthetic native list input must require foreground activation",
+  );
+  const nativeListForegroundGate = fixture.slice(nativeListInputStart, nativeListInputEnd);
+  const blockedPathStart = nativeListForegroundGate.indexOf("  } else {");
+  assert.ok(blockedPathStart > 0, "Synthetic native list foreground fallback is missing");
+  const foregroundPath = nativeListForegroundGate.slice(0, blockedPathStart);
+  const blockedPath = nativeListForegroundGate.slice(blockedPathStart);
+  assert.match(
+    foregroundPath,
+    /SelectNativeListItemsExact[\s\S]*ClickNativeListItemExact[\s\S]*SendControlAShortcutExact[\s\S]*AreNativeListItemsSelectedExact/,
+  );
+  assert.match(blockedPath, /BLOCKED AC-05: hosted desktop did not foreground synthetic window/);
+  assert.doesNotMatch(blockedPath, /SelectNativeListItemsExact|ClickNativeListItemExact|SendControlAShortcutExact/);
 });
 
 test("AC-05: strict filtered capture proves the positive control and exported paths remain validated", async () => {

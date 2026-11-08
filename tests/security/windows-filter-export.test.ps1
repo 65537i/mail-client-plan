@@ -1191,29 +1191,33 @@ try {
   ) {
     throw "Native list count or header count did not match the synthetic fixture"
   }
-  if ([ProcmonNativeMenu]::SelectNativeListItemsExact($nativeList, [int]$PID, 2) -ne 2) {
-    throw "Native list did not select all synthetic rows"
-  }
-  [ProcmonNativeMenu]::ClickNativeListItemExact(
-    $nativeList,
-    $nativeForm.Handle,
-    [int]$PID
-  )
-  [System.Windows.Forms.Application]::DoEvents()
-  if (-not [ProcmonNativeMenu]::IsNativeListFocusedExact(
+  if ($foregroundHandle -eq $nativeForm.Handle) {
+    if ([ProcmonNativeMenu]::SelectNativeListItemsExact($nativeList, [int]$PID, 2) -ne 2) {
+      throw "Native list did not select all synthetic rows"
+    }
+    [ProcmonNativeMenu]::ClickNativeListItemExact(
+      $nativeList,
+      $nativeForm.Handle,
+      [int]$PID
+    )
+    [System.Windows.Forms.Application]::DoEvents()
+    if (-not [ProcmonNativeMenu]::IsNativeListFocusedExact(
+        $nativeForm.Handle,
+        $nativeList,
+        [int]$PID
+      )) {
+      throw "Synthetic native list did not retain keyboard focus"
+    }
+    [ProcmonNativeMenu]::SendControlAShortcutExact(
       $nativeForm.Handle,
       $nativeList,
       [int]$PID
-    )) {
-    throw "Synthetic native list did not retain keyboard focus"
-  }
-  [ProcmonNativeMenu]::SendControlAShortcutExact(
-    $nativeForm.Handle,
-    $nativeList,
-    [int]$PID
-  )
-  if (-not [ProcmonNativeMenu]::AreNativeListItemsSelectedExact($nativeList, [int]$PID, 2)) {
-    throw "Native list keyboard selection did not match the synthetic row count"
+    )
+    if (-not [ProcmonNativeMenu]::AreNativeListItemsSelectedExact($nativeList, [int]$PID, 2)) {
+      throw "Native list keyboard selection did not match the synthetic row count"
+    }
+  } else {
+    Write-Host "BLOCKED AC-05: hosted desktop did not foreground synthetic window; native list input gate was not exercised"
   }
   $expectedCells = @("Path", "is", "C:\audit\canary.png", "Include")
   for ($columnIndex = 0; $columnIndex -lt $expectedCells.Count; $columnIndex++) {
