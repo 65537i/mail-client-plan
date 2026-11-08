@@ -1141,6 +1141,12 @@ try {
   if ([SyntheticListCount]::GetButtonCheck($nativeButtonHandle) -ne 1) {
     throw "Native button activation did not toggle its synthetic checked state"
   }
+  $nativeForm.Activate()
+  [ProcmonNativeMenu]::SetForegroundWindow($nativeForm.Handle) | Out-Null
+  [System.Windows.Forms.Application]::DoEvents()
+  if ([ProcmonNativeMenu]::GetForegroundWindow() -ne $nativeForm.Handle) {
+    throw "Synthetic native filter window could not be activated for mouse input"
+  }
   [ProcmonNativeMenu]::ClickNativeButtonWithMouseExact(
     $nativeButtonHandle,
     $nativeForm.Handle,
