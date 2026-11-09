@@ -5,7 +5,7 @@ import { pathToFileURL } from "node:url";
 const platforms = [
   { platform: "ubuntu-24.04-x64", runner: "ubuntu-24.04" },
   { platform: "windows-2025-x64", runner: "windows-2025" },
-  { platform: "macos-14-arm64", runner: "macos-14" },
+  { platform: "macos-15-arm64", runner: "macos-15" },
   { platform: "macos-15-intel", runner: "macos-15-intel" },
 ];
 

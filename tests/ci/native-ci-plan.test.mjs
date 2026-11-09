@@ -7,7 +7,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { nativeCiPlan } from "../../scripts/native-ci-plan.mjs";
 
-const targets = ["ubuntu-24.04-x64", "windows-2025-x64", "macos-14-arm64", "macos-15-intel"];
+const targets = ["ubuntu-24.04-x64", "windows-2025-x64", "macos-15-arm64", "macos-15-intel"];
+const runners = ["ubuntu-24.04", "windows-2025", "macos-15", "macos-15-intel"];
 const modes = ["basic", "webview", "full"];
 
 test("native CI: pushes run basic Linux checks and PRs retain full cross-OS validation", () => {
@@ -18,6 +19,7 @@ test("native CI: pushes run basic Linux checks and PRs retain full cross-OS vali
   const plan = nativeCiPlan("pull_request");
   assert.equal(plan.mode, "full");
   assert.deepEqual(plan.matrix.include.map((item) => item.platform), targets);
+  assert.deepEqual(plan.matrix.include.map((item) => item.runner), runners);
 });
 
 test("native CI: every manual target and mode produces the exact requested matrix", () => {
@@ -26,7 +28,7 @@ test("native CI: every manual target and mode produces the exact requested matri
       const plan = nativeCiPlan("workflow_dispatch", target, mode);
       assert.equal(plan.mode, mode);
       assert.deepEqual(plan.matrix.include.map((item) => item.platform), target === "all" ? targets : [target]);
-      for (const item of plan.matrix.include) assert.equal(typeof item.runner, "string");
+      for (const item of plan.matrix.include) assert.equal(item.runner, runners[targets.indexOf(item.platform)]);
     }
   }
 });
@@ -35,6 +37,7 @@ test("native CI: rejects unsupported events and inputs rather than silently runn
   for (const args of [
     ["schedule"], ["push", "all", "full"], ["pull_request", "", "basic"],
     ["workflow_dispatch", "", ""], ["workflow_dispatch", "other", "full"],
+    ["workflow_dispatch", "macos-14-arm64", "full"],
     ["workflow_dispatch", "all", "other"],
   ]) {
     assert.throws(() => nativeCiPlan(...args));
@@ -52,7 +55,7 @@ test("native CI: CLI writes valid matrix outputs and an explicit partial-validat
       env: {
         ...process.env,
         CI_EVENT: "workflow_dispatch",
-        CI_TARGET: "macos-14-arm64",
+        CI_TARGET: "macos-15-arm64",
         CI_MODE: "webview",
         GITHUB_OUTPUT: output,
         GITHUB_STEP_SUMMARY: summary,
@@ -62,7 +65,17 @@ test("native CI: CLI writes valid matrix outputs and an explicit partial-validat
     assert.equal(result.status, 0, result.stderr);
     const lines = (await readFile(output, "utf8")).trim().split("\n");
     assert.deepEqual(JSON.parse(lines[0].slice("matrix=".length)), {
-      include: [{ platform: "macos-14-arm64", runner: "macos-14" }],
+      include: [{ platform: "macos-15-arm64", runner: "macos-15" }],
+    });
+
+    test("native CI: workflow choices match planner targets and use the selected runner", async () => {
+      const workflow = (await readFile(new URL("../../.github/workflows/native.yml", import.meta.url), "utf8"))
+        .replaceAll("\r\n", "\n");
+      const choices = workflow.match(/      target:[\s\S]*?        options:\n((?:          - [^\n]+\n)+)/)?.[1];
+      assert.ok(choices);
+      assert.deepEqual([...choices.matchAll(/          - ([^\n]+)/g)].map((match) => match[1]), ["all", ...targets]);
+      assert.match(workflow, /runs-on: \$\{\{ matrix.runner \}\}/);
+      assert.doesNotMatch(workflow, /macos-14/);
     });
     assert.equal(lines[1], "mode=webview");
     assert.match(await readFile(summary, "utf8"), /Partial validation only/);

@@ -2,6 +2,8 @@
 
 ## 1. ワークフロー構成
 
+2026-11-10 runner更新: [Run 623](https://github.com/65537i/mail-client-plan/actions/runs/42656232254)でmacOS ARM64が`The configuration 'macos-14-arm64-us-default' is not supported`によりstep実行前にcancelledとなった。公式[runner一覧](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)のARM64 `macos-15`へ変更し、plannerと手動targetを`macos-15-arm64`へ揃える。旧`macos-14-arm64`入力はfallbackせず拒否する。PRは従来通り4対象full、pushはLinux basicで、必須チェックや監査gateを削減しない。macOS 14の最低OS実機検証は別途必要。ETW PoCとは別PRであり、merge・手動dispatchは含まない。
+
 [Run 519](https://github.com/65537i/mail-client-plan/actions/runs/41306084970)（Windows 2025 x64 / webview）は長いInstance Nameで後続列がずれた行により`row-shape`停止。instance行はtoken順（先頭Filter / Altitude、末尾Frame / SprtFtrs / 任意VlStatus）で検証する方式へ変更した。
 
 [Run 517](https://github.com/65537i/mail-client-plan/actions/runs/41304809374)（`7cb3a2e`、Windows 2025 x64 / webview）はconfiguration exportを通過し、live Filter Manager parserの`row-shape`（列診断`word-integer-words-integer-barehex-empty`）で停止。`fltmc instances -v`の固定幅出力（空白入りInstance Name、`0x`無しSprtFtrs、空VlStatus）をseparator列位置で検証する受理経路を追加し、越境・タブ・未知値はfail closedのまま。
@@ -349,7 +351,7 @@ Run 238（`2f48084`、Windows / webview）はExport Configurationの発見・Inv
 
 Actions → native → Run workflowで最新のmainを選び、以下を指定する。旧runのRe-run jobsは旧commitを使うため、修正確認には新規実行を使う。
 
-- `target`: `all` / `ubuntu-24.04-x64` / `windows-2025-x64` / `macos-14-arm64` / `macos-15-intel`
+- `target`: `all` / `ubuntu-24.04-x64` / `windows-2025-x64` / `macos-15-arm64` / `macos-15-intel`
 - `mode`:
   - `basic`: Rust format / workspace test / clippy、frontend typecheck / build。native release build、起動、protocol、実WebViewは未実行。
   - `webview`: security-test用Tauri build（frontend typecheck / buildを含む）と実WebView / SecretStore試験。Linux `strace`、macOS `fs_usage`、Windows Process Monitorによるfile-access監査を実行する。WindowsはRun 232までに初期MSAA stateからInvoke後の`checked:on`を確認したが、Save Filter command発見がtimeoutした。Alt+F後のfocused MenuItemは取得できたが、正確なmenu item一覧は未取得。保存経路は未完了で、次はallowlisted menu item summaryを確認する。canary event / capacity問題およびprocess coverageも未解決。production build、起動smoke、protocol、Rust workspace test / clippyは未実行。

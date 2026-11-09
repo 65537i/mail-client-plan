@@ -26,10 +26,12 @@
 |---|---|
 | Ubuntu x64 | `ubuntu-24.04` |
 | Windows x64 | `windows-2025` |
-| macOS arm64 | `macos-14` |
+| macOS arm64 | `macos-15` |
 | macOS x64 | `macos-15-intel` |
 
 公開GitHub-hosted runnerの公式一覧でラベルとarchを確認した（2026-10-20）。private repositoryでの利用可否・料金はリポジトリのプランで別途確認する。runnerの新しいOSは最低対応OSの実機検証を代替しない。
+
+2026-11-10更新: Run 623で`macos-14-arm64-us-default`がunsupportedとして実行前に拒否されたため、公式一覧にARM64として掲載されている`macos-15`へ変更する。CI対象IDと手動入力も`macos-15-arm64`へ揃える。これはrunner更新であり、製品の最低OS候補macOS 14や最低OS実機検証要件を変更しない。新runner上の実行成功はまだ未確認。
 
 ### 固定ツールチェーン
 
