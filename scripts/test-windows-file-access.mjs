@@ -168,7 +168,7 @@ async function captureScenario(scenario) {
         "-ControlPath", positiveControlPath, "-ConfigPath", filterConfig,
         "-CaptureProcessId", String(capture.pid),
       ],
-      { stdio: ["ignore", "pipe", "pipe"], windowsHide: true },
+      { stdio: ["ignore", "pipe", "pipe"], windowsHide: false },
     );
     let liveFilterOutput = "";
     liveFilter.stdout.setEncoding("utf8");
@@ -275,7 +275,7 @@ async function captureScenario(scenario) {
         "-ConfigPath",
         filterConfig,
       ],
-      { stdio: ["ignore", "pipe", "pipe"], windowsHide: true },
+      { stdio: ["ignore", "pipe", "pipe"], windowsHide: false },
     );
     let filterSetupOutput = "";
     filterSetup.stdout.setEncoding("utf8");
