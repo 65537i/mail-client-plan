@@ -2,6 +2,8 @@
 
 ## 1. ワークフロー構成
 
+2026-11-10 順序比較の結果: [Run 622](https://github.com/65537i/mail-client-plan/actions/runs/42644271334)（`eef192b`、Windows ARM64 / webview）は合成GUI fixture実行前でもbaseline `activate-main-window`で失敗した。`target-input:true;foreground-menu:false`等の分類はRun 621と同じ。Node 108/108成功後、実監査失敗、続いて必須fixtureが実行されforeground拒否を明示し、job全体は失敗のままだった。直前の合成GUI入力が失敗の必要条件ではないことを確認したが原因は未確定。効果のなかった順序変更と実験専用testを戻し、追加dispatchやgate緩和はしない。Windows実監査/全platform AC-05未達を維持する。
+
 2026-11-10 hosted順序比較: 合成configuration fixtureはnative mouse/key入力を送り、その直後に別processの実監査を起動していた。ローカルread-only観測でもfixture前後にsession最終入力が変化し、foreground lock timeoutは未経過だった。ただし入力の受取processやhosted失敗原因は証明しない。Windows実監査を合成UI試験より先へ移し、Node回帰は引き続き先に実施する。合成UI試験は同じWindows/non-basic条件に`!cancelled()`を併用して監査失敗後も実行し、双方の失敗をjob失敗に残す。skipやcontinue-on-errorへの変更、activation/timeout/security gate緩和は行わない。これは原因断定ではなく一度の順序比較である。
 
 2026-11-09 [Run 621](https://github.com/65537i/mail-client-plan/actions/runs/42640367722)（`5d29b25`、Windows ARM64 / webview）はbaseline `activate-main-window`で失敗。新診断は`target-input:true;foreground-menu:false`で、対象desktopの入力不能やforeground threadのactive menuは失敗時点で観測されなかった。ただし先行するactivation呼出時の状態、他threadのmenu、foreground lock所有やactivation資格は証明しない。原因未確定であり、設定保存・再読込・capture・audit WDIO/controlは未到達。同条件の再dispatchや強制入力/desktop変更は行わず、厳密gateと未達判定を維持する。詳細は[status](status.md)。

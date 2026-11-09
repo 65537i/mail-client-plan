@@ -240,13 +240,13 @@ jobs:
         run: |
           node --test tests/security/windows-audit-canary.test.mjs tests/security/windows-audit-wdio.test.mjs tests/security/windows-filter-diagnostics.test.mjs tests/security/windows-file-trace.test.mjs
 
+      - name: Test Windows configuration export wait
+        if: needs.plan.outputs.mode != 'basic' && runner.os == 'Windows'
+        shell: powershell
+        run: .\tests\security\windows-filter-export.test.ps1
+
       - name: Test real WebView security boundaries
         if: needs.plan.outputs.mode != 'basic' && runner.os == 'Windows'
         run: pnpm run test:security:file-access:windows
         env:
           MAIL_CLIENT_REQUIRE_SECRET_STORE: "1"
-
-      - name: Test Windows configuration export wait
-        if: ${{ !cancelled() && needs.plan.outputs.mode != 'basic' && runner.os == 'Windows' }}
-        shell: powershell
-        run: .\tests\security\windows-filter-export.test.ps1

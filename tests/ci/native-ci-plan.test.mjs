@@ -76,7 +76,6 @@ test("native CI: CLI writes valid matrix outputs and an explicit partial-validat
       },
       encoding: "utf8",
     });
-
     assert.equal(result.status, 0, result.stderr);
     const lines = (await readFile(output, "utf8")).trim().split("\n");
     assert.deepEqual(JSON.parse(lines[0].slice("matrix=".length)), {
@@ -87,20 +86,4 @@ test("native CI: CLI writes valid matrix outputs and an explicit partial-validat
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
-});
-
-test("native CI: Windows audit precedes synthetic input without suppressing either failure", async () => {
-  const workflow = (await readFile(
-    new URL("../../.github/workflows/native.yml", import.meta.url),
-    "utf8",
-  )).replaceAll("\r\n", "\n");
-  const audit = workflow.indexOf("run: pnpm run test:security:file-access:windows");
-  const fixture = workflow.indexOf("- name: Test Windows configuration export wait");
-  assert.ok(audit >= 0 && fixture > audit);
-  assert.equal(workflow.match(/run: \.\\tests\\security\\windows-filter-export\.test\.ps1/g)?.length, 1);
-  assert.equal(workflow.match(/run: pnpm run test:security:file-access:windows/g)?.length, 1);
-  const fixtureStep = workflow.slice(fixture).split("\n      - name:")[0];
-  assert.match(fixtureStep, /if: \$\{\{ !cancelled\(\) && needs\.plan\.outputs\.mode != 'basic' && runner\.os == 'Windows' \}\}/);
-  assert.match(fixtureStep, /shell: powershell\n        run: \.\\tests\\security\\windows-filter-export\.test\.ps1/);
-  assert.doesNotMatch(workflow.slice(audit, fixture) + fixtureStep, /continue-on-error|exit 0|\|\| true/);
 });
