@@ -95,9 +95,12 @@ test("AC-05: driver registry inspection is read-only, bounded and emits aggregat
 
 test("AC-05: failed main foreground gates emit read-only classified context without changing activation", async () => {
   const source = await readFile(new URL("../../scripts/configure-windows-procmon-filter.ps1", import.meta.url), "utf8");
-  const native = source.slice(source.indexOf("public static string ReadForegroundContext("), source.indexOf('public static extern bool IsWindowVisible('));
+  const native = source.slice(source.indexOf("private static string ReadDesktopInputState("), source.indexOf('public static extern bool IsWindowVisible('));
   assert.match(native, /GetWindowProcessId\(window\) != ownerProcessId[\s\S]*throw new InvalidOperationException/);
-  assert.match(native, /ProcessIdToSessionId[\s\S]*GetThreadDesktop\(GetCurrentThreadId\(\)\)[\s\S]*GetDesktopInputState\(desktop, 6,[\s\S]*needed == 4/);
+  assert.match(native, /GetDesktopInputState\(desktop, 6,[\s\S]*needed == 4/);
+  assert.match(native, /ProcessIdToSessionId[\s\S]*GetThreadDesktop\(GetCurrentThreadId\(\)\)[\s\S]*ReadDesktopInputState\(desktop\)/);
+  assert.match(native, /targetProcess == \(uint\)ownerProcessId[\s\S]*ReadDesktopInputState\(GetThreadDesktop\(targetThread\)\)[\s\S]*verifiedTargetProcess[\s\S]*targetInput = "unavailable"/);
+  assert.match(native, /Marshal.SizeOf\(typeof\(GuiThreadInfo\)\)[\s\S]*GetGUIThreadInfo\(foregroundThread, ref info\)[\s\S]*GetForegroundWindow\(\) == foreground[\s\S]*verifiedForegroundProcess == foregroundProcess[\s\S]*info.flags & \(GUI_INMENUMODE \| GUI_SYSTEMMENUMODE \| GUI_POPUPMENUMODE\)[\s\S]*info.hwndMenuOwner != IntPtr.Zero/);
   assert.doesNotMatch(native, /SetForegroundWindow|SendInput|SwitchDesktop|OpenDesktop|GetWindowText|GetClassName|ProcessName/);
   const gate = source.slice(source.indexOf("function Set-VerifiedProcmonMainWindowForeground("), source.indexOf("function Resolve-ProcmonMissingSnapshotDialog("));
   assert.match(gate, /SetForegroundWindow[\s\S]*GetForegroundWindow[\s\S]*\$foregroundHandle -eq \$windowHandle/);

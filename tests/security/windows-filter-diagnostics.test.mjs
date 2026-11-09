@@ -29,6 +29,30 @@ test("AC-05: foreground context exposes only fixed desktop and target classifica
   assert.ok(describeWindowsFilterDiagnostics(raw.replace("phase:main", "phase:reload_main")).includes("phase:reload_main"));
 });
 
+test("AC-05: target input and foreground menu context is complete, allowlisted, and retained", () => {
+  const legacy = "PROC_MON_FILTER_FOREGROUND_CONTEXT=phase:main;interactive:true;session:same;caller-input:true;visible:true;enabled:true;minimized:false;foreground:other-process";
+  for (const input of ["true", "false", "unavailable"]) {
+    for (const menu of ["true", "false", "unavailable"]) {
+      const raw = `${legacy};target-input:${input};foreground-menu:${menu}`;
+      assert.equal(describeWindowsFilterDiagnostics(raw), `; foreground-context=${raw.split("=")[1]}`);
+      const retained = appendBoundedWindowsFilterOutput("x".repeat(9000), `\n${legacy}\n${raw}\n${"y".repeat(9000)}`);
+      assert.ok(retained.length <= windowsFilterOutputLimit);
+      assert.equal(describeWindowsFilterDiagnostics(retained), describeWindowsFilterDiagnostics(raw));
+    }
+  }
+  for (const invalid of [
+    `${legacy};target-input:true`,
+    `${legacy};foreground-menu:false`,
+    `${legacy};target-input:private;foreground-menu:false`,
+    `${legacy};target-input:true;foreground-menu:123`,
+    `${legacy};target-input:true;foreground-menu:false;title=private`,
+  ]) {
+    assert.equal(describeWindowsFilterDiagnostics(invalid), "");
+    const retained = appendBoundedWindowsFilterOutput("x".repeat(9000), `\n${invalid}\n${"y".repeat(9000)}`);
+    assert.equal(describeWindowsFilterDiagnostics(retained), "");
+  }
+});
+
 test("AC-05: native reload evidence requires complete post-reload two-row four-column shape", () => {
   const raw = "PROC_MON_FILTER_NATIVE_RULES=phase:reloaded;state:ready;rows:2;columns:4;path:2;is:2;include:2;exact-shape:2;unclassified:0;truncated:false";
   const evidence = describeWindowsFilterDiagnostics(raw).slice(2);

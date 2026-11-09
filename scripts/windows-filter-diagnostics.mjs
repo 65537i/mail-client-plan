@@ -336,7 +336,7 @@ export function describeWindowsFilterDiagnostics(output) {
   }
 
   const foregroundContext = [...output.matchAll(
-    /^PROC_MON_FILTER_FOREGROUND_CONTEXT=(phase:(?:main|reload_main);interactive:(?:true|false);session:(?:same|different|unavailable);caller-input:(?:true|false|unavailable);visible:(?:true|false);enabled:(?:true|false);minimized:(?:true|false);foreground:(?:none|target|same-process|other-process))\r?$/gm,
+    /^PROC_MON_FILTER_FOREGROUND_CONTEXT=(phase:(?:main|reload_main);interactive:(?:true|false);session:(?:same|different|unavailable);caller-input:(?:true|false|unavailable);visible:(?:true|false);enabled:(?:true|false);minimized:(?:true|false);foreground:(?:none|target|same-process|other-process)(?:;target-input:(?:true|false|unavailable);foreground-menu:(?:true|false|unavailable))?)\r?$/gm,
   )].at(-1)?.[1];
   if (foregroundContext) {
     diagnostics.push(`foreground-context=${foregroundContext}`);

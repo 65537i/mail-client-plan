@@ -980,8 +980,13 @@ try {
   $classProbeChildHandle = $classProbeChild.Handle
   $foregroundBeforeDiagnostic = [ProcmonNativeMenu]::GetForegroundWindow()
   $foregroundContext = [ProcmonNativeMenu]::ReadForegroundContext($classProbeRoot, $PID)
-  if ($foregroundContext -cnotmatch '^interactive:(true|false);session:same;caller-input:(true|false|unavailable);visible:false;enabled:true;minimized:false;foreground:(none|same-process|other-process)$') {
+  if ($foregroundContext -cnotmatch '^interactive:(true|false);session:same;caller-input:(true|false|unavailable);visible:false;enabled:true;minimized:false;foreground:(none|same-process|other-process);target-input:(true|false|unavailable);foreground-menu:(true|false|unavailable)$') {
     throw "Read-only foreground diagnostics must classify a hidden synthetic window without exposing identifiers"
+  }
+  $callerInput = [regex]::Match($foregroundContext, ';caller-input:([^;]+);').Groups[1].Value
+  $targetInput = [regex]::Match($foregroundContext, ';target-input:([^;]+);').Groups[1].Value
+  if ($callerInput -cne $targetInput) {
+    throw "Same-thread synthetic target and caller must report the same input desktop state"
   }
   foreach ($target in @(
       [pscustomobject]@{ Handle = [IntPtr]::Zero; Owner = $PID }
@@ -1359,6 +1364,10 @@ foreach ($popupMode in @("normal", "duplicate", "disabled", "checked", "limit", 
       Start-Sleep -Milliseconds 25
     } while ([DateTime]::UtcNow -lt $deadline)
     if ($popupHandle -eq [IntPtr]::Zero) { throw "Synthetic native popup did not appear" }
+    $menuContext = [ProcmonNativeMenu]::ReadForegroundContext($popupFixture.Handle, $PID)
+    if ($menuContext -cnotmatch ';foreground-menu:true$') {
+      throw "Read-only foreground diagnostics must detect the active synthetic menu"
+    }
     if ([ProcmonNativeMenu]::ReadAccessiblePopupCommand(
         $popupHandle, $popupFixture.Handle, 0, "Drop Filtered Events"
       ).ReadFailure -cne "owner-mismatch") { throw "Accessible popup accepted foreign ownership" }
@@ -1403,6 +1412,10 @@ foreach ($popupMode in @("normal", "duplicate", "disabled", "checked", "limit", 
       $deadline = [DateTime]::UtcNow.AddSeconds(2)
       while ($popupFixture.Actions -ne 1 -and [DateTime]::UtcNow -lt $deadline) { Start-Sleep -Milliseconds 25 }
       if ($popupFixture.Actions -ne 1) { throw "Accessible popup action did not execute exactly once" }
+      $closedMenuContext = [ProcmonNativeMenu]::ReadForegroundContext($popupFixture.Handle, $PID)
+      if ($closedMenuContext -cnotmatch ';foreground-menu:false$') {
+        throw "Read-only foreground diagnostics must detect the closed synthetic menu"
+      }
       [ProcmonNativeMenu]::SendAltLShortcut($popupFixture.Handle, $PID) | Out-Null
       Start-Sleep -Milliseconds 100
       $candidates = @([ProcmonNativeMenu]::GetProcessTopLevelWindows($PID, 257) | Where-Object {

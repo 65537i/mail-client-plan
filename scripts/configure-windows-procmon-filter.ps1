@@ -65,6 +65,7 @@ public static class ProcmonNativeMenu
     private const uint MFS_DISABLED = 0x00000003;
     private const uint MFT_OWNERDRAW = 0x00000100;
     private const uint GUI_INMENUMODE = 0x00000004;
+    private const uint GUI_SYSTEMMENUMODE = 0x00000008;
     private const uint GUI_POPUPMENUMODE = 0x00000010;
     private const uint INPUT_MOUSE = 0;
     private const uint INPUT_KEYBOARD = 1;
@@ -749,6 +750,15 @@ public static class ProcmonNativeMenu
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool IsIconic(IntPtr window);
 
+    private static string ReadDesktopInputState(IntPtr desktop)
+    {
+        int receivingInput;
+        uint needed;
+        return desktop != IntPtr.Zero &&
+            GetDesktopInputState(desktop, 6, out receivingInput, 4, out needed) && needed == 4
+            ? (receivingInput != 0 ? "true" : "false") : "unavailable";
+    }
+
     public static string ReadForegroundContext(IntPtr window, int ownerProcessId)
     {
         if (ownerProcessId <= 0 || window == IntPtr.Zero || !IsWindow(window) ||
@@ -762,21 +772,39 @@ public static class ProcmonNativeMenu
             ? (callerSession == targetSession ? "same" : "different") : "unavailable";
         // GetThreadDesktop returns a borrowed handle; no desktop is opened or switched.
         IntPtr desktop = GetThreadDesktop(GetCurrentThreadId());
-        int receivingInput;
-        uint needed;
-        string input = desktop != IntPtr.Zero &&
-            GetDesktopInputState(desktop, 6, out receivingInput, 4, out needed) && needed == 4
-            ? (receivingInput != 0 ? "true" : "false") : "unavailable";
+        string input = ReadDesktopInputState(desktop);
+        uint targetProcess;
+        uint targetThread = GetWindowThreadProcessId(window, out targetProcess);
+        string targetInput = targetThread != 0 && targetProcess == (uint)ownerProcessId
+            ? ReadDesktopInputState(GetThreadDesktop(targetThread)) : "unavailable";
+        uint verifiedTargetProcess;
+        if (GetWindowThreadProcessId(window, out verifiedTargetProcess) != targetThread ||
+            verifiedTargetProcess != (uint)ownerProcessId)
+            targetInput = "unavailable";
         IntPtr foreground = GetForegroundWindow();
         string foregroundKind = foreground == IntPtr.Zero ? "none" :
             foreground == window ? "target" :
             GetWindowProcessId(foreground) == ownerProcessId ? "same-process" : "other-process";
+        string foregroundMenu = "unavailable";
+        uint foregroundProcess;
+        uint foregroundThread = GetWindowThreadProcessId(foreground, out foregroundProcess);
+        var info = new GuiThreadInfo { cbSize = (uint)Marshal.SizeOf(typeof(GuiThreadInfo)) };
+        uint verifiedForegroundProcess;
+        if (foreground != IntPtr.Zero && foregroundThread != 0 &&
+            GetGUIThreadInfo(foregroundThread, ref info) &&
+            GetForegroundWindow() == foreground &&
+            GetWindowThreadProcessId(foreground, out verifiedForegroundProcess) == foregroundThread &&
+            verifiedForegroundProcess == foregroundProcess)
+            foregroundMenu = (info.flags & (GUI_INMENUMODE | GUI_SYSTEMMENUMODE | GUI_POPUPMENUMODE)) != 0 ||
+                info.hwndMenuOwner != IntPtr.Zero
+                ? "true" : "false";
         return "interactive:" + Environment.UserInteractive.ToString().ToLowerInvariant() +
             ";session:" + session + ";caller-input:" + input +
             ";visible:" + IsWindowVisible(window).ToString().ToLowerInvariant() +
             ";enabled:" + IsWindowEnabled(window).ToString().ToLowerInvariant() +
             ";minimized:" + IsIconic(window).ToString().ToLowerInvariant() +
-            ";foreground:" + foregroundKind;
+            ";foreground:" + foregroundKind +
+            ";target-input:" + targetInput + ";foreground-menu:" + foregroundMenu;
     }
 
     [DllImport("user32.dll", ExactSpelling = true)]
