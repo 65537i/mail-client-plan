@@ -29,6 +29,8 @@ ARM64でwarnings-as-errors compileとnative fixtures、Node source contractsを�
 
 ### Windows hosted investigation history
 
+2026-11-10 Windows陽性control未検出の調査から、既定ブランチ向けdraft [PR #3](https://github.com/65537i/mail-client-plan/pull/3)（`a72ec01`）を作成した。既定側は`os.tmpdir()`の8.3短縮名/junction別名を解決せずexact Path Includeへ渡していた。ローカルARM64の合成Procmon比較で別名filterはNode ReadFile 0、実体名filterは1、双方canary/対象外event 0を再現し、修正済みdirectory helperでも確認した。`realpath`した親に一時directoryを作り、全6パスを同じ実体名から生成する。失敗時fallbackなし、診断は別名有無のbooleanのみ。実junction/default-temp/欠落rootと既存Windows/CI tests 69/69、構文・diff check成功。既存の完全一致・drop・陽性/陰性control・canary拒否・上限は不変。調査branchのrepository内一時領域という既存動作は維持した。merge・手動dispatchなし、PRの自動CIとhosted x64結果は未確認。ローカル比較には調査branchのsafe設定helperを使用したため、既定側の全UI/実WebViewやWindows AC-05合格の代替ではない。
+
 2026-11-10 ユーザーがhosted PoCを明示選択したため、独立した[手動workflow](../.github/workflows/windows-arm64-etw-controls.yml)を追加した。`windows-11-arm`でnative architecture・管理者権限・ARM64 Visual Studio toolchain・dispatch SHA一致・専用session不在を検証し、既存Windows/ETW/CI contracts、untouched、touchedを順番に実行する。後者はcanary検出によるnative exit 2をrunnerが要求する。失敗後もcancelされていなければsessionと一時directoryの不在を確認し、cleanup不能を成功にしない。10分上限、同時実行なし、raw trace/artifact uploadなし。既存Procmon/native workflowとAC-05 gateは不変。ローカルNode 123/123、実YAML解析とGitHub式置換後の全5 PowerShell block構文検査が成功。hosted実行はまだ未確認。
 
 新規の`workflow_dispatch`は[GitHub公式手順](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow)上、workflowの既定ブランチ配置が必要。調査branchの追加だけで実行できなければ、そのblockerを報告し、既定ブランチ更新や別trigger追加を無断で行わない。このworkflowは合成native controlsだけを検証し、既存Node control・実WebView・全process/operation coverage・Windows AC-05成功の証拠にはしない。
