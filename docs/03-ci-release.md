@@ -190,9 +190,19 @@ Linux: Tauri公式prerequisitesに従うWebKitGTK 4.1等を固定された環境
 
 Windows: MSVC toolchain、WebView2、必要SDK。WebDriverを外部利用する場合はEdge/driver互換版を確認する。Credential Managerは実ユーザー環境も確認する。macOS: Xcode toolchain、deployment target、arm64/x64、Keychain・署名権限を分離する。
 
-### Windows ARM64 対話型self-hosted検証の準備手順（未実装・未登録）
+### Windows ARM64 対話型self-hosted検証（workflow実装済み・未登録・未実行）
 
-これはRun 618後の検証候補であり、foreground問題の修正や実行承認ではない。現行`native.yml`はhosted runnerだけを選択するため、runnerを登録しただけではこの経路を実行できない。以下の準備条件を満たした後、workflow変更・runner登録・実行を別途承認する。通常のPR / push / all-target matrixをself-hostedへ切り替えない。
+これはRun 618後の検証候補であり、foreground問題の修正や実行承認ではない。`native.yml`はhosted runnerのまま維持し、別の[windows-arm64-interactive.yml](../.github/workflows/windows-arm64-interactive.yml)を手動専用で追加した。以下の準備条件を満たした後、runner登録・有効化・実行を別途承認する。通常のPR / push / all-target matrixをself-hostedへ切り替えない。
+
+#### 実装済みworkflowの固定契約
+
+- source checkoutは`182557978df3afb0a4f5077946ba76564dcd7422`に固定。workflow自体のrevisionと検証source SHAは別に記録する。このsourceを更新するにはworkflowと契約testのレビューを伴う変更が必要で、入力から任意refを実行できない。
+- `workflow_dispatch`、元repository `65537i/mail-client-plan`、`isolated_runner_approved=true`、入力`approved_sha`とrepository variable `MAIL_CLIENT_INTERACTIVE_APPROVED_SHA`の双方が上記SHAに一致する場合だけjobを選択する。variable未設定・不一致はjobをskipする。有効化variableは今回は設定していない。skipを成功証拠にしない。
+- runner labelsは`self-hosted / Windows / ARM64 / mail-client-isolated-interactive`。同時実行groupは固定、実行中jobをcancelしない。45分上限、`contents: read`、固定action SHA、checkoutの`persist-credentials: false`を要求する。Secrets参照・cache復元・artifact uploadは追加しない。
+- 既存のtoolchainを事前準備し、runner起動前の同じ対話環境でARM64 MSVC/SDKとARM64 ClangのPATHを初期化する。固定版Node ARM64 / pnpm / Rust ARM64 hostをjobで照合する。事前配置したMicrosoft署名付き`Procmon64a.exe`を環境変数`MAIL_CLIENT_PROCMON_PATH`で渡す。未配置・署名不正・非管理者・非対話・異なるarchitecture・既存Procmon・試験binary/target出力先override・foreground拒否simulationがあれば停止する。
+- 固定sourceを検証後、frozen frontend install、新規security-test build、Windows Node 4 suite、PowerShell fixture、SecretStore必須の実baseline/attack監査を順に実行する。summaryは実audit stepのoutcomeとpartial検証の制約を記録する。前提条件によりforeground取得が保証されるわけではなく、既存gateは変更しない。
+- このjob条件やlabelは、他の悪意あるworkflowから同じrunnerを保護する境界ではない。repository variableの有効化だけで隔離や認可を保証したとは扱わず、下記の登録前確認を必須にする。
+- GitHub上の手動起動にはdefault branchにworkflowが存在する必要がある。新workflowの信頼済みrevisionをレビューして配置する作業も別途承認し、未配置なら起動可能とは扱わない。この作業ではmergeやdefault branch変更を行わない。
 
 #### 登録前の停止条件
 
@@ -203,7 +213,7 @@ Windows: MSVC toolchain、WebView2、必要SDK。WebDriverを外部利用する�
 
 #### 承認後に行う最小構成
 
-1. レビュー済みの完全なcommit SHA、実行するworkflow、runnerの利用範囲と権限、VMの破棄方法を確定する。既存のhosted検証と分離した手動専用経路を実装・レビューし、固定SHA checkout、`contents: read`、checkout認証の非永続化、外部Secretsなし、45分上限、同時実行1を要求する。任意ref入力やPRコードの実行を許可しない。現行workflowはここでは変更しない。
+1. レビュー済みの完全なsource SHA、実行するworkflow revision、runnerの利用範囲と権限、VMの破棄方法を確定する。上記の実装済みworkflowをレビューし、有効化variable設定と手動入力を別途承認する。任意ref入力やPRコードの実行を許可しない。
 2. VM内で既存ADRのARM64 toolchain / WebView2要件を確認する。自動ログオン、画面ロック解除の自動化、UAC無効化、foreground制限の変更はしない。operatorが専用デスクトップへログオンし、承認された監査時間だけ利用する。
 3. 短命の登録tokenで一時runnerを構成し、可能な構成では1 job後に登録解除されるephemeral runnerを使う。tokenやrunner資格情報をchat、ログ、repositoryへ保存しない。Windows serviceとして起動せず、operatorが承認済みの管理者PowerShellから対話的に起動する。管理者権限はProcmon監査のためであり、任意コードへ同じ権限を与えるリスクを明示して承認する。
 4. runnerがOnline / Idle、Windows ARM64であることと、専用workflowだけが対象を選ぶことを確認してから1回実行する。監査中は他のGUI操作・RDP切断・ロック・sleepを避けるが、組織のロックポリシーは無断変更しない。foreground取得を保証する条件ではなく、既存のexact HWND/PID foreground gateを引き続き必須にする。
@@ -215,7 +225,7 @@ Windows: MSVC toolchain、WebView2、必要SDK。WebDriverを外部利用する�
 - 記録する証拠はcommit SHA、OS/architecture、runner種別、run URL、UTC、各gateと件数、失敗/未実行項目。raw captureや資格情報を無条件にartifact化しない。self-hostedでの成功はhosted runnerでの成功、全descendant coverage、最低OS matrix、AC-05全体の代替ではない。`webview`相当の実行は本番build/protocolのfull検証とも区別する。
 - job終了後にrunnerプロセス終了とGitHub側登録解除を確認する。ephemeral登録解除だけでディスクは消去されない。自身が起動したProcmonやhelperだけを終了し、一時capture・合成資格情報のcleanupを確認した後に専用VMを破棄する。共有ディレクトリの再帰削除や既存ユーザーデータの削除で代替しない。
 
-現在はこの文書の準備まで。runner取得・登録、token発行、GitHub設定、workflow、desktop/security設定、Actions実行はいずれも変更していない。
+現在は文書と手動専用workflowの実装・ローカル契約検証まで。runner取得・登録、token発行、GitHub variable/設定、desktop/security設定、Actions実行はいずれも変更していない。実環境でのworkflow成功・runner隔離・foreground取得は未検証。
 
 参考: [GitHub runner追加とpublic repositoryへの警告](https://docs.github.com/en/actions/how-tos/manage-runners/self-hosted-runners/add-runners)、[self-hosted runnerのhardening](https://docs.github.com/en/actions/reference/security/secure-use#hardening-for-self-hosted-runners)。toolchainは[ADR-001](adr/ADR-001-platform-toolchains.md)、検証結果は[status](status.md)を参照する。
 

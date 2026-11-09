@@ -1,0 +1,133 @@
+name: Windows ARM64 interactive audit
+
+on:
+  workflow_dispatch:
+    inputs:
+      approved_sha:
+        description: Reviewed source SHA (must match the fixed checkout and enable variable)
+        required: true
+        type: string
+      isolated_runner_approved:
+        description: Dedicated disposable VM, trusted workflow access, elevated interactive session approved
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-arm64-interactive-audit
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.repository == '65537i/mail-client-plan' &&
+      inputs.isolated_runner_approved == true &&
+      inputs.approved_sha == '182557978df3afb0a4f5077946ba76564dcd7422' &&
+      vars.MAIL_CLIENT_INTERACTIVE_APPROVED_SHA == '182557978df3afb0a4f5077946ba76564dcd7422'
+    runs-on: [self-hosted, Windows, ARM64, mail-client-isolated-interactive]
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      APPROVED_SOURCE_SHA: 182557978df3afb0a4f5077946ba76564dcd7422
+
+    steps:
+      - name: Verify isolated interactive ARM64 prerequisites
+        run: |
+          $ErrorActionPreference = "Stop"
+          if ($env:RUNNER_OS -cne "Windows" -or $env:RUNNER_ARCH -cne "ARM64" -or
+              [Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture.ToString() -cne "Arm64" -or
+              -not [Environment]::UserInteractive) {
+            throw "An interactive native Windows ARM64 runner is required"
+          }
+          $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+          try {
+            $principal = [Security.Principal.WindowsPrincipal]::new($identity)
+            if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+              throw "The isolated Procmon audit requires explicit elevated execution"
+            }
+          } finally {
+            $identity.Dispose()
+          }
+          if (@(Get-Process | Where-Object ProcessName -Match '^Procmon').Count -ne 0) {
+            throw "Existing Procmon prevents isolated audit; operator intervention required"
+          }
+          if ($env:PROC_MON_TEST_FORCE_FOREGROUND_DENIAL -or $env:MAIL_CLIENT_WDIO_BINARY -or
+              $env:CARGO_TARGET_DIR -or $env:CARGO_BUILD_TARGET) {
+            throw "Conflicting test or cross-compilation environment"
+          }
+          if (-not [IO.Path]::IsPathFullyQualified($env:MAIL_CLIENT_PROCMON_PATH) -or
+              -not (Test-Path -LiteralPath $env:MAIL_CLIENT_PROCMON_PATH -PathType Leaf) -or
+              [IO.Path]::GetFileName($env:MAIL_CLIENT_PROCMON_PATH) -cne "Procmon64a.exe") {
+            throw "Preprovision the official ARM64 Procmon executable"
+          }
+          $signature = Get-AuthenticodeSignature -FilePath $env:MAIL_CLIENT_PROCMON_PATH
+          if ($signature.Status -ne "Valid" -or
+              $signature.SignerCertificate.Subject -notmatch "^CN=Microsoft Corporation,") {
+            throw "Process Monitor signature validation failed"
+          }
+          Write-Host "Verified isolated interactive ARM64 prerequisites; foreground remains independently gated"
+
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: 182557978df3afb0a4f5077946ba76564dcd7422
+          persist-credentials: false
+
+      - name: Verify source and preprovisioned toolchain
+        run: |
+          $ErrorActionPreference = "Stop"
+          $actual = git rev-parse HEAD
+          if ($LASTEXITCODE -ne 0 -or $actual -cne $env:APPROVED_SOURCE_SHA) {
+            throw "Checked-out source differs from the approved SHA"
+          }
+          $nodeVersion = node --version
+          if ($LASTEXITCODE -ne 0 -or $nodeVersion -cne "v24.22.0") { throw "Pinned Node is required" }
+          $nodeArch = node -p "process.arch"
+          if ($LASTEXITCODE -ne 0 -or $nodeArch -cne "arm64") { throw "Native ARM64 Node is required" }
+          $pnpmVersion = pnpm --version
+          if ($LASTEXITCODE -ne 0 -or $pnpmVersion -cne "12.14.0") { throw "Pinned pnpm is required" }
+          $rustInfo = @(rustc -vV)
+          if ($LASTEXITCODE -ne 0 -or $rustInfo -cnotcontains "release: 1.99.1" -or
+              $rustInfo -cnotcontains "host: aarch64-pc-windows-msvc") {
+            throw "Pinned native ARM64 Rust toolchain is required"
+          }
+          Get-Command clang -ErrorAction Stop | Out-Null
+          Write-Host "Verified approved source and pinned native toolchain"
+
+      - name: Install locked frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build security-test application
+        run: pnpm exec tauri build --no-bundle --ci --features security-test --config src-tauri/tauri.security-test.conf.json
+
+      - name: Test Windows audit setup and worker coordination
+        run: node --test tests/security/windows-audit-canary.test.mjs tests/security/windows-audit-wdio.test.mjs tests/security/windows-filter-diagnostics.test.mjs tests/security/windows-file-trace.test.mjs
+
+      - name: Test Windows configuration export
+        shell: powershell
+        run: .\tests\security\windows-filter-export.test.ps1
+
+      - name: Run real baseline and attack audit
+        id: capture
+        run: pnpm run test:security:file-access:windows
+        env:
+          MAIL_CLIENT_REQUIRE_SECRET_STORE: "1"
+
+      - name: Record partial validation outcome
+        if: always()
+        env:
+          CAPTURE_OUTCOME: ${{ steps.capture.outcome }}
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          @(
+            "Source SHA: $env:APPROVED_SOURCE_SHA"
+            "Runner: self-hosted Windows ARM64 interactive"
+            "Job status: $env:JOB_STATUS; real audit outcome: $env:CAPTURE_OUTCOME"
+            "Partial validation only: not hosted-runner, full production/protocol, complete descendant coverage, or all-platform AC-05 evidence."
+            "Operator must verify process cleanup, runner deregistration, and disposable VM destruction."
+          ) | Out-File -LiteralPath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
