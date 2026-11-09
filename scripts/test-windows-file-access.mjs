@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { fork, spawn } from "node:child_process";
-import { access, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { access, readFile, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -9,7 +9,7 @@ import {
   decodeWindowsFileTrace,
   inspectWindowsFileTrace,
 } from "./windows-file-trace.mjs";
-import { createWindowsAuditCanary } from "./windows-audit-canary.mjs";
+import { createWindowsAuditCanary, createWindowsAuditDirectory } from "./windows-audit-canary.mjs";
 import {
   appendBoundedWindowsFilterOutput,
   describeWindowsFilterDiagnostics,
@@ -24,7 +24,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const procmonPath = path.resolve(process.env.MAIL_CLIENT_PROCMON_PATH);
 
 async function captureScenario(scenario) {
-  const temporaryDirectory = await mkdtemp(path.join(os.tmpdir(), "mail-client-file-audit-"));
+  const temporaryDirectory = await createWindowsAuditDirectory();
   const canaryPath = path.join(temporaryDirectory, `mc-${randomUUID().slice(0, 12)}.png`);
   const positiveControlPath = path.join(temporaryDirectory, `mc-control-${randomUUID().slice(0, 12)}.png`);
   const excludedPath = path.join(temporaryDirectory, `mc-excluded-${randomUUID().slice(0, 12)}.png`);
@@ -158,6 +158,7 @@ async function captureScenario(scenario) {
   let captureStartedAt;
 
   try {
+    console.log(`Windows audit ${scenario}: temporary-root-alias=${path.resolve(os.tmpdir()).toLowerCase() !== path.dirname(temporaryDirectory).toLowerCase()}`);
     console.log(`Windows audit ${scenario}: canary creation requested UTC=${new Date().toISOString()}; mode=write-through`);
     const canaryBytes = await createWindowsAuditCanary(canaryPath);
     const canaryCreatedAt = new Date().toISOString();

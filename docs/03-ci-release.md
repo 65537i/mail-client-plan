@@ -2,6 +2,12 @@
 
 ## 1. ワークフロー構成
 
+### Windows exact-path audit directories
+
+Windowsの完全一致Path Include条件は、`os.tmpdir()`の文字列表記をそのまま使わず、実体パスへ解決した親directoryで`mkdtemp`してから生成する。[directory helper](../scripts/windows-audit-canary.mjs)は`realpath`失敗を伝播し、別名パスへfallbackしない。[driver](../scripts/test-windows-file-access.mjs)はcanary/control/excluded/config/PML/CSVの全パスを同じ実体directoryから作り、診断は`temporary-root-alias=true|false`だけを出す。8.3短縮名やjunctionの別名をCSV比較側で緩く受理する修正ではなく、capture前のexact filter作成を正す。
+
+Runs [623](https://github.com/65537i/mail-client-plan/actions/runs/42656232254) / [624](https://github.com/65537i/mail-client-plan/actions/runs/42685595594)のWindows x64は陽性control全3件数0で失敗していた。ローカルARM64で合成ファイルだけを使った限定Procmon比較では、短縮名IncludeはNode ReadFile 0、修正済みdirectory helperの実体名Includeは1となり、双方canary/対象外event 0を確認した。設定には調査branchの既存safe configuration helperを使用したため、既定ブランチ側の全UI/実WebView試験やhosted x64成功の代替ではない。現行の2 exact Include / Drop Filtered Events / excluded negative control / Node ReadFile必須 / canary拒否 / 256 MiB上限は維持。raw traceはuploadせず終了時に削除し、hosted確認まではWindows AC-05未達とする。
+
 [Run 519](https://github.com/65537i/mail-client-plan/actions/runs/41306084970)（Windows 2025 x64 / webview）は長いInstance Nameで後続列がずれた行により`row-shape`停止。instance行はtoken順（先頭Filter / Altitude、末尾Frame / SprtFtrs / 任意VlStatus）で検証する方式へ変更した。
 
 [Run 517](https://github.com/65537i/mail-client-plan/actions/runs/41304809374)（`7cb3a2e`、Windows 2025 x64 / webview）はconfiguration exportを通過し、live Filter Manager parserの`row-shape`（列診断`word-integer-words-integer-barehex-empty`）で停止。`fltmc instances -v`の固定幅出力（空白入りInstance Name、`0x`無しSprtFtrs、空VlStatus）をseparator列位置で検証する受理経路を追加し、越境・タブ・未知値はfail closedのまま。

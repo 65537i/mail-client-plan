@@ -1,9 +1,49 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm, stat, unlink } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, realpath, rm, stat, symlink, unlink } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { createWindowsAuditCanary } from "../../scripts/windows-audit-canary.mjs";
+import { createWindowsAuditCanary, createWindowsAuditDirectory } from "../../scripts/windows-audit-canary.mjs";
+
+test("AC-05: audit paths use the canonical temporary root before exact filters are constructed", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "mc-path-test-"));
+  try {
+    const target = path.join(directory, "target");
+    const alias = path.join(directory, "alias");
+    await mkdir(target);
+    await symlink(target, alias, process.platform === "win32" ? "junction" : "dir");
+    const canonicalTarget = await realpath(target);
+    const auditDirectory = await createWindowsAuditDirectory(alias);
+    assert.equal(path.dirname(auditDirectory), canonicalTarget);
+    assert.equal(await realpath(auditDirectory), auditDirectory);
+    assert.match(path.basename(auditDirectory), /^mail-client-file-audit-/);
+    assert.equal((await stat(auditDirectory)).isDirectory(), true);
+    const canary = path.join(auditDirectory, "canary.png");
+    await createWindowsAuditCanary(canary);
+    assert.equal(await realpath(canary), canary);
+    await assert.rejects(createWindowsAuditDirectory(path.join(target, "missing")), { code: "ENOENT" });
+    assert.deepEqual(await readdir(target), [path.basename(auditDirectory)]);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+  const driver = await readFile(new URL("../../scripts/test-windows-file-access.mjs", import.meta.url), "utf8");
+  assert.match(driver, /const temporaryDirectory = await createWindowsAuditDirectory\(\)/);
+  for (const name of ["canaryPath", "positiveControlPath", "excludedPath", "backingFile", "csvFile", "filterConfig"]) {
+    assert.match(driver, new RegExp(`const ${name} = path\\.join\\(temporaryDirectory,`));
+  }
+  assert.doesNotMatch(driver, /mkdtemp\(/);
+  assert.match(driver, /temporary-root-alias=\$\{path\.resolve\(os\.tmpdir\(\)\)\.toLowerCase\(\) !== path\.dirname\(temporaryDirectory\)\.toLowerCase\(\)\}/);
+});
+
+test("AC-05: default audit directory resolves Windows short temporary paths without emitting them", async () => {
+  const directory = await createWindowsAuditDirectory();
+  try {
+    assert.equal(path.dirname(directory), await realpath(os.tmpdir()));
+    assert.equal(directory, await realpath(directory));
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
 
 test("AC-05: SCM driver inventory is bounded and identifies Procmon by service name or image path", async () => {
   const [inspection, driver] = await Promise.all([
