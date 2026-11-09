@@ -8,6 +8,8 @@ Windowsの完全一致Path Include条件は、`os.tmpdir()`の文字列表記を
 
 Runs [623](https://github.com/65537i/mail-client-plan/actions/runs/42656232254) / [624](https://github.com/65537i/mail-client-plan/actions/runs/42685595594)のWindows x64は陽性control全3件数0で失敗していた。ローカルARM64で合成ファイルだけを使った限定Procmon比較では、短縮名IncludeはNode ReadFile 0、修正済みdirectory helperの実体名Includeは1となり、双方canary/対象外event 0を確認した。設定には調査branchの既存safe configuration helperを使用したため、既定ブランチ側の全UI/実WebView試験やhosted x64成功の代替ではない。現行の2 exact Include / Drop Filtered Events / excluded negative control / Node ReadFile必須 / canary拒否 / 256 MiB上限は維持。raw traceはuploadせず終了時に削除し、hosted確認まではWindows AC-05未達とする。
 
+Run 625（source `a72ec01`）でhosted x64のNode ReadFile 1と`temporary-root-alias=true`を確認したが、baselineはPowerShell由来canary 17件、attackは設定`find-main-window`失敗で未合格。capture中のvolume確認は`File.Exists`/`GetVolumePathName`により対象へアクセスするため、未接触canaryではなく同じcanonical directoryの陽性controlを渡す。volume attachmentの検査は省略しない。baseline canary 0件をattack開始前に必須assertし、不合格を後続失敗で隠さない。元inspector ASTから抽出した実処理によるローカル合成比較でもcanary指定17件→control指定0件、陽性ReadFileは双方1件を確認。全inspector/実WebView/hosted follow-upの代替ではなく、attack設定失敗も別途未解決とする。canaryイベントの除外やPowerShell許可リストは追加しない。
+
 [Run 519](https://github.com/65537i/mail-client-plan/actions/runs/41306084970)（Windows 2025 x64 / webview）は長いInstance Nameで後続列がずれた行により`row-shape`停止。instance行はtoken順（先頭Filter / Altitude、末尾Frame / SprtFtrs / 任意VlStatus）で検証する方式へ変更した。
 
 [Run 517](https://github.com/65537i/mail-client-plan/actions/runs/41304809374)（`7cb3a2e`、Windows 2025 x64 / webview）はconfiguration exportを通過し、live Filter Manager parserの`row-shape`（列診断`word-integer-words-integer-barehex-empty`）で停止。`fltmc instances -v`の固定幅出力（空白入りInstance Name、`0x`無しSprtFtrs、空VlStatus）をseparator列位置で検証する受理経路を追加し、越境・タブ・未知値はfail closedのまま。

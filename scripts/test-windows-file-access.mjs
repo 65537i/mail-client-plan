@@ -314,7 +314,7 @@ async function captureScenario(scenario) {
       [
         "-STA", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
         "-File", path.join(root, "scripts", "inspect-windows-procmon-capture.ps1"),
-        "-OwnerProcessId", String(capture.pid), "-TargetPath", canaryPath,
+        "-OwnerProcessId", String(capture.pid), "-TargetPath", positiveControlPath,
       ],
       { stdio: ["ignore", "pipe", "pipe"], windowsHide: true },
     );
@@ -605,9 +605,9 @@ async function captureScenario(scenario) {
 }
 
 const baseline = await captureScenario("baseline");
+assert.equal(baseline.canaryEvents.length, 0, "Windows baseline capture contains unexplained canary events");
 const attack = await captureScenario("attack");
 assert.equal(attack.canaryEvents.length, 0, "Windows attack capture contains unexpected canary events");
-assert.equal(baseline.canaryEvents.length, 0, "Windows baseline capture contains unexplained canary events");
 console.log(
   "AC-05 Windows file-access audit passed for both captures; complete descendant coverage remains unverified.",
 );

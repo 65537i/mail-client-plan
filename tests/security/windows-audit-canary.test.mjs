@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, readFile, readdir, realpath, rm, stat, symlink, unlink 
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import vm from "node:vm";
 import { createWindowsAuditCanary, createWindowsAuditDirectory } from "../../scripts/windows-audit-canary.mjs";
 
 test("AC-05: audit paths use the canonical temporary root before exact filters are constructed", async () => {
@@ -175,7 +176,10 @@ test("AC-05: Filter Manager inventory is an independent bounded read-only driver
   assert.match(inspection, /target-volume-attached:\$attached;target-volume-instances:\$targetVolumeInstances/);
   assert.match(inspection, /PROC_MON_CAPTURE_FILTER_MANAGER=\$filterManagerEvidence/);
   assert.doesNotMatch(inspection, /fltmc\.exe\s+(?:load|unload|attach|detach)|WriteLine\([^)]*(?:\$line|\$filterManagerPath|\$volumeName|\$candidateName)/i);
-  assert.match(driver, /"-OwnerProcessId", String\(capture\.pid\), "-TargetPath", canaryPath/);
+  assert.match(driver, /"-OwnerProcessId", String\(capture\.pid\), "-TargetPath", positiveControlPath/);
+  assert.doesNotMatch(driver, /"-TargetPath", canaryPath/);
+  assert.match(driver, /const canaryPath = path\.join\(temporaryDirectory,/);
+  assert.match(driver, /const positiveControlPath = path\.join\(temporaryDirectory,/);
   assert.match(driver, /PROC_MON_CAPTURE_FILTER_MANAGER_COMMAND=exit-code:\(0\|\[1-9\]\\d\{0,2\}\|out-of-range\)/);
   assert.match(driver, /PROC_MON_CAPTURE_FILTER_MANAGER_PARSE=\(started\|empty-output\|line-limit\|line-shape\|duplicate-header\|instance-list-header\|volume-heading\|volume-heading-drive-path\|volume-heading-drive-decorated-parenthesis\|volume-heading-drive-decorated-bracket\|volume-heading-drive-decorated-quoted\|volume-heading-drive-decorated-volume-name\|volume-heading-drive-decorated-volume-guid\|volume-heading-drive-decorated-volume-id\|volume-heading-drive-decorated-volume-colon-guid\|volume-heading-drive-decorated-volume-colon-device\|volume-heading-drive-decorated-volume-colon-object-manager\|volume-heading-drive-decorated-volume-colon-drive\|volume-heading-drive-decorated-volume-colon-empty\|volume-heading-drive-decorated-volume-colon-text\|volume-heading-drive-decorated-volume-colon-numeric\|volume-heading-drive-decorated-volume-colon-other\|volume-heading-drive-decorated-volume-path\|volume-heading-drive-decorated-volume-other\|volume-heading-drive-decorated-device\|volume-heading-drive-decorated-harddisk\|volume-heading-drive-decorated-text\|volume-heading-drive-decorated-numeric\|volume-heading-drive-decorated-path\|volume-heading-drive-decorated-punctuation\|volume-heading-drive-decorated-other\|volume-heading-drive-other\|volume-heading-guid-prefix\|volume-heading-device-prefix\|volume-heading-object-manager-prefix\|volume-heading-rooted\|volume-heading-other\|instances-heading\|instance-heading\|filter-manager-heading\|filter-heading\|unexpected-preamble\|separator-shape\|row-shape\|invalid-count\|count-limit\|inventory-limit\|incomplete-table\|valid\)/);
   assert.match(driver, /Filter Manager parse state \$\{filterManagerParseState\}/);
@@ -251,6 +255,34 @@ test("AC-05: Filter Manager inventory is an independent bounded read-only driver
   assert.match(driver, /FILTER_MANAGER=candidates:\(0\|\[1-9\]\\d\{0,2\}\);instances:\(0\|\[1-9\]\\d\{0,4\}\);target-volume-attached:\(true\|false\);target-volume-instances:/);
   assert.match(driver, /filterManagerEvidence.length === 1[\s\S]*Number\(filterManagerEvidence\[0\]\[1\]\) <= 64/);
   assert.match(driver, /Number\(filterManagerEvidence\[0\]\[4\]\) <= Number\(filterManagerEvidence\[0\]\[1\]\) \* 64/);
+});
+
+test("AC-05: baseline canary failure stops before preparing the attack capture", async () => {
+  const driver = await readFile(new URL("../../scripts/test-windows-file-access.mjs", import.meta.url), "utf8");
+  assert.match(driver, /const baseline = await captureScenario\("baseline"\);\s*assert.equal\(baseline.canaryEvents.length, 0, "Windows baseline capture contains unexplained canary events"\);\s*const attack = await captureScenario\("attack"\);/);
+  for (const [baselineCount, attackCount] of [[1, 0], [0, 1], [0, 0]]) {
+    const calls = [];
+    let successMessages = 0;
+    const execution = vm.runInNewContext(
+      `(async () => { ${driver.slice(driver.indexOf('const baseline = await captureScenario("baseline");'))} })()`,
+      {
+        assert,
+        captureScenario: async (scenario) => {
+          calls.push(scenario);
+          return { canaryEvents: Array(scenario === "baseline" ? baselineCount : attackCount).fill({}) };
+        },
+        console: { log: () => { successMessages++; } },
+      },
+    );
+    if (baselineCount || attackCount) {
+      await assert.rejects(execution, /Windows (baseline|attack) capture contains/);
+      assert.equal(successMessages, 0);
+    } else {
+      await execution;
+      assert.equal(successMessages, 1);
+    }
+    assert.deepEqual(calls, baselineCount ? ["baseline"] : ["baseline", "attack"]);
+  }
 });
 
 test("AC-05: live filter verification attaches to the capture PID and preserves its lifetime", async () => {
