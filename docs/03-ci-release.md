@@ -2,6 +2,8 @@
 
 ## 1. ワークフロー構成
 
+2026-11-09 [Run 621](https://github.com/65537i/mail-client-plan/actions/runs/42640367722)（`5d29b25`、Windows ARM64 / webview）はbaseline `activate-main-window`で失敗。新診断は`target-input:true;foreground-menu:false`で、対象desktopの入力不能やforeground threadのactive menuは失敗時点で観測されなかった。ただし先行するactivation呼出時の状態、他threadのmenu、foreground lock所有やactivation資格は証明しない。原因未確定であり、設定保存・再読込・capture・audit WDIO/controlは未到達。同条件の再dispatchや強制入力/desktop変更は行わず、厳密gateと未達判定を維持する。詳細は[status](status.md)。
+
 2026-11-09 foreground失敗時のread-only診断に`target-input`と`foreground-menu`を追加。caller desktopが入力可能でもProcmon thread desktopの入力状態は未確認だったため、対象thread/PIDを再確認して入力状態を記録する。またforeground HWND/thread/PIDが観測中に変わっていない場合だけ、既存`GetGUIThreadInfo`のmenu/system-menu/popup-menu flagsとmenu ownerの有無を固定分類する。query不能・identity変化はunavailable。名前・ID・handle・raw flagsは出さず、desktop操作・activation権限変更・timeout変更・gate緩和はしない。通常fixtureでhidden target非activation・同一thread input一致・menu開閉を検証し、拒否fixtureとNode固定shape/retention回帰も通過。実hosted証拠の取得までは原因を断定せず、診断追加を実監査/AC-05成功とは扱わない。
 
 2026-11-09 比較結果: [Run 620](https://github.com/65537i/mail-client-plan/actions/runs/42610674317)（`08d3b97`、Windows ARM64 / webview）はvisible子プロセスでもbaseline `activate-main-window`で失敗し、foregroundは別processのままだった。設定保存・再読込・capture・audit WDIO/controlは未到達。この表示変更では解決しないため、2箇所のspawn設定と実験専用testを元に戻した。原因未確定・厳密gateは維持し、同じ条件での追加dispatchはしない。self-hostedも保留のまま。一方[Run 619](https://github.com/65537i/mail-client-plan/actions/runs/42609377009)（`ca14b36`、Ubuntu ARM64 / full）は成功し、WebView 2/2・外部probe 0・89 traced processesでcanary openなしを確認した。Windowsや全platform AC-05の代替にはしない。

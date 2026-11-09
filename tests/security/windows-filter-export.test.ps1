@@ -1412,7 +1412,12 @@ foreach ($popupMode in @("normal", "duplicate", "disabled", "checked", "limit", 
       $deadline = [DateTime]::UtcNow.AddSeconds(2)
       while ($popupFixture.Actions -ne 1 -and [DateTime]::UtcNow -lt $deadline) { Start-Sleep -Milliseconds 25 }
       if ($popupFixture.Actions -ne 1) { throw "Accessible popup action did not execute exactly once" }
-      $closedMenuContext = [ProcmonNativeMenu]::ReadForegroundContext($popupFixture.Handle, $PID)
+      $deadline = [DateTime]::UtcNow.AddSeconds(2)
+      do {
+        $closedMenuContext = [ProcmonNativeMenu]::ReadForegroundContext($popupFixture.Handle, $PID)
+        if ($closedMenuContext -cmatch ';foreground-menu:false$') { break }
+        Start-Sleep -Milliseconds 25
+      } while ([DateTime]::UtcNow -lt $deadline)
       if ($closedMenuContext -cnotmatch ';foreground-menu:false$') {
         throw "Read-only foreground diagnostics must detect the closed synthetic menu"
       }
