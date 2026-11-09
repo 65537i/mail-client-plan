@@ -1,9 +1,11 @@
 # 開発状況
 
-更新日: 2026-10-30
+更新日: 2026-11-10
 
 ## 現在の範囲
 
+- 2026-11-10 separate macOS ARM64 runner fix: [Run 623](https://github.com/65537i/mail-client-plan/actions/runs/42656232254), source `433c977`, rejected `macos-14-arm64 (full)` before steps with annotation `The configuration 'macos-14-arm64-us-default' is not supported`. Use the officially listed ARM64 `macos-15` runner, rename planner/manual target to `macos-15-arm64`, and reject the obsolete target instead of silently substituting. Add exact runner-map, workflow-choice and stale-input regression coverage. Preserve four-target PR full validation, Linux-only push basic validation, all existing native/audit gates, and macOS 14 minimum-product-OS candidate/manual testing. This separate default-based PR contains no ETW or investigation-branch changes; no merge or manual dispatch is part of preparation. Hosted success remains pending.
+  - Validation: the exact native plan-step command (`node --test tests/ci/*.test.mjs tests/security/macos-file-trace.test.mjs tests/security/windows-file-trace.test.mjs`) passed 27/27. Existing transitive YAML parser verified actual workflow choices, dynamic runner wiring, unchanged fail-fast=false and all 15 manual target/mode contexts. No dependency installation, native app build or macOS execution was performed locally.
 - [Run 519](https://github.com/65537i/mail-client-plan/actions/runs/41306084970)（`272554e`、manual Windows 2025 x64 / webview）でRun 517の短いinstance行は通過したが、列幅を超える長いInstance Name行で`row-shape`停止（列診断`word-integer-words-words-integer-barehex`、token `text-number-text-text-number-text-number-text`）。`fltmc`は長い値で後続列を右へずらすため列位置解析をやめ、先頭Filter / Altitudeと末尾Frame / SprtFtrs（`0x`有無） / 任意VlStatusをtoken順で固定する文法へ置換した。タブ・token数超過・未知値・重複instanceはfail closed、名前や値は出力しない。ローカル: PowerShell 7.6.9でRegistry依存部より前のfixture全通過（Registry部はLinux非対応で未実行）、Node 77/77、diff check成功。Windows実機検証は次Runで実施、AC-05未達。
 - [Run 517](https://github.com/65537i/mail-client-plan/actions/runs/41304809374)（`7cb3a2e`）はconfiguration export（保存dialog含む）を通過し、live Filter Manager parserで`row-shape`停止（列診断`word-integer-words-integer-barehex-empty`: 空白入りInstance Name、`0x`無しSprtFtrs、空VlStatus）。
 - GitHub CLI認証完了、保留中commitはorigin/mainへ反映済み。[Run 515](https://github.com/65537i/mail-client-plan/actions/runs/41135493794)（`9556149`、Windows 2025 x64 / webview）はconfiguration-export fixtureの関数抽出数検査で停止。window分類関数追加後の実数10に対して期待数9が残っていたため10へ修正した。ローカルPowerShellで実際の抽出式・期待数検査・6分類fixtureを実行し成功。Windows全fixture / live監査は次run待ち、AC-05未達。
