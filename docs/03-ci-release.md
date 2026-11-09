@@ -190,6 +190,35 @@ Linux: Tauri公式prerequisitesに従うWebKitGTK 4.1等を固定された環境
 
 Windows: MSVC toolchain、WebView2、必要SDK。WebDriverを外部利用する場合はEdge/driver互換版を確認する。Credential Managerは実ユーザー環境も確認する。macOS: Xcode toolchain、deployment target、arm64/x64、Keychain・署名権限を分離する。
 
+### Windows ARM64 対話型self-hosted検証の準備手順（未実装・未登録）
+
+これはRun 618後の検証候補であり、foreground問題の修正や実行承認ではない。現行`native.yml`はhosted runnerだけを選択するため、runnerを登録しただけではこの経路を実行できない。以下の準備条件を満たした後、workflow変更・runner登録・実行を別途承認する。通常のPR / push / all-target matrixをself-hostedへ切り替えない。
+
+#### 登録前の停止条件
+
+- 専用の破棄可能なWindows 11 ARM64 VMと専用テストユーザーを用意する。開発PC、共有ホスト、実メール、個人のCredential Manager、SSH鍵、GitHub認証、共有フォルダ、ホストのclipboardや資格情報が残る環境は使わない。Secretsがなくても管理者jobはホスト上のデータへ到達し得る。
+- GitHubはpublic repositoryへのself-hosted runner利用を推奨していない。repositoryの公開範囲、fork/PRからの実行可能性、他workflowのrunner選択、書込権限者を登録前に確認する。公開範囲は無断で変更しない。信頼済みコードだけへの実行制限を保証できなければ登録せず、隔離されたprivate検証repository等の別案を承認してから進める。
+- 専用labelはルーティングであって認可ではない。利用可能ならrunner groupのrepository/workflow制限を併用し、利用できない場合も同等の隔離が必要。手動event条件だけで悪意あるworkflowからの利用を防げるとは扱わない。
+- GitHubのrunner追加画面でWindows ARM64の配布・要件を確認し、公式の取得・検証手順だけを使う。未対応ならx64 runnerのエミュレーションをARM64 native検証に読み替えない。
+
+#### 承認後に行う最小構成
+
+1. レビュー済みの完全なcommit SHA、実行するworkflow、runnerの利用範囲と権限、VMの破棄方法を確定する。既存のhosted検証と分離した手動専用経路を実装・レビューし、固定SHA checkout、`contents: read`、checkout認証の非永続化、外部Secretsなし、45分上限、同時実行1を要求する。任意ref入力やPRコードの実行を許可しない。現行workflowはここでは変更しない。
+2. VM内で既存ADRのARM64 toolchain / WebView2要件を確認する。自動ログオン、画面ロック解除の自動化、UAC無効化、foreground制限の変更はしない。operatorが専用デスクトップへログオンし、承認された監査時間だけ利用する。
+3. 短命の登録tokenで一時runnerを構成し、可能な構成では1 job後に登録解除されるephemeral runnerを使う。tokenやrunner資格情報をchat、ログ、repositoryへ保存しない。Windows serviceとして起動せず、operatorが承認済みの管理者PowerShellから対話的に起動する。管理者権限はProcmon監査のためであり、任意コードへ同じ権限を与えるリスクを明示して承認する。
+4. runnerがOnline / Idle、Windows ARM64であることと、専用workflowだけが対象を選ぶことを確認してから1回実行する。監査中は他のGUI操作・RDP切断・ロック・sleepを避けるが、組織のロックポリシーは無断変更しない。foreground取得を保証する条件ではなく、既存のexact HWND/PID foreground gateを引き続き必須にする。
+
+#### 実行内容・判定・終了
+
+- 同じSHAのsecurity-test版を新規buildし、4つのWindows Node suite、PowerShell configuration-export fixture、`MAIL_CLIENT_REQUIRE_SECRET_STORE=1`付き実baseline/attack監査を順に実行する。実provider資格情報や実メールは使わず、隔離ユーザーの合成SecretStore試験だけを許可する。Procmon既存instanceがあれば停止してoperatorへ確認し、任意instanceを終了しない。
+- 成功にはPMC完全一致2ルールの保存・再読込、Drop on、capture/readiness、陽性Node ReadFile、excluded/other-path 0、canary 0、容量上限、baseline/attack WDIO成功をすべて要求する。失敗時は固定分類のforeground診断と停止stageを保存し、desktop状態を変えながら無制限に再実行しない。
+- 記録する証拠はcommit SHA、OS/architecture、runner種別、run URL、UTC、各gateと件数、失敗/未実行項目。raw captureや資格情報を無条件にartifact化しない。self-hostedでの成功はhosted runnerでの成功、全descendant coverage、最低OS matrix、AC-05全体の代替ではない。`webview`相当の実行は本番build/protocolのfull検証とも区別する。
+- job終了後にrunnerプロセス終了とGitHub側登録解除を確認する。ephemeral登録解除だけでディスクは消去されない。自身が起動したProcmonやhelperだけを終了し、一時capture・合成資格情報のcleanupを確認した後に専用VMを破棄する。共有ディレクトリの再帰削除や既存ユーザーデータの削除で代替しない。
+
+現在はこの文書の準備まで。runner取得・登録、token発行、GitHub設定、workflow、desktop/security設定、Actions実行はいずれも変更していない。
+
+参考: [GitHub runner追加とpublic repositoryへの警告](https://docs.github.com/en/actions/how-tos/manage-runners/self-hosted-runners/add-runners)、[self-hosted runnerのhardening](https://docs.github.com/en/actions/reference/security/secure-use#hardening-for-self-hosted-runners)。toolchainは[ADR-001](adr/ADR-001-platform-toolchains.md)、検証結果は[status](status.md)を参照する。
+
 ### nativeの短い検証ループ
 
 Run422後はreadiness直後のWin32_SystemDriver inventoryを名前prefix filterなしの全一覧照会へ変更する。最大1025件を読み、1024超過・未知shapeは失敗。各serviceを内部で検査し、name `PROCMON`+digitsまたはimage basename `procmon*.sys`を候補として識別する。出力は総数・candidate・name/image matchと候補状態の集計だけで、service name/pathを出さない。既存20秒 / 2 KiB、positive-control必須、exact filter / Drop gatesは維持。Windows回帰に候補の両識別経路・空PathName・上限・不正shapeを追加。Running状態はevent収集正常やPML内容の証明ではない。Windows実測待ち。
