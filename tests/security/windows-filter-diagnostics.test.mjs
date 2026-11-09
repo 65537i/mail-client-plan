@@ -7,6 +7,30 @@ import {
   windowsFilterOutputLimit,
 } from "../../scripts/windows-filter-diagnostics.mjs";
 
+test("AC-05: accessible popup diagnostics retain only bounded command and state classifications", () => {
+  const line = "PROC_MON_FILTER_ACCESSIBLE_POPUP=command:drop;state:none;items:12;matches:1;checked:on";
+  assert.equal(
+    describeWindowsFilterDiagnostics(line),
+    "; accessible-popup=command:drop;state:none;items:12;matches:1;checked:on",
+  );
+  const absent = "PROC_MON_FILTER_ACCESSIBLE_POPUP=command:export;state:absent;items:0;matches:0;checked:unavailable";
+  assert.ok(describeWindowsFilterDiagnostics(`${line}\n${absent}`).includes("command:export;state:absent"));
+  for (const invalid of [
+    `${line};name=private`,
+    line.replace("command:drop", "command:private"),
+    line.replace("state:none", "state:private"),
+    line.replace("items:12", "items:65"),
+    line.replace("matches:1", "matches:2"),
+    line.replace("checked:on", "checked:unavailable"),
+    absent.replace("items:0", "items:1"),
+  ]) {
+    assert.equal(describeWindowsFilterDiagnostics(invalid), "");
+  }
+  const captured = appendBoundedWindowsFilterOutput("x".repeat(9000), `\n${line}\n`);
+  assert.ok(captured.length <= windowsFilterOutputLimit);
+  assert.ok(describeWindowsFilterDiagnostics(captured).includes("accessible-popup="));
+});
+
 test("AC-05: export timeout observations distinguish missing dialogs from failed inspection", () => {
   const line = "PROC_MON_FILTER_SAVE_RESULT=phase:export-timeout;foreground:procmon-main;same-process-dialogs:0;other-process-windows:1;buttons:save:0;cancel:0;yes:0;no:0;ok:0;retry:0;close:0;truncated:false";
   assert.equal(

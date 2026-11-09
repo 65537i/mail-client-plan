@@ -1031,6 +1031,216 @@ try {
   }
 }
 $forceForegroundDenial = $env:PROC_MON_TEST_FORCE_FOREGROUND_DENIAL -ceq "true"
+Add-Type -TypeDefinition @'
+using System;
+using System.Threading;
+using System.Windows.Forms;
+using System.Runtime.InteropServices;
+public sealed class SyntheticAccessiblePopup : IDisposable
+{
+    private readonly Thread thread;
+    private readonly ManualResetEvent ready = new ManualResetEvent(false);
+    private Form form;
+    private Exception failure;
+    public IntPtr Handle { get; private set; }
+    public int Actions;
+    [DllImport("user32.dll", EntryPoint = "PostMessageW", ExactSpelling = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool PostMessage(IntPtr window, uint message, IntPtr wParam, IntPtr lParam);
+    public SyntheticAccessiblePopup(string mode)
+    {
+        thread = new Thread(() =>
+        {
+            try
+            {
+                form = new Form { ShowInTaskbar = false, Width = 320, Height = 180 };
+                var drop = new MenuItem("Drop Filtered Events");
+                if (mode == "missing") drop.Text = "Synthetic item";
+                drop.Enabled = mode != "disabled";
+                drop.Checked = mode == "checked";
+                drop.Click += (sender, args) => { drop.Checked = !drop.Checked; Interlocked.Increment(ref Actions); };
+                var filter = new MenuItem("Fi&lter", new[] { drop });
+                if (mode == "duplicate") filter.MenuItems.Add(new MenuItem("Drop Filtered Events"));
+                if (mode == "limit")
+                    for (int i = 0; i < 65; i++) filter.MenuItems.Add(new MenuItem("Synthetic item"));
+                var export = new MenuItem("Export Configuration...");
+                export.Click += (sender, args) => Interlocked.Increment(ref Actions);
+                filter.MenuItems.Add(export);
+                form.Menu = new MainMenu(new[] { filter });
+                form.Shown += (sender, args) => { Handle = form.Handle; ready.Set(); };
+                Application.Run(form);
+                form.Dispose();
+            }
+            catch (Exception error) { failure = error; ready.Set(); }
+        });
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.IsBackground = true;
+        thread.Start();
+        if (!ready.WaitOne(5000)) throw new InvalidOperationException("Synthetic popup startup timed out");
+        if (failure != null) throw new InvalidOperationException("Synthetic popup startup failed", failure);
+    }
+    public void Dispose()
+    {
+        if (form != null && !form.IsDisposed)
+        {
+            if (!PostMessage(Handle, 0x001F, IntPtr.Zero, IntPtr.Zero))
+                throw new InvalidOperationException("Synthetic popup cancel failed");
+            form.BeginInvoke(new Action(() => form.Close()));
+        }
+        if (!thread.Join(5000)) throw new InvalidOperationException("Synthetic popup cleanup timed out");
+        ready.Dispose();
+        if (failure != null) throw new InvalidOperationException("Synthetic popup thread failed", failure);
+    }
+}
+'@ -ReferencedAssemblies "System.Windows.Forms", "System.Drawing"
+$popupBlockedCases = 0
+foreach ($popupMode in @("normal", "duplicate", "disabled", "checked", "limit", "missing")) {
+  $popupFixture = [SyntheticAccessiblePopup]::new($popupMode)
+  $popupBlocker = $null
+  try {
+    [ProcmonNativeMenu]::SetForegroundWindow($popupFixture.Handle) | Out-Null
+    $deadline = [DateTime]::UtcNow.AddSeconds(2)
+    while ([ProcmonNativeMenu]::GetForegroundWindow() -ne $popupFixture.Handle -and [DateTime]::UtcNow -lt $deadline) {
+      Start-Sleep -Milliseconds 25
+    }
+    if ($forceForegroundDenial) {
+      $popupBlocker = [System.Windows.Forms.Form]::new()
+      $popupBlocker.ShowInTaskbar = $false
+      $popupBlocker.Show()
+      $popupBlocker.Activate()
+      [System.Windows.Forms.Application]::DoEvents()
+      if ([ProcmonNativeMenu]::GetForegroundWindow() -eq $popupFixture.Handle) {
+        throw "Accessible popup foreground denial simulation failed"
+      }
+    }
+    $popupInput = [ProcmonNativeMenu]::SendAltLShortcut($popupFixture.Handle, [int]$PID)
+    if ($popupInput.State -eq "target-mismatch") {
+      if ($env:GITHUB_ACTIONS -cne "true" -and -not $forceForegroundDenial) {
+        throw "Synthetic accessible popup did not receive foreground activation"
+      }
+      $rejected = $false
+      try {
+        [ProcmonNativeMenu]::InvokeAccessiblePopupCommand(
+          $popupFixture.Handle, $popupFixture.Handle, [uint32]$PID, "Drop Filtered Events"
+        )
+      } catch [System.Management.Automation.MethodInvocationException] {
+        if ($_.Exception.InnerException -isnot [InvalidOperationException]) { throw }
+        $rejected = $true
+      }
+      if (-not $rejected -or $popupFixture.Actions -ne 0) { throw "Blocked popup input changed fixture state" }
+      $popupBlockedCases++
+      Write-Host "BLOCKED AC-05: accessible popup action rejected without foreground ownership"
+      continue
+    }
+    if ($popupInput.State -ne "sent" -or $popupInput.Events -ne 4) {
+      throw "Synthetic accessible popup shortcut failed"
+    }
+    $popupHandle = [IntPtr]::Zero
+    $deadline = [DateTime]::UtcNow.AddSeconds(2)
+    do {
+      $candidates = @([ProcmonNativeMenu]::GetProcessTopLevelWindows($PID, 257) | Where-Object {
+        [ProcmonNativeMenu]::GetWindowClassKind($_, $PID, $popupFixture.Handle) -eq "popup" -and
+        [ProcmonNativeMenu]::IsWindowVisible($_)
+      })
+      if ($candidates.Count -eq 1) { $popupHandle = $candidates[0]; break }
+      Start-Sleep -Milliseconds 25
+    } while ([DateTime]::UtcNow -lt $deadline)
+    if ($popupHandle -eq [IntPtr]::Zero) { throw "Synthetic native popup did not appear" }
+    if ([ProcmonNativeMenu]::ReadAccessiblePopupCommand(
+        $popupHandle, $popupFixture.Handle, 0, "Drop Filtered Events"
+      ).ReadFailure -cne "owner-mismatch") { throw "Accessible popup accepted foreign ownership" }
+    foreach ($invalidTarget in @(
+      [pscustomobject]@{ Popup = $popupHandle; Main = $popupFixture.Handle; Owner = 0 },
+      [pscustomobject]@{ Popup = $popupHandle; Main = $popupHandle; Owner = $PID },
+      [pscustomobject]@{ Popup = [IntPtr]::Zero; Main = $popupFixture.Handle; Owner = $PID }
+    )) {
+      $targetRejected = $false
+      try {
+        [ProcmonNativeMenu]::InvokeAccessiblePopupCommand(
+          $invalidTarget.Popup, $invalidTarget.Main, $invalidTarget.Owner, "Drop Filtered Events"
+        )
+      } catch [System.Management.Automation.MethodInvocationException] {
+        if ($_.Exception.InnerException -isnot [InvalidOperationException]) { throw }
+        $targetRejected = $true
+      }
+      if (-not $targetRejected -or $popupFixture.Actions -ne 0) {
+        throw "Accessible popup accepted an invalid target"
+      }
+    }
+    $unsupportedRejected = $false
+    try {
+      [ProcmonNativeMenu]::ReadAccessiblePopupCommand(
+        $popupHandle, $popupFixture.Handle, $PID, "Untrusted command"
+      ) | Out-Null
+    } catch [System.Management.Automation.MethodInvocationException] {
+      if ($_.Exception.InnerException -isnot [ArgumentException]) { throw }
+      $unsupportedRejected = $true
+    }
+    if (-not $unsupportedRejected) { throw "Accessible popup accepted an arbitrary label" }
+    $snapshot = [ProcmonNativeMenu]::ReadAccessiblePopupCommand(
+      $popupHandle, $popupFixture.Handle, $PID, "Drop Filtered Events"
+    )
+    if ($popupMode -eq "normal") {
+      if ($snapshot.ReadFailure -cne "none" -or $snapshot.CheckState -cne "off") {
+        throw "Accessible popup did not expose the unique unchecked command"
+      }
+      [ProcmonNativeMenu]::InvokeAccessiblePopupCommand(
+        $popupHandle, $popupFixture.Handle, $PID, "Drop Filtered Events"
+      )
+      $deadline = [DateTime]::UtcNow.AddSeconds(2)
+      while ($popupFixture.Actions -ne 1 -and [DateTime]::UtcNow -lt $deadline) { Start-Sleep -Milliseconds 25 }
+      if ($popupFixture.Actions -ne 1) { throw "Accessible popup action did not execute exactly once" }
+      [ProcmonNativeMenu]::SendAltLShortcut($popupFixture.Handle, $PID) | Out-Null
+      Start-Sleep -Milliseconds 100
+      $candidates = @([ProcmonNativeMenu]::GetProcessTopLevelWindows($PID, 257) | Where-Object {
+        [ProcmonNativeMenu]::GetWindowClassKind($_, $PID, $popupFixture.Handle) -eq "popup" -and
+        [ProcmonNativeMenu]::IsWindowVisible($_)
+      })
+      if ($candidates.Count -ne 1) { throw "Accessible popup did not reopen uniquely" }
+      $snapshot = [ProcmonNativeMenu]::ReadAccessiblePopupCommand(
+        $candidates[0], $popupFixture.Handle, $PID, "Drop Filtered Events"
+      )
+      if ($snapshot.ReadFailure -cne "none" -or $snapshot.CheckState -cne "on") {
+        throw "Accessible popup checked-state readback failed"
+      }
+      [ProcmonNativeMenu]::InvokeAccessiblePopupCommand(
+        $candidates[0], $popupFixture.Handle, $PID, "Export Configuration..."
+      )
+      $deadline = [DateTime]::UtcNow.AddSeconds(2)
+      while ($popupFixture.Actions -ne 2 -and [DateTime]::UtcNow -lt $deadline) { Start-Sleep -Milliseconds 25 }
+      if ($popupFixture.Actions -ne 2) { throw "Accessible export command did not execute exactly once" }
+    } else {
+      $expectedFailure = switch ($popupMode) {
+        "duplicate" { "ambiguous-match" }
+        "disabled" { "command-unavailable" }
+        "checked" { "none" }
+        "limit" { "count-invalid" }
+        "missing" { "ambiguous-match" }
+      }
+      if ($snapshot.ReadFailure -cne $expectedFailure) {
+        throw "Accessible popup mode $popupMode returned $($snapshot.ReadFailure) instead of $expectedFailure"
+      }
+      $rejected = $false
+      try {
+        [ProcmonNativeMenu]::InvokeAccessiblePopupCommand(
+          $popupHandle, $popupFixture.Handle, $PID, "Drop Filtered Events"
+        )
+      } catch [System.Management.Automation.MethodInvocationException] {
+        if ($_.Exception.InnerException -isnot [InvalidOperationException]) { throw }
+        $rejected = $true
+      }
+      if (-not $rejected -or $popupFixture.Actions -ne 0) { throw "Unsafe popup action was not rejected" }
+    }
+  } finally {
+    if ($null -ne $popupBlocker) { $popupBlocker.Close(); $popupBlocker.Dispose() }
+    $popupFixture.Dispose()
+  }
+}
+if ($popupBlockedCases -gt 0) {
+  Write-Host "PASS AC-05: accessible popup foreground rejection preserved state; normal popup actions and readback were not all exercised"
+} else {
+  Write-Host "PASS AC-05: accessible popup commands enforce exact labels, owner, state, bounds, and checked-state readback"
+}
 $foregroundDenialContext = if ($forceForegroundDenial) {
   "local foreground-denial simulation"
 } else {

@@ -1078,6 +1078,24 @@ export function describeWindowsFilterDiagnostics(output) {
     }
   }
 
+  const accessiblePopup = [...output.matchAll(
+    /^PROC_MON_FILTER_ACCESSIBLE_POPUP=command:(drop|export);state:(absent|none|owner-mismatch|object-unavailable|count-invalid|label-limit|state-invalid|ambiguous-match|command-unavailable|invocation-state-mismatch|child-read-failed|object-invalid);items:(\d{1,2});matches:(\d{1,2});checked:(on|off|unavailable)\r?$/gm,
+  )].at(-1);
+  if (accessiblePopup) {
+    const [, command, state, rawItems, rawMatches, checked] = accessiblePopup;
+    const items = Number(rawItems);
+    const matches = Number(rawMatches);
+    if (
+      items <= 64 && matches <= items &&
+      (state !== "none" || (matches === 1 && checked !== "unavailable")) &&
+      (state !== "absent" || (items === 0 && matches === 0 && checked === "unavailable"))
+    ) {
+      diagnostics.push(
+        `accessible-popup=command:${command};state:${state};items:${items};matches:${matches};checked:${checked}`,
+      );
+    }
+  }
+
   const processDropItemScan = output.match(
     /^PROC_MON_FILTER_PROCESS_DROP_ITEM_SCAN=state:(ready|owner-or-label-mismatch|runtime-id-unavailable);windows:(\d{1,4});items:(\d{1,4});matches:(\d{1,4});enabled:(\d{1,4});offscreen:(\d{1,4})\r?$/m,
   );

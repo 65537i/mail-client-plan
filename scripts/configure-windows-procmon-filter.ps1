@@ -126,6 +126,8 @@ public static class ProcmonNativeMenu
     private const int CheckedState = 0x10;
     private const int MixedState = 0x20;
     private const int UnavailableState = 0x1;
+    private const int InvisibleState = 0x8000;
+    private const int OffscreenState = 0x10000;
 
     [StructLayout(LayoutKind.Sequential)]
     private struct MenuItemInfo
@@ -257,6 +259,7 @@ public static class ProcmonNativeMenu
         public string ReadFailure { get; set; }
         public string CheckState { get; set; }
         public bool IsEnabled { get; set; }
+        public bool HasDefaultAction { get; set; }
     }
 
     public sealed class AccessibleToolbarCommandSnapshot
@@ -3040,6 +3043,181 @@ public static class ProcmonNativeMenu
         }
     }
 
+    private static bool IsAccessiblePopupOwned(
+        IntPtr popupWindow,
+        IntPtr mainWindow,
+        uint expectedProcessId
+    )
+    {
+        bool known, same, available, mode;
+        var owner = GetMenuOwnerWindow(popupWindow, expectedProcessId,
+            out known, out same, out available, out mode);
+        var owned = expectedProcessId != 0 &&
+            mainWindow != IntPtr.Zero &&
+            GetWindowProcessId(mainWindow) == expectedProcessId &&
+            GetAncestor(mainWindow, GA_ROOT) == mainWindow &&
+            IsWindowVisible(mainWindow) && IsWindowEnabled(mainWindow) &&
+            GetForegroundWindow() == mainWindow &&
+            popupWindow != mainWindow &&
+            GetWindowClassKind(popupWindow, expectedProcessId, mainWindow) == "popup" &&
+            GetAncestor(popupWindow, GA_ROOT) == popupWindow &&
+            IsWindowVisible(popupWindow) && IsWindowEnabled(popupWindow) &&
+            owner != IntPtr.Zero && IsWindowVisible(owner) &&
+            GetAncestor(owner, GA_ROOT) == mainWindow &&
+            known && same && available && mode;
+        if (!owned) return false;
+        var windows = GetProcessTopLevelWindows((int)expectedProcessId, 257);
+        if (windows.Length > 256) return false;
+        var visiblePopups = 0;
+        foreach (var window in windows)
+        {
+            if (IsWindowVisible(window) &&
+                GetWindowClassKind(window, expectedProcessId, mainWindow) == "popup")
+                visiblePopups++;
+        }
+        return visiblePopups == 1;
+    }
+
+    public static AccessibleMenuSnapshot ReadAccessiblePopupCommand(
+        IntPtr popupWindow,
+        IntPtr mainWindow,
+        uint expectedProcessId,
+        string label
+    )
+    {
+        return AccessPopupCommand(popupWindow, mainWindow, expectedProcessId, label, false);
+    }
+
+    public static void InvokeAccessiblePopupCommand(
+        IntPtr popupWindow,
+        IntPtr mainWindow,
+        uint expectedProcessId,
+        string label
+    )
+    {
+        var snapshot = AccessPopupCommand(
+            popupWindow, mainWindow, expectedProcessId, label, true);
+        if (snapshot.ReadFailure != "none")
+            throw new InvalidOperationException("Accessible popup command failed its strict guards");
+    }
+
+    private static AccessibleMenuSnapshot AccessPopupCommand(
+        IntPtr popupWindow,
+        IntPtr mainWindow,
+        uint expectedProcessId,
+        string label,
+        bool invoke
+    )
+    {
+        if (label != "Drop Filtered Events" && label != "Export Configuration...")
+            throw new ArgumentException("Unsupported accessible popup command");
+        var snapshot = new AccessibleMenuSnapshot
+        {
+            ReadFailure = "owner-mismatch", CheckState = "unavailable"
+        };
+        if (!IsAccessiblePopupOwned(popupWindow, mainWindow, expectedProcessId))
+            return snapshot;
+        snapshot.ProcessKnown = true;
+        snapshot.ProcessSame = true;
+        var interfaceId = new Guid("618736E0-3C3D-11CF-810C-00AA00389B71");
+        Accessibility.IAccessible accessible = null;
+        try
+        {
+            var result = AccessibleObjectFromWindow(
+                popupWindow, unchecked((uint)AccessibleClientObjectId),
+                ref interfaceId, out accessible);
+            if (result != 0 || accessible == null)
+            {
+                snapshot.ReadFailure = "object-unavailable";
+                return snapshot;
+            }
+            snapshot.AccessibleAvailable = true;
+            var count = accessible.accChildCount;
+            if (count < 0 || count > MaximumAccessibleMenuItems)
+            {
+                snapshot.ReadFailure = "count-invalid";
+                return snapshot;
+            }
+            snapshot.ItemCount = count;
+            object commandChild = null;
+            for (var childId = 1; childId <= count; childId++)
+            {
+                object child = childId;
+                var name = accessible.get_accName(child) ?? string.Empty;
+                if (name.Length > MaximumTextCharacters)
+                {
+                    snapshot.ReadFailure = "label-limit";
+                    return snapshot;
+                }
+                var normalized = name.Replace("&", "").Split('\t')[0].Trim();
+                if (!string.Equals(normalized, label, StringComparison.Ordinal))
+                    continue;
+                snapshot.LabelMatchCount++;
+                int role, state;
+                if (!TryGetInteger(accessible.get_accRole(child), out role) ||
+                    role != MenuItemRole)
+                    continue;
+                snapshot.MatchCount++;
+                if (!TryGetInteger(accessible.get_accState(child), out state) ||
+                    (state & MixedState) != 0)
+                {
+                    snapshot.ReadFailure = "state-invalid";
+                    return snapshot;
+                }
+                snapshot.IsEnabled = (state & (UnavailableState | InvisibleState | OffscreenState)) == 0;
+                snapshot.CheckState = (state & CheckedState) == 0 ? "off" : "on";
+                var action = snapshot.IsEnabled ? accessible.get_accDefaultAction(child) : null;
+                snapshot.HasDefaultAction = !string.IsNullOrWhiteSpace(action) && action.Length <= 64;
+                commandChild = child;
+            }
+            if (snapshot.LabelMatchCount != 1 || snapshot.MatchCount != 1)
+            {
+                snapshot.ReadFailure = "ambiguous-match";
+                return snapshot;
+            }
+            if (!snapshot.IsEnabled || !snapshot.HasDefaultAction)
+            {
+                snapshot.ReadFailure = "command-unavailable";
+                return snapshot;
+            }
+            if (invoke)
+            {
+                int currentRole, currentState;
+                if (!IsAccessiblePopupOwned(popupWindow, mainWindow, expectedProcessId) ||
+                    accessible.accChildCount != count ||
+                    (accessible.get_accName(commandChild) ?? string.Empty)
+                        .Replace("&", "").Split('\t')[0].Trim() != label ||
+                    !TryGetInteger(accessible.get_accRole(commandChild), out currentRole) ||
+                    currentRole != MenuItemRole ||
+                    !TryGetInteger(accessible.get_accState(commandChild), out currentState) ||
+                    (currentState & (UnavailableState | MixedState | InvisibleState | OffscreenState)) != 0 ||
+                    (label == "Drop Filtered Events" && (currentState & CheckedState) != 0))
+                {
+                    snapshot.ReadFailure = "invocation-state-mismatch";
+                    return snapshot;
+                }
+                accessible.accDoDefaultAction(commandChild);
+            }
+            snapshot.ReadFailure = "none";
+            return snapshot;
+        }
+        catch (COMException)
+        {
+            snapshot.ReadFailure = "child-read-failed";
+            return snapshot;
+        }
+        catch (ArgumentException)
+        {
+            snapshot.ReadFailure = "object-invalid";
+            return snapshot;
+        }
+        finally
+        {
+            if (accessible != null && Marshal.IsComObject(accessible))
+                Marshal.ReleaseComObject(accessible);
+        }
+    }
+
     public static IntPtr GetMenuOwnerWindow(
         IntPtr menuWindow,
         uint expectedProcessId,
@@ -4748,10 +4926,76 @@ function Open-FilterDialogByShortcut(
   Wait-FilterDialog $Process $MainWindow
 }
 
+function Find-ProcmonAccessiblePopup(
+  [System.Diagnostics.Process]$Process,
+  [System.IntPtr]$MainWindowHandle,
+  [ValidateSet("Drop Filtered Events", "Export Configuration...")][string]$Label
+) {
+  [IntPtr[]]$handles = [ProcmonNativeMenu]::GetProcessTopLevelWindows($Process.Id, 257)
+  if ($handles.Length -gt 256) {
+    throw "Process Monitor accessible popup scan exceeded its window bound"
+  }
+  $popups = [System.Collections.Generic.List[System.IntPtr]]::new()
+  foreach ($handle in $handles) {
+    if (
+      [ProcmonNativeMenu]::GetWindowClassKind($handle, $Process.Id, $MainWindowHandle) -eq "popup" -and
+      [ProcmonNativeMenu]::IsWindowVisible($handle)
+    ) {
+      $popups.Add($handle)
+    }
+  }
+  if ($popups.Count -gt 1) {
+    throw "Process Monitor exposed ambiguous visible native popups"
+  }
+  $command = if ($Label -eq "Drop Filtered Events") { "drop" } else { "export" }
+  if ($popups.Count -eq 0) {
+    [Console]::Out.WriteLine(
+      "PROC_MON_FILTER_ACCESSIBLE_POPUP=command:$command;state:absent;items:0;matches:0;checked:unavailable"
+    )
+    return $null
+  }
+  $snapshot = [ProcmonNativeMenu]::ReadAccessiblePopupCommand(
+    $popups[0], $MainWindowHandle, $Process.Id, $Label
+  )
+  [Console]::Out.WriteLine(
+    "PROC_MON_FILTER_ACCESSIBLE_POPUP=command:$command;state:$($snapshot.ReadFailure);items:$($snapshot.ItemCount);matches:$($snapshot.MatchCount);checked:$($snapshot.CheckState)"
+  )
+  if ($snapshot.ReadFailure -ne "none") { return $null }
+  $popup = [System.Windows.Automation.AutomationElement]::FromHandle($popups[0])
+  $state = $popup.Current
+  if (
+    $state.ProcessId -ne $Process.Id -or
+    $state.NativeWindowHandle -ne $popups[0].ToInt64() -or
+    -not $state.IsEnabled -or $state.IsOffscreen
+  ) {
+    throw "Process Monitor accessible popup identity changed"
+  }
+  return $popup
+}
+
+function Wait-ProcmonAccessiblePopup(
+  [System.Diagnostics.Process]$Process,
+  [System.IntPtr]$MainWindowHandle,
+  [ValidateSet("Drop Filtered Events", "Export Configuration...")][string]$Label
+) {
+  $deadline = [DateTime]::UtcNow.AddSeconds(5)
+  do {
+    $popup = Find-ProcmonAccessiblePopup $Process $MainWindowHandle $Label
+    if ($null -ne $popup) { return $popup }
+    Start-Sleep -Milliseconds 100
+  } while ([DateTime]::UtcNow -lt $deadline)
+  throw "Process Monitor did not expose one guarded accessible popup command"
+}
+
 function Wait-ProcessMenu(
   [System.Diagnostics.Process]$Process,
-  [int]$TimeoutSeconds = 5
+  [int]$TimeoutSeconds = 5,
+  [System.IntPtr]$MainWindowHandle = [IntPtr]::Zero
 ) {
+  if ($MainWindowHandle -eq [IntPtr]::Zero) {
+    $Process.Refresh()
+    $MainWindowHandle = $Process.MainWindowHandle
+  }
   $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
   $windowCondition = [System.Windows.Automation.PropertyCondition]::new(
     [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
@@ -4906,6 +5150,18 @@ function Wait-ProcessMenu(
         Windows = [Math]::Min($ownedWindowCount, 9999)
         Menus = [Math]::Min($menuCount, 9999)
         VisibleMenus = [Math]::Min($visibleMenuCount, 9999)
+      }
+    }
+    if ($menus.Count -eq 0) {
+      $popup = Find-ProcmonAccessiblePopup `
+        $Process $MainWindowHandle "Drop Filtered Events"
+      if ($null -ne $popup) {
+        return [pscustomobject]@{
+          Menu = $popup
+          Windows = [Math]::Min($ownedWindowCount, 9999)
+          Menus = 1
+          VisibleMenus = 1
+        }
       }
     }
     Start-Sleep -Milliseconds 100
@@ -5259,7 +5515,7 @@ function Open-ProcmonFilterMenuFromMain(
       }
       $verifiedFilterToolbarCommands[0].InvokePattern.Invoke()
       Set-Stage "wait-filter-toolbar-popup"
-      $toolbarPopup = (Wait-ProcessMenu $Process).Menu
+      $toolbarPopup = (Wait-ProcessMenu $Process -MainWindowHandle $mainHandle).Menu
       $toolbarPopupState = $toolbarPopup.Current
       if (
         $toolbarPopupState.ProcessId -ne $Process.Id -or
@@ -5412,7 +5668,7 @@ function Open-ProcmonFilterMenuFromMain(
       }
       $nativeToolbarCommand.InvokePattern.Invoke()
       Set-Stage "wait-native-filter-toolbar-popup"
-      $nativeToolbarPopup = (Wait-ProcessMenu $Process).Menu
+      $nativeToolbarPopup = (Wait-ProcessMenu $Process -MainWindowHandle $mainHandle).Menu
       $nativeToolbarPopupState = $nativeToolbarPopup.Current
       if (
         $nativeToolbarPopupState.ProcessId -ne $Process.Id -or
@@ -5482,7 +5738,7 @@ function Open-ProcmonFilterMenuFromMain(
           [uint32]$Process.Id
         )
         Set-Stage "wait-accessible-filter-toolbar-popup"
-        $accessibleToolbarPopup = (Wait-ProcessMenu $Process).Menu
+        $accessibleToolbarPopup = (Wait-ProcessMenu $Process -MainWindowHandle $mainHandle).Menu
         $accessibleToolbarPopupState = $accessibleToolbarPopup.Current
         if (
           $accessibleToolbarPopupState.ProcessId -ne $Process.Id -or
@@ -5710,7 +5966,7 @@ function Open-ProcmonFilterMenuFromMain(
       Write-ProcmonMenuLoopUiaSummary $mainHandle $Process "main-after-shortcut"
     }
     Set-Stage "wait-filter-menu-popup"
-    $menu = (Wait-ProcessMenu $Process).Menu
+    $menu = (Wait-ProcessMenu $Process -MainWindowHandle $mainHandle).Menu
     $menuState = $menu.Current
     if (
       $menuState.ProcessId -ne $Process.Id -or
@@ -5769,9 +6025,7 @@ function Open-ProcmonFilterMenuFromMain(
     if ($null -ne $menu) { break }
     Start-Sleep -Milliseconds 100
   } while ([DateTime]::UtcNow -lt $menuDeadline)
-  if ($null -eq $menu) {
-    throw "Process Monitor did not expose its opened Filter menu"
-  }
+  if ($null -eq $menu) { $menu = (Wait-ProcessMenu $Process -MainWindowHandle $mainHandle).Menu }
   return $menu
 }
 
@@ -7637,6 +7891,53 @@ function Find-ProcmonNativeFilterDialog(
   return $null
 }
 
+function Get-ProcmonAccessibleDropState(
+  [System.IntPtr]$PopupWindowHandle,
+  [System.IntPtr]$MainWindowHandle,
+  [uint32]$ProcessId,
+  [ValidateSet("before", "after-invoke", "after-reload")][string]$Observation
+) {
+  $guarded = [ProcmonNativeMenu]::ReadAccessiblePopupCommand(
+    $PopupWindowHandle, $MainWindowHandle, $ProcessId, "Drop Filtered Events"
+  )
+  $snapshot = Get-AccessibleDropMenuSnapshot `
+    $PopupWindowHandle $ProcessId $false $Observation
+  if (
+    $guarded.ReadFailure -ne "none" -or
+    $snapshot.ReadFailure -ne "none" -or
+    -not $snapshot.IsEnabled -or
+    $snapshot.CheckState -notin @("on", "off") -or
+    $snapshot.CheckState -ne $guarded.CheckState
+  ) {
+    throw "Process Monitor accessible Drop state failed identity or state verification"
+  }
+  return $snapshot.CheckState
+}
+
+function Enable-ProcmonAccessibleDrop(
+  [System.Windows.Automation.AutomationElement]$Popup,
+  [System.Windows.Automation.AutomationElement]$MainWindow,
+  [System.Diagnostics.Process]$Process
+) {
+  $mainHandle = [IntPtr]$MainWindow.Current.NativeWindowHandle
+  $popupHandle = [IntPtr]$Popup.Current.NativeWindowHandle
+  $checked = Get-ProcmonAccessibleDropState $popupHandle $mainHandle $Process.Id "before"
+  if ($checked -eq "off") {
+    Set-Stage "invoke-drop-filtered-events"
+    [ProcmonNativeMenu]::InvokeAccessiblePopupCommand(
+      $popupHandle, $mainHandle, $Process.Id, "Drop Filtered Events"
+    )
+    Start-Sleep -Milliseconds 100
+    Set-Stage "reopen-drop-filtered-events-menu"
+    $Popup = Open-ProcmonFilterMenuFromMain $MainWindow $Process
+    $popupHandle = [IntPtr]$Popup.Current.NativeWindowHandle
+  }
+  Set-Stage "verify-drop-native-menu-state"
+  if ((Get-ProcmonAccessibleDropState $popupHandle $mainHandle $Process.Id "after-invoke") -ne "on") {
+    throw "Process Monitor did not enable accessible Drop Filtered Events"
+  }
+}
+
 function Read-ReloadedFilterPopupState(
   [System.IntPtr]$MainWindowHandle,
   [uint32]$ProcessId
@@ -7653,6 +7954,12 @@ function Read-ReloadedFilterPopupState(
     )
   )
   $items = $main.FindAll([System.Windows.Automation.TreeScope]::Descendants, $condition)
+  if ($items.Count -eq 0) {
+    $process = [System.Diagnostics.Process]::GetProcessById([int]$ProcessId)
+    $popup = Open-ProcmonFilterMenuFromMain $main $process
+    return Get-ProcmonAccessibleDropState `
+      ([IntPtr]$popup.Current.NativeWindowHandle) $MainWindowHandle $ProcessId "after-reload"
+  }
   if ($items.Count -ne 1) {
     throw "Process Monitor reloaded main window did not expose one Filter menu item"
   }
@@ -7675,7 +7982,7 @@ function Read-ReloadedFilterPopupState(
   $pattern.Invoke()
   Set-Stage "wait-reloaded-filter-toolbar-popup"
   $process = [System.Diagnostics.Process]::GetProcessById([int]$ProcessId)
-  $popup = (Wait-ProcessMenu $process).Menu
+  $popup = (Wait-ProcessMenu $process -MainWindowHandle $MainWindowHandle).Menu
   Set-Stage "validate-reloaded-filter-popup"
   $popupState = $popup.Current
   $popupHandle = [IntPtr]$popupState.NativeWindowHandle
@@ -7698,6 +8005,9 @@ function Read-ReloadedFilterPopupState(
     )
   )
   $drops = $popup.FindAll([System.Windows.Automation.TreeScope]::Descendants, $dropCondition)
+  if ($drops.Count -eq 0) {
+    return Get-ProcmonAccessibleDropState $popupHandle $MainWindowHandle $ProcessId "after-reload"
+  }
   if ($drops.Count -ne 1) {
     throw "Process Monitor reloaded Filter popup did not expose one Drop item"
   }
@@ -8642,6 +8952,9 @@ try {
   [Console]::Out.WriteLine(
     "PROC_MON_FILTER_DROP_MENU_MATCH=items:$dropItemCount;matches:$dropMatchCount"
   )
+  if ($dropMatches.Count -eq 0) {
+    Enable-ProcmonAccessibleDrop $dropMenu $main $process
+  } else {
   if ($dropMatches.Count -ne 1) {
     throw "Process Monitor open Filter menu did not expose one Drop Filtered Events item"
   }
@@ -8783,6 +9096,7 @@ try {
       throw "Process Monitor did not enable Drop Filtered Events"
     }
   }
+  }
   Set-Stage "drop-filtered-events-verified"
 
   Set-Stage "save-filter"
@@ -8794,6 +9108,7 @@ try {
   Set-Stage "open-file-menu-for-export"
   [System.Windows.Forms.SendKeys]::SendWait("%f")
   Set-Stage "resolve-file-menu-for-export"
+  $treeWalker = [System.Windows.Automation.TreeWalker]::ControlViewWalker
   $saveMenu = $null
   $saveMenuDeadline = [DateTime]::UtcNow.AddSeconds(5)
   do {
@@ -8809,7 +9124,8 @@ try {
     Start-Sleep -Milliseconds 100
   } while ([DateTime]::UtcNow -lt $saveMenuDeadline)
   if ($null -eq $saveMenu) {
-    throw "Process Monitor did not expose its File menu for configuration export"
+    $saveMenu = Wait-ProcmonAccessiblePopup `
+      $process ([IntPtr]$main.Current.NativeWindowHandle) "Export Configuration..."
   }
   $saveMenuState = $saveMenu.Current
   if ($saveMenuState.ProcessId -ne $process.Id -or
@@ -8831,6 +9147,15 @@ try {
       $saveMatches.Add($item)
     }
   }
+  if ($saveMatches.Count -eq 0) {
+    Set-Stage "invoke-export-config-command"
+    [ProcmonNativeMenu]::InvokeAccessiblePopupCommand(
+      ([IntPtr]$saveMenu.Current.NativeWindowHandle),
+      ([IntPtr]$main.Current.NativeWindowHandle),
+      $process.Id,
+      "Export Configuration..."
+    )
+  } else {
   if ($saveMatches.Count -ne 1) {
     throw "Process Monitor File menu did not expose one Export Configuration command"
   }
@@ -8850,6 +9175,7 @@ try {
   }
   Set-Stage "invoke-export-config-command"
   $saveInvokePattern.Invoke()
+  }
   Set-Stage "wait-export-config-dialog"
   try {
     $saveControls = Wait-ConfigSaveDialog $process $main

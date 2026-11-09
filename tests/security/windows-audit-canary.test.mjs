@@ -5,6 +5,27 @@ import path from "node:path";
 import test from "node:test";
 import { createWindowsAuditCanary } from "../../scripts/windows-audit-canary.mjs";
 
+test("AC-05: MSAA popup fallback preserves UIA priority and strict action/readback gates", async () => {
+  const configuration = await readFile(new URL("../../scripts/configure-windows-procmon-filter.ps1", import.meta.url), "utf8");
+  const ownership = configuration.match(/private static bool IsAccessiblePopupOwned[\s\S]*?public static AccessibleMenuSnapshot ReadAccessiblePopupCommand/)?.[0];
+  assert.ok(ownership);
+  assert.match(ownership, /GetMenuOwnerWindow[\s\S]*GetWindowProcessId\(mainWindow\) == expectedProcessId[\s\S]*GetForegroundWindow\(\) == mainWindow[\s\S]*GetWindowClassKind[\s\S]*"popup"[\s\S]*IsWindowVisible\(popupWindow\)[\s\S]*IsWindowEnabled\(popupWindow\)[\s\S]*GetAncestor\(owner, GA_ROOT\) == mainWindow[\s\S]*known && same && available && mode/);
+  assert.match(ownership, /GetProcessTopLevelWindows\(\(int\)expectedProcessId, 257\)[\s\S]*windows.Length > 256[\s\S]*visiblePopups == 1/);
+  const action = configuration.match(/private static AccessibleMenuSnapshot AccessPopupCommand[\s\S]*?public static IntPtr GetMenuOwnerWindow/)?.[0];
+  assert.ok(action);
+  assert.match(action, /label != "Drop Filtered Events" && label != "Export Configuration\.\.\."[\s\S]*AccessibleClientObjectId[\s\S]*count > MaximumAccessibleMenuItems[\s\S]*name.Length > MaximumTextCharacters[\s\S]*StringComparison.Ordinal[\s\S]*role != MenuItemRole[\s\S]*MixedState[\s\S]*snapshot.LabelMatchCount != 1 \|\| snapshot.MatchCount != 1/);
+  assert.match(action, /if \(invoke\)[\s\S]*IsAccessiblePopupOwned[\s\S]*accessible.accChildCount != count[\s\S]*get_accName\(commandChild\)[\s\S]*currentRole != MenuItemRole[\s\S]*get_accState\(commandChild\)[\s\S]*CheckedState[\s\S]*accDoDefaultAction\(commandChild\)[\s\S]*finally[\s\S]*Marshal.ReleaseComObject/);
+  assert.match(configuration, /function Find-ProcmonAccessiblePopup[\s\S]*handles.Length -gt 256[\s\S]*popups.Count -gt 1[\s\S]*ReadAccessiblePopupCommand[\s\S]*state.NativeWindowHandle -ne[\s\S]*state.IsOffscreen/);
+  const wait = configuration.match(/function Wait-ProcessMenu[\s\S]*?function Write-ProcmonMenuLoopUiaSummary/)?.[0];
+  assert.ok(wait);
+  assert.match(wait, /if \(\$menus.Count -eq 1\)[\s\S]*if \(\$menus.Count -eq 0\)[\s\S]*Find-ProcmonAccessiblePopup/);
+  assert.match(configuration, /if \(\$dropMatches.Count -eq 0\) \{[\s\S]*Enable-ProcmonAccessibleDrop \$dropMenu \$main \$process[\s\S]*else \{[\s\S]*\$dropMatches.Count -ne 1/);
+  assert.match(configuration, /function Enable-ProcmonAccessibleDrop[\s\S]*Get-ProcmonAccessibleDropState[\s\S]*\$checked -eq "off"[\s\S]*InvokeAccessiblePopupCommand[\s\S]*Open-ProcmonFilterMenuFromMain[\s\S]*"after-invoke"\) -ne "on"/);
+  assert.match(configuration, /function Read-ReloadedFilterPopupState[\s\S]*\$items.Count -eq 0[\s\S]*Open-ProcmonFilterMenuFromMain[\s\S]*Get-ProcmonAccessibleDropState[\s\S]*"after-reload"/);
+  assert.match(configuration, /if \(\$null -eq \$saveMenu\)[\s\S]*Wait-ProcmonAccessiblePopup[\s\S]*"Export Configuration\.\.\."[\s\S]*if \(\$saveMatches.Count -eq 0\)[\s\S]*InvokeAccessiblePopupCommand[\s\S]*else \{[\s\S]*\$saveMatches.Count -ne 1[\s\S]*\$saveInvokePattern.Invoke\(\)[\s\S]*Wait-ConfigSaveDialog/);
+  assert.match(configuration, /Set-Stage "resolve-file-menu-for-export"\s+\$treeWalker = \[System.Windows.Automation.TreeWalker\]::ControlViewWalker[\s\S]*\$treeWalker.GetParent\(\$focused\)/);
+});
+
 test("AC-05: SCM driver inventory is bounded and identifies Procmon by service name or image path", async () => {
   const [inspection, driver] = await Promise.all([
     readFile(new URL("../../scripts/inspect-windows-procmon-capture.ps1", import.meta.url), "utf8"),
