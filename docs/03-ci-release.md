@@ -37,6 +37,8 @@ source `0f1d450`をpush後、承認済みの手動dispatchを1回試みたがHTT
 
 ユーザーのPR準備選択後、既定ブランチ`4b6911c`をbaseにPoC一式と関連文書だけの7ファイルを切り出し、draft [PR #1](https://github.com/65537i/mail-client-plan/pull/1)（head `433c977`）を作成した。merge・追加手動dispatchは行わない。依存未導入の別worktreeでは既存WDIO testの`@wdio/cli`不足を確認したため、専用workflowは依存不要のPoC contracts 7件だけを実行するよう修正。既存native CIの依存導入や監査gateを省略する変更ではない。切り出し側で7/7とdependency-free regressions 74/74、native ARM64 compile/self-tests、実YAML/全PowerShell構文と12 routing/cancellation contexts成功。hosted captureやWindows AC-05成功とは扱わない。
 
+PRの既存native CI [Run 623](https://github.com/65537i/mail-client-plan/actions/runs/42656232254)は`plan`成功後、macOS ARM64が`The configuration 'macos-14-arm64-us-default' is not supported`というcheck annotationでstep実行前にcancelledになった。ETW実行の失敗ではなく、既定ブランチ側のrunner構成blocker。10分のbounded確認では残るUbuntu x64 / macOS Intel / Windows x64は実行中で、CI全体成功は未確認。PoCのmerge・再実行・runner設定変更は行わず、runner更新は別scopeとして扱う。
+
 2026-11-10 順序比較の結果: [Run 622](https://github.com/65537i/mail-client-plan/actions/runs/42644271334)（`eef192b`、Windows ARM64 / webview）は合成GUI fixture実行前でもbaseline `activate-main-window`で失敗した。`target-input:true;foreground-menu:false`等の分類はRun 621と同じ。Node 108/108成功後、実監査失敗、続いて必須fixtureが実行されforeground拒否を明示し、job全体は失敗のままだった。直前の合成GUI入力が失敗の必要条件ではないことを確認したが原因は未確定。効果のなかった順序変更と実験専用testを戻し、追加dispatchやgate緩和はしない。Windows実監査/全platform AC-05未達を維持する。
 
 2026-11-10 hosted順序比較: 合成configuration fixtureはnative mouse/key入力を送り、その直後に別processの実監査を起動していた。ローカルread-only観測でもfixture前後にsession最終入力が変化し、foreground lock timeoutは未経過だった。ただし入力の受取processやhosted失敗原因は証明しない。Windows実監査を合成UI試験より先へ移し、Node回帰は引き続き先に実施する。合成UI試験は同じWindows/non-basic条件に`!cancelled()`を併用して監査失敗後も実行し、双方の失敗をjob失敗に残す。skipやcontinue-on-errorへの変更、activation/timeout/security gate緩和は行わない。これは原因断定ではなく一度の順序比較である。
