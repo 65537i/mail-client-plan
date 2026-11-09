@@ -2,6 +2,8 @@
 
 ## 1. ワークフロー構成
 
+2026-11-09 比較結果: [Run 620](https://github.com/65537i/mail-client-plan/actions/runs/42610674317)（`08d3b97`、Windows ARM64 / webview）はvisible子プロセスでもbaseline `activate-main-window`で失敗し、foregroundは別processのままだった。設定保存・再読込・capture・audit WDIO/controlは未到達。この表示変更では解決しないため、2箇所のspawn設定と実験専用testを元に戻した。原因未確定・厳密gateは維持し、同じ条件での追加dispatchはしない。self-hostedも保留のまま。一方[Run 619](https://github.com/65537i/mail-client-plan/actions/runs/42609377009)（`ca14b36`、Ubuntu ARM64 / full）は成功し、WebView 2/2・外部probe 0・89 traced processesでcanary openなしを確認した。Windowsや全platform AC-05の代替にはしない。
+
 2026-11-09 専用Win11 VMを用意できないためself-hostedの登録・有効化・実行を保留し、hosted経路の比較へ戻る。Procmonの設定・live-filter確認を操作するPowerShell子プロセスだけを`windowsHide: false`とし、既存のcapture子プロセスと表示方針を揃える。read-only子プロセスは非表示のまま。ローカルhidden/visible比較は双方成功でhosted失敗を再現しておらず、原因解消とは扱わない。foregroundの同一HWND/PID、保存再読込、control/canary各gateは緩和しない。Node回帰108/108と構文検査は成功。実ローカル監査は初回baselineの未説明`System / IRP_MJ_CLOSE` canary 1件で失敗し、1回だけの再検証ではbaseline/attackともcanary 0・陽性ReadFile 1で成功した。初回失敗も残し、ローカル再現性の留保とhosted未検証を[status](status.md)に記録する。この変更でWindows ARM64/AC-05全体を合格にしない。
 
 2026-11-09 Run 618もforeground gateで失敗。診断はinteractive・同一session・caller desktop入力可能・target可視enabled/非最小化だがforegroundは別processを示した。原因となるWindows制約は未確定。ユーザー承認のローカルUIA SetFocus調査では、Procmon mainがfocus不可で呼出しも拒否され、bounded RawViewの公開7要素中に適格な代替focus対象は0件だった。未実証のfallbackやforeground制限回避は追加せず、追加dispatchも停止した。controlled interactive runner等で別途foregroundと実監査を実証するまで、hosted Windows ARM64の実監査は未確認とする。ローカル成功やnative build成功を代替しない。

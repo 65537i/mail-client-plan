@@ -5,27 +5,6 @@ import path from "node:path";
 import test from "node:test";
 import { createWindowsAuditCanary } from "../../scripts/windows-audit-canary.mjs";
 
-test("AC-05: GUI-driving PowerShell hosts remain visible without changing stream or foreground gates", async () => {
-  const [driver, configuration] = await Promise.all([
-    readFile(new URL("../../scripts/test-windows-file-access.mjs", import.meta.url), "utf8"),
-    readFile(new URL("../../scripts/configure-windows-procmon-filter.ps1", import.meta.url), "utf8"),
-  ]);
-  for (const name of ["liveFilter", "filterSetup"]) {
-    const spawn = driver.match(new RegExp(`const ${name} = spawn\\([\\s\\S]*?\\r?\\n    \\);`))?.[0];
-    assert.ok(spawn, name);
-    assert.match(spawn, /configure-windows-procmon-filter\.ps1/);
-    assert.match(spawn, /stdio: \["ignore", "pipe", "pipe"\], windowsHide: false/);
-    assert.doesNotMatch(spawn, /shell:|detached:/);
-  }
-  const gate = configuration.slice(
-    configuration.indexOf("function Set-VerifiedProcmonMainWindowForeground("),
-    configuration.indexOf("function Resolve-ProcmonMissingSnapshotDialog("),
-  );
-  assert.match(gate, /GetWindowProcessId\(\$windowHandle\) -eq \$Process.Id[\s\S]*SetForegroundWindow/);
-  assert.match(gate, /\$foregroundHandle -eq \$windowHandle[\s\S]*GetWindowProcessId\(\$foregroundHandle\) -eq \$Process.Id/);
-  assert.match(gate, /\$foregroundGate -ne "passed"[\s\S]*throw/);
-});
-
 test("AC-05: native configuration save preserves modal identity, filename, focus, and reload gates", async () => {
   const [configuration, driver] = await Promise.all([
     readFile(new URL("../../scripts/configure-windows-procmon-filter.ps1", import.meta.url), "utf8"),
