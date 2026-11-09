@@ -12,6 +12,17 @@
 
 次の縦切りは**独立したcontrols-only PoC**を候補とする。既存監査やworkflowの必須gateを置換しない。専用sessionのownershipと他session非干渉、capture前のready barrier、時間/メモリ/output上限、非対象pathの非永続化・非出力、finally cleanupを先に定義する。GUI操作なしで合成ファイルのcreate/open/read/queryを観測し、意図的に触れたcanaryを確実に失敗として検出する異常系と、未接触canaryの正常系を分ける。相関・schema・loss失敗のfixtureも必要。ローカル/hosted ARM64でcontrolsを実証した後にだけ、実WebView統合と受け入れ基準変更の可否を別途判断する。raw ETLをpublic artifactへuploadしない。mapped/cached/failed-open等の観測範囲と全process coverageが未実証なら、その限界を残す。
 
+2026-11-10 ユーザー承認範囲はPoC実装とfixture試験まで。test-only [SDK utility](../scripts/windows-etw-controls.cpp)と[runner](../scripts/test-windows-etw-controls.ps1)を追加した。既存のnative Visual Studio/Windows SDK developer環境で、以下はcompileとself-testのみを実行し、traceを開始しない。
+
+```powershell
+powershell.exe -STA -NoProfile -NonInteractive -ExecutionPolicy Bypass -File .\scripts\test-windows-etw-controls.ps1
+node --test tests\security\windows-etw-controls.test.mjs
+```
+
+runnerの`-Capture`は別途実行承認が必要で、今回は使っていない。native CLIも明示的な`--capture-controls untouched|touched`以外では収集を開始しない。生成済みの合成ファイルだけを対象分類し、raw ETL、path、pointer、PID、providerの任意textは出力しない。正規化済み対象パスと関連token以外は保存しない。fixed sessionが存在したら拒否し、他sessionを停止しない。readyはcontrol create/read/queryの実受信、終了はstop/drainとproducer/consumer loss 0を要求する。上限はmapping 128、event 200,000、property 8192 bytes、設定上64 buffers x 64 KiB、capture deadline 10秒と別枠のbounded consumer cleanup。触れたcanaryはnative exit 2 / rejectedとし、harnessだけがその期待拒否を検証する。compile/fixture一時directoryはfinallyで削除する。
+
+ARM64でwarnings-as-errors compileとnative fixtures、Node source contractsを検証したが、実イベント、provider権限、buffer/stop/drain、hosted動作は未検証。unknown/unmapped eventsは対象の完全coverageを証明せず、untouched出力をAC-05成功とは扱わない。これはnative self-process controlsのみで、既存Node controlや実WebView auditを置換しない。test-only C++はSDKの正規ETW layoutを使うための限定採用で、production Rust/Tauriやdependency manifestへは含めない。既存Procmon gateとworkflowを維持する。
+
 ### Windows hosted investigation history
 
 2026-11-10 順序比較の結果: [Run 622](https://github.com/65537i/mail-client-plan/actions/runs/42644271334)（`eef192b`、Windows ARM64 / webview）は合成GUI fixture実行前でもbaseline `activate-main-window`で失敗した。`target-input:true;foreground-menu:false`等の分類はRun 621と同じ。Node 108/108成功後、実監査失敗、続いて必須fixtureが実行されforeground拒否を明示し、job全体は失敗のままだった。直前の合成GUI入力が失敗の必要条件ではないことを確認したが原因は未確定。効果のなかった順序変更と実験専用testを戻し、追加dispatchやgate緩和はしない。Windows実監査/全platform AC-05未達を維持する。
