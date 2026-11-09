@@ -978,6 +978,29 @@ try {
   $classProbeForm.Controls.Add($classProbeChild)
   $classProbeRoot = $classProbeForm.Handle
   $classProbeChildHandle = $classProbeChild.Handle
+  $foregroundBeforeDiagnostic = [ProcmonNativeMenu]::GetForegroundWindow()
+  $foregroundContext = [ProcmonNativeMenu]::ReadForegroundContext($classProbeRoot, $PID)
+  if ($foregroundContext -cnotmatch '^interactive:(true|false);session:same;caller-input:(true|false|unavailable);visible:false;enabled:true;minimized:false;foreground:(none|same-process|other-process)$') {
+    throw "Read-only foreground diagnostics must classify a hidden synthetic window without exposing identifiers"
+  }
+  foreach ($target in @(
+      [pscustomobject]@{ Handle = [IntPtr]::Zero; Owner = $PID }
+      [pscustomobject]@{ Handle = $classProbeRoot; Owner = 0 }
+      [pscustomobject]@{ Handle = $classProbeRoot; Owner = $PID + 1 }
+    )) {
+    $rejected = $false
+    try { [ProcmonNativeMenu]::ReadForegroundContext($target.Handle, $target.Owner) | Out-Null }
+    catch [System.Management.Automation.MethodInvocationException] {
+      if ($_.Exception.InnerException -isnot [InvalidOperationException]) { throw }
+      $rejected = $true
+    }
+    if (-not $rejected) { throw "Foreground diagnostic must reject invalid or foreign targets" }
+  }
+  if ([ProcmonNativeMenu]::GetForegroundWindow() -ne $foregroundBeforeDiagnostic -or
+    [ProcmonNativeMenu]::IsWindowVisible($classProbeRoot)) {
+    throw "Read-only foreground diagnostics must not activate or reveal the hidden target"
+  }
+  Write-Host "PASS AC-05: foreground context is classified, ownership-checked, and does not activate the hidden target"
   $classProbeMenu = [SyntheticOwnerDrawMenu]::CreateMenu()
   if (
     $classProbeMenu -eq [IntPtr]::Zero -or

@@ -60,6 +60,11 @@ export function appendBoundedWindowsFilterOutput(current, chunk) {
       );
     }
   }
+  for (const match of combined.matchAll(/^PROC_MON_FILTER_FOREGROUND_CONTEXT=[^\r\n]{1,512}\r?\n/gm)) {
+    if (describeWindowsFilterDiagnostics(match[0])) {
+      evidence.set("PROC_MON_FILTER_FOREGROUND_CONTEXT", match[0].replace(/\r?\n$/, ""));
+    }
+  }
   const retainedEvidence = evidence.size ? `${[...evidence.values()].join("\n")}\n` : "";
   const tailLimit = windowsFilterOutputTailLimit - retainedEvidence.length;
   return combined.slice(0, windowsFilterOutputHeadLimit)
@@ -328,6 +333,13 @@ export function describeWindowsFilterDiagnostics(output) {
   )].at(-1)?.[1];
   if (mainForegroundGate) {
     diagnostics.push(`main-foreground-gate=${mainForegroundGate}`);
+  }
+
+  const foregroundContext = [...output.matchAll(
+    /^PROC_MON_FILTER_FOREGROUND_CONTEXT=(phase:(?:main|reload_main);interactive:(?:true|false);session:(?:same|different|unavailable);caller-input:(?:true|false|unavailable);visible:(?:true|false);enabled:(?:true|false);minimized:(?:true|false);foreground:(?:none|target|same-process|other-process))\r?$/gm,
+  )].at(-1)?.[1];
+  if (foregroundContext) {
+    diagnostics.push(`foreground-context=${foregroundContext}`);
   }
 
   const shortcutForegroundGate = output.match(

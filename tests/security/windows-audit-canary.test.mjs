@@ -93,6 +93,17 @@ test("AC-05: driver registry inspection is read-only, bounded and emits aggregat
   assert.match(driver, /DRIVER_REGISTRY=keys:\(0\|\[1-9\]\\d\{0,3\}\);candidates:/);
 });
 
+test("AC-05: failed main foreground gates emit read-only classified context without changing activation", async () => {
+  const source = await readFile(new URL("../../scripts/configure-windows-procmon-filter.ps1", import.meta.url), "utf8");
+  const native = source.slice(source.indexOf("public static string ReadForegroundContext("), source.indexOf('public static extern bool IsWindowVisible('));
+  assert.match(native, /GetWindowProcessId\(window\) != ownerProcessId[\s\S]*throw new InvalidOperationException/);
+  assert.match(native, /ProcessIdToSessionId[\s\S]*GetThreadDesktop\(GetCurrentThreadId\(\)\)[\s\S]*GetDesktopInputState\(desktop, 6,[\s\S]*needed == 4/);
+  assert.doesNotMatch(native, /SetForegroundWindow|SendInput|SwitchDesktop|OpenDesktop|GetWindowText|GetClassName|ProcessName/);
+  const gate = source.slice(source.indexOf("function Set-VerifiedProcmonMainWindowForeground("), source.indexOf("function Resolve-ProcmonMissingSnapshotDialog("));
+  assert.match(gate, /SetForegroundWindow[\s\S]*GetForegroundWindow[\s\S]*\$foregroundHandle -eq \$windowHandle/);
+  assert.match(gate, /if \(\$foregroundGate -ne "passed"\) \{[\s\S]*PROC_MON_FILTER_FOREGROUND_CONTEXT[\s\S]*ReadForegroundContext[\s\S]*throw "Process Monitor/);
+});
+
 test("AC-05: Filter Manager inventory is an independent bounded read-only driver observation", async () => {
   const [inspection, driver] = await Promise.all([
     readFile(new URL("../../scripts/inspect-windows-procmon-capture.ps1", import.meta.url), "utf8"),

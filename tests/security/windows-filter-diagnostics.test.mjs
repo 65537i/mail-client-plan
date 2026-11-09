@@ -8,6 +8,27 @@ import {
   windowsFilterOutputLimit,
 } from "../../scripts/windows-filter-diagnostics.mjs";
 
+test("AC-05: foreground context exposes only fixed desktop and target classifications", () => {
+  const raw = "PROC_MON_FILTER_FOREGROUND_CONTEXT=phase:main;interactive:true;session:same;caller-input:true;visible:true;enabled:true;minimized:false;foreground:other-process";
+  assert.equal(describeWindowsFilterDiagnostics(raw), `; foreground-context=${raw.split("=")[1]}`);
+  for (const invalid of [
+    `${raw};title=private`,
+    raw.replace("phase:main", "phase:private"),
+    raw.replace("session:same", "session:123"),
+    raw.replace("caller-input:true", "caller-input:private"),
+    raw.replace("foreground:other-process", "foreground:private"),
+    raw.replace("visible:true", "visible:1"),
+  ]) {
+    assert.equal(describeWindowsFilterDiagnostics(invalid), "");
+    const retained = appendBoundedWindowsFilterOutput("x".repeat(9000), `\n${invalid}\n${"y".repeat(9000)}`);
+    assert.equal(describeWindowsFilterDiagnostics(retained), "");
+  }
+  const retained = appendBoundedWindowsFilterOutput("x".repeat(9000), `\n${raw}\n${"y".repeat(9000)}`);
+  assert.ok(retained.length <= windowsFilterOutputLimit);
+  assert.equal(describeWindowsFilterDiagnostics(retained), describeWindowsFilterDiagnostics(raw));
+  assert.ok(describeWindowsFilterDiagnostics(raw.replace("phase:main", "phase:reload_main")).includes("phase:reload_main"));
+});
+
 test("AC-05: native reload evidence requires complete post-reload two-row four-column shape", () => {
   const raw = "PROC_MON_FILTER_NATIVE_RULES=phase:reloaded;state:ready;rows:2;columns:4;path:2;is:2;include:2;exact-shape:2;unclassified:0;truncated:false";
   const evidence = describeWindowsFilterDiagnostics(raw).slice(2);

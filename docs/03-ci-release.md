@@ -2,6 +2,8 @@
 
 ## 1. ワークフロー構成
 
+2026-11-09 hosted Windows ARM64 Run 616 / 617は、実監査の最初の`activate-main-window`でforeground gateが失敗した。変更なしの再実行はここで止め、失敗時だけcallerのinteractive状態・targetとのsession一致・thread desktopのinput状態・targetのvisible/enabled/minimized・foreground所属を固定分類で記録する診断を追加した。名前・ID・handle・pathは出さず、desktop操作やforeground gateの緩和は行わない。query不能はunavailableとし、診断をcapture成功やAC-05合格に読み替えない。詳細は[status](status.md)。
+
 2026-11-09 local Windows ARM64では、非表示PowerShell子プロセスの`fltmc instances -v C:`が日本語の固定volume見出し・6列headerを返すことを再現し、strict parserへその書式だけを追加した。Node 105/105、PowerShell通常/foreground拒否fixture、実Procmon baseline/attack captureが成功。各CSVでNode陽性ReadFile 1件・canary 0件、既存のexcluded/other-path拒否gateを通過し、attack WDIO 2/2・hostile HTTP request 0を確認した。詳細は[status](status.md)。新Actions runやbuildは実行しておらず、hosted runner・全descendant coverage・最低OS/全architecture matrix・AC-05全体の未確認条件は残る。
 
 [Run 42011048178](https://github.com/65537i/mail-client-plan/actions/runs/42011048178)（`f9e5b92`、Windows 2025 x64 / full）はbuild、Rust、security dependencies、WebViewとWindows audit testsを通過。実WebViewでは既存24 rowsを選択・Removeし、row count 0 / removed 24を確認した後、`find-filter-menu-for-drop-filtered-events`で停止。main UIA treeにFilter MenuItemがなく、strict capture / `.PMC`保存・再読込前に失敗した。UIA itemがない場合だけsame-process foregroundへbounded Alt+Fを送り、唯一のProcmon popupとDrop Filtered Events exact label確認へ進むfallbackを追加。node audit regression 72/72、PowerShell parseは通過。Windows synthetic / runtime再検証待ち、AC-05未達。

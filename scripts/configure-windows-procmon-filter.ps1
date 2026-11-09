@@ -727,6 +727,58 @@ public static class ProcmonNativeMenu
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool SetForegroundWindow(IntPtr hWnd);
 
+    [DllImport("kernel32.dll", ExactSpelling = true)]
+    private static extern uint GetCurrentThreadId();
+
+    [DllImport("kernel32.dll", ExactSpelling = true)]
+    private static extern uint GetCurrentProcessId();
+
+    [DllImport("kernel32.dll", ExactSpelling = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool ProcessIdToSessionId(uint processId, out uint sessionId);
+
+    [DllImport("user32.dll", ExactSpelling = true)]
+    private static extern IntPtr GetThreadDesktop(uint threadId);
+
+    [DllImport("user32.dll", EntryPoint = "GetUserObjectInformationW", ExactSpelling = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetDesktopInputState(
+        IntPtr desktop, int index, out int receivingInput, uint length, out uint needed);
+
+    [DllImport("user32.dll", ExactSpelling = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool IsIconic(IntPtr window);
+
+    public static string ReadForegroundContext(IntPtr window, int ownerProcessId)
+    {
+        if (ownerProcessId <= 0 || window == IntPtr.Zero || !IsWindow(window) ||
+            GetWindowProcessId(window) != ownerProcessId)
+            throw new InvalidOperationException("Foreground diagnostic target is invalid");
+
+        uint callerSession;
+        uint targetSession;
+        string session = ProcessIdToSessionId(GetCurrentProcessId(), out callerSession) &&
+            ProcessIdToSessionId((uint)ownerProcessId, out targetSession)
+            ? (callerSession == targetSession ? "same" : "different") : "unavailable";
+        // GetThreadDesktop returns a borrowed handle; no desktop is opened or switched.
+        IntPtr desktop = GetThreadDesktop(GetCurrentThreadId());
+        int receivingInput;
+        uint needed;
+        string input = desktop != IntPtr.Zero &&
+            GetDesktopInputState(desktop, 6, out receivingInput, 4, out needed) && needed == 4
+            ? (receivingInput != 0 ? "true" : "false") : "unavailable";
+        IntPtr foreground = GetForegroundWindow();
+        string foregroundKind = foreground == IntPtr.Zero ? "none" :
+            foreground == window ? "target" :
+            GetWindowProcessId(foreground) == ownerProcessId ? "same-process" : "other-process";
+        return "interactive:" + Environment.UserInteractive.ToString().ToLowerInvariant() +
+            ";session:" + session + ";caller-input:" + input +
+            ";visible:" + IsWindowVisible(window).ToString().ToLowerInvariant() +
+            ";enabled:" + IsWindowEnabled(window).ToString().ToLowerInvariant() +
+            ";minimized:" + IsIconic(window).ToString().ToLowerInvariant() +
+            ";foreground:" + foregroundKind;
+    }
+
     [DllImport("user32.dll", ExactSpelling = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool IsWindowVisible(IntPtr hWnd);
@@ -4905,6 +4957,9 @@ function Set-VerifiedProcmonMainWindowForeground(
     "PROC_MON_FILTER_${DiagnosticName}_FOREGROUND=gate:$foregroundGate"
   )
   if ($foregroundGate -ne "passed") {
+    [Console]::Out.WriteLine(
+      "PROC_MON_FILTER_FOREGROUND_CONTEXT=phase:$($DiagnosticName.ToLowerInvariant());$([ProcmonNativeMenu]::ReadForegroundContext($windowHandle, $Process.Id))"
+    )
     throw "Process Monitor $DiagnosticName window did not become the foreground window"
   }
 }
