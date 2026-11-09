@@ -23,6 +23,10 @@ runnerの`-Capture`は別途実行承認が必要で、今回は使っていな�
 
 ARM64でwarnings-as-errors compileとnative fixtures、Node source contractsを検証したが、実イベント、provider権限、buffer/stop/drain、hosted動作は未検証。unknown/unmapped eventsは対象の完全coverageを証明せず、untouched出力をAC-05成功とは扱わない。これはnative self-process controlsのみで、既存Node controlや実WebView auditを置換しない。test-only C++はSDKの正規ETW layoutを使うための限定採用で、production Rust/Tauriやdependency manifestへは含めない。既存Procmon gateとworkflowを維持する。
 
+2026-11-10 続行指示を受け、source `06231f1`のままローカルARM64で限定captureを各1回実行した。native developer環境で上記runnerに`-Capture -Scenario untouched` / `-Capture -Scenario touched`を付け、未接触側はcontrol create/read/query各10・canary未観測、接触側はcontrol各20・canary create/read/query検出による期待拒否を確認した。接触側のnative exit 2をrunnerが要求するため、runner exit 0をcanary監査成功へ読み替えない。双方loss zero・cleanup complete、終了後の専用session不在と合成ファイル/build directory削除を確認。ETL保存・raw path出力・upload・Actions実行はない。Node contracts 4/4と各回のnative fixturesも成功。詳細は[status](status.md)。
+
+これでローカル合成native操作に対するGUI不要の収集・TDH decode・相関・停止/drainを実測できたが、hosted/x64、別process/Node control、failed-open/mapped access、全操作/全process coverage、実WebView監査は未実証。ProcmonやAC-05の置換は行わない。次の候補は独立PoCのhosted ARM64検証またはcross-process controlsの縦切りであり、既存必須監査の成功扱いへの切替とは分けて承認・検証する。
+
 ### Windows hosted investigation history
 
 2026-11-10 順序比較の結果: [Run 622](https://github.com/65537i/mail-client-plan/actions/runs/42644271334)（`eef192b`、Windows ARM64 / webview）は合成GUI fixture実行前でもbaseline `activate-main-window`で失敗した。`target-input:true;foreground-menu:false`等の分類はRun 621と同じ。Node 108/108成功後、実監査失敗、続いて必須fixtureが実行されforeground拒否を明示し、job全体は失敗のままだった。直前の合成GUI入力が失敗の必要条件ではないことを確認したが原因は未確定。効果のなかった順序変更と実験専用testを戻し、追加dispatchやgate緩和はしない。Windows実監査/全platform AC-05未達を維持する。
