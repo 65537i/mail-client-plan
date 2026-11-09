@@ -190,7 +190,9 @@ test("AC-05: Filter Manager inventory is an independent bounded read-only driver
   assert.match(inspection, /"unobserved", "missing", "drive-root-match", "drive-root-mismatch", "mount-path", "other"[\s\S]*PROC_MON_CAPTURE_FILTER_MANAGER_HEADING_TARGET=\$script:filterManagerHeadingTarget/);
   assert.match(driver, /HEADING_TARGET=\(unobserved\|missing\|drive-root-match\|drive-root-mismatch\|mount-path\|other\)/);
   assert.match(driver, /Filter Manager heading target \$\{filterManagerHeadingTarget\}/);
-  assert.match(inspection, /\$instanceTable = \$line -match '\\sVlStatus\\s\*\$'/);
+  assert.match(inspection, /\$instanceTable = \$japaneseInstanceHeader -or \$line -match '\\sVlStatus\\s\*\$'/);
+  assert.ok(inspection.includes(String.raw`$japaneseInstanceHeader = $line -match '^\s*\u30d5\u30a3\u30eb\u30bf\u30fc\s+\u968e\u5c64\s+\u30a4\u30f3\u30b9\u30bf\u30f3\u30b9\u540d\s+\u30d5\u30ec\u30fc\u30e0\s+SprtFtrs\s+Vl\s+\u72b6\u614b\s*$'`));
+  assert.ok(inspection.includes(String.raw`$line -match '^\s*(.+?)\s+\u30dc\u30ea\u30e5\u30fc\u30e0\u306e\u30a4\u30f3\u30b9\u30bf\u30f3\u30b9:\s*$'`));
   assert.match(inspection, /if \(\$instanceTable\)[\s\S]*\$instanceNames.Add\(\$instanceKey\)[\s\S]*\$filterInstanceCounts\[\$filterName\]\+\+[\s\S]*-gt 64/);
   assert.match(inspection, /PROC_MON_CAPTURE_FILTER_MANAGER_ROW=\$script:filterManagerRowShape/);
   const rowPatternSource = driver.match(/\^PROC_MON_CAPTURE_FILTER_MANAGER_ROW=[^\n]+(?=\/m,)/)?.[0];

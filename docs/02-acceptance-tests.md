@@ -45,6 +45,8 @@ WindowsのメニューがUIAで公開されない場合だけ、同一Procmon PI
 
 設定保存でUIAのFile name / Save候補が双方0件の場合だけ、同一PIDの可視・enabledな標準dialog (`#32770`) とnative Edit / Buttonを検証する。modal ownerのrootは可視・disabledなmain windowと一致しなければならない。MSAA client-objectの固定英語・日本語ラベル（`File name:` / `ファイル名:`、`Save` / `保存` / `保存(S)`）、Edit / Button role、可視・enabled状態、Save captionとの一致で各controlを一意に識別する。256 windows / child controls、128文字のlabel、1024文字の入力path上限とEdit read-only拒否を必須とする。control IDだけでは対象を決めない。foreground dialogとEdit focus確認後にpathを設定し、完全一致readback、Save focus、同じcontrol identity・label・modal ownerの再検証後に既存のhit-test付きmouse helperで保存する。保存ファイルのサイズ・完全一致path検査、再読込後の完全一致2ルールとDrop on確認は維持する。UIA再読込証拠が存在する場合は引き続きそれを必須とし、存在しない場合だけnativeのreloaded / ready / 2行 / 4列 / Path・is・Include各2 / exact-shape 2 / unclassified 0 / truncated falseを要求する。同一証拠のretention重複だけを除去し、異なる証拠の混在・初期証拠・部分証拠は合格にしない。
 
+Windowsのread-only `fltmc instances -v`検査は、英語の既知書式に加え、非表示PowerShell子プロセスで実測した日本語の固定volume見出し（`C: ボリュームのインスタンス:`）と6列header（`フィルター / 階層 / インスタンス名 / フレーム / SprtFtrs / Vl 状態`）だけを受理する。volumeは実際のquery対象との完全一致を要求し、既存のseparator・全row・数値/hex・重複・件数上限検証を共用する。未知locale、追加文字、異なるvolume、重複見出し、不正row、exit 0で返るコマンドエラー文も成功に読み替えない。local Windows ARM64でbaseline/attack captureが成功しても、全descendant coverageや全対象環境のAC-05合格を代替しない。
+
 macOS run 22で、system-wide traceにOS daemon `fseventsd`の`lstat64`が1件記録された。利用者確認済みのPoC判定として、この操作と`fseventsd.<数値>`の組み合わせだけを別集計してログへ明示する。それ以外のcanaryイベント（同daemonのopen/read、アプリ、WebKit、未知process / formatを含む）は失敗とする。これはシステム全体のcanaryイベント0件という旧判定からの限定的変更であり、完全なprocess coverageやAC-05合格の証明ではない。process名はtraceのprocess/thread欄に基づき、実行ファイルの同一性までは検証していない。
 
 ## 3. テスト層

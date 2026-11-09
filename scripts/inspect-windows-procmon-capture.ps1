@@ -220,20 +220,24 @@ function Get-ProcmonFilterManagerVolumeEvidence {
       $script:filterManagerVolumeParseState = "line-shape"
       throw "Filter Manager volume inventory has an unsupported shape"
     }
+    # Unicode regex escapes preserve the fixed Japanese header under Windows PowerShell's script encoding.
+    $japaneseInstanceHeader = $line -match '^\s*\u30d5\u30a3\u30eb\u30bf\u30fc\s+\u968e\u5c64\s+\u30a4\u30f3\u30b9\u30bf\u30f3\u30b9\u540d\s+\u30d5\u30ec\u30fc\u30e0\s+SprtFtrs\s+Vl\s+\u72b6\u614b\s*$'
     if ($line -match '^\s*Filter Name\s+Num Instances\s+Altitude\s+Frame(?:\s+SprtFtrs)?\s*$' -or
-      $line -match '^\s*Filter\s+Altitude\s+Instance Name\s+Frame\s+SprtFtrs\s+VlStatus\s*$') {
+      $line -match '^\s*Filter\s+Altitude\s+Instance Name\s+Frame\s+SprtFtrs\s+VlStatus\s*$' -or
+      $japaneseInstanceHeader) {
       if ($headerSeen) {
         $script:filterManagerVolumeParseState = "duplicate-header"
         throw "Filter Manager volume inventory repeated its header"
       }
       $headerSeen = $true
-      $instanceTable = $line -match '\sVlStatus\s*$'
+      $instanceTable = $japaneseInstanceHeader -or $line -match '\sVlStatus\s*$'
       $hasSupportedFeatures = $line -match '\sSprtFtrs\s*$'
       continue
     }
     if (-not $headerSeen) {
       if ([string]::IsNullOrWhiteSpace($line)) { continue }
-      if ($line -match '^\s*Instances for\s+(.+?)\s*$') {
+      if ($line -match '^\s*Instances for\s+(.+?)\s*$' -or
+        $line -match '^\s*(.+?)\s+\u30dc\u30ea\u30e5\u30fc\u30e0\u306e\u30a4\u30f3\u30b9\u30bf\u30f3\u30b9:\s*$') {
         $reportedVolume = $Matches[1].Trim()
         $expectedVolumeMatches = $false
         if ($ExpectedVolume -is [string] -and $ExpectedVolume.Length -gt 0 -and

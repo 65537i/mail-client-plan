@@ -294,6 +294,41 @@ if ((Get-ProcmonFilterManagerVolumeEvidence @(
     ) "D:") -cne "candidates:0;instances:0") {
   throw "An empty instance table must remain unattached"
 }
+$japaneseInstanceHeader = [regex]::Unescape('\u30d5\u30a3\u30eb\u30bf\u30fc \u968e\u5c64 \u30a4\u30f3\u30b9\u30bf\u30f3\u30b9\u540d \u30d5\u30ec\u30fc\u30e0 SprtFtrs Vl \u72b6\u614b')
+$japaneseVolumeSuffix = [regex]::Unescape(' \u30dc\u30ea\u30e5\u30fc\u30e0\u306e\u30a4\u30f3\u30b9\u30bf\u30f3\u30b9:')
+foreach ($rows in @(
+    [pscustomobject]@{ Lines = @(); Evidence = "candidates:0;instances:0" }
+    [pscustomobject]@{ Lines = $instanceRows; Evidence = "candidates:2;instances:3" }
+  )) {
+  $evidence = Get-ProcmonFilterManagerVolumeEvidence (
+    @("D:$japaneseVolumeSuffix", $japaneseInstanceHeader, $instanceSeparator) + $rows.Lines
+  ) "D:"
+  if ($evidence -cne $rows.Evidence -or $script:filterManagerVolumeParseState -cne "valid") {
+    throw "The exact Japanese volume heading and six-column header must preserve instance evidence"
+  }
+}
+$invalidJapaneseInstanceTables = @(
+  [pscustomobject]@{ Lines = @("C:$japaneseVolumeSuffix", $japaneseInstanceHeader, $instanceSeparator) }
+  [pscustomobject]@{ Lines = @("D: extra$japaneseVolumeSuffix", $japaneseInstanceHeader, $instanceSeparator) }
+  [pscustomobject]@{ Lines = @("D:$japaneseVolumeSuffix extra", $japaneseInstanceHeader, $instanceSeparator) }
+  [pscustomobject]@{ Lines = @("D:$japaneseVolumeSuffix", "D:$japaneseVolumeSuffix", $japaneseInstanceHeader, $instanceSeparator) }
+  [pscustomobject]@{ Lines = @("D:$japaneseVolumeSuffix", "Instances for D:", $japaneseInstanceHeader, $instanceSeparator) }
+  [pscustomobject]@{ Lines = @("D:$japaneseVolumeSuffix", "$japaneseInstanceHeader extra", $instanceSeparator) }
+  [pscustomobject]@{ Lines = @("D:$japaneseVolumeSuffix", $japaneseInstanceHeader.Replace("SprtFtrs", "unknown"), $instanceSeparator) }
+  [pscustomobject]@{ Lines = @("Volume instance listing failed with error: 0x801f0014", "The system could not find the volume specified.") }
+)
+foreach ($fixture in $invalidJapaneseInstanceTables) {
+  $rejected = $false
+  try { Get-ProcmonFilterManagerVolumeEvidence $fixture.Lines "D:" | Out-Null } catch { $rejected = $true }
+  if (-not $rejected) { throw "Localized heading/header mismatches and command error text must fail closed" }
+}
+$missingJapaneseTargetRejected = $false
+try {
+  Get-ProcmonFilterManagerVolumeEvidence @(
+    "D:$japaneseVolumeSuffix", $japaneseInstanceHeader, $instanceSeparator
+  ) | Out-Null
+} catch { $missingJapaneseTargetRejected = $true }
+if (-not $missingJapaneseTargetRejected) { throw "A localized heading cannot bypass target-volume identity" }
 $invalidInstanceTables = @(
   [pscustomobject]@{ Lines = @($instanceHeader, $instanceHeader, $instanceSeparator) }
   [pscustomobject]@{ Lines = @($instanceHeader, $volumeSeparator) }
@@ -306,9 +341,12 @@ $invalidInstanceTables = @(
   [pscustomobject]@{ Lines = @($instanceHeader, $instanceSeparator) + @(1..65 | ForEach-Object { "PROCMON24 385200 instance$_ 0 0x03 0" }) }
 )
 foreach ($fixture in $invalidInstanceTables) {
-  $rejected = $false
-  try { Get-ProcmonFilterManagerVolumeEvidence $fixture.Lines "D:" | Out-Null } catch { $rejected = $true }
-  if (-not $rejected) { throw "Malformed or oversized instance tables must fail closed" }
+  foreach ($header in @($instanceHeader, $japaneseInstanceHeader)) {
+    $lines = @(foreach ($line in $fixture.Lines) { if ($line -ceq $instanceHeader) { $header } else { $line } })
+    $rejected = $false
+    try { Get-ProcmonFilterManagerVolumeEvidence $lines "D:" | Out-Null } catch { $rejected = $true }
+    if (-not $rejected) { throw "Malformed or oversized instance tables must fail closed in both languages" }
+  }
 }
 $rowShapeFixtures = @(
   [pscustomobject]@{ Row = "PROCMON24 385200 private 0 0x03 unsupported"; Shape = "text-number-text-number-hex-text" }

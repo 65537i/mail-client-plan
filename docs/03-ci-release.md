@@ -2,6 +2,8 @@
 
 ## 1. ワークフロー構成
 
+2026-11-09 local Windows ARM64では、非表示PowerShell子プロセスの`fltmc instances -v C:`が日本語の固定volume見出し・6列headerを返すことを再現し、strict parserへその書式だけを追加した。Node 105/105、PowerShell通常/foreground拒否fixture、実Procmon baseline/attack captureが成功。各CSVでNode陽性ReadFile 1件・canary 0件、既存のexcluded/other-path拒否gateを通過し、attack WDIO 2/2・hostile HTTP request 0を確認した。詳細は[status](status.md)。新Actions runやbuildは実行しておらず、hosted runner・全descendant coverage・最低OS/全architecture matrix・AC-05全体の未確認条件は残る。
+
 [Run 42011048178](https://github.com/65537i/mail-client-plan/actions/runs/42011048178)（`f9e5b92`、Windows 2025 x64 / full）はbuild、Rust、security dependencies、WebViewとWindows audit testsを通過。実WebViewでは既存24 rowsを選択・Removeし、row count 0 / removed 24を確認した後、`find-filter-menu-for-drop-filtered-events`で停止。main UIA treeにFilter MenuItemがなく、strict capture / `.PMC`保存・再読込前に失敗した。UIA itemがない場合だけsame-process foregroundへbounded Alt+Fを送り、唯一のProcmon popupとDrop Filtered Events exact label確認へ進むfallbackを追加。node audit regression 72/72、PowerShell parseは通過。Windows synthetic / runtime再検証待ち、AC-05未達。
 
 [Run 41955374112](https://github.com/65537i/mail-client-plan/actions/runs/41955374112)（`17ad768`、Windows 2025 x64 / full、failed-job rerun含む）はfocused Windows testsとconfiguration export / synthetic controlsを通過。実WebView stepは既存24 rowsの4列read・全24 rows selection・Remove入力まで到達したが、直後の全cell再読取が`read-native-filter-list-cells`で失敗し、Remove後のrow countを確認できずstrict capture未実施。削除中のListView cell readを避けるため、bounded retry内で同一root/list identityを再検証しながらrow countだけを読む修正を追加。node audit regression / PowerShell parseは通過。Windows runtime再検証待ち、AC-05未達。
