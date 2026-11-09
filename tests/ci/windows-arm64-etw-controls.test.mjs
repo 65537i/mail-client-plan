@@ -33,7 +33,7 @@ test("ETW hosted PoC: real controls and native prerequisites cannot be skipped o
   assert.equal(workflow.match(/-Capture -Scenario untouched/g)?.length, 1);
   assert.equal(workflow.match(/-Capture -Scenario touched/g)?.length, 1);
   assert.ok(workflow.indexOf("-Scenario untouched") < workflow.indexOf("-Scenario touched"));
-  assert.match(workflow, /node --test tests\/security\/windows-etw-controls.test.mjs/);
+  assert.match(workflow, /node --test tests\/security\/windows-etw-controls.test.mjs tests\/ci\/windows-arm64-etw-controls.test.mjs\n/);
   assert.doesNotMatch(workflow, /tauri build|test:security:file-access:windows|wpr.exe|tracerpt|\.etl/);
 });
 

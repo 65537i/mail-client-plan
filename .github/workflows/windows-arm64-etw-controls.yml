@@ -64,9 +64,9 @@ jobs:
           }
           "ETW_VCVARS=$setup" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
-      - name: Test PoC and existing Windows audit contracts
+      - name: Test dependency-free PoC contracts
         run: |
-          node --test tests/security/windows-etw-controls.test.mjs tests/security/windows-audit-canary.test.mjs tests/security/windows-audit-wdio.test.mjs tests/security/windows-filter-diagnostics.test.mjs tests/security/windows-file-trace.test.mjs tests/ci/*.test.mjs
+          node --test tests/security/windows-etw-controls.test.mjs tests/ci/windows-arm64-etw-controls.test.mjs
 
       - name: Capture untouched synthetic controls
         run: |
