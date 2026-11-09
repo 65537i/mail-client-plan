@@ -29,6 +29,10 @@ ARM64でwarnings-as-errors compileとnative fixtures、Node source contractsを�
 
 ### Windows hosted investigation history
 
+2026-11-10 ユーザーがhosted PoCを明示選択したため、独立した[手動workflow](../.github/workflows/windows-arm64-etw-controls.yml)を追加した。`windows-11-arm`でnative architecture・管理者権限・ARM64 Visual Studio toolchain・dispatch SHA一致・専用session不在を検証し、既存Windows/ETW/CI contracts、untouched、touchedを順番に実行する。後者はcanary検出によるnative exit 2をrunnerが要求する。失敗後もcancelされていなければsessionと一時directoryの不在を確認し、cleanup不能を成功にしない。10分上限、同時実行なし、raw trace/artifact uploadなし。既存Procmon/native workflowとAC-05 gateは不変。ローカルNode 123/123、実YAML解析とGitHub式置換後の全5 PowerShell block構文検査が成功。hosted実行はまだ未確認。
+
+新規の`workflow_dispatch`は[GitHub公式手順](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow)上、workflowの既定ブランチ配置が必要。調査branchの追加だけで実行できなければ、そのblockerを報告し、既定ブランチ更新や別trigger追加を無断で行わない。このworkflowは合成native controlsだけを検証し、既存Node control・実WebView・全process/operation coverage・Windows AC-05成功の証拠にはしない。
+
 2026-11-10 順序比較の結果: [Run 622](https://github.com/65537i/mail-client-plan/actions/runs/42644271334)（`eef192b`、Windows ARM64 / webview）は合成GUI fixture実行前でもbaseline `activate-main-window`で失敗した。`target-input:true;foreground-menu:false`等の分類はRun 621と同じ。Node 108/108成功後、実監査失敗、続いて必須fixtureが実行されforeground拒否を明示し、job全体は失敗のままだった。直前の合成GUI入力が失敗の必要条件ではないことを確認したが原因は未確定。効果のなかった順序変更と実験専用testを戻し、追加dispatchやgate緩和はしない。Windows実監査/全platform AC-05未達を維持する。
 
 2026-11-10 hosted順序比較: 合成configuration fixtureはnative mouse/key入力を送り、その直後に別processの実監査を起動していた。ローカルread-only観測でもfixture前後にsession最終入力が変化し、foreground lock timeoutは未経過だった。ただし入力の受取processやhosted失敗原因は証明しない。Windows実監査を合成UI試験より先へ移し、Node回帰は引き続き先に実施する。合成UI試験は同じWindows/non-basic条件に`!cancelled()`を併用して監査失敗後も実行し、双方の失敗をjob失敗に残す。skipやcontinue-on-errorへの変更、activation/timeout/security gate緩和は行わない。これは原因断定ではなく一度の順序比較である。

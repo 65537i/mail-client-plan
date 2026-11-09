@@ -1,0 +1,96 @@
+name: Windows ARM64 ETW controls PoC
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-arm64-etw-controls
+  cancel-in-progress: false
+
+jobs:
+  controls:
+    if: github.event_name == 'workflow_dispatch' && github.repository == '65537i/mail-client-plan'
+    runs-on: windows-11-arm
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24.22.0
+
+      - name: Verify native hosted ARM64 prerequisites
+        run: |
+          $ErrorActionPreference = "Stop"
+          if ($env:RUNNER_OS -cne "Windows" -or $env:RUNNER_ARCH -cne "ARM64" -or
+              [Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture.ToString() -cne "Arm64") {
+            throw "A native Windows ARM64 process is required"
+          }
+          $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+          try {
+            $principal = [Security.Principal.WindowsPrincipal]::new($identity)
+            if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+              throw "ETW controls require an elevated hosted runner"
+            }
+          } finally {
+            $identity.Dispose()
+          }
+          $actual = git rev-parse HEAD
+          if ($LASTEXITCODE -ne 0 -or $actual -cne "${{ github.sha }}") {
+            throw "Checked-out source differs from the dispatched revision"
+          }
+          & logman.exe query "MailClient-EtwControls-PoC" -ets *> $null
+          if ($LASTEXITCODE -ne -2144337918) {
+            throw "ETW session absence could not be established; do not stop an existing session"
+          }
+          $global:LASTEXITCODE = 0
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\Installer\vswhere.exe"
+          $installation = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.ARM64 -property installationPath
+          if ($LASTEXITCODE -ne 0 -or @($installation).Count -ne 1) {
+            throw "Exactly one native ARM64 Visual Studio toolchain is required"
+          }
+          $setup = Join-Path $installation "VC\Auxiliary\Build\vcvarsall.bat"
+          if (-not (Test-Path -LiteralPath $setup -PathType Leaf)) {
+            throw "ARM64 developer environment setup is missing"
+          }
+          "ETW_VCVARS=$setup" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Test PoC and existing Windows audit contracts
+        run: |
+          node --test tests/security/windows-etw-controls.test.mjs tests/security/windows-audit-canary.test.mjs tests/security/windows-audit-wdio.test.mjs tests/security/windows-filter-diagnostics.test.mjs tests/security/windows-file-trace.test.mjs tests/ci/*.test.mjs
+
+      - name: Capture untouched synthetic controls
+        run: |
+          $command = 'call "{0}" arm64 >nul && powershell.exe -STA -NoProfile -NonInteractive -ExecutionPolicy Bypass -File scripts\test-windows-etw-controls.ps1 -Capture -Scenario untouched' -f $env:ETW_VCVARS
+          & $env:ComSpec /d /c $command
+          if ($LASTEXITCODE -ne 0) { throw "Untouched ETW controls failed" }
+
+      - name: Capture and reject touched synthetic canary
+        run: |
+          $command = 'call "{0}" arm64 >nul && powershell.exe -STA -NoProfile -NonInteractive -ExecutionPolicy Bypass -File scripts\test-windows-etw-controls.ps1 -Capture -Scenario touched' -f $env:ETW_VCVARS
+          & $env:ComSpec /d /c $command
+          if ($LASTEXITCODE -ne 0) { throw "Expected touched-canary rejection was not verified" }
+
+      - name: Verify session and fixture cleanup
+        if: ${{ !cancelled() }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          & logman.exe query "MailClient-EtwControls-PoC" -ets *> $null
+          if ($LASTEXITCODE -ne -2144337918) {
+            throw "ETW session remains or its absence could not be established"
+          }
+          $global:LASTEXITCODE = 0
+          $temporary = [IO.Path]::GetTempPath()
+          $leftovers = @(Get-ChildItem -LiteralPath $temporary -Directory -Filter "mail-client-etw-build-*")
+          $leftovers += @(Get-ChildItem -LiteralPath $temporary -Directory -Filter "mail-client-etw-controls-*")
+          if ($leftovers.Count -ne 0) { throw "ETW PoC temporary directories remain" }
+          Write-Host "ETW controls cleanup verified; no real WebView or AC-05 completion is claimed"
