@@ -4,8 +4,34 @@ import {
   appendBoundedWindowsFilterOutput,
   describeWindowsFilterDiagnostics,
   reloadedFilterUiEvidencePattern,
+  reloadedFilterNativeEvidencePattern,
   windowsFilterOutputLimit,
 } from "../../scripts/windows-filter-diagnostics.mjs";
+
+test("AC-05: native reload evidence requires complete post-reload two-row four-column shape", () => {
+  const raw = "PROC_MON_FILTER_NATIVE_RULES=phase:reloaded;state:ready;rows:2;columns:4;path:2;is:2;include:2;exact-shape:2;unclassified:0;truncated:false";
+  const evidence = describeWindowsFilterDiagnostics(raw).slice(2);
+  assert.match(evidence, reloadedFilterNativeEvidencePattern);
+  for (const invalid of [
+    raw.replace("phase:reloaded", "phase:initial"),
+    raw.replace("state:ready", "state:partial"),
+    raw.replace("rows:2", "rows:3"),
+    raw.replace("columns:4", "columns:3"),
+    raw.replace("path:2", "path:1"),
+    raw.replace("is:2", "is:1"),
+    raw.replace("include:2", "include:1"),
+    raw.replace("exact-shape:2", "exact-shape:1"),
+    raw.replace("unclassified:0", "unclassified:1"),
+    raw.replace("truncated:false", "truncated:true"),
+    `${raw};name=private`,
+    "",
+  ]) {
+    assert.doesNotMatch(describeWindowsFilterDiagnostics(invalid).slice(2), reloadedFilterNativeEvidencePattern);
+  }
+  const retained = appendBoundedWindowsFilterOutput(`${"x".repeat(9000)}\n${raw}\n`, "y".repeat(9000));
+  assert.ok(retained.length <= windowsFilterOutputLimit);
+  assert.match(describeWindowsFilterDiagnostics(retained).slice(2), reloadedFilterNativeEvidencePattern);
+});
 
 test("AC-05: accessible popup diagnostics retain only bounded command and state classifications", () => {
   const line = "PROC_MON_FILTER_ACCESSIBLE_POPUP=command:drop;state:none;items:12;matches:1;checked:on";

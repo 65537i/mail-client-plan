@@ -2,6 +2,7 @@ const allowedTypes = /^(?:MenuBar|Menu|MenuItem|Window|Pane|ToolBar|Button|Text|
 const allowedNames = /^(?:Event|FileMenu|Filter|FilterCommand|SaveFilterCommand|ExportConfigCommand|DropFilteredEvents|HighlightFilteredEvents|MenuBar|ProcessMonitor|Other)$/;
 export const windowsFilterOutputLimit = 8192;
 export const reloadedFilterUiEvidencePattern = /^reloaded-filter-ui=items:\d+;lists:\d+;data-grids:\d+;tables:\d+;list-items:\d+;data-items:\d+(?:;dialog-window-rows:\d+;other-window-rows:\d+;unscoped-rows:\d+(?:;combo-option-rows:\d+;rule-containers:\d+;rule-row-candidates:\d+;rule-container-unclassified-rows:\d+)?)?;rows:2;truncated:false$/;
+export const reloadedFilterNativeEvidencePattern = /^filter-native-rules=phase:reloaded;state:ready;rows:2;columns:4;path:2;is:2;include:2;exact-shape:2;unclassified:0;truncated:false$/;
 const windowsFilterOutputHeadLimit = 3072;
 const windowsFilterOutputTruncationMarker = "\nPROC_MON_FILTER_OUTPUT_TRUNCATED=true\n";
 const windowsFilterOutputTailLimit =

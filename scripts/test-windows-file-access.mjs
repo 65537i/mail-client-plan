@@ -13,6 +13,7 @@ import {
   appendBoundedWindowsFilterOutput,
   describeWindowsFilterDiagnostics,
   reloadedFilterUiEvidencePattern,
+  reloadedFilterNativeEvidencePattern,
   windowsFilterOutputLimit,
 } from "./windows-filter-diagnostics.mjs";
 
@@ -339,12 +340,25 @@ async function captureScenario(scenario) {
     const reloadedFilterUiEvidence = describeWindowsFilterDiagnostics(filterSetupOutput)
       .split("; ")
       .find((diagnostic) => diagnostic.startsWith("reloaded-filter-ui="));
-    assert.match(
-      reloadedFilterUiEvidence ?? "",
-      reloadedFilterUiEvidencePattern,
-      "Process Monitor did not provide a complete bounded UI snapshot for the reloaded rules",
-    );
-    console.log(`Windows audit ${scenario}: ${reloadedFilterUiEvidence}`);
+    if (/^PROC_MON_FILTER_RELOADED_UI=/m.test(filterSetupOutput)) {
+      assert.match(
+        reloadedFilterUiEvidence ?? "",
+        reloadedFilterUiEvidencePattern,
+        "Process Monitor did not provide a complete bounded UI snapshot for the reloaded rules",
+      );
+      console.log(`Windows audit ${scenario}: ${reloadedFilterUiEvidence}`);
+    } else {
+      const nativeEvidence = [...new Set(describeWindowsFilterDiagnostics(filterSetupOutput)
+        .split("; ")
+        .filter((diagnostic) => diagnostic.startsWith("filter-native-rules=phase:reloaded;")))];
+      assert.equal(nativeEvidence.length, 1, "Process Monitor did not provide one native reloaded rule snapshot");
+      assert.match(
+        nativeEvidence[0],
+        reloadedFilterNativeEvidencePattern,
+        "Process Monitor did not provide a complete bounded native snapshot for the reloaded rules",
+      );
+      console.log(`Windows audit ${scenario}: ${nativeEvidence[0]}`);
+    }
     const reloadedDropEvidence = describeWindowsFilterDiagnostics(filterSetupOutput)
       .split("; ")
       .find((diagnostic) => diagnostic.startsWith("reloaded-drop-filtered-events="));

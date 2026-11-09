@@ -1036,6 +1036,158 @@ using System;
 using System.Threading;
 using System.Windows.Forms;
 using System.Runtime.InteropServices;
+public sealed class SyntheticSaveFileDialog : IDisposable
+{
+    private readonly Thread thread;
+    private readonly ManualResetEvent ready = new ManualResetEvent(false);
+    private Exception failure;
+    public IntPtr Main { get; private set; }
+    public IntPtr Dialog;
+    public int Accepted;
+    public bool ExactPath;
+    [DllImport("user32.dll", EntryPoint = "PostMessageW", ExactSpelling = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool PostMessage(IntPtr window, uint message, IntPtr wParam, IntPtr lParam);
+    public SyntheticSaveFileDialog(string expectedPath)
+    {
+        thread = new Thread(() =>
+        {
+            try
+            {
+                using (var main = new Form { ShowInTaskbar = false, Width = 320, Height = 180 })
+                using (var save = new SaveFileDialog { Filter = "Synthetic configuration|*.pmc", AddExtension = false })
+                {
+                    save.FileOk += (sender, args) =>
+                    {
+                        ExactPath = string.Equals(save.FileName, expectedPath, StringComparison.Ordinal);
+                        Interlocked.Increment(ref Accepted);
+                    };
+                    main.Shown += (sender, args) =>
+                    {
+                        Main = main.Handle;
+                        ready.Set();
+                        main.BeginInvoke(new Action(() => { save.ShowDialog(main); main.Close(); }));
+                    };
+                    Application.Run(main);
+                }
+            }
+            catch (Exception error) { failure = error; ready.Set(); }
+        });
+        thread.IsBackground = true;
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        if (!ready.WaitOne(5000)) throw new InvalidOperationException("Save fixture startup timed out");
+        if (failure != null) throw new InvalidOperationException("Save fixture startup failed", failure);
+    }
+    public void Dispose()
+    {
+        if (thread.IsAlive && Dialog != IntPtr.Zero && !PostMessage(Dialog, 0x0010, IntPtr.Zero, IntPtr.Zero))
+            throw new InvalidOperationException("Save fixture dialog cleanup failed");
+        if (!thread.Join(5000)) throw new InvalidOperationException("Save fixture thread cleanup timed out");
+        ready.Dispose();
+        if (failure != null) throw new InvalidOperationException("Save fixture thread failed", failure);
+    }
+}
+'@ -ReferencedAssemblies "System.Windows.Forms", "System.Drawing"
+$saveFixturePath = Join-Path ([IO.Path]::GetTempPath()) ("synthetic-save-" + [Guid]::NewGuid().ToString("N") + ".pmc")
+$saveFixture = [SyntheticSaveFileDialog]::new($saveFixturePath)
+$saveBlocker = $null
+try {
+  $deadline = [DateTime]::UtcNow.AddSeconds(5)
+  do {
+    $saveDialogs = @([ProcmonNativeMenu]::GetProcessTopLevelWindows($PID, 257) | Where-Object {
+      [ProcmonNativeMenu]::GetWindowClassKind($_, $PID, $saveFixture.Main) -eq "dialog" -and
+      [ProcmonNativeMenu]::IsWindowVisible($_)
+    })
+    if ($saveDialogs.Count -eq 1) { $saveFixture.Dialog = $saveDialogs[0]; break }
+    Start-Sleep -Milliseconds 25
+  } while ([DateTime]::UtcNow -lt $deadline)
+  if ($saveFixture.Dialog -eq [IntPtr]::Zero) { throw "Synthetic save dialog did not appear" }
+  $saveNative = [ProcmonNativeMenu]::ReadNativeSaveControls($saveFixture.Dialog, $saveFixture.Main, $PID)
+  $wrongOwnerRejected = $false
+  try {
+    [ProcmonNativeMenu]::ReadNativeSaveControls($saveFixture.Dialog, $saveFixture.Main, 0) | Out-Null
+  } catch [System.Management.Automation.MethodInvocationException] {
+    if ($_.Exception.InnerException -isnot [InvalidOperationException]) { throw }
+    $wrongOwnerRejected = $true
+  }
+  if (-not $wrongOwnerRejected) { throw "Native save discovery accepted a foreign owner" }
+  [ProcmonNativeMenu]::SetForegroundWindow($saveFixture.Dialog) | Out-Null
+  $deadline = [DateTime]::UtcNow.AddSeconds(2)
+  while ([ProcmonNativeMenu]::GetForegroundWindow() -ne $saveFixture.Dialog -and [DateTime]::UtcNow -lt $deadline) {
+    Start-Sleep -Milliseconds 25
+  }
+  if ($forceForegroundDenial) {
+    $saveBlocker = [System.Windows.Forms.Form]::new()
+    $saveBlocker.ShowInTaskbar = $false
+    $saveBlocker.Show()
+    $saveBlocker.Activate()
+    [System.Windows.Forms.Application]::DoEvents()
+    if ([ProcmonNativeMenu]::GetForegroundWindow() -eq $saveFixture.Dialog) {
+      throw "Save foreground-denial simulation failed"
+    }
+  }
+  $originalName = [ProcmonNativeMenu]::ReadNativeControlText($saveNative.FileName, $PID, "edit", 1024)
+  foreach ($invalid in @(
+    [pscustomobject]@{ Edit = $saveNative.FileName; Save = $saveNative.Save; Main = $saveFixture.Dialog; Path = $saveFixturePath },
+    [pscustomobject]@{ Edit = $saveNative.Save; Save = $saveNative.Save; Main = $saveFixture.Main; Path = $saveFixturePath },
+    [pscustomobject]@{ Edit = $saveNative.FileName; Save = $saveNative.FileName; Main = $saveFixture.Main; Path = $saveFixturePath },
+    [pscustomobject]@{ Edit = $saveNative.FileName; Save = $saveNative.Save; Main = $saveFixture.Main; Path = "relative.pmc" }
+  )) {
+    $rejected = $false
+    try {
+      [ProcmonNativeMenu]::SaveNativeConfiguration(
+        $saveFixture.Dialog, $invalid.Main, $PID, $invalid.Edit, $invalid.Save, $invalid.Path
+      )
+    } catch [System.Management.Automation.MethodInvocationException] {
+      if ($_.Exception.InnerException -isnot [InvalidOperationException] -and
+        $_.Exception.InnerException -isnot [ArgumentException]) { throw }
+      $rejected = $true
+    }
+    if (-not $rejected -or $saveFixture.Accepted -ne 0 -or
+      [ProcmonNativeMenu]::ReadNativeControlText($saveNative.FileName, $PID, "edit", 1024) -cne $originalName) {
+      throw "Invalid native save operation changed the fixture"
+    }
+  }
+  if ([ProcmonNativeMenu]::GetForegroundWindow() -ne $saveFixture.Dialog) {
+    if ($env:GITHUB_ACTIONS -cne "true" -and -not $forceForegroundDenial) {
+      throw "Synthetic save dialog did not become foreground"
+    }
+    $rejected = $false
+    try {
+      [ProcmonNativeMenu]::SaveNativeConfiguration(
+        $saveFixture.Dialog, $saveFixture.Main, $PID, $saveNative.FileName, $saveNative.Save, $saveFixturePath
+      )
+    } catch [System.Management.Automation.MethodInvocationException] {
+      if ($_.Exception.InnerException -isnot [InvalidOperationException]) { throw }
+      $rejected = $true
+    }
+    if (-not $rejected -or $saveFixture.Accepted -ne 0 -or
+      [ProcmonNativeMenu]::ReadNativeControlText($saveNative.FileName, $PID, "edit", 1024) -cne $originalName) {
+      throw "Blocked native save changed the fixture"
+    }
+    Write-Host "BLOCKED AC-05: native save rejected foreground denial without changing filename or accepting"
+  } else {
+    [ProcmonNativeMenu]::SaveNativeConfiguration(
+      $saveFixture.Dialog, $saveFixture.Main, $PID, $saveNative.FileName, $saveNative.Save, $saveFixturePath
+    )
+    $deadline = [DateTime]::UtcNow.AddSeconds(2)
+    while ($saveFixture.Accepted -ne 1 -and [DateTime]::UtcNow -lt $deadline) { Start-Sleep -Milliseconds 25 }
+    if ($saveFixture.Accepted -ne 1 -or -not $saveFixture.ExactPath) {
+      throw "Native Save did not accept the exact synthetic path once"
+    }
+    Write-Host "PASS AC-05: native Save verifies modal ownership, exact filename, focus, and acceptance"
+  }
+  if (Test-Path -LiteralPath $saveFixturePath) { throw "Synthetic SaveFileDialog unexpectedly wrote a file" }
+} finally {
+  if ($null -ne $saveBlocker) { $saveBlocker.Close(); $saveBlocker.Dispose() }
+  $saveFixture.Dispose()
+}
+Add-Type -TypeDefinition @'
+using System;
+using System.Threading;
+using System.Windows.Forms;
+using System.Runtime.InteropServices;
 public sealed class SyntheticAccessiblePopup : IDisposable
 {
     private readonly Thread thread;

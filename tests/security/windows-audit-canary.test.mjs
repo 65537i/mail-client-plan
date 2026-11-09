@@ -5,6 +5,21 @@ import path from "node:path";
 import test from "node:test";
 import { createWindowsAuditCanary } from "../../scripts/windows-audit-canary.mjs";
 
+test("AC-05: native configuration save preserves modal identity, filename, focus, and reload gates", async () => {
+  const [configuration, driver] = await Promise.all([
+    readFile(new URL("../../scripts/configure-windows-procmon-filter.ps1", import.meta.url), "utf8"),
+    readFile(new URL("../../scripts/test-windows-file-access.mjs", import.meta.url), "utf8"),
+  ]);
+  assert.match(configuration, /VerifyNativeSaveDialog[\s\S]*IsWindowEnabled\(main\)[\s\S]*GetWindowClassKind[\s\S]*"dialog"[\s\S]*GetWindowNative\(dialog, 4\)[\s\S]*!= main/);
+  assert.match(configuration, /ReadSaveControlLabel[\s\S]*VerifyNativeControl[\s\S]*name.Length > 128[\s\S]*get_accRole\(0\)[\s\S]*InvisibleState \| OffscreenState \| MixedState[\s\S]*role == 42[\s\S]*"File name:"[\s\S]*role != 43[\s\S]*"Save"[\s\S]*caption[\s\S]*Marshal.ReleaseComObject/);
+  assert.match(configuration, /ReadNativeSaveControls[\s\S]*ReadNativeChildSummary\(dialog, processId, 256\)[\s\S]*children.Truncated[\s\S]*GetAncestor\(child.Handle, GA_ROOT\) != dialog[\s\S]*0x800[\s\S]*edits != 1 \|\| saves != 1/);
+  assert.match(configuration, /SaveNativeConfiguration[\s\S]*GetForegroundWindow\(\) != dialog[\s\S]*controls.FileName != expectedEdit[\s\S]*FocusNativeSaveControl\(expectedEdit[\s\S]*SetNativeEditTextExact[\s\S]*FocusNativeSaveControl\(expectedSave[\s\S]*ReadNativeSaveControls[\s\S]*ReadNativeControlText[\s\S]*!= path[\s\S]*FocusWindow != expectedSave[\s\S]*ClickNativeButtonWithMouseExact/);
+  assert.match(configuration, /if \(\$fileNameCount -eq 0 -and \$saveCount -eq 0\)[\s\S]*nativeWindows.Length -gt 256[\s\S]*ReadNativeSaveControls[\s\S]*Get-UniqueConfigSaveDialogMatch \$nativeMatches/);
+  assert.match(configuration, /saveControls.ContainsKey\("Native"\)[\s\S]*SaveNativeConfiguration[\s\S]*else \{[\s\S]*ValuePattern[\s\S]*Wait-FilterConfigFile \$ConfigPath[\s\S]*Get-ConfigFilterPathEvidence \$ConfigPath \$CanaryPath \$ControlPath/);
+  assert.match(driver, /if \(\/\^PROC_MON_FILTER_RELOADED_UI=\/m.test\(filterSetupOutput\)\)[\s\S]*reloadedFilterUiEvidencePattern[\s\S]*else \{[\s\S]*nativeEvidence.length, 1[\s\S]*reloadedFilterNativeEvidencePattern[\s\S]*reloaded-drop-filtered-events=on/);
+  assert.match(driver, /const nativeEvidence = \[\.\.\.new Set\(describeWindowsFilterDiagnostics\(filterSetupOutput\)[\s\S]*filter-native-rules=phase:reloaded;/);
+});
+
 test("AC-05: MSAA popup fallback preserves UIA priority and strict action/readback gates", async () => {
   const configuration = await readFile(new URL("../../scripts/configure-windows-procmon-filter.ps1", import.meta.url), "utf8");
   const ownership = configuration.match(/private static bool IsAccessiblePopupOwned[\s\S]*?public static AccessibleMenuSnapshot ReadAccessiblePopupCommand/)?.[0];

@@ -319,6 +319,13 @@ public static class ProcmonNativeMenu
         public string Kind { get; set; }
     }
 
+    public sealed class NativeSaveControls
+    {
+        public IntPtr FileName { get; set; }
+        public IntPtr Save { get; set; }
+        public string SaveLabel { get; set; }
+    }
+
     public sealed class NativeToolbarCommandSnapshot
     {
         public string ReadFailure { get; set; }
@@ -1601,6 +1608,161 @@ public static class ProcmonNativeMenu
         if (count < 0 || count > 256)
             throw new InvalidOperationException("Native combo item count exceeded its bound");
         return count;
+    }
+
+    [DllImport("user32.dll", EntryPoint = "GetWindow", ExactSpelling = true)]
+    private static extern IntPtr GetWindowNative(IntPtr window, uint command);
+
+    private static void VerifyNativeSaveDialog(IntPtr dialog, IntPtr main, int processId)
+    {
+        if (processId <= 0 || dialog == main ||
+            GetWindowProcessId(main) != processId ||
+            GetAncestor(main, GA_ROOT) != main ||
+            !IsWindowVisible(main) || IsWindowEnabled(main) ||
+            GetWindowClassKind(dialog, (uint)processId, main) != "dialog" ||
+            GetAncestor(dialog, GA_ROOT) != dialog ||
+            !IsWindowVisible(dialog) || !IsWindowEnabled(dialog) ||
+            GetAncestor(GetWindowNative(dialog, 4), GA_ROOT) != main)
+            throw new InvalidOperationException("Native save dialog modal ownership is unavailable");
+    }
+
+    private static bool ReadSaveControlLabel(
+        IntPtr control, int processId, string kind, out string buttonLabel)
+    {
+        buttonLabel = null;
+        VerifyNativeControl(control, processId, kind);
+        var iid = new Guid("618736E0-3C3D-11CF-810C-00AA00389B71");
+        Accessibility.IAccessible accessible = null;
+        try
+        {
+            if (AccessibleObjectFromWindow(control, unchecked((uint)AccessibleClientObjectId),
+                ref iid, out accessible) != 0 || accessible == null)
+                throw new InvalidOperationException("Native save control accessible object is unavailable");
+            var name = accessible.get_accName(0) ?? string.Empty;
+            if (name.Length > 128)
+                throw new InvalidOperationException("Native save control label exceeded its bound");
+            var normalized = name.Replace("&", "").Trim();
+            int role, state;
+            if (!TryGetInteger(accessible.get_accRole(0), out role) ||
+                !TryGetInteger(accessible.get_accState(0), out state) ||
+                (state & (UnavailableState | InvisibleState | OffscreenState | MixedState)) != 0)
+                throw new InvalidOperationException("Native save control role or state is unavailable");
+            if (kind == "edit")
+                return role == 42 && (normalized == "File name:" || normalized == "\u30d5\u30a1\u30a4\u30eb\u540d:");
+            if (role != 43 || (normalized != "Save" && normalized != "\u4fdd\u5b58(S)" && normalized != "\u4fdd\u5b58"))
+                return false;
+            var caption = ReadNativeControlText(control, processId, "button", 128);
+            if (NormalizeNativeButtonLabel(caption) != normalized)
+                throw new InvalidOperationException("Native save button caption and accessible label disagree");
+            buttonLabel = caption;
+            return true;
+        }
+        finally
+        {
+            if (accessible != null && Marshal.IsComObject(accessible))
+                Marshal.ReleaseComObject(accessible);
+        }
+    }
+
+    public static NativeSaveControls ReadNativeSaveControls(IntPtr dialog, IntPtr main, int processId)
+    {
+        VerifyNativeSaveDialog(dialog, main, processId);
+        var children = ReadNativeChildSummary(dialog, processId, 256);
+        if (children.State != "ready" || children.Truncated)
+            throw new InvalidOperationException("Native save child scan is incomplete");
+        var result = new NativeSaveControls();
+        var edits = 0;
+        var saves = 0;
+        foreach (var child in children.ChildWindows)
+        {
+            if (!IsWindowVisible(child.Handle) || !IsWindowEnabled(child.Handle) ||
+                (child.Kind != "edit" && child.Kind != "button"))
+                continue;
+            if (GetAncestor(child.Handle, GA_ROOT) != dialog)
+                throw new InvalidOperationException("Native save child root changed");
+            string caption;
+            if (!ReadSaveControlLabel(child.Handle, processId, child.Kind, out caption))
+                continue;
+            if (child.Kind == "edit")
+            {
+                if ((GetWindowLongPtr(child.Handle, GWL_STYLE).ToInt64() & 0x800) != 0)
+                    throw new InvalidOperationException("Native filename edit is read-only");
+                edits++;
+                result.FileName = child.Handle;
+            }
+            else
+            {
+                saves++;
+                result.Save = child.Handle;
+                result.SaveLabel = caption;
+            }
+        }
+        if (edits != 1 || saves != 1)
+            throw new InvalidOperationException("Native save controls are not uniquely identified");
+        VerifyNativeSaveDialog(dialog, main, processId);
+        return result;
+    }
+
+    private static void FocusNativeSaveControl(IntPtr control, IntPtr dialog, int processId)
+    {
+        if (GetForegroundWindow() != dialog || GetWindowProcessId(control) != processId ||
+            GetAncestor(control, GA_ROOT) != dialog ||
+            !IsWindowVisible(control) || !IsWindowEnabled(control))
+            throw new InvalidOperationException("Native save control focus ownership is unavailable");
+        var iid = new Guid("618736E0-3C3D-11CF-810C-00AA00389B71");
+        Accessibility.IAccessible accessible = null;
+        try
+        {
+            if (AccessibleObjectFromWindow(control, unchecked((uint)AccessibleClientObjectId),
+                ref iid, out accessible) != 0 || accessible == null)
+                throw new InvalidOperationException("Native save control focus object is unavailable");
+            if (GetForegroundWindow() != dialog)
+                throw new InvalidOperationException("Native save dialog lost foreground before focus");
+            accessible.accSelect(1, 0);
+        }
+        finally
+        {
+            if (accessible != null && Marshal.IsComObject(accessible))
+                Marshal.ReleaseComObject(accessible);
+        }
+        var deadline = DateTime.UtcNow.AddSeconds(2);
+        do
+        {
+            var focus = ReadFocusSnapshot(dialog);
+            if (GetForegroundWindow() == dialog && GetWindowProcessId(control) == processId &&
+                focus.Available && focus.FocusWindow == control)
+                return;
+            System.Threading.Thread.Sleep(25);
+        } while (DateTime.UtcNow < deadline);
+        throw new InvalidOperationException("Native save control did not receive verified focus");
+    }
+
+    public static void SaveNativeConfiguration(
+        IntPtr dialog, IntPtr main, int processId, IntPtr expectedEdit, IntPtr expectedSave, string path)
+    {
+        if (string.IsNullOrEmpty(path) || path.Length > 1024 || path.IndexOf('\0') >= 0 ||
+            !System.IO.Path.IsPathRooted(path))
+            throw new ArgumentException("Native configuration path is invalid");
+        if (GetForegroundWindow() != dialog)
+            throw new InvalidOperationException("Native save dialog is not foreground");
+        var controls = ReadNativeSaveControls(dialog, main, processId);
+        if (controls.FileName != expectedEdit || controls.Save != expectedSave)
+            throw new InvalidOperationException("Native save controls changed before setting path");
+        FocusNativeSaveControl(expectedEdit, dialog, processId);
+        var beforeSet = ReadNativeSaveControls(dialog, main, processId);
+        if (beforeSet.FileName != expectedEdit || beforeSet.Save != expectedSave ||
+            GetForegroundWindow() != dialog || ReadFocusSnapshot(dialog).FocusWindow != expectedEdit)
+            throw new InvalidOperationException("Native filename identity or focus changed before setting path");
+        SetNativeEditTextExact(expectedEdit, processId, path);
+        FocusNativeSaveControl(expectedSave, dialog, processId);
+        var final = ReadNativeSaveControls(dialog, main, processId);
+        if (final.FileName != expectedEdit || final.Save != expectedSave ||
+            final.SaveLabel != controls.SaveLabel ||
+            GetForegroundWindow() != dialog ||
+            ReadNativeControlText(expectedEdit, processId, "edit", 1024) != path ||
+            ReadFocusSnapshot(dialog).FocusWindow != expectedSave)
+            throw new InvalidOperationException("Native save final path or focus verification failed");
+        ClickNativeButtonWithMouseExact(expectedSave, dialog, processId, final.SaveLabel);
     }
 
     public static void SetNativeEditTextExact(
@@ -4550,6 +4712,29 @@ function Wait-ConfigSaveDialog(
     $dialogMatch = Get-UniqueConfigSaveDialogMatch $dialogMatches
     if ($null -ne $dialogMatch) {
       return $dialogMatch
+    }
+    if ($fileNameCount -eq 0 -and $saveCount -eq 0) {
+      $nativeMatches = [System.Collections.Generic.List[object]]::new()
+      [IntPtr[]]$nativeWindows = [ProcmonNativeMenu]::GetProcessTopLevelWindows($Process.Id, 257)
+      if ($nativeWindows.Length -gt 256) { throw "Native save window scan exceeded its bound" }
+      foreach ($handle in $nativeWindows) {
+        if (
+          [ProcmonNativeMenu]::GetWindowClassKind($handle, $Process.Id, ([IntPtr]$mainWindowHandle)) -ne "dialog" -or
+          -not [ProcmonNativeMenu]::IsWindowVisible($handle) -or
+          -not [ProcmonNativeMenu]::IsWindowEnabled($handle)
+        ) { continue }
+        $controls = [ProcmonNativeMenu]::ReadNativeSaveControls(
+          $handle, ([IntPtr]$mainWindowHandle), $Process.Id
+        )
+        $nativeDialog = [System.Windows.Automation.AutomationElement]::FromHandle($handle)
+        if ($nativeDialog.Current.ProcessId -ne $Process.Id -or
+          $nativeDialog.Current.IsOffscreen -or -not $nativeDialog.Current.IsEnabled) {
+          throw "Native save dialog UIA identity changed"
+        }
+        $nativeMatches.Add(@{ Dialog = $nativeDialog; Native = $controls; FileName = $null; Save = $null })
+      }
+      $nativeMatch = Get-UniqueConfigSaveDialogMatch $nativeMatches
+      if ($null -ne $nativeMatch) { return $nativeMatch }
     }
     Start-Sleep -Milliseconds 100
   } while ([DateTime]::UtcNow -lt $deadline)
@@ -9183,6 +9368,18 @@ try {
     Write-ConfigSaveResultObservation "export-timeout" $process $main
     throw
   }
+  if ($saveControls.ContainsKey("Native")) {
+    Set-Stage "activate-export-config-dialog"
+    $dialogHandle = [IntPtr]$saveControls.Dialog.Current.NativeWindowHandle
+    Set-VerifiedProcmonMainWindowForeground $saveControls.Dialog $process "MAIN"
+    Set-Stage "set-export-config-path"
+    [ProcmonNativeMenu]::SaveNativeConfiguration(
+      $dialogHandle, ([IntPtr]$main.Current.NativeWindowHandle), $process.Id,
+      $saveControls.Native.FileName, $saveControls.Native.Save, $ConfigPath
+    )
+    [Console]::Out.WriteLine("PROC_MON_FILTER_SAVE_FILENAME=gate:passed")
+    [Console]::Out.WriteLine("PROC_MON_FILTER_SAVE_FINAL_FOREGROUND=gate:passed")
+  } else {
   $fileName = $saveControls.FileName
   $save = $saveControls.Save
   if ($fileName.Current.ProcessId -ne $process.Id -or
@@ -9284,11 +9481,14 @@ try {
   Write-FocusOwnerObservation "after-save-enter" $process $main
   Write-ConfigSaveObservation "after-invoke" $saveControls $process.Id $ConfigPath
   Write-ConfigOutputObservation "after-invoke" $ConfigPath
+  }
   Set-Stage "verify-filter-file"
   try {
     Wait-FilterConfigFile $ConfigPath
   } catch {
-    Write-ConfigSaveObservation "verify-failed" $saveControls $process.Id $ConfigPath
+    if (-not $saveControls.ContainsKey("Native")) {
+      Write-ConfigSaveObservation "verify-failed" $saveControls $process.Id $ConfigPath
+    }
     Write-ConfigOutputObservation "after-wait" $ConfigPath
     Write-ConfigSaveResultObservation "after-wait" $process $main
     throw
