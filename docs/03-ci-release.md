@@ -2,6 +2,18 @@
 
 ## 1. ワークフロー構成
 
+### Headless Windows audit candidate: ETW
+
+2026-11-10時点の調査候補であり、Procmonの代替採用やAC-05判定変更ではない。ローカルARM64でWPR/logman/tracerptと`Microsoft-Windows-Kernel-File`のprovider metadataをread-only確認した。capture/session開始、ETL保存、外部upload、追加dependency、audit policy/SACL変更、Actions実行は行っていない。hosted runnerでの権限・schema・実イベント取得は未確認。
+
+- **GUI不要だが単純なCSV置換ではない**: インストール済みmanifestではCreate（ID 12 v0/v1）がFileName/FileObject、Read（ID 15）とQueryInformation（ID 22）がFileObject/FileKeyを持つ。Read/QueryInformationにはfilenameがない。NameCreate/NameDelete（ID 10/11）との関連、open/close lifetime、object/key再利用、out-of-order event、drive/device path対応を検証する必要がある。classic [FileIo](https://learn.microsoft.com/en-us/windows/win32/etw/fileio) / [FileIo_Create](https://learn.microsoft.com/en-us/windows/win32/etw/fileio-create) / [FileIo_ReadWrite](https://learn.microsoft.com/en-us/windows/win32/etw/fileio-readwrite)のMOF event typesを、この別manifest providerのIDや固定pointer layoutに読み替えない。CreateのpathだけをfilterしてReadまで観測できたと主張しない。PID filterだけで動的な全WebView descendantsやkernel側I/Oを覆えたとも主張しない。
+- **WPR標準profileの丸ごとcaptureを開発PCで始めない**: ローカル`wpr -profiledetails FileIO`はsystem keywords/stacksに加えて対象外providerを含む。対象外path/metadataをETLへ永続化する可能性がある。[WPR command-line options](https://learn.microsoft.com/en-us/windows-hardware/test/wpt/wpr-command-line-options)によると`-filemode`はunbounded fileであり、既存256 MiB上限の代替にならない。tracerptのCSV/XML変換成功だけでは完全なschema decodeやpath相関を証明しない。`-lr`等のbest-effort decodeを安全判定に使わない。既存sessionへの接続・停止・`wpr -cancel`も行わない。
+- **欠落0の証拠が必須**: [EVENT_TRACE_PROPERTIES](https://learn.microsoft.com/en-us/windows/win32/api/evntrace/ns-evntrace-event_trace_properties)のEventsLost / LogBuffersLost / RealTimeBuffersLostと最終停止・drain状態を実測する。counter不明、event/buffer loss、未知schema、関連付け不明、resource limit超過、consumer停止は監査失敗。canary 0件だけでは成功にしない。[EnableTraceEx2](https://learn.microsoft.com/en-us/windows/win32/api/evntrace/nf-evntrace-enabletraceex2)のfilter可否もprovider/OSごとに実証し、keyword設定成功をpath coverageの代替にしない。
+
+次の縦切りは**独立したcontrols-only PoC**を候補とする。既存監査やworkflowの必須gateを置換しない。専用sessionのownershipと他session非干渉、capture前のready barrier、時間/メモリ/output上限、非対象pathの非永続化・非出力、finally cleanupを先に定義する。GUI操作なしで合成ファイルのcreate/open/read/queryを観測し、意図的に触れたcanaryを確実に失敗として検出する異常系と、未接触canaryの正常系を分ける。相関・schema・loss失敗のfixtureも必要。ローカル/hosted ARM64でcontrolsを実証した後にだけ、実WebView統合と受け入れ基準変更の可否を別途判断する。raw ETLをpublic artifactへuploadしない。mapped/cached/failed-open等の観測範囲と全process coverageが未実証なら、その限界を残す。
+
+### Windows hosted investigation history
+
 2026-11-10 順序比較の結果: [Run 622](https://github.com/65537i/mail-client-plan/actions/runs/42644271334)（`eef192b`、Windows ARM64 / webview）は合成GUI fixture実行前でもbaseline `activate-main-window`で失敗した。`target-input:true;foreground-menu:false`等の分類はRun 621と同じ。Node 108/108成功後、実監査失敗、続いて必須fixtureが実行されforeground拒否を明示し、job全体は失敗のままだった。直前の合成GUI入力が失敗の必要条件ではないことを確認したが原因は未確定。効果のなかった順序変更と実験専用testを戻し、追加dispatchやgate緩和はしない。Windows実監査/全platform AC-05未達を維持する。
 
 2026-11-10 hosted順序比較: 合成configuration fixtureはnative mouse/key入力を送り、その直後に別processの実監査を起動していた。ローカルread-only観測でもfixture前後にsession最終入力が変化し、foreground lock timeoutは未経過だった。ただし入力の受取processやhosted失敗原因は証明しない。Windows実監査を合成UI試験より先へ移し、Node回帰は引き続き先に実施する。合成UI試験は同じWindows/non-basic条件に`!cancelled()`を併用して監査失敗後も実行し、双方の失敗をjob失敗に残す。skipやcontinue-on-errorへの変更、activation/timeout/security gate緩和は行わない。これは原因断定ではなく一度の順序比較である。
