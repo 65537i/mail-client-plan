@@ -2,6 +2,24 @@
 
 ## 1. ワークフロー構成
 
+### Isolated Windows ARM64 ETW controls candidate
+
+[専用workflow](../.github/workflows/windows-arm64-etw-controls.yml)は`workflow_dispatch`だけで起動し、既存native CI・Procmon監査・AC-05判定を置換しない。`windows-11-arm`でnative architecture、管理者権限、ARM64 Visual Studio toolchain、dispatch SHA一致と専用session不在を検証する。pinned checkout/setup-nodeを使い、依存不要のPoC Node contracts、untouched、touchedを順番に実行する。後者はcanary検出によるnative exit 2をrunnerが要求するため、runner exit 0を監査成功へ読み替えない。cancelされていなければ失敗後もsession・合成/build directory不在を確認する。10分上限、同時実行なし、raw ETL/artifact uploadなし。既存native CIの依存導入や監査試験は変更しない。
+
+[SDK utility](../scripts/windows-etw-controls.cpp)はtest-only C++で、production Rust/Tauriへ組み込まない。[runner](../scripts/test-windows-etw-controls.ps1)は既存native Visual Studio/Windows SDK developer環境で、以下の明示承認済みcapture以外はcompileとself-testだけを実行する。
+
+```powershell
+powershell.exe -STA -NoProfile -NonInteractive -ExecutionPolicy Bypass -File .\scripts\test-windows-etw-controls.ps1
+node --test tests\security\windows-etw-controls.test.mjs tests\ci\windows-arm64-etw-controls.test.mjs
+# Separately authorized synthetic capture only:
+powershell.exe -STA -NoProfile -NonInteractive -ExecutionPolicy Bypass -File .\scripts\test-windows-etw-controls.ps1 -Capture -Scenario untouched
+powershell.exe -STA -NoProfile -NonInteractive -ExecutionPolicy Bypass -File .\scripts\test-windows-etw-controls.ps1 -Capture -Scenario touched
+```
+
+固定sessionが既存なら拒否し、自分のhandle以外を停止しない。real-time TDH decode後に合成対象のpath分類とobject/key関連だけを保持し、非対象path・任意payloadを保存/出力しない。上限はmapping 128、event 200,000、property 8192 bytes、64 buffers x 64 KiB、capture deadline 10秒と別枠のbounded consumer cleanup。create/read/queryの実受信をready条件とし、stop/drain・producer/consumer loss 0を要求する。object/key再利用・close/delete・相関衝突とschema versionも検査する。ただし未知/unmapped trafficを破棄するこのPoCは全process/operation coverageや任意canary-absenceを証明しない。native self-process controlsだけで、既存Node control・実WebView・failed-open/mapped accessは未検証。
+
+ローカルARM64でcompile/self-testsと両scenario各1回の限定captureは成功したが、hosted実行は未確認。新規workflowの調査branchからのdispatchはHTTP 404で未開始だった。[GitHub公式手順](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow)上、手動workflowには既定ブランチ配置が必要なため、PoC一式だけを独立PRにする。mergeや追加dispatchはこのPR準備に含めない。Windows/full-platform AC-05未達を維持する。証跡と未実施項目は[status](status.md)を参照。
+
 [Run 519](https://github.com/65537i/mail-client-plan/actions/runs/41306084970)（Windows 2025 x64 / webview）は長いInstance Nameで後続列がずれた行により`row-shape`停止。instance行はtoken順（先頭Filter / Altitude、末尾Frame / SprtFtrs / 任意VlStatus）で検証する方式へ変更した。
 
 [Run 517](https://github.com/65537i/mail-client-plan/actions/runs/41304809374)（`7cb3a2e`、Windows 2025 x64 / webview）はconfiguration exportを通過し、live Filter Manager parserの`row-shape`（列診断`word-integer-words-integer-barehex-empty`）で停止。`fltmc instances -v`の固定幅出力（空白入りInstance Name、`0x`無しSprtFtrs、空VlStatus）をseparator列位置で検証する受理経路を追加し、越境・タブ・未知値はfail closedのまま。
