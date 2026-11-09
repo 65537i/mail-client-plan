@@ -2,6 +2,8 @@
 
 ## 1. ワークフロー構成
 
+2026-11-09 Run 618もforeground gateで失敗。診断はinteractive・同一session・caller desktop入力可能・target可視enabled/非最小化だがforegroundは別processを示した。原因となるWindows制約は未確定。ユーザー承認のローカルUIA SetFocus調査では、Procmon mainがfocus不可で呼出しも拒否され、bounded RawViewの公開7要素中に適格な代替focus対象は0件だった。未実証のfallbackやforeground制限回避は追加せず、追加dispatchも停止した。controlled interactive runner等で別途foregroundと実監査を実証するまで、hosted Windows ARM64の実監査は未確認とする。ローカル成功やnative build成功を代替しない。
+
 2026-11-09 hosted Windows ARM64 Run 616 / 617は、実監査の最初の`activate-main-window`でforeground gateが失敗した。変更なしの再実行はここで止め、失敗時だけcallerのinteractive状態・targetとのsession一致・thread desktopのinput状態・targetのvisible/enabled/minimized・foreground所属を固定分類で記録する診断を追加した。名前・ID・handle・pathは出さず、desktop操作やforeground gateの緩和は行わない。query不能はunavailableとし、診断をcapture成功やAC-05合格に読み替えない。詳細は[status](status.md)。
 
 2026-11-09 local Windows ARM64では、非表示PowerShell子プロセスの`fltmc instances -v C:`が日本語の固定volume見出し・6列headerを返すことを再現し、strict parserへその書式だけを追加した。Node 105/105、PowerShell通常/foreground拒否fixture、実Procmon baseline/attack captureが成功。各CSVでNode陽性ReadFile 1件・canary 0件、既存のexcluded/other-path拒否gateを通過し、attack WDIO 2/2・hostile HTTP request 0を確認した。詳細は[status](status.md)。新Actions runやbuildは実行しておらず、hosted runner・全descendant coverage・最低OS/全architecture matrix・AC-05全体の未確認条件は残る。
