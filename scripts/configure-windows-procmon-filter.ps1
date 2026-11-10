@@ -1492,39 +1492,62 @@ function Wait-MainWindow([System.Diagnostics.Process]$Process, [int]$TimeoutSeco
   $windowFound = $false
   $scanPhase = "refresh-process"
   $foregroundOwner = "unavailable"
+  $transientFailureCount = 0
+  $transientFailurePhase = "none"
+  $transientFailureType = "none"
   try {
     do {
-      $scanPhase = "refresh-process"
-      $Process.Refresh()
-      $scanPhase = "check-process"
-      if ($Process.HasExited) {
-        $processExited = $true
-        break
-      }
-      $scanPhase = "enumerate-uia-windows"
-      $windows = [System.Windows.Automation.AutomationElement]::RootElement.FindAll(
-        [System.Windows.Automation.TreeScope]::Children,
-        $windowCondition
-      )
-      $rootWindowCount = $windows.Count
-      foreach ($window in $windows) {
-        $scanPhase = "read-uia-window-owner"
-        if ($window.Current.ProcessId -eq $Process.Id) {
-          $ownedWindowCount++
-          $windowFound = $true
-          return $window
+      try {
+        $scanPhase = "refresh-process"
+        $Process.Refresh()
+        $scanPhase = "check-process"
+        if ($Process.HasExited) {
+          $processExited = $true
+          break
         }
-      }
-      $scanPhase = "read-main-window-handle"
-      $mainHandle = $Process.MainWindowHandle
-      $mainHandleAvailable = $mainHandle -ne [IntPtr]::Zero
-      if ($mainHandleAvailable) {
-        $scanPhase = "read-main-window-owner"
-        $mainWindow = [System.Windows.Automation.AutomationElement]::FromHandle($mainHandle)
-        if ($mainWindow.Current.ProcessId -eq $Process.Id) {
-          $windowFound = $true
-          return $mainWindow
+        $scanPhase = "enumerate-uia-windows"
+        $windows = [System.Windows.Automation.AutomationElement]::RootElement.FindAll(
+          [System.Windows.Automation.TreeScope]::Children,
+          $windowCondition
+        )
+        $rootWindowCount = $windows.Count
+        foreach ($window in $windows) {
+          $scanPhase = "read-uia-window-owner"
+          if ($window.Current.ProcessId -eq $Process.Id) {
+            $ownedWindowCount++
+            $windowFound = $true
+            return $window
+          }
         }
+        $scanPhase = "read-main-window-handle"
+        $mainHandle = $Process.MainWindowHandle
+        $mainHandleAvailable = $mainHandle -ne [IntPtr]::Zero
+        if ($mainHandleAvailable) {
+          $scanPhase = "read-main-window-owner"
+          $mainWindow = [System.Windows.Automation.AutomationElement]::FromHandle($mainHandle)
+          if ($mainWindow.Current.ProcessId -eq $Process.Id) {
+            $windowFound = $true
+            return $mainWindow
+          }
+        }
+      } catch {
+        $transientFailure = $_.Exception
+        if (
+          $transientFailure.GetType().Name -eq "MethodInvocationException" -and
+          $null -ne $transientFailure.InnerException
+        ) {
+          $transientFailure = $transientFailure.InnerException
+        }
+        $transientFailureType = $transientFailure.GetType().Name
+        if ($transientFailureType -notin @(
+            "COMException",
+            "ElementNotAvailableException",
+            "InvalidOperationException"
+          )) {
+          throw
+        }
+        $transientFailureCount = [Math]::Min($transientFailureCount + 1, 9999)
+        $transientFailurePhase = $scanPhase
       }
       $scanPhase = "wait"
       Start-Sleep -Milliseconds 100
@@ -1545,6 +1568,9 @@ function Wait-MainWindow([System.Diagnostics.Process]$Process, [int]$TimeoutSeco
       }
       [Console]::Out.WriteLine(
         "PROC_MON_FILTER_WINDOW_SCAN=stage:$stageClass;phase:$scanPhase;process-exited:$($processExited.ToString().ToLowerInvariant());root-windows:$([Math]::Min($rootWindowCount, 9999));uia-owned-windows:$([Math]::Min($ownedWindowCount, 9999));main-handle:$(if ($mainHandleAvailable) { 'available' } else { 'unavailable' });foreground-owner:$foregroundOwner"
+      )
+      [Console]::Out.WriteLine(
+        "PROC_MON_FILTER_WINDOW_SCAN_TRANSIENTS=stage:$stageClass;count:$transientFailureCount;phase:$transientFailurePhase;type:$transientFailureType"
       )
     }
   }

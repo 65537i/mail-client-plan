@@ -303,6 +303,14 @@ test("AC-05: live filter verification attaches to the capture PID and preserves 
   assert.match(driver, /WDIO finished[\s\S]*await verifyLiveCaptureFilter\("after-wdio"\)[\s\S]*await readCaptureListCount\("final"\)/);
 });
 
+test("AC-05: Procmon window discovery retries transient UIA ownership reads before failing", async () => {
+  const configuration = await readFile(new URL("../../scripts/configure-windows-procmon-filter.ps1", import.meta.url), "utf8");
+  assert.match(configuration, /function Wait-MainWindow/);
+  assert.match(configuration, /\$transientFailureCount = 0[\s\S]*\$transientFailurePhase = "none"[\s\S]*\$transientFailureType = "none"/);
+  assert.match(configuration, /catch \{[\s\S]*\$transientFailureType -notin @\([\s\S]*"COMException"[\s\S]*"ElementNotAvailableException"[\s\S]*"InvalidOperationException"[\s\S]*\)\s*\) \{\s*throw\s*\}[\s\S]*\$transientFailureCount = \[Math\]::Min\(\$transientFailureCount \+ 1, 9999\)/);
+  assert.match(configuration, /PROC_MON_FILTER_WINDOW_SCAN_TRANSIENTS=stage:\$stageClass;count:\$transientFailureCount;phase:\$transientFailurePhase;type:\$transientFailureType/);
+});
+
 test("AC-05: only offline export clears display filters and all exported paths remain validated", async () => {
   const source = await readFile(new URL("../../scripts/test-windows-file-access.mjs", import.meta.url), "utf8");
   assert.equal((source.match(/"\/NoFilter"/g) ?? []).length, 1);
