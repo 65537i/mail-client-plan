@@ -1535,6 +1535,7 @@ function Wait-MainWindow([System.Diagnostics.Process]$Process, [int]$TimeoutSeco
           }
         }
       } catch {
+        $script:windowScanFailureType = "Other"
         $script:windowScanPhase = $scanPhase
         $transientFailure = $_.Exception
         if (

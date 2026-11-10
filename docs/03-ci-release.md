@@ -24,6 +24,8 @@ Run 630（source `ae5daa4`）ではsame attack setup failureが再発し、outer
 
 Run 631（source `db17613`）も同じWindows setup失敗を再現し、baseline control/canaryは1/0。summaryは`count:0;phase:create-window-condition;type:none`だった。ここで`phase`は処理前に出すmarkerにすぎず、constructor自体の例外を確定しない。また`type:none`では通常のthrow typeが欠落していたため、診断を拡張し、例外名は限定allowlistまたは`Other`へ正規化する。任意例外text・window名・pathは出さない。Node 57/57、Windows PowerShell fixtures、PowerShell syntax check成功。新hosted runまで原因未確定、AC-05未達。
 
+Run 632（source `96cadef`）もWindows baseline陽性control ReadFile 1 / canary 0の後、attack setup `find-main-window`で失敗し、attack WebView未到達。summaryはなお`count:0;phase:create-window-condition;type:none`（外側の`InvalidOperationException`）で、前回追加したclassificationは原因を捕捉できなかった。Windows 2025 runnerと同じUIA `PropertyCondition` constructorをローカルPowerShellで単独実行し生成成功したが、hosted runner上での動作を証明しない。次のdiagnostic-only follow-upではinner catchの先頭でtypeを`Other`へ初期化し、catchへ入らない場合の`none`と、catch内のexception extraction/classification失敗を分離する。Node audit/diagnostics 71/71、Windows PowerShell fixtures成功。新hosted resultまで原因未確定、AC-05未達、gate不変。
+
 [Run 519](https://github.com/65537i/mail-client-plan/actions/runs/41306084970)（Windows 2025 x64 / webview）は長いInstance Nameで後続列がずれた行により`row-shape`停止。instance行はtoken順（先頭Filter / Altitude、末尾Frame / SprtFtrs / 任意VlStatus）で検証する方式へ変更した。
 
 [Run 517](https://github.com/65537i/mail-client-plan/actions/runs/41304809374)（`7cb3a2e`、Windows 2025 x64 / webview）はconfiguration exportを通過し、live Filter Manager parserの`row-shape`（列診断`word-integer-words-integer-barehex-empty`）で停止。`fltmc instances -v`の固定幅出力（空白入りInstance Name、`0x`無しSprtFtrs、空VlStatus）をseparator列位置で検証する受理経路を追加し、越境・タブ・未知値はfail closedのまま。

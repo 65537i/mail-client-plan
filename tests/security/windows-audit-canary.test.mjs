@@ -307,6 +307,7 @@ test("AC-05: Procmon window discovery retries transient UIA ownership reads befo
   const configuration = await readFile(new URL("../../scripts/configure-windows-procmon-filter.ps1", import.meta.url), "utf8");
   assert.match(configuration, /function Wait-MainWindow/);
   assert.match(configuration, /\$script:windowScanTransientCount = 0[\s\S]*\$script:windowScanTransientPhase = "none"[\s\S]*\$script:windowScanTransientType = "none"/);
+  assert.match(configuration, /} catch \{\s*\$script:windowScanFailureType = "Other"\s+\$script:windowScanPhase = \$scanPhase\s+\$transientFailure = \$_.Exception/);
   assert.match(configuration, /catch \{[\s\S]*\$transientFailureType -notin @\([\s\S]*"COMException"[\s\S]*"ElementNotAvailableException"[\s\S]*"InvalidOperationException"[\s\S]*\)\s*\) \{\s*throw\s*\}[\s\S]*\$script:windowScanTransientCount = \[Math\]::Min\(\s*\$script:windowScanTransientCount \+ 1, 9999\s*\)/);
   assert.match(configuration, /\$script:windowScanFailureType = if \(\$transientFailureType -in @\([\s\S]*"TypeInitializationException"[\s\S]*\)\) \{\s*\$transientFailureType\s*\} else \{\s*"Other"\s*\}[\s\S]*if \(\$transientFailureType -notin @\(/);
   assert.match(configuration, /PROC_MON_FILTER_WINDOW_SCAN_TRANSIENTS=stage:\$stageClass;count:\$script:windowScanTransientCount;phase:\$script:windowScanPhase;type:\$script:windowScanFailureType/);
