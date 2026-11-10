@@ -139,12 +139,19 @@ test("AC-05: transient window-discovery retries retain only bounded classificati
     "; reload-window-scan-transients=count:0;phase:create-window-condition;type:none",
   );
   assert.equal(
+    describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_WINDOW_SCAN_TRANSIENTS=stage:initial;count:0;phase:create-window-condition;type:TypeInitializationException",
+    ),
+    "; initial-window-scan-transients=count:0;phase:create-window-condition;type:TypeInitializationException",
+  );
+  assert.equal(
     describeWindowsFilterDiagnostics([
       "PROC_MON_FILTER_WINDOW_SCAN_TRANSIENTS=stage:initial;count:10000;phase:wait;type:InvalidOperationException",
       "PROC_MON_FILTER_WINDOW_SCAN_TRANSIENTS=stage:initial;count:1;phase:wait;type:SecretException",
       "PROC_MON_FILTER_WINDOW_SCAN_TRANSIENTS=stage:private;count:1;phase:read-uia-window-owner;type:COMException",
       "PROC_MON_FILTER_WINDOW_SCAN_TRANSIENTS=stage:reload;count:1;phase:enumerate-uia-windows;type:none;path=C:\\private",
       "PROC_MON_FILTER_WINDOW_SCAN_TRANSIENTS=stage:reload;count:0;phase:private;type:none",
+      "PROC_MON_FILTER_WINDOW_SCAN_TRANSIENTS=stage:initial;count:0;phase:create-window-condition;type:PrivateException",
     ].join("\n")),
     "",
   );

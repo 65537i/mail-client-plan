@@ -1484,6 +1484,7 @@ function Wait-MainWindow([System.Diagnostics.Process]$Process, [int]$TimeoutSeco
   $script:windowScanTransientPhase = "none"
   $script:windowScanTransientType = "none"
   $script:windowScanPhase = "not-started"
+  $script:windowScanFailureType = "none"
   $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
   $rootWindowCount = 0
   $ownedWindowCount = 0
@@ -1543,6 +1544,18 @@ function Wait-MainWindow([System.Diagnostics.Process]$Process, [int]$TimeoutSeco
           $transientFailure = $transientFailure.InnerException
         }
         $transientFailureType = $transientFailure.GetType().Name
+        $script:windowScanFailureType = if ($transientFailureType -in @(
+            "ArgumentException",
+            "COMException",
+            "ElementNotAvailableException",
+            "InvalidOperationException",
+            "MethodInvocationException",
+            "TypeInitializationException"
+          )) {
+          $transientFailureType
+        } else {
+          "Other"
+        }
         if ($transientFailureType -notin @(
             "COMException",
             "ElementNotAvailableException",
@@ -3343,7 +3356,7 @@ try {
       "initial"
     }
     [Console]::Out.WriteLine(
-      "PROC_MON_FILTER_WINDOW_SCAN_TRANSIENTS=stage:$stageClass;count:$script:windowScanTransientCount;phase:$script:windowScanPhase;type:$script:windowScanTransientType"
+      "PROC_MON_FILTER_WINDOW_SCAN_TRANSIENTS=stage:$stageClass;count:$script:windowScanTransientCount;phase:$script:windowScanPhase;type:$script:windowScanFailureType"
     )
   }
   $failureException = $_.Exception
