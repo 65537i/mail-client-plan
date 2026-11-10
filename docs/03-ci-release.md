@@ -29,6 +29,8 @@ ARM64でwarnings-as-errors compileとnative fixtures、Node source contractsを�
 
 ### Windows hosted investigation history
 
+2026-11-11 PR #3 [Run 629](https://github.com/65537i/mail-client-plan/actions/runs/42865424876)（source `c6b9ded`）はWindows baselineが陽性ReadFile 1 / canary 0の後、attack setupの`find-main-window` / `InvalidOperationException`で停止。outer failure summaryは`initial-window-scan-transients=count:0;phase:none;type:none`で、retry対象例外は観測されなかったがthrow位置は未確定。plan、Ubuntu x64、macOS Intel成功、旧runner設定のmacOS ARM64 cancelled、全体run cancelled。PR worktreeでは`PropertyCondition`生成をbounded scan内へ移し、失敗phaseの固定分類を追跡する追加調査中。Node 57/57とWindows PowerShell fixtures成功。新sourceのhosted確認まで原因未確定、AC-05未達。
+
 2026-11-11 PR #3 [Run 628](https://github.com/65537i/mail-client-plan/actions/runs/42850502543)（source `c43e5f5`）はWindows baselineが陽性ReadFile 1 / canary 0のまま、attack setupの`find-main-window` / `InvalidOperationException`で失敗した。retry diagnosticsを追加したsourceだがActions failure summaryに表示されず、UIA retryの有無・例外位置は未確定。次のfollow-upはretry stateをscript scopeへ保存し、outer failure handlerからboundedな固定分類を出力する。ローカルNode 57/57、Windows PowerShell fixtures、diff check成功。hosted確認まで原因特定・AC-05合格としない。
 
 2026-11-11 PR #3 [Run 627](https://github.com/65537i/mail-client-plan/actions/runs/42841881311)（source `bb5be20`）はWindows x64で再びattack setupの`find-main-window` / `InvalidOperationException`により失敗した。baselineのNode陽性ReadFile 1 / canary 0は維持されたがattack WebView未到達。plan、Ubuntu x64、macOS Intel成功、旧runner設定のmacOS ARM64 cancelled、全体run cancelled。UIA retryが実行されたか、例外がどの段階で起きたかはrunログだけでは識別できない。PR #3 head `c43e5f5`ではfixed allowlistのstage/count/phase/typeだけを含むtransient diagnostic parserを追加し、次の新source runで判別する。ローカルNode 57/57、Windows PowerShell contract fixtures、diff check成功。原因を推定せず、AC-05未達・gate不変・未merge。
