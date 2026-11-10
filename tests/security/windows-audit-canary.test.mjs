@@ -308,7 +308,7 @@ test("AC-05: Procmon window discovery retries transient UIA ownership reads befo
   assert.match(configuration, /function Wait-MainWindow/);
   assert.match(configuration, /\$script:windowScanTransientCount = 0[\s\S]*\$script:windowScanTransientPhase = "none"[\s\S]*\$script:windowScanTransientType = "none"/);
   assert.match(configuration, /catch \{[\s\S]*\$transientFailureType -notin @\([\s\S]*"COMException"[\s\S]*"ElementNotAvailableException"[\s\S]*"InvalidOperationException"[\s\S]*\)\s*\) \{\s*throw\s*\}[\s\S]*\$script:windowScanTransientCount = \[Math\]::Min\(\s*\$script:windowScanTransientCount \+ 1, 9999\s*\)/);
-  assert.match(configuration, /PROC_MON_FILTER_WINDOW_SCAN_TRANSIENTS=stage:\$stageClass;count:\$script:windowScanTransientCount;phase:\$script:windowScanTransientPhase;type:\$script:windowScanTransientType/);
+  assert.match(configuration, /PROC_MON_FILTER_WINDOW_SCAN_TRANSIENTS=stage:\$stageClass;count:\$script:windowScanTransientCount;phase:\$script:windowScanPhase;type:\$script:windowScanTransientType/);
   assert.match(configuration, /\} catch \{\s*\[Console\]::Out\.WriteLine\("PROC_MON_FILTER_FAILED_STAGE=\$script:stage"\)[\s\S]*PROC_MON_FILTER_WINDOW_SCAN_TRANSIENTS=/);
 });
 

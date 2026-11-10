@@ -1483,11 +1483,8 @@ function Wait-MainWindow([System.Diagnostics.Process]$Process, [int]$TimeoutSeco
   $script:windowScanTransientCount = 0
   $script:windowScanTransientPhase = "none"
   $script:windowScanTransientType = "none"
+  $script:windowScanPhase = "not-started"
   $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
-  $windowCondition = [System.Windows.Automation.PropertyCondition]::new(
-    [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
-    [System.Windows.Automation.ControlType]::Window
-  )
   $rootWindowCount = 0
   $ownedWindowCount = 0
   $mainHandleAvailable = $false
@@ -1498,6 +1495,12 @@ function Wait-MainWindow([System.Diagnostics.Process]$Process, [int]$TimeoutSeco
   try {
     do {
       try {
+        $scanPhase = "create-window-condition"
+        $script:windowScanPhase = $scanPhase
+        $windowCondition = [System.Windows.Automation.PropertyCondition]::new(
+          [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+          [System.Windows.Automation.ControlType]::Window
+        )
         $scanPhase = "refresh-process"
         $Process.Refresh()
         $scanPhase = "check-process"
@@ -1531,6 +1534,7 @@ function Wait-MainWindow([System.Diagnostics.Process]$Process, [int]$TimeoutSeco
           }
         }
       } catch {
+        $script:windowScanPhase = $scanPhase
         $transientFailure = $_.Exception
         if (
           $transientFailure.GetType().Name -eq "MethodInvocationException" -and
@@ -1556,6 +1560,7 @@ function Wait-MainWindow([System.Diagnostics.Process]$Process, [int]$TimeoutSeco
       Start-Sleep -Milliseconds 100
     } while ([DateTime]::UtcNow -lt $deadline)
     $scanPhase = "foreground-owner"
+    $script:windowScanPhase = $scanPhase
     $foregroundHandle = [ProcmonNativeMenu]::GetForegroundWindow()
     if ($foregroundHandle -ne [IntPtr]::Zero) {
       $foregroundOwner = if (
@@ -3338,7 +3343,7 @@ try {
       "initial"
     }
     [Console]::Out.WriteLine(
-      "PROC_MON_FILTER_WINDOW_SCAN_TRANSIENTS=stage:$stageClass;count:$script:windowScanTransientCount;phase:$script:windowScanTransientPhase;type:$script:windowScanTransientType"
+      "PROC_MON_FILTER_WINDOW_SCAN_TRANSIENTS=stage:$stageClass;count:$script:windowScanTransientCount;phase:$script:windowScanPhase;type:$script:windowScanTransientType"
     )
   }
   $failureException = $_.Exception
