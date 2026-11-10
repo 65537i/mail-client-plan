@@ -125,6 +125,31 @@ test("AC-05: reload window diagnostics retain only bounded process state", () =>
   );
 });
 
+test("AC-05: transient window-discovery retries retain only bounded classifications", () => {
+  const valid = "PROC_MON_FILTER_WINDOW_SCAN_TRANSIENTS="
+    + "stage:initial;count:12;phase:read-uia-window-owner;type:ElementNotAvailableException";
+  assert.equal(
+    describeWindowsFilterDiagnostics(valid),
+    "; initial-window-scan-transients=count:12;phase:read-uia-window-owner;type:ElementNotAvailableException",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_WINDOW_SCAN_TRANSIENTS=stage:reload;count:0;phase:none;type:none",
+    ),
+    "; reload-window-scan-transients=count:0;phase:none;type:none",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics([
+      "PROC_MON_FILTER_WINDOW_SCAN_TRANSIENTS=stage:initial;count:10000;phase:wait;type:InvalidOperationException",
+      "PROC_MON_FILTER_WINDOW_SCAN_TRANSIENTS=stage:initial;count:1;phase:wait;type:SecretException",
+      "PROC_MON_FILTER_WINDOW_SCAN_TRANSIENTS=stage:private;count:1;phase:read-uia-window-owner;type:COMException",
+      "PROC_MON_FILTER_WINDOW_SCAN_TRANSIENTS=stage:reload;count:1;phase:enumerate-uia-windows;type:none;path=C:\\private",
+      "PROC_MON_FILTER_WINDOW_SCAN_TRANSIENTS=stage:reload;count:0;phase:read-main-window-owner;type:none",
+    ].join("\n")),
+    "",
+  );
+});
+
 test("AC-05: reloaded filter UI diagnostics retain only bounded control counts", () => {
   assert.equal(
     describeWindowsFilterDiagnostics(

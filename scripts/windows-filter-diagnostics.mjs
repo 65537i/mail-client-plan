@@ -464,6 +464,25 @@ export function describeWindowsFilterDiagnostics(output) {
     }
   }
 
+  const windowScanTransients = output.match(
+    /^PROC_MON_FILTER_WINDOW_SCAN_TRANSIENTS=stage:(initial|reload);count:(\d{1,4});phase:(none|refresh-process|check-process|enumerate-uia-windows|read-uia-window-owner|read-main-window-handle|read-main-window-owner);type:(COMException|ElementNotAvailableException|InvalidOperationException|none)\r?$/m,
+  );
+  const transientCount = windowScanTransients ? Number(windowScanTransients[2]) : -1;
+  const transientPhase = windowScanTransients?.[3];
+  const transientType = windowScanTransients?.[4];
+  if (
+    windowScanTransients
+    && transientCount <= 9999
+    && (
+      (transientCount === 0 && transientPhase === "none" && transientType === "none")
+      || (transientCount > 0 && transientPhase !== "none" && transientType !== "none")
+    )
+  ) {
+    diagnostics.push(
+      `${windowScanTransients[1]}-window-scan-transients=count:${transientCount};phase:${transientPhase};type:${transientType}`,
+    );
+  }
+
   const reloadedFilterUi = output.match(
     /^PROC_MON_FILTER_RELOADED_UI=items:(\d{1,4});lists:(\d{1,4});data-grids:(\d{1,4});tables:(\d{1,4});list-items:(\d{1,4});data-items:(\d{1,4});dialog-window-rows:(\d{1,4});other-window-rows:(\d{1,4});unscoped-rows:(\d{1,4});combo-option-rows:(\d{1,4});rule-containers:(\d{1,2});rule-row-candidates:(\d{1,4});rule-container-unclassified-rows:(\d{1,4});rows:(\d{1,2});truncated:(true|false)\r?$/m,
   ) ?? output.match(
