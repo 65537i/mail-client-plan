@@ -29,6 +29,8 @@ ARM64でwarnings-as-errors compileとnative fixtures、Node source contractsを�
 
 ### Windows hosted investigation history
 
+2026-11-11 PR #3 [Run 632](https://github.com/65537i/mail-client-plan/actions/runs/42886634675)（source `96cadef`）はplan、Ubuntu x64、macOS Intel成功、macOS ARM64は旧runner設定でcancelled、Windows x64はfailure、全体runはcancelled。Windows baselineは陽性control ReadFile 1 / canary 0でcleanだったが、attack setupが`find-main-window`で停止し、attack WebView assertions未到達。failure summaryは引き続き`count:0;phase:create-window-condition;type:none`（外側の`failure-type=InvalidOperationException`）で、追加したscan exception classificationは原因例外を捕捉できていない。throwing operationは未特定でAC-05未達、gate変更なし。
+
 2026-11-11 PR #3 [Run 631](https://github.com/65537i/mail-client-plan/actions/runs/42878826304)（source `db17613`）もclean baseline（陽性ReadFile 1 / canary 0）の後に`find-main-window` / `InvalidOperationException`で停止し、summaryは`count:0;phase:create-window-condition;type:none`。phaseは処理前markerでありconstructorの例外を断定しない。通常のthrow typeも記録されていなかったため、PR #3で例外名を限定allowlistまたは`Other`へ正規化する。raw error textは含めない。Node 57/57、PowerShell fixturesとsyntax check成功。hosted確認までは原因未確定、AC-05未達。
 
 2026-11-11 PR #3 [Run 630](https://github.com/65537i/mail-client-plan/actions/runs/42872226458)（source `ae5daa4`）はclean baseline（陽性ReadFile 1 / canary 0）の後にattack設定が失敗。outer summaryは`initial-window-scan-transients=count:0;phase:create-window-condition;type:none`で、retry対象例外はscan loopで捕捉されず、phase markerはcondition constructionだった。これはstageの分類であり、throw operationの確定ではない。次はcondition construction pathをbounded local fixtureで切り分ける。plan/Ubuntu x64/macOS Intel成功、旧runner設定のmacOS ARM64 cancelled、全体run cancelled。AC-05未達。
