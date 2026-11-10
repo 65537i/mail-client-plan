@@ -1480,6 +1480,9 @@ function Wait-ConfigSaveDialog(
 }
 
 function Wait-MainWindow([System.Diagnostics.Process]$Process, [int]$TimeoutSeconds = 15) {
+  $script:windowScanTransientCount = 0
+  $script:windowScanTransientPhase = "none"
+  $script:windowScanTransientType = "none"
   $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
   $windowCondition = [System.Windows.Automation.PropertyCondition]::new(
     [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
@@ -1492,9 +1495,6 @@ function Wait-MainWindow([System.Diagnostics.Process]$Process, [int]$TimeoutSeco
   $windowFound = $false
   $scanPhase = "refresh-process"
   $foregroundOwner = "unavailable"
-  $transientFailureCount = 0
-  $transientFailurePhase = "none"
-  $transientFailureType = "none"
   try {
     do {
       try {
@@ -1546,8 +1546,11 @@ function Wait-MainWindow([System.Diagnostics.Process]$Process, [int]$TimeoutSeco
           )) {
           throw
         }
-        $transientFailureCount = [Math]::Min($transientFailureCount + 1, 9999)
-        $transientFailurePhase = $scanPhase
+        $script:windowScanTransientCount = [Math]::Min(
+          $script:windowScanTransientCount + 1, 9999
+        )
+        $script:windowScanTransientPhase = $scanPhase
+        $script:windowScanTransientType = $transientFailureType
       }
       $scanPhase = "wait"
       Start-Sleep -Milliseconds 100
@@ -1568,9 +1571,6 @@ function Wait-MainWindow([System.Diagnostics.Process]$Process, [int]$TimeoutSeco
       }
       [Console]::Out.WriteLine(
         "PROC_MON_FILTER_WINDOW_SCAN=stage:$stageClass;phase:$scanPhase;process-exited:$($processExited.ToString().ToLowerInvariant());root-windows:$([Math]::Min($rootWindowCount, 9999));uia-owned-windows:$([Math]::Min($ownedWindowCount, 9999));main-handle:$(if ($mainHandleAvailable) { 'available' } else { 'unavailable' });foreground-owner:$foregroundOwner"
-      )
-      [Console]::Out.WriteLine(
-        "PROC_MON_FILTER_WINDOW_SCAN_TRANSIENTS=stage:$stageClass;count:$transientFailureCount;phase:$transientFailurePhase;type:$transientFailureType"
       )
     }
   }
@@ -3327,7 +3327,20 @@ try {
     [Console]::Out.WriteLine("PROC_MON_FILTER_LIVE_VERIFIED=rules:exact-two;drop:on")
   }
 } catch {
-  [Console]::Out.WriteLine("PROC_MON_FILTER_FAILED_STAGE=$stage")
+  [Console]::Out.WriteLine("PROC_MON_FILTER_FAILED_STAGE=$script:stage")
+  if (
+    $script:stage -in @("find-main-window", "find-reloaded-main-window") -and
+    $null -ne $script:windowScanTransientCount
+  ) {
+    $stageClass = if ($script:stage -eq "find-reloaded-main-window") {
+      "reload"
+    } else {
+      "initial"
+    }
+    [Console]::Out.WriteLine(
+      "PROC_MON_FILTER_WINDOW_SCAN_TRANSIENTS=stage:$stageClass;count:$script:windowScanTransientCount;phase:$script:windowScanTransientPhase;type:$script:windowScanTransientType"
+    )
+  }
   $failureException = $_.Exception
   if (
     $failureException.GetType().Name -eq "MethodInvocationException" -and

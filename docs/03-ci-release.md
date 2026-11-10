@@ -14,6 +14,10 @@ Run 626（source `b369d64`）ではhosted x64 baselineが`positive-control ReadF
 
 Run 627（source `bb5be20`）でも同じ`find-main-window` / `InvalidOperationException`が再現した。baselineの陽性Node ReadFile 1 / canary 0は維持されたが、attack WDIO前の設定で停止し、Windows job失敗・全体run cancelled。plan、Ubuntu x64、macOS Intelは成功し、macOS ARM64は旧runner設定でcancelled。Run 627のjob出力には追加したtransient診断がdriver errorへ含まれておらず、UIA retryが発生したか、別の例外箇所で停止したかは確定できない。次のsliceでは固定形式のstage/count/phase/typeだけを許可するdiagnostic parserと拒否fixtureを追加し、変更後の新runで失敗位置を特定する。ローカルNode 57/57とWindows PowerShell contract fixturesは成功。Run 627の失敗を根拠に原因を推定せず、AC-05は未達のままとする。
 
+Run 628（source `c43e5f5`）でもWindows baselineは陽性ReadFile 1 / canary 0を維持したが、attack setupが同じ`find-main-window` / `InvalidOperationException`で失敗し、全体run cancelled。追加した診断がActions error summaryに現れなかったため、retry中に起きたことか、window-scanより前の例外かを判別できていない。このfollow-upではretry stateをscript scopeへ保存し、enclosing failure handlerから固定分類を出力する。再度変更したsourceでの確認まではAC-05未達、原因未確定。
+
+diagnostic reporting follow-upのローカルNode 57/57、Windows PowerShell contract fixture、diff checkは成功した。診断はretry回数・固定phase・allowlist exception typeのみで、raw UIA textやpathは含めない。hostedで行が実際のfailure summaryへ届くまで原因特定とは扱わない。
+
 [Run 519](https://github.com/65537i/mail-client-plan/actions/runs/41306084970)（Windows 2025 x64 / webview）は長いInstance Nameで後続列がずれた行により`row-shape`停止。instance行はtoken順（先頭Filter / Altitude、末尾Frame / SprtFtrs / 任意VlStatus）で検証する方式へ変更した。
 
 [Run 517](https://github.com/65537i/mail-client-plan/actions/runs/41304809374)（`7cb3a2e`、Windows 2025 x64 / webview）はconfiguration exportを通過し、live Filter Manager parserの`row-shape`（列診断`word-integer-words-integer-barehex-empty`）で停止。`fltmc instances -v`の固定幅出力（空白入りInstance Name、`0x`無しSprtFtrs、空VlStatus）をseparator列位置で検証する受理経路を追加し、越境・タブ・未知値はfail closedのまま。

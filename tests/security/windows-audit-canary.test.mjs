@@ -306,9 +306,10 @@ test("AC-05: live filter verification attaches to the capture PID and preserves 
 test("AC-05: Procmon window discovery retries transient UIA ownership reads before failing", async () => {
   const configuration = await readFile(new URL("../../scripts/configure-windows-procmon-filter.ps1", import.meta.url), "utf8");
   assert.match(configuration, /function Wait-MainWindow/);
-  assert.match(configuration, /\$transientFailureCount = 0[\s\S]*\$transientFailurePhase = "none"[\s\S]*\$transientFailureType = "none"/);
-  assert.match(configuration, /catch \{[\s\S]*\$transientFailureType -notin @\([\s\S]*"COMException"[\s\S]*"ElementNotAvailableException"[\s\S]*"InvalidOperationException"[\s\S]*\)\s*\) \{\s*throw\s*\}[\s\S]*\$transientFailureCount = \[Math\]::Min\(\$transientFailureCount \+ 1, 9999\)/);
-  assert.match(configuration, /PROC_MON_FILTER_WINDOW_SCAN_TRANSIENTS=stage:\$stageClass;count:\$transientFailureCount;phase:\$transientFailurePhase;type:\$transientFailureType/);
+  assert.match(configuration, /\$script:windowScanTransientCount = 0[\s\S]*\$script:windowScanTransientPhase = "none"[\s\S]*\$script:windowScanTransientType = "none"/);
+  assert.match(configuration, /catch \{[\s\S]*\$transientFailureType -notin @\([\s\S]*"COMException"[\s\S]*"ElementNotAvailableException"[\s\S]*"InvalidOperationException"[\s\S]*\)\s*\) \{\s*throw\s*\}[\s\S]*\$script:windowScanTransientCount = \[Math\]::Min\(\s*\$script:windowScanTransientCount \+ 1, 9999\s*\)/);
+  assert.match(configuration, /PROC_MON_FILTER_WINDOW_SCAN_TRANSIENTS=stage:\$stageClass;count:\$script:windowScanTransientCount;phase:\$script:windowScanTransientPhase;type:\$script:windowScanTransientType/);
+  assert.match(configuration, /\} catch \{\s*\[Console\]::Out\.WriteLine\("PROC_MON_FILTER_FAILED_STAGE=\$script:stage"\)[\s\S]*PROC_MON_FILTER_WINDOW_SCAN_TRANSIENTS=/);
 });
 
 test("AC-05: only offline export clears display filters and all exported paths remain validated", async () => {
