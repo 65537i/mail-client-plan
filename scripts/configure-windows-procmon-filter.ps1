@@ -1503,13 +1503,16 @@ function Wait-MainWindow([System.Diagnostics.Process]$Process, [int]$TimeoutSeco
           [System.Windows.Automation.ControlType]::Window
         )
         $scanPhase = "refresh-process"
+        $script:windowScanPhase = $scanPhase
         $Process.Refresh()
         $scanPhase = "check-process"
+        $script:windowScanPhase = $scanPhase
         if ($Process.HasExited) {
           $processExited = $true
           break
         }
         $scanPhase = "enumerate-uia-windows"
+        $script:windowScanPhase = $scanPhase
         $windows = [System.Windows.Automation.AutomationElement]::RootElement.FindAll(
           [System.Windows.Automation.TreeScope]::Children,
           $windowCondition
@@ -1517,6 +1520,7 @@ function Wait-MainWindow([System.Diagnostics.Process]$Process, [int]$TimeoutSeco
         $rootWindowCount = $windows.Count
         foreach ($window in $windows) {
           $scanPhase = "read-uia-window-owner"
+          $script:windowScanPhase = $scanPhase
           if ($window.Current.ProcessId -eq $Process.Id) {
             $ownedWindowCount++
             $windowFound = $true
@@ -1524,10 +1528,12 @@ function Wait-MainWindow([System.Diagnostics.Process]$Process, [int]$TimeoutSeco
           }
         }
         $scanPhase = "read-main-window-handle"
+        $script:windowScanPhase = $scanPhase
         $mainHandle = $Process.MainWindowHandle
         $mainHandleAvailable = $mainHandle -ne [IntPtr]::Zero
         if ($mainHandleAvailable) {
           $scanPhase = "read-main-window-owner"
+          $script:windowScanPhase = $scanPhase
           $mainWindow = [System.Windows.Automation.AutomationElement]::FromHandle($mainHandle)
           if ($mainWindow.Current.ProcessId -eq $Process.Id) {
             $windowFound = $true
@@ -1571,6 +1577,7 @@ function Wait-MainWindow([System.Diagnostics.Process]$Process, [int]$TimeoutSeco
         $script:windowScanTransientType = $transientFailureType
       }
       $scanPhase = "wait"
+      $script:windowScanPhase = $scanPhase
       Start-Sleep -Milliseconds 100
     } while ([DateTime]::UtcNow -lt $deadline)
     $scanPhase = "foreground-owner"
