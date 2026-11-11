@@ -140,6 +140,12 @@ test("AC-05: transient window-discovery retries retain only bounded classificati
   );
   assert.equal(
     describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_WINDOW_SCAN_TRANSIENTS=stage:initial;count:0;phase:get-uia-window-element;type:none",
+    ),
+    "; initial-window-scan-transients=count:0;phase:get-uia-window-element;type:none",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(
       "PROC_MON_FILTER_WINDOW_SCAN_TRANSIENTS=stage:initial;count:0;phase:create-window-condition;type:TypeInitializationException",
     ),
     "; initial-window-scan-transients=count:0;phase:create-window-condition;type:TypeInitializationException",

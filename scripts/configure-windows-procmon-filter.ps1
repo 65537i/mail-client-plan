@@ -1518,7 +1518,10 @@ function Wait-MainWindow([System.Diagnostics.Process]$Process, [int]$TimeoutSeco
           $windowCondition
         )
         $rootWindowCount = $windows.Count
-        foreach ($window in $windows) {
+        for ($windowIndex = 0; $windowIndex -lt $rootWindowCount; $windowIndex++) {
+          $scanPhase = "get-uia-window-element"
+          $script:windowScanPhase = $scanPhase
+          $window = $windows[$windowIndex]
           $scanPhase = "read-uia-window-owner"
           $script:windowScanPhase = $scanPhase
           if ($window.Current.ProcessId -eq $Process.Id) {
