@@ -14,7 +14,7 @@ export function appendBoundedWindowsFilterOutput(current, chunk) {
   if (combined.length <= windowsFilterOutputLimit) return combined;
   const evidence = new Map();
   for (const match of combined.matchAll(
-    /^(PROC_MON_FILTER_CONFIG_PATHS|PROC_MON_FILTER_RELOADED_RULES|PROC_MON_FILTER_RELOADED_UI|PROC_MON_FILTER_RELOADED_DROP)=[^\r\n]{1,1024}\r?$/gm,
+    /^(PROC_MON_FILTER_CONFIG_PATHS|PROC_MON_FILTER_RELOADED_RULES|PROC_MON_FILTER_RELOADED_UI|PROC_MON_FILTER_RELOADED_DROP|PROC_MON_FILTER_WINDOW_SCAN)=[^\r\n]{1,1024}\r?$/gm,
   )) {
     if (!evidence.has(match[1]) && describeWindowsFilterDiagnostics(match[0])) {
       evidence.set(match[1], match[0].replace(/\r$/, ""));
@@ -453,7 +453,7 @@ export function describeWindowsFilterDiagnostics(output) {
   }
 
   const windowScan = output.match(
-    /^PROC_MON_FILTER_WINDOW_SCAN=stage:(initial|reload);phase:(refresh-process|check-process|enumerate-uia-windows|read-uia-window-owner|read-main-window-handle|read-main-window-owner|wait|foreground-owner);process-exited:(true|false);root-windows:(\d{1,4});uia-owned-windows:(\d{1,4});main-handle:(available|unavailable);foreground-owner:(same|other|unavailable)\r?$/m,
+    /^PROC_MON_FILTER_WINDOW_SCAN=stage:(initial|reload);phase:(create-window-condition|refresh-process|check-process|enumerate-uia-windows|get-uia-window-element|read-uia-window-current|read-uia-window-owner|read-main-window-handle|read-main-window-owner|wait|foreground-owner);process-exited:(true|false);root-windows:(\d{1,4});uia-owned-windows:(\d{1,4});main-handle:(available|unavailable);foreground-owner:(same|other|unavailable)\r?$/m,
   );
   if (windowScan) {
     const [rootWindows, ownedWindows] = windowScan.slice(4, 6).map(Number);

@@ -169,6 +169,24 @@ test("AC-05: transient window-discovery retries retain only bounded classificati
   );
 });
 
+test("AC-05: bounded output retains and parses the final window-scan summary", () => {
+  const scan = "PROC_MON_FILTER_WINDOW_SCAN=stage:initial;phase:read-uia-window-owner;"
+    + "process-exited:false;root-windows:23;uia-owned-windows:0;"
+    + "main-handle:unavailable;foreground-owner:other";
+  const captured = appendBoundedWindowsFilterOutput(
+    `${"x".repeat(9000)}\n${scan}\n`,
+    `${"y".repeat(12000)}\n`,
+  );
+  assert.equal(captured.length, windowsFilterOutputLimit);
+  assert.ok(captured.includes(scan));
+  assert.ok(
+    describeWindowsFilterDiagnostics(captured).includes(
+      "; initial-window-scan=phase:read-uia-window-owner;process-exited:false;"
+        + "root-windows:23;uia-owned-windows:0;main-handle:unavailable;foreground-owner:other",
+    ),
+  );
+});
+
 test("AC-05: reloaded filter UI diagnostics retain only bounded control counts", () => {
   assert.equal(
     describeWindowsFilterDiagnostics(

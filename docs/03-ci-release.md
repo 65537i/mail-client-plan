@@ -34,6 +34,8 @@ Run 634（source `ef68ef4`）ではscan phaseの記録が`read-uia-window-owner`
 
 Run 635（source `69a56f2`）もclean Windows baseline（陽性ReadFile 1 / canary 0）の後に`find-main-window`で失敗。indexed UIA element取得後にphaseは`read-uia-window-owner`となり、攻撃WebView未到達、Windows failure、plan/Ubuntu x64/macOS Intel success、旧macOS ARM64 runner cancelled、overall cancelled。`AutomationElement.Current`と`Current.ProcessId`のどちらが失敗するかはまだ切り分けられていない。次のsliceでは両property accessを別々のfixed phaseへ記録する。Node 71/71、Windows PowerShell fixtures、syntax/diff check成功。AC-05未達、gate不変。
 
+Run 636（source `fd8ff76`）もWindows baseline陽性ReadFile 1 / canary 0の後に`find-main-window`で失敗し、failure textは`count:0;phase:read-uia-window-owner;type:none`とouter `InvalidOperationException`を報告した。phaseは`Current.ProcessId`読取の直前markerであり、throwの証明ではない。failure textにroot/owned window countを持つ別のbounded scan lineは現れなかった。output collectorは上限超過時に4種の証拠だけを明示保持し、window-scan lineは対象外だったため、次のsliceで同lineをallowlist/validation後に保持し、新phase名もparserに受理させる。これは失敗診断の可視性だけで、監査判定やwindow ownershipを変更しない。Run 636はplan/Ubuntu x64/macOS Intel成功、Windows failure、macOS ARM64旧runnerでcancelled、overall cancelled。AC-05未達。
+
 [Run 519](https://github.com/65537i/mail-client-plan/actions/runs/41306084970)（Windows 2025 x64 / webview）は長いInstance Nameで後続列がずれた行により`row-shape`停止。instance行はtoken順（先頭Filter / Altitude、末尾Frame / SprtFtrs / 任意VlStatus）で検証する方式へ変更した。
 
 [Run 517](https://github.com/65537i/mail-client-plan/actions/runs/41304809374)（`7cb3a2e`、Windows 2025 x64 / webview）はconfiguration exportを通過し、live Filter Manager parserの`row-shape`（列診断`word-integer-words-integer-barehex-empty`）で停止。`fltmc instances -v`の固定幅出力（空白入りInstance Name、`0x`無しSprtFtrs、空VlStatus）をseparator列位置で検証する受理経路を追加し、越境・タブ・未知値はfail closedのまま。
