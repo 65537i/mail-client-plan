@@ -465,7 +465,7 @@ export function describeWindowsFilterDiagnostics(output) {
   }
 
   const windowScanTransients = output.match(
-    /^PROC_MON_FILTER_WINDOW_SCAN_TRANSIENTS=stage:(initial|reload);count:(\d{1,4});phase:(not-started|create-window-condition|refresh-process|check-process|enumerate-uia-windows|get-uia-window-element|read-uia-window-owner|read-main-window-handle|read-main-window-owner|wait|foreground-owner);type:(ArgumentException|COMException|ElementNotAvailableException|InvalidOperationException|MethodInvocationException|TypeInitializationException|Other|none)\r?$/m,
+    /^PROC_MON_FILTER_WINDOW_SCAN_TRANSIENTS=stage:(initial|reload);count:(\d{1,4});phase:(not-started|create-window-condition|refresh-process|check-process|enumerate-uia-windows|get-uia-window-element|read-uia-window-current|read-uia-window-owner|read-main-window-handle|read-main-window-owner|wait|foreground-owner);type:(ArgumentException|COMException|ElementNotAvailableException|InvalidOperationException|MethodInvocationException|TypeInitializationException|Other|none)\r?$/m,
   );
   const transientCount = windowScanTransients ? Number(windowScanTransients[2]) : -1;
   const transientPhase = windowScanTransients?.[3];

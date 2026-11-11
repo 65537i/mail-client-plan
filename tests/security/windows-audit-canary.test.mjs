@@ -313,6 +313,7 @@ test("AC-05: Procmon window discovery retries transient UIA ownership reads befo
     "check-process",
     "enumerate-uia-windows",
     "get-uia-window-element",
+    "read-uia-window-current",
     "read-uia-window-owner",
     "read-main-window-handle",
     "read-main-window-owner",
