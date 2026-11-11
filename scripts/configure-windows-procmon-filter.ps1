@@ -1530,6 +1530,8 @@ function Wait-MainWindow([System.Diagnostics.Process]$Process, [int]$TimeoutSeco
           if ($windowCurrent.ProcessId -eq $Process.Id) {
             $ownedWindowCount++
             $windowFound = $true
+            $scanPhase = "window-found"
+            $script:windowScanPhase = $scanPhase
             return $window
           }
         }
@@ -1543,6 +1545,8 @@ function Wait-MainWindow([System.Diagnostics.Process]$Process, [int]$TimeoutSeco
           $mainWindow = [System.Windows.Automation.AutomationElement]::FromHandle($mainHandle)
           if ($mainWindow.Current.ProcessId -eq $Process.Id) {
             $windowFound = $true
+            $scanPhase = "window-found"
+            $script:windowScanPhase = $scanPhase
             return $mainWindow
           }
         }
@@ -1595,16 +1599,17 @@ function Wait-MainWindow([System.Diagnostics.Process]$Process, [int]$TimeoutSeco
       ) { "same" } else { "other" }
     }
   } finally {
-    if (-not $windowFound) {
-      $stageClass = if ($script:stage -eq "find-reloaded-main-window") {
-        "reload"
-      } else {
-        "initial"
-      }
-      [Console]::Out.WriteLine(
-        "PROC_MON_FILTER_WINDOW_SCAN=stage:$stageClass;phase:$scanPhase;process-exited:$($processExited.ToString().ToLowerInvariant());root-windows:$([Math]::Min($rootWindowCount, 9999));uia-owned-windows:$([Math]::Min($ownedWindowCount, 9999));main-handle:$(if ($mainHandleAvailable) { 'available' } else { 'unavailable' });foreground-owner:$foregroundOwner"
-      )
+    $stageClass = if ($script:stage -in @(
+        "find-reloaded-main-window",
+        "activate-reloaded-main-window"
+      )) {
+      "reload"
+    } else {
+      "initial"
     }
+    [Console]::Out.WriteLine(
+      "PROC_MON_FILTER_WINDOW_SCAN=stage:$stageClass;phase:$scanPhase;process-exited:$($processExited.ToString().ToLowerInvariant());window-found:$($windowFound.ToString().ToLowerInvariant());root-windows:$([Math]::Min($rootWindowCount, 9999));uia-owned-windows:$([Math]::Min($ownedWindowCount, 9999));main-handle:$(if ($mainHandleAvailable) { 'available' } else { 'unavailable' });foreground-owner:$foregroundOwner"
+    )
   }
   if ($processExited) {
     throw "Process Monitor exited before its configuration window became available"
@@ -2693,6 +2698,7 @@ try {
   }
   Set-Stage "find-main-window"
   $main = Wait-MainWindow $process
+  Set-Stage "focus-main-window"
   $main.SetFocus()
   Set-Stage "find-filter-menu"
   $filterMenuCondition = [System.Windows.Automation.AndCondition]::new(

@@ -315,6 +315,7 @@ test("AC-05: Procmon window discovery retries transient UIA ownership reads befo
     "get-uia-window-element",
     "read-uia-window-current",
     "read-uia-window-owner",
+    "window-found",
     "read-main-window-handle",
     "read-main-window-owner",
     "wait",
@@ -329,6 +330,8 @@ test("AC-05: Procmon window discovery retries transient UIA ownership reads befo
   assert.match(configuration, /\$script:windowScanFailureType = if \(\$transientFailureType -in @\([\s\S]*"TypeInitializationException"[\s\S]*\)\) \{\s*\$transientFailureType\s*\} else \{\s*"Other"\s*\}[\s\S]*if \(\$transientFailureType -notin @\(/);
   assert.match(configuration, /PROC_MON_FILTER_WINDOW_SCAN_TRANSIENTS=stage:\$stageClass;count:\$script:windowScanTransientCount;phase:\$script:windowScanPhase;type:\$script:windowScanFailureType/);
   assert.match(configuration, /\} catch \{\s*\[Console\]::Out\.WriteLine\("PROC_MON_FILTER_FAILED_STAGE=\$script:stage"\)[\s\S]*PROC_MON_FILTER_WINDOW_SCAN_TRANSIENTS=/);
+  assert.match(configuration, /Set-Stage "find-main-window"\s+\$main = Wait-MainWindow \$process\s+Set-Stage "focus-main-window"\s+\$main\.SetFocus\(\)/);
+  assert.match(configuration, /finally \{\s+\$stageClass = if \(\$script:stage -in @\([\s\S]*"activate-reloaded-main-window"[\s\S]*\)\)[\s\S]*PROC_MON_FILTER_WINDOW_SCAN=.*window-found:/);
 });
 
 test("AC-05: only offline export clears display filters and all exported paths remain validated", async () => {

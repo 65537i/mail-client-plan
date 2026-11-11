@@ -106,20 +106,20 @@ test("AC-05: reloaded Windows filter rule summaries retain bounded counts only",
 test("AC-05: reload window diagnostics retain only bounded process state", () => {
   const summary = "PROC_MON_FILTER_WINDOW_SCAN="
     + "stage:reload;phase:enumerate-uia-windows;process-exited:false;"
-    + "root-windows:2;uia-owned-windows:0;"
+    + "window-found:false;root-windows:2;uia-owned-windows:0;"
     + "main-handle:unavailable;foreground-owner:other";
   assert.equal(
     describeWindowsFilterDiagnostics(summary),
     "; reload-window-scan=phase:enumerate-uia-windows;process-exited:false;"
-      + "root-windows:2;uia-owned-windows:0;"
+      + "window-found:false;root-windows:2;uia-owned-windows:0;"
       + "main-handle:unavailable;foreground-owner:other",
   );
   assert.equal(
     describeWindowsFilterDiagnostics([
-      "PROC_MON_FILTER_WINDOW_SCAN=stage:reload;phase:wait;process-exited:false;root-windows:2;uia-owned-windows:3;main-handle:unavailable;foreground-owner:other",
-      "PROC_MON_FILTER_WINDOW_SCAN=stage:reload;phase:wait;process-exited:false;root-windows:10000;uia-owned-windows:0;main-handle:unavailable;foreground-owner:other",
-      "PROC_MON_FILTER_WINDOW_SCAN=stage:reload;phase:private;process-exited:false;root-windows:2;uia-owned-windows:0;main-handle:unavailable;foreground-owner:other",
-      "PROC_MON_FILTER_WINDOW_SCAN=stage:reload;phase:wait;process-exited:false;root-windows:2;uia-owned-windows:0;main-handle:unavailable;foreground-owner:other;handle=0x1234",
+      "PROC_MON_FILTER_WINDOW_SCAN=stage:reload;phase:wait;process-exited:false;window-found:false;root-windows:2;uia-owned-windows:3;main-handle:unavailable;foreground-owner:other",
+      "PROC_MON_FILTER_WINDOW_SCAN=stage:reload;phase:wait;process-exited:false;window-found:false;root-windows:10000;uia-owned-windows:0;main-handle:unavailable;foreground-owner:other",
+      "PROC_MON_FILTER_WINDOW_SCAN=stage:reload;phase:private;process-exited:false;window-found:false;root-windows:2;uia-owned-windows:0;main-handle:unavailable;foreground-owner:other",
+      "PROC_MON_FILTER_WINDOW_SCAN=stage:reload;phase:wait;process-exited:false;window-found:false;root-windows:2;uia-owned-windows:0;main-handle:unavailable;foreground-owner:other;handle=0x1234",
     ].join("\n")),
     "",
   );
@@ -170,8 +170,8 @@ test("AC-05: transient window-discovery retries retain only bounded classificati
 });
 
 test("AC-05: bounded output retains and parses the final window-scan summary", () => {
-  const scan = "PROC_MON_FILTER_WINDOW_SCAN=stage:initial;phase:read-uia-window-owner;"
-    + "process-exited:false;root-windows:23;uia-owned-windows:0;"
+  const scan = "PROC_MON_FILTER_WINDOW_SCAN=stage:initial;phase:window-found;"
+    + "process-exited:false;window-found:true;root-windows:23;uia-owned-windows:1;"
     + "main-handle:unavailable;foreground-owner:other";
   const captured = appendBoundedWindowsFilterOutput(
     `${"x".repeat(9000)}\n${scan}\n`,
@@ -181,8 +181,9 @@ test("AC-05: bounded output retains and parses the final window-scan summary", (
   assert.ok(captured.includes(scan));
   assert.ok(
     describeWindowsFilterDiagnostics(captured).includes(
-      "; initial-window-scan=phase:read-uia-window-owner;process-exited:false;"
-        + "root-windows:23;uia-owned-windows:0;main-handle:unavailable;foreground-owner:other",
+      "; initial-window-scan=phase:window-found;process-exited:false;"
+        + "window-found:true;root-windows:23;uia-owned-windows:1;"
+        + "main-handle:unavailable;foreground-owner:other",
     ),
   );
 });

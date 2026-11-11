@@ -453,13 +453,13 @@ export function describeWindowsFilterDiagnostics(output) {
   }
 
   const windowScan = output.match(
-    /^PROC_MON_FILTER_WINDOW_SCAN=stage:(initial|reload);phase:(create-window-condition|refresh-process|check-process|enumerate-uia-windows|get-uia-window-element|read-uia-window-current|read-uia-window-owner|read-main-window-handle|read-main-window-owner|wait|foreground-owner);process-exited:(true|false);root-windows:(\d{1,4});uia-owned-windows:(\d{1,4});main-handle:(available|unavailable);foreground-owner:(same|other|unavailable)\r?$/m,
+    /^PROC_MON_FILTER_WINDOW_SCAN=stage:(initial|reload);phase:(create-window-condition|refresh-process|check-process|enumerate-uia-windows|get-uia-window-element|read-uia-window-current|read-uia-window-owner|read-main-window-handle|read-main-window-owner|wait|foreground-owner|window-found);process-exited:(true|false);window-found:(true|false);root-windows:(\d{1,4});uia-owned-windows:(\d{1,4});main-handle:(available|unavailable);foreground-owner:(same|other|unavailable)\r?$/m,
   );
   if (windowScan) {
-    const [rootWindows, ownedWindows] = windowScan.slice(4, 6).map(Number);
+    const [rootWindows, ownedWindows] = windowScan.slice(5, 7).map(Number);
     if (rootWindows <= 9999 && ownedWindows <= rootWindows) {
       diagnostics.push(
-        `${windowScan[1]}-window-scan=phase:${windowScan[2]};process-exited:${windowScan[3]};root-windows:${rootWindows};uia-owned-windows:${ownedWindows};main-handle:${windowScan[6]};foreground-owner:${windowScan[7]}`,
+        `${windowScan[1]}-window-scan=phase:${windowScan[2]};process-exited:${windowScan[3]};window-found:${windowScan[4]};root-windows:${rootWindows};uia-owned-windows:${ownedWindows};main-handle:${windowScan[7]};foreground-owner:${windowScan[8]}`,
       );
     }
   }
