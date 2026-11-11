@@ -14,7 +14,7 @@ export function appendBoundedWindowsFilterOutput(current, chunk) {
   if (combined.length <= windowsFilterOutputLimit) return combined;
   const evidence = new Map();
   for (const match of combined.matchAll(
-    /^(PROC_MON_FILTER_CONFIG_PATHS|PROC_MON_FILTER_RELOADED_RULES|PROC_MON_FILTER_RELOADED_UI|PROC_MON_FILTER_RELOADED_DROP|PROC_MON_FILTER_WINDOW_SCAN)=[^\r\n]{1,1024}\r?$/gm,
+    /^(PROC_MON_FILTER_CONFIG_PATHS|PROC_MON_FILTER_RELOADED_RULES|PROC_MON_FILTER_RELOADED_UI|PROC_MON_FILTER_RELOADED_DROP|PROC_MON_FILTER_WINDOW_SCAN|PROC_MON_FILTER_MAIN_FOREGROUND)=[^\r\n]{1,1024}\r?$/gm,
   )) {
     if (!evidence.has(match[1]) && describeWindowsFilterDiagnostics(match[0])) {
       evidence.set(match[1], match[0].replace(/\r$/, ""));
@@ -474,6 +474,13 @@ export function describeWindowsFilterDiagnostics(output) {
     diagnostics.push(
       `${windowScanTransients[1]}-window-scan-transients=count:${transientCount};phase:${transientPhase};type:${transientType}`,
     );
+  }
+
+  const mainForeground = output.match(
+    /^PROC_MON_FILTER_MAIN_FOREGROUND=gate:(passed|failed)\r?$/m,
+  );
+  if (mainForeground) {
+    diagnostics.push(`main-window-foreground-gate=${mainForeground[1]}`);
   }
 
   const reloadedFilterUi = output.match(

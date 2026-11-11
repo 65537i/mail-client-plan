@@ -173,17 +173,24 @@ test("AC-05: bounded output retains and parses the final window-scan summary", (
   const scan = "PROC_MON_FILTER_WINDOW_SCAN=stage:initial;phase:window-found;"
     + "process-exited:false;window-found:true;root-windows:23;uia-owned-windows:1;"
     + "main-handle:unavailable;foreground-owner:other";
+  const focus = "PROC_MON_FILTER_MAIN_FOREGROUND=gate:failed";
   const captured = appendBoundedWindowsFilterOutput(
-    `${"x".repeat(9000)}\n${scan}\n`,
+    `${"x".repeat(9000)}\n${scan}\n${focus}\n`,
     `${"y".repeat(12000)}\n`,
   );
   assert.equal(captured.length, windowsFilterOutputLimit);
   assert.ok(captured.includes(scan));
+  assert.ok(captured.includes(focus));
   assert.ok(
     describeWindowsFilterDiagnostics(captured).includes(
       "; initial-window-scan=phase:window-found;process-exited:false;"
         + "window-found:true;root-windows:23;uia-owned-windows:1;"
         + "main-handle:unavailable;foreground-owner:other",
+    ),
+  );
+  assert.ok(
+    describeWindowsFilterDiagnostics(captured).includes(
+      "; main-window-foreground-gate=failed",
     ),
   );
 });
@@ -568,6 +575,14 @@ test("AC-05: configuration save observations expose states, not paths or dialog 
   );
   assert.equal(
     describeWindowsFilterDiagnostics("PROC_MON_FILTER_RELOAD_MAIN_FOREGROUND=gate:C:\\private"),
+    "",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics("PROC_MON_FILTER_MAIN_FOREGROUND=gate:passed"),
+    "; main-window-foreground-gate=passed",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics("PROC_MON_FILTER_MAIN_FOREGROUND=gate:C:\\private"),
     "",
   );
   assert.equal(

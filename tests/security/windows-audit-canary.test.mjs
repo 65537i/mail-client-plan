@@ -330,7 +330,15 @@ test("AC-05: Procmon window discovery retries transient UIA ownership reads befo
   assert.match(configuration, /\$script:windowScanFailureType = if \(\$transientFailureType -in @\([\s\S]*"TypeInitializationException"[\s\S]*\)\) \{\s*\$transientFailureType\s*\} else \{\s*"Other"\s*\}[\s\S]*if \(\$transientFailureType -notin @\(/);
   assert.match(configuration, /PROC_MON_FILTER_WINDOW_SCAN_TRANSIENTS=stage:\$stageClass;count:\$script:windowScanTransientCount;phase:\$script:windowScanPhase;type:\$script:windowScanFailureType/);
   assert.match(configuration, /\} catch \{\s*\[Console\]::Out\.WriteLine\("PROC_MON_FILTER_FAILED_STAGE=\$script:stage"\)[\s\S]*PROC_MON_FILTER_WINDOW_SCAN_TRANSIENTS=/);
-  assert.match(configuration, /Set-Stage "find-main-window"\s+\$main = Wait-MainWindow \$process\s+Set-Stage "focus-main-window"\s+\$main\.SetFocus\(\)/);
+  const foregroundHelper = configuration.match(
+    /function Set-VerifiedProcmonMainWindowForeground\(([\s\S]*?)\r?\n\}\r?\n\r?\nfunction Wait-ProcessMenu/,
+  )?.[1] ?? "";
+  assert.match(foregroundHelper, /\$mainWindowState\.ProcessId -ne \$Process\.Id/);
+  assert.match(foregroundHelper, /GetWindowProcessId\(\$mainWindowHandle\) -ne \$Process\.Id/);
+  assert.match(foregroundHelper, /SetForegroundWindow\(\$mainWindowHandle\)/);
+  assert.match(foregroundHelper, /GetForegroundWindow\(\)[\s\S]*GetWindowProcessId\(\$foregroundHandle\) -eq \$Process\.Id/);
+  assert.match(configuration, /Set-Stage "find-main-window"\s+\$main = Wait-MainWindow \$process\s+Set-Stage "focus-main-window"\s+\$mainWindowHandle = Set-VerifiedProcmonMainWindowForeground \$main \$process/);
+  assert.match(configuration, /Set-Stage "activate-reloaded-main-window"\s+\$mainWindowHandle = Set-VerifiedProcmonMainWindowForeground \$main \$process/);
   assert.match(configuration, /finally \{\s+\$stageClass = if \(\$script:stage -in @\([\s\S]*"activate-reloaded-main-window"[\s\S]*\)\)[\s\S]*PROC_MON_FILTER_WINDOW_SCAN=.*window-found:/);
 });
 
