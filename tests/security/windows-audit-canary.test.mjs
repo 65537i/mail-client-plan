@@ -338,7 +338,12 @@ test("AC-05: Procmon window discovery retries transient UIA ownership reads befo
   assert.match(foregroundHelper, /SetForegroundWindow\(\$mainWindowHandle\)/);
   assert.match(foregroundHelper, /GetForegroundWindow\(\)[\s\S]*GetWindowProcessId\(\$foregroundHandle\) -eq \$Process\.Id/);
   assert.match(configuration, /Set-Stage "find-main-window"\s+\$main = Wait-MainWindow \$process\s+Set-Stage "focus-main-window"\s+\$mainWindowHandle = Set-VerifiedProcmonMainWindowForeground \$main \$process/);
+  assert.match(configuration, /Set-Stage "verify-main-foreground-for-filter-shortcut"\s+\$currentForegroundHandle = \[ProcmonNativeMenu\]::GetForegroundWindow\(\)[\s\S]*Set-Stage "dismiss-unresolved-filter-menu"\s+\[System\.Windows\.Forms\.SendKeys\]::SendWait\("\{ESC\}"\)/);
+  assert.match(configuration, /if \(\$null -eq \$menu\)[\s\S]*SendWait\("\{ESC\}"\)[\s\S]*GetForegroundWindow\(\)[\s\S]*SendWait\("\^l"\)[\s\S]*Wait-FilterDialog \$process \$main/);
+  assert.match(configuration, /Set-Stage "focus-main-for-drop-filtered-events"\s+\$mainWindowHandle = Set-VerifiedProcmonMainWindowForeground \$main \$process/);
+  assert.match(configuration, /Set-Stage "focus-main-for-export"\s+\$mainWindowHandle = Set-VerifiedProcmonMainWindowForeground \$main \$process/);
   assert.match(configuration, /Set-Stage "activate-reloaded-main-window"\s+\$mainWindowHandle = Set-VerifiedProcmonMainWindowForeground \$main \$process/);
+  assert.doesNotMatch(configuration, /\$main\.SetFocus\(\)/);
   assert.match(configuration, /finally \{\s+\$stageClass = if \(\$script:stage -in @\([\s\S]*"activate-reloaded-main-window"[\s\S]*\)\)[\s\S]*PROC_MON_FILTER_WINDOW_SCAN=.*window-found:/);
 });
 

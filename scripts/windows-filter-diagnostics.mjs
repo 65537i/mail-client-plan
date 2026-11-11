@@ -14,10 +14,14 @@ export function appendBoundedWindowsFilterOutput(current, chunk) {
   if (combined.length <= windowsFilterOutputLimit) return combined;
   const evidence = new Map();
   for (const match of combined.matchAll(
-    /^(PROC_MON_FILTER_CONFIG_PATHS|PROC_MON_FILTER_RELOADED_RULES|PROC_MON_FILTER_RELOADED_UI|PROC_MON_FILTER_RELOADED_DROP|PROC_MON_FILTER_WINDOW_SCAN|PROC_MON_FILTER_MAIN_FOREGROUND)=[^\r\n]{1,1024}\r?$/gm,
+    /^(PROC_MON_FILTER_CONFIG_PATHS|PROC_MON_FILTER_RELOADED_RULES|PROC_MON_FILTER_RELOADED_UI|PROC_MON_FILTER_RELOADED_DROP|PROC_MON_FILTER_WINDOW_SCAN|PROC_MON_FILTER_MAIN_FOREGROUND|PROC_MON_FILTER_INITIAL_SHORTCUT)=[^\r\n]{1,1024}\r?$/gm,
   )) {
-    if (!evidence.has(match[1]) && describeWindowsFilterDiagnostics(match[0])) {
-      evidence.set(match[1], match[0].replace(/\r$/, ""));
+    const stage = match[1] === "PROC_MON_FILTER_MAIN_FOREGROUND"
+      ? match[0].match(/stage:(initial|drop|export);/)?.[1] ?? "legacy"
+      : null;
+    const key = stage ? `${match[1]}:${stage}` : match[1];
+    if (!evidence.has(key) && describeWindowsFilterDiagnostics(match[0])) {
+      evidence.set(key, match[0].replace(/\r$/, ""));
     }
   }
   const retainedEvidence = evidence.size ? `${[...evidence.values()].join("\n")}\n` : "";
@@ -476,11 +480,18 @@ export function describeWindowsFilterDiagnostics(output) {
     );
   }
 
-  const mainForeground = output.match(
-    /^PROC_MON_FILTER_MAIN_FOREGROUND=gate:(passed|failed)\r?$/m,
+  const mainForeground = output.matchAll(
+    /^PROC_MON_FILTER_MAIN_FOREGROUND=(?:stage:(initial|drop|export);)?gate:(passed|failed)\r?$/gm,
   );
-  if (mainForeground) {
-    diagnostics.push(`main-window-foreground-gate=${mainForeground[1]}`);
+  for (const match of mainForeground) {
+    const name = match[1]
+      ? `${match[1]}-main-window-foreground-gate`
+      : "main-window-foreground-gate";
+    diagnostics.push(`${name}=${match[2]}`);
+  }
+
+  if (/^PROC_MON_FILTER_INITIAL_SHORTCUT=command:filter-dialog;state:sent\r?$/m.test(output)) {
+    diagnostics.push("initial-filter-dialog=keyboard-shortcut");
   }
 
   const reloadedFilterUi = output.match(

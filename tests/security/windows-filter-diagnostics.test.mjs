@@ -173,14 +173,18 @@ test("AC-05: bounded output retains and parses the final window-scan summary", (
   const scan = "PROC_MON_FILTER_WINDOW_SCAN=stage:initial;phase:window-found;"
     + "process-exited:false;window-found:true;root-windows:23;uia-owned-windows:1;"
     + "main-handle:unavailable;foreground-owner:other";
-  const focus = "PROC_MON_FILTER_MAIN_FOREGROUND=gate:failed";
+  const initialFocus = "PROC_MON_FILTER_MAIN_FOREGROUND=stage:initial;gate:passed";
+  const dropFocus = "PROC_MON_FILTER_MAIN_FOREGROUND=stage:drop;gate:failed";
+  const shortcut = "PROC_MON_FILTER_INITIAL_SHORTCUT=command:filter-dialog;state:sent";
   const captured = appendBoundedWindowsFilterOutput(
-    `${"x".repeat(9000)}\n${scan}\n${focus}\n`,
+    `${"x".repeat(9000)}\n${scan}\n${initialFocus}\n${dropFocus}\n${shortcut}\n`,
     `${"y".repeat(12000)}\n`,
   );
   assert.equal(captured.length, windowsFilterOutputLimit);
   assert.ok(captured.includes(scan));
-  assert.ok(captured.includes(focus));
+  assert.ok(captured.includes(initialFocus));
+  assert.ok(captured.includes(dropFocus));
+  assert.ok(captured.includes(shortcut));
   assert.ok(
     describeWindowsFilterDiagnostics(captured).includes(
       "; initial-window-scan=phase:window-found;process-exited:false;"
@@ -190,7 +194,9 @@ test("AC-05: bounded output retains and parses the final window-scan summary", (
   );
   assert.ok(
     describeWindowsFilterDiagnostics(captured).includes(
-      "; main-window-foreground-gate=failed",
+      "; initial-main-window-foreground-gate=passed"
+        + "; drop-main-window-foreground-gate=failed"
+        + "; initial-filter-dialog=keyboard-shortcut",
     ),
   );
 });
@@ -578,11 +584,31 @@ test("AC-05: configuration save observations expose states, not paths or dialog 
     "",
   );
   assert.equal(
+    describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_MAIN_FOREGROUND=stage:initial;gate:passed",
+    ),
+    "; initial-main-window-foreground-gate=passed",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_MAIN_FOREGROUND=stage:export;gate:C:\\private",
+    ),
+    "",
+  );
+  assert.equal(
     describeWindowsFilterDiagnostics("PROC_MON_FILTER_MAIN_FOREGROUND=gate:passed"),
     "; main-window-foreground-gate=passed",
   );
   assert.equal(
-    describeWindowsFilterDiagnostics("PROC_MON_FILTER_MAIN_FOREGROUND=gate:C:\\private"),
+    describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_INITIAL_SHORTCUT=command:filter-dialog;state:sent",
+    ),
+    "; initial-filter-dialog=keyboard-shortcut",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_INITIAL_SHORTCUT=command:private;state:sent",
+    ),
     "",
   );
   assert.equal(
