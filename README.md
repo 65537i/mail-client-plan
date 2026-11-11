@@ -22,7 +22,7 @@ VS Codeでこのフォルダを開き、Dev Containers拡張から「Reopen in C
 
 ### Windows（Dockerなし）
 
-1. [Node.js 24.22.0 x64](https://nodejs.org/dist/v24.22.0/node-v24.22.0-x64.msi)をインストールし、PowerShellで`npm install --global pnpm@12.14.0`を実行します。
+1. [Node.js 26.13.1 x64](https://nodejs.org/dist/v26.13.1/node-v26.13.1-x64.msi)をインストールし、PowerShellで`npm install --global pnpm@12.14.0`を実行します。
 2. [Rustup](https://www.rust-lang.org/tools/install)をインストールし、次を実行します。
 
    ```powershell

@@ -39,7 +39,7 @@ GitHub-hosted runnerの公式一覧でラベルとarchを確認した（2026-11-
 
 | 項目 | 固定値 |
 |---|---|
-| Node.js | 24.22.0 (LTS) |
+| Node.js | 26.13.1 (LTS) |
 | pnpm | 12.14.0 |
 | Rust | 1.99.1、`clippy` / `rustfmt` component |
 | Tauri CLI | 2.12.3 |
@@ -52,6 +52,8 @@ GitHub-hosted runnerの公式一覧でラベルとarchを確認した（2026-11-
 | Cargo lock | workspace rootの`Cargo.lock`、`--locked` |
 
 バージョンは公式配布情報とregistryで確認した時点の固定値。Tauri 1の設定・APIは使わない。
+
+2026-11-12にNode.js 26.13.1 (LTS)へ更新。公式release indexで26系がLTS、26.13.1が現行patchとして掲載されていることを確認した。pnpm 12.14.0のNode engineは`>=18`のため、この固定版を満たす。Node 24.22.0への参照は過去の検証履歴であり、現在の開発・CI pinではない。
 
 開発環境はNode公式Debian Bookwormイメージのdigest固定Dev Containerとし、Linux向けTauri依存、Xvfb、D-Bus、Rust toolchainを含める。Docker Desktop上ではlinux/arm64で動作するが、これはLinux arm64の製品サポートを意味しない。
 

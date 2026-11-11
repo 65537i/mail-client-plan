@@ -50,7 +50,7 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
-          node-version: 24.22.0
+          node-version: 26.13.1
       - name: Test CI planning and macOS file trace diagnostics
         run: node --test tests/ci/*.test.mjs tests/security/macos-file-trace.test.mjs tests/security/windows-file-trace.test.mjs
       - name: Select validation scope
@@ -78,7 +78,7 @@ jobs:
 
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
-          node-version: 24.22.0
+          node-version: 26.13.1
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
 

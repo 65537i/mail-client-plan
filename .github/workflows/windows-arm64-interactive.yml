@@ -86,7 +86,7 @@ jobs:
             throw "Checked-out source differs from the approved SHA"
           }
           $nodeVersion = node --version
-          if ($LASTEXITCODE -ne 0 -or $nodeVersion -cne "v24.22.0") { throw "Pinned Node is required" }
+          if ($LASTEXITCODE -ne 0 -or $nodeVersion -cne "v26.13.1") { throw "Pinned Node is required" }
           $nodeArch = node -p "process.arch"
           if ($LASTEXITCODE -ne 0 -or $nodeArch -cne "arm64") { throw "Native ARM64 Node is required" }
           $pnpmVersion = pnpm --version

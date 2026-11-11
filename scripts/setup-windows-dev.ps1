@@ -21,8 +21,8 @@ try {
   }
 
   $nodeVersion = Get-CommandVersion "node" @("--version")
-  if ($nodeVersion -and $nodeVersion -ne "v24.22.0") {
-    $issues.Add("Node.js must be v24.22.0; found $nodeVersion")
+  if ($nodeVersion -and $nodeVersion -ne "v26.13.1") {
+    $issues.Add("Node.js must be v26.13.1; found $nodeVersion")
   }
 
   $pnpmVersion = Get-CommandVersion "pnpm" @("--version")
