@@ -30,10 +30,12 @@
 | Ubuntu ARM64 | `ubuntu-24.04-arm` |
 | Windows x64 | `windows-2025` |
 | Windows ARM64 | `windows-11-arm` |
-| macOS arm64 | `macos-14` |
+| macOS arm64 | `macos-15` |
 | macOS x64 | `macos-15-intel` |
 
 GitHub-hosted runnerの公式一覧でラベルとarchを確認した（2026-11-08）。ARM64 runnerは対象リポジトリのプランで利用可能性・料金を確認する。runner上の成功は最低対応OSの実機検証を代替しない。
+
+2026-11-12更新: native Run 642で`macos-14-arm64-us-default`がunsupportedとして実行前に拒否されたため、公式一覧にARM64として掲載されている`macos-15`へ変更する。CI targetと手動入力も`macos-15-arm64`へ揃える。これはrunner更新であり、製品の最低OS候補macOS 14や最低OS実機検証要件を変更しない。先行する同リポジトリのRun 624で同runnerのfull検証成功を確認済み。
 
 ### 固定ツールチェーン
 

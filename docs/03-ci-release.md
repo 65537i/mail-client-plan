@@ -2,6 +2,8 @@
 
 ## 1. ワークフロー構成
 
+2026-11-12 runner correction: [Run 642](https://github.com/65537i/mail-client-plan/actions/runs/43186352360) rejected `macos-14-arm64-us-default` before the platform job could run. Use the officially supported ARM64 `macos-15` runner and planner/manual target `macos-15-arm64`; the same mapping passed macOS ARM64 full checks in [Run 624](https://github.com/65537i/mail-client-plan/actions/runs/42685595594). Keep macOS 14 as the product minimum candidate; this hosted runner does not replace minimum-OS device validation.
+
 ### Headless Windows audit candidate: ETW
 
 2026-11-10時点の調査候補であり、Procmonの代替採用やAC-05判定変更ではない。ローカルARM64でWPR/logman/tracerptと`Microsoft-Windows-Kernel-File`のprovider metadataをread-only確認した。capture/session開始、ETL保存、外部upload、追加dependency、audit policy/SACL変更、Actions実行は行っていない。hosted runnerでの権限・schema・実イベント取得は未確認。
@@ -255,7 +257,7 @@ Run513で得た`wait-export-config-dialog`停止の切り分け用に、UIA wind
 | compatibility | nightly / release | OS最低版/現行版、Windows / Ubuntu / macOSの各対象architecture、WebView差異、長時間同期、fuzz corpus |
 | release | protected tag + environment | 承認済みcommitの再ビルド、署名、公証、SBOM、hash、更新署名、draft release |
 
-runner候補: Ubuntu x64 / ARM64は`ubuntu-24.04` / `ubuntu-24.04-arm`、Windows x64 / ARM64は`windows-2025` / `windows-11-arm`、macOS arm64 / x64は`macos-14` / `macos-15-intel`。GitHub-hosted runnerのarchitecture対応表で確認するが、runnerラベルや内蔵OSは変更されうるため、各architectureの最低OS試験を別に持つ。latestやhosted runnerを製品の最低動作OSの証明にしない。
+runner候補: Ubuntu x64 / ARM64は`ubuntu-24.04` / `ubuntu-24.04-arm`、Windows x64 / ARM64は`windows-2025` / `windows-11-arm`、macOS arm64 / x64は`macos-15` / `macos-15-intel`。GitHub-hosted runnerのarchitecture対応表で確認するが、runnerラベルや内蔵OSは変更されうるため、各architectureの最低OS試験を別に持つ。latestやhosted runnerを製品の最低動作OSの証明にしない。
 
 Linux: Tauri公式prerequisitesに従うWebKitGTK 4.1等を固定された環境に導入し、GUI試験はXvfb + D-Bus + Secret Serviceのセッションを準備する。コンテナfixtureはUbuntuで動かし、他OSはネイティブのscripted protocol serverを使う。全OSでDocker利用可能と仮定しない。
 
@@ -604,7 +606,7 @@ Run 238（`2f48084`、Windows / webview）はExport Configurationの発見・Inv
 
 Actions → native → Run workflowで最新のmainを選び、以下を指定する。旧runのRe-run jobsは旧commitを使うため、修正確認には新規実行を使う。
 
-- `target`: `all` / `ubuntu-24.04-x64` / `ubuntu-24.04-arm64` / `windows-2025-x64` / `windows-11-arm64` / `macos-14-arm64` / `macos-15-intel`
+- `target`: `all` / `ubuntu-24.04-x64` / `ubuntu-24.04-arm64` / `windows-2025-x64` / `windows-11-arm64` / `macos-15-arm64` / `macos-15-intel`
 - GitHub-hosted ARM64 labels: Ubuntu `ubuntu-24.04-arm`、Windows `windows-11-arm`。Windows Procmon auditはrunner architectureに対応するMicrosoft署名済み`Procmon64.exe` / `Procmon64a.exe`を選択する。
 - `mode`:
   - `basic`: Rust format / workspace test / clippy、frontend typecheck / build。native release build、起動、protocol、実WebViewは未実行。

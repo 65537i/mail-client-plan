@@ -7,7 +7,7 @@ const platforms = [
   { platform: "ubuntu-24.04-arm64", runner: "ubuntu-24.04-arm" },
   { platform: "windows-2025-x64", runner: "windows-2025" },
   { platform: "windows-11-arm64", runner: "windows-11-arm" },
-  { platform: "macos-14-arm64", runner: "macos-14" },
+  { platform: "macos-15-arm64", runner: "macos-15" },
   { platform: "macos-15-intel", runner: "macos-15-intel" },
 ];
 
