@@ -14,11 +14,13 @@ export function appendBoundedWindowsFilterOutput(current, chunk) {
   if (combined.length <= windowsFilterOutputLimit) return combined;
   const evidence = new Map();
   for (const match of combined.matchAll(
-    /^(PROC_MON_FILTER_CONFIG_PATHS|PROC_MON_FILTER_RELOADED_RULES|PROC_MON_FILTER_RELOADED_UI|PROC_MON_FILTER_RELOADED_DROP|PROC_MON_FILTER_WINDOW_SCAN|PROC_MON_FILTER_MAIN_FOREGROUND|PROC_MON_FILTER_INITIAL_SHORTCUT)=[^\r\n]{1,1024}\r?$/gm,
+    /^(PROC_MON_FILTER_CONFIG_PATHS|PROC_MON_FILTER_RELOADED_RULES|PROC_MON_FILTER_RELOADED_UI|PROC_MON_FILTER_RELOADED_DROP|PROC_MON_FILTER_WINDOW_SCAN|PROC_MON_FILTER_MAIN_FOREGROUND|PROC_MON_FILTER_MAIN_FOREGROUND_DETAIL|PROC_MON_FILTER_INITIAL_SHORTCUT)=[^\r\n]{1,1024}\r?$/gm,
   )) {
     const stage = match[1] === "PROC_MON_FILTER_MAIN_FOREGROUND"
       ? match[0].match(/stage:(initial|shortcut|shortcut-dismiss|drop|export);/)?.[1] ?? "legacy"
-      : null;
+      : match[1] === "PROC_MON_FILTER_MAIN_FOREGROUND_DETAIL"
+        ? match[0].match(/stage:(drop);/)?.[1] ?? null
+        : null;
     const key = stage ? `${match[1]}:${stage}` : match[1];
     if (!evidence.has(key) && describeWindowsFilterDiagnostics(match[0])) {
       evidence.set(key, match[0].replace(/\r$/, ""));
@@ -488,6 +490,15 @@ export function describeWindowsFilterDiagnostics(output) {
       ? `${match[1]}-main-window-foreground-gate`
       : "main-window-foreground-gate";
     diagnostics.push(`${name}=${match[2]}`);
+  }
+
+  const mainForegroundDetail = output.matchAll(
+    /^PROC_MON_FILTER_MAIN_FOREGROUND_DETAIL=stage:drop;validation:(passed|process-mismatch|handle-missing|window-owner-mismatch);before:(target|same-process-other|other-process|unavailable);request:(accepted|rejected|not-attempted);after:(target|same-process-other|other-process|unavailable);wait-ms:(\d{1,4})\r?$/gm,
+  );
+  for (const match of mainForegroundDetail) {
+    diagnostics.push(
+      `drop-main-window-foreground-detail=validation:${match[1]};before:${match[2]};request:${match[3]};after:${match[4]};wait-ms:${Number(match[5])}`,
+    );
   }
 
   if (/^PROC_MON_FILTER_INITIAL_SHORTCUT=command:filter-dialog;state:sent\r?$/m.test(output)) {

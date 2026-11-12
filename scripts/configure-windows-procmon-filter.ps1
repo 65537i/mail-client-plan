@@ -1620,19 +1620,45 @@ function Wait-MainWindow([System.Diagnostics.Process]$Process, [int]$TimeoutSeco
 function Set-VerifiedProcmonMainWindowForeground(
   [System.Windows.Automation.AutomationElement]$MainWindow,
   [System.Diagnostics.Process]$Process,
-  [int]$TimeoutSeconds = 2
+  [int]$TimeoutSeconds = 2,
+  [ValidateSet("none", "drop")][string]$DiagnosticStage = "none"
 ) {
   $mainWindowState = $MainWindow.Current
   $mainWindowHandle = [IntPtr]$mainWindowState.NativeWindowHandle
-  if (
-    $mainWindowState.ProcessId -ne $Process.Id -or
-    $mainWindowHandle -eq [IntPtr]::Zero -or
-    [ProcmonNativeMenu]::GetWindowProcessId($mainWindowHandle) -ne $Process.Id
-  ) {
+  $validationState = if ($mainWindowState.ProcessId -ne $Process.Id) {
+    "process-mismatch"
+  } elseif ($mainWindowHandle -eq [IntPtr]::Zero) {
+    "handle-missing"
+  } elseif ([ProcmonNativeMenu]::GetWindowProcessId($mainWindowHandle) -ne $Process.Id) {
+    "window-owner-mismatch"
+  } else {
+    "passed"
+  }
+  $beforeForegroundHandle = [ProcmonNativeMenu]::GetForegroundWindow()
+  $beforeForegroundState = "unavailable"
+  if ($beforeForegroundHandle -ne [IntPtr]::Zero) {
+    $beforeForegroundProcessId = [ProcmonNativeMenu]::GetWindowProcessId($beforeForegroundHandle)
+    $beforeForegroundState = if ($beforeForegroundProcessId -ne $Process.Id) {
+      "other-process"
+    } elseif ($beforeForegroundHandle -eq $mainWindowHandle) {
+      "target"
+    } else {
+      "same-process-other"
+    }
+  }
+  if ($validationState -ne "passed") {
+    if ($DiagnosticStage -eq "drop") {
+      [Console]::Out.WriteLine(
+        "PROC_MON_FILTER_MAIN_FOREGROUND_DETAIL=stage:drop;validation:$validationState;before:$beforeForegroundState;request:not-attempted;after:$beforeForegroundState;wait-ms:0"
+      )
+    }
     return [IntPtr]::Zero
   }
 
-  [ProcmonNativeMenu]::SetForegroundWindow($mainWindowHandle) | Out-Null
+  $setForegroundAccepted = [ProcmonNativeMenu]::SetForegroundWindow($mainWindowHandle)
+  $requestState = if ($setForegroundAccepted) { "accepted" } else { "rejected" }
+  $waitStartedAt = [DateTime]::UtcNow
+  $foregroundHandle = $beforeForegroundHandle
   $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
   do {
     $foregroundHandle = [ProcmonNativeMenu]::GetForegroundWindow()
@@ -1644,6 +1670,29 @@ function Set-VerifiedProcmonMainWindowForeground(
     }
     Start-Sleep -Milliseconds 50
   } while ([DateTime]::UtcNow -lt $deadline)
+  $afterForegroundProcessId = if ($foregroundHandle -ne [IntPtr]::Zero) {
+    [ProcmonNativeMenu]::GetWindowProcessId($foregroundHandle)
+  } else {
+    0
+  }
+  $afterForegroundState = if ($foregroundHandle -eq [IntPtr]::Zero) {
+    "unavailable"
+  } elseif ($afterForegroundProcessId -ne $Process.Id) {
+    "other-process"
+  } elseif ($foregroundHandle -eq $mainWindowHandle) {
+    "target"
+  } else {
+    "same-process-other"
+  }
+  if ($DiagnosticStage -eq "drop") {
+    $waitMilliseconds = [Math]::Min(
+      [Math]::Max([int]([DateTime]::UtcNow.Subtract($waitStartedAt).TotalMilliseconds), 0),
+      9999
+    )
+    [Console]::Out.WriteLine(
+      "PROC_MON_FILTER_MAIN_FOREGROUND_DETAIL=stage:drop;validation:passed;before:$beforeForegroundState;request:$requestState;after:$afterForegroundState;wait-ms:$waitMilliseconds"
+    )
+  }
   return [IntPtr]::Zero
 }
 
@@ -2956,7 +3005,8 @@ try {
   $ok.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
 
   Set-Stage "focus-main-for-drop-filtered-events"
-  $mainWindowHandle = Set-VerifiedProcmonMainWindowForeground $main $process
+  $mainWindowHandle = Set-VerifiedProcmonMainWindowForeground `
+    $main $process -DiagnosticStage "drop"
   $mainForegroundGate = if ($mainWindowHandle -eq [IntPtr]::Zero) {
     "failed"
   } else {
