@@ -162,7 +162,7 @@ public static class ProcmonNativeMenu
     [DllImport("user32.dll", ExactSpelling = true)]
     private static extern IntPtr GetWindow(IntPtr hWnd, uint command);
 
-    [DllImport("user32.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
+    [DllImport("user32.dll", EntryPoint = "GetClassNameW", CharSet = CharSet.Unicode, ExactSpelling = true)]
     private static extern int GetClassName(IntPtr hWnd, StringBuilder className, int maximum);
 
     public static string DescribeForegroundWindow(
