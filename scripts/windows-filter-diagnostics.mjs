@@ -17,7 +17,7 @@ export function appendBoundedWindowsFilterOutput(current, chunk) {
     /^(PROC_MON_FILTER_CONFIG_PATHS|PROC_MON_FILTER_RELOADED_RULES|PROC_MON_FILTER_RELOADED_UI|PROC_MON_FILTER_RELOADED_DROP|PROC_MON_FILTER_WINDOW_SCAN|PROC_MON_FILTER_MAIN_FOREGROUND|PROC_MON_FILTER_INITIAL_SHORTCUT)=[^\r\n]{1,1024}\r?$/gm,
   )) {
     const stage = match[1] === "PROC_MON_FILTER_MAIN_FOREGROUND"
-      ? match[0].match(/stage:(initial|drop|export);/)?.[1] ?? "legacy"
+      ? match[0].match(/stage:(initial|shortcut|shortcut-dismiss|drop|export);/)?.[1] ?? "legacy"
       : null;
     const key = stage ? `${match[1]}:${stage}` : match[1];
     if (!evidence.has(key) && describeWindowsFilterDiagnostics(match[0])) {
@@ -481,7 +481,7 @@ export function describeWindowsFilterDiagnostics(output) {
   }
 
   const mainForeground = output.matchAll(
-    /^PROC_MON_FILTER_MAIN_FOREGROUND=(?:stage:(initial|drop|export);)?gate:(passed|failed)\r?$/gm,
+    /^PROC_MON_FILTER_MAIN_FOREGROUND=(?:stage:(initial|shortcut|shortcut-dismiss|drop|export);)?gate:(passed|failed)\r?$/gm,
   );
   for (const match of mainForeground) {
     const name = match[1]

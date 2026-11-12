@@ -2778,6 +2778,8 @@ try {
   [Console]::Out.WriteLine(
     "PROC_MON_FILTER_MENU_PATTERNS=expand-collapse:$($hasExpandPattern.ToString().ToLowerInvariant());invoke:$($hasInvokePattern.ToString().ToLowerInvariant())"
   )
+  $menuOpenAttempted = $false
+  $menu = $null
   if ($menuState.IsKeyboardFocusable) {
     try {
       $filterMenu.SetFocus()
@@ -2796,57 +2798,68 @@ try {
       [Console]::Out.WriteLine("PROC_MON_FILTER_MENU_FOCUS=failed-$focusError")
       throw
     }
+    Set-Stage "expand-filter-menu"
+    if ($hasExpandPattern) {
+      $menuOpenAttempted = $true
+      $expandPattern.Expand()
+    } elseif ($hasInvokePattern) {
+      $menuOpenAttempted = $true
+      $invokePattern.Invoke()
+    } else {
+      throw "Process Monitor Filter menu exposes no supported open pattern"
+    }
+    Set-Stage "wait-for-open-filter-menu"
+    $menuDeadline = [DateTime]::UtcNow.AddSeconds(5)
+    do {
+      $focused = [System.Windows.Automation.AutomationElement]::FocusedElement
+      for ($level = 0; $null -ne $focused -and $level -lt 5; $level++) {
+        if ($focused.Current.ControlType -eq [System.Windows.Automation.ControlType]::Menu) {
+          if ($focused.Current.ProcessId -eq $process.Id) {
+            $menu = $focused
+          }
+          break
+        }
+        $focused = $treeWalker.GetParent($focused)
+      }
+      if ($null -ne $menu) { break }
+      Start-Sleep -Milliseconds 100
+    } while ([DateTime]::UtcNow -lt $menuDeadline)
+    Set-Stage "observe-menu-focus"
+    $focusSnapshot = @{}
+    Write-FocusObservation "after-open" $focusSnapshot
+    Set-Stage "verify-menu-focus-snapshot"
+    Write-FocusSnapshotObservation "caller" $focusSnapshot
   } else {
     [Console]::Out.WriteLine("PROC_MON_FILTER_MENU_FOCUS=skipped-not-keyboard-focusable")
   }
-  Set-Stage "expand-filter-menu"
-  if ($hasExpandPattern) {
-    $expandPattern.Expand()
-  } elseif ($hasInvokePattern) {
-    $invokePattern.Invoke()
-  } else {
-    throw "Process Monitor Filter menu exposes no supported open pattern"
-  }
-  Set-Stage "wait-for-open-filter-menu"
-  $menu = $null
-  $menuDeadline = [DateTime]::UtcNow.AddSeconds(5)
-  do {
-    $focused = [System.Windows.Automation.AutomationElement]::FocusedElement
-    for ($level = 0; $null -ne $focused -and $level -lt 5; $level++) {
-      if ($focused.Current.ControlType -eq [System.Windows.Automation.ControlType]::Menu) {
-        if ($focused.Current.ProcessId -eq $process.Id) {
-          $menu = $focused
-        }
-        break
-      }
-      $focused = $treeWalker.GetParent($focused)
-    }
-    if ($null -ne $menu) { break }
-    Start-Sleep -Milliseconds 100
-  } while ([DateTime]::UtcNow -lt $menuDeadline)
-  Set-Stage "observe-menu-focus"
-  $focusSnapshot = @{}
-  Write-FocusObservation "after-open" $focusSnapshot
-  Set-Stage "verify-menu-focus-snapshot"
-  Write-FocusSnapshotObservation "caller" $focusSnapshot
   Set-Stage "resolve-open-filter-menu"
   if ($null -eq $menu) {
     Set-Stage "verify-main-foreground-for-filter-shortcut"
     $currentForegroundHandle = [ProcmonNativeMenu]::GetForegroundWindow()
-    if (
+    $shortcutForegroundGate = if (
       $currentForegroundHandle -ne $mainWindowHandle -or
       [ProcmonNativeMenu]::GetWindowProcessId($currentForegroundHandle) -ne $process.Id
-    ) {
+    ) { "failed" } else { "passed" }
+    [Console]::Out.WriteLine(
+      "PROC_MON_FILTER_MAIN_FOREGROUND=stage:shortcut;gate:$shortcutForegroundGate"
+    )
+    if ($shortcutForegroundGate -ne "passed") {
       throw "Process Monitor main window lost foreground before the Filter shortcut"
     }
-    Set-Stage "dismiss-unresolved-filter-menu"
-    [System.Windows.Forms.SendKeys]::SendWait("{ESC}")
-    $currentForegroundHandle = [ProcmonNativeMenu]::GetForegroundWindow()
-    if (
-      $currentForegroundHandle -ne $mainWindowHandle -or
-      [ProcmonNativeMenu]::GetWindowProcessId($currentForegroundHandle) -ne $process.Id
-    ) {
-      throw "Process Monitor main window lost foreground while dismissing the Filter menu"
+    if ($menuOpenAttempted) {
+      Set-Stage "dismiss-unresolved-filter-menu"
+      [System.Windows.Forms.SendKeys]::SendWait("{ESC}")
+      $currentForegroundHandle = [ProcmonNativeMenu]::GetForegroundWindow()
+      $dismissForegroundGate = if (
+        $currentForegroundHandle -ne $mainWindowHandle -or
+        [ProcmonNativeMenu]::GetWindowProcessId($currentForegroundHandle) -ne $process.Id
+      ) { "failed" } else { "passed" }
+      [Console]::Out.WriteLine(
+        "PROC_MON_FILTER_MAIN_FOREGROUND=stage:shortcut-dismiss;gate:$dismissForegroundGate"
+      )
+      if ($dismissForegroundGate -ne "passed") {
+        throw "Process Monitor main window lost foreground while dismissing the Filter menu"
+      }
     }
     Set-Stage "open-filter-dialog-shortcut"
     [System.Windows.Forms.SendKeys]::SendWait("^l")
