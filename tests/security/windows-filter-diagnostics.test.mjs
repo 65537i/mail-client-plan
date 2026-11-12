@@ -620,6 +620,12 @@ test("AC-05: configuration save observations expose states, not paths or dialog 
   );
   assert.equal(
     describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_MAIN_FOREGROUND_DETAIL=stage:drop;validation:passed;before:filter-dialog;request:accepted;after:filter-dialog;wait-ms:2000",
+    ),
+    "; drop-main-window-foreground-detail=validation:passed;before:filter-dialog;request:accepted;after:filter-dialog;wait-ms:2000",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(
       "PROC_MON_FILTER_MAIN_FOREGROUND_DETAIL=stage:drop;validation:passed;before:C:\\private;request:accepted;after:other-process;wait-ms:2000",
     ),
     "",

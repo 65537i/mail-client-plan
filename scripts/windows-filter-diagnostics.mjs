@@ -493,7 +493,7 @@ export function describeWindowsFilterDiagnostics(output) {
   }
 
   const mainForegroundDetail = output.matchAll(
-    /^PROC_MON_FILTER_MAIN_FOREGROUND_DETAIL=stage:drop;validation:(passed|process-mismatch|handle-missing|window-owner-mismatch);before:(target|same-process-other|other-process|unavailable);request:(accepted|rejected|not-attempted);after:(target|same-process-other|other-process|unavailable);wait-ms:(\d{1,4})\r?$/gm,
+    /^PROC_MON_FILTER_MAIN_FOREGROUND_DETAIL=stage:drop;validation:(passed|process-mismatch|handle-missing|window-owner-mismatch);before:(target|filter-dialog|same-process-other|other-process|unavailable);request:(accepted|rejected|not-attempted);after:(target|filter-dialog|same-process-other|other-process|unavailable);wait-ms:(\d{1,4})\r?$/gm,
   );
   for (const match of mainForegroundDetail) {
     diagnostics.push(

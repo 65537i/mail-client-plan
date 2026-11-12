@@ -1621,7 +1621,8 @@ function Set-VerifiedProcmonMainWindowForeground(
   [System.Windows.Automation.AutomationElement]$MainWindow,
   [System.Diagnostics.Process]$Process,
   [int]$TimeoutSeconds = 2,
-  [ValidateSet("none", "drop")][string]$DiagnosticStage = "none"
+  [ValidateSet("none", "drop")][string]$DiagnosticStage = "none",
+  [System.IntPtr]$FilterDialogHandle = [IntPtr]::Zero
 ) {
   $mainWindowState = $MainWindow.Current
   $mainWindowHandle = [IntPtr]$mainWindowState.NativeWindowHandle
@@ -1642,6 +1643,11 @@ function Set-VerifiedProcmonMainWindowForeground(
       "other-process"
     } elseif ($beforeForegroundHandle -eq $mainWindowHandle) {
       "target"
+    } elseif (
+      $FilterDialogHandle -ne [IntPtr]::Zero -and
+      $beforeForegroundHandle -eq $FilterDialogHandle
+    ) {
+      "filter-dialog"
     } else {
       "same-process-other"
     }
@@ -1681,6 +1687,11 @@ function Set-VerifiedProcmonMainWindowForeground(
     "other-process"
   } elseif ($foregroundHandle -eq $mainWindowHandle) {
     "target"
+  } elseif (
+    $FilterDialogHandle -ne [IntPtr]::Zero -and
+    $foregroundHandle -eq $FilterDialogHandle
+  ) {
+    "filter-dialog"
   } else {
     "same-process-other"
   }
@@ -3002,11 +3013,12 @@ try {
   $ok = Wait-Element $filterDialog ([System.Windows.Automation.PropertyCondition]::new(
     [System.Windows.Automation.AutomationElement]::NameProperty, "OK"
   )) 5
+  $filterDialogHandle = [IntPtr]$filterDialog.Current.NativeWindowHandle
   $ok.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
 
   Set-Stage "focus-main-for-drop-filtered-events"
   $mainWindowHandle = Set-VerifiedProcmonMainWindowForeground `
-    $main $process -DiagnosticStage "drop"
+    $main $process -DiagnosticStage "drop" -FilterDialogHandle $filterDialogHandle
   $mainForegroundGate = if ($mainWindowHandle -eq [IntPtr]::Zero) {
     "failed"
   } else {
