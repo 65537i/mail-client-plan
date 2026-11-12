@@ -53,6 +53,7 @@ try {
   $nativeMenuTypeDefinition = @"
 using System;
 using System.Runtime.InteropServices;
+using System.Text;
 
 public static class ProcmonNativeMenu
 {
@@ -68,6 +69,7 @@ public static class ProcmonNativeMenu
     private const uint GUI_POPUPMENUMODE = 0x00000010;
     private const int AccessibleMenuObjectId = -3;
     private const int AccessibleClientObjectId = -4;
+    private const uint WindowOwner = 4;
     private const uint MaximumTextCharacters = 255;
     private const int MaximumAccessibleMenuItems = 64;
     private const int MenuItemRole = 12;
@@ -152,6 +154,54 @@ public static class ProcmonNativeMenu
     [DllImport("user32.dll", ExactSpelling = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool IsWindowVisible(IntPtr hWnd);
+
+    [DllImport("user32.dll", ExactSpelling = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool IsWindowEnabled(IntPtr hWnd);
+
+    [DllImport("user32.dll", ExactSpelling = true)]
+    private static extern IntPtr GetWindow(IntPtr hWnd, uint command);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
+    private static extern int GetClassName(IntPtr hWnd, StringBuilder className, int maximum);
+
+    public static string DescribeForegroundWindow(
+        IntPtr hWnd,
+        int ownerProcessId,
+        IntPtr mainWindowHandle
+    )
+    {
+        const string unavailable =
+            "class:unavailable;owner:unavailable;visible:unavailable;enabled:unavailable";
+        if (hWnd == IntPtr.Zero || GetWindowProcessId(hWnd) != ownerProcessId)
+            return unavailable;
+
+        var className = new StringBuilder(128);
+        string classState = "unavailable";
+        if (GetClassName(hWnd, className, className.Capacity) != 0)
+        {
+            classState = hWnd == mainWindowHandle
+                ? "main"
+                : className.ToString() == "#32770" ? "dialog" : "other";
+        }
+
+        IntPtr ownerHandle = GetWindow(hWnd, WindowOwner);
+        string ownerState = ownerHandle == IntPtr.Zero
+            ? "none"
+            : ownerHandle == mainWindowHandle ? "main" : "other";
+        bool visible = IsWindowVisible(hWnd);
+        bool enabled = IsWindowEnabled(hWnd);
+        if (GetWindowProcessId(hWnd) != ownerProcessId)
+            return unavailable;
+
+        return String.Format(
+            "class:{0};owner:{1};visible:{2};enabled:{3}",
+            classState,
+            ownerState,
+            visible ? "true" : "false",
+            enabled ? "true" : "false"
+        );
+    }
 
     public static int GetWindowProcessId(IntPtr hWnd)
     {
@@ -1702,6 +1752,14 @@ function Set-VerifiedProcmonMainWindowForeground(
     )
     [Console]::Out.WriteLine(
       "PROC_MON_FILTER_MAIN_FOREGROUND_DETAIL=stage:drop;validation:passed;before:$beforeForegroundState;request:$requestState;after:$afterForegroundState;wait-ms:$waitMilliseconds"
+    )
+    $foregroundDetails = [ProcmonNativeMenu]::DescribeForegroundWindow(
+      $foregroundHandle,
+      $Process.Id,
+      $mainWindowHandle
+    )
+    [Console]::Out.WriteLine(
+      "PROC_MON_FILTER_FOREGROUND_WINDOW=stage:drop;$foregroundDetails"
     )
   }
   return [IntPtr]::Zero

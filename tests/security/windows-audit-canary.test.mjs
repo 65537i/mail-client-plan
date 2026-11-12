@@ -337,6 +337,8 @@ test("AC-05: Procmon window discovery retries transient UIA ownership reads befo
   assert.match(foregroundHelper, /GetWindowProcessId\(\$mainWindowHandle\) -ne \$Process\.Id/);
   assert.match(foregroundHelper, /SetForegroundWindow\(\$mainWindowHandle\)/);
   assert.match(foregroundHelper, /GetForegroundWindow\(\)[\s\S]*GetWindowProcessId\(\$foregroundHandle\) -eq \$Process\.Id/);
+  assert.match(configuration, /public static string DescribeForegroundWindow\([\s\S]*GetWindowProcessId\(hWnd\) != ownerProcessId[\s\S]*GetClassName\(hWnd, className, className\.Capacity\)[\s\S]*"dialog"[\s\S]*WindowOwner[\s\S]*IsWindowVisible\(hWnd\)[\s\S]*IsWindowEnabled\(hWnd\)[\s\S]*GetWindowProcessId\(hWnd\) != ownerProcessId[\s\S]*class:\{0\};owner:\{1\};visible:\{2\};enabled:\{3\}/);
+  assert.match(foregroundHelper, /DescribeForegroundWindow\(\s*\$foregroundHandle,\s*\$Process\.Id,\s*\$mainWindowHandle\s*\)/);
   assert.match(foregroundHelper, /\[ValidateSet\("none", "drop"\)\]\[string\]\$DiagnosticStage = "none"/);
   assert.match(foregroundHelper, /\[System\.IntPtr\]\$FilterDialogHandle = \[IntPtr\]::Zero/);
   assert.match(foregroundHelper, /\$FilterDialogHandle -ne \[IntPtr\]::Zero[\s\S]*"filter-dialog"/);

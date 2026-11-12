@@ -180,9 +180,11 @@ test("AC-05: bounded output retains and parses the final window-scan summary", (
   const dropFocusDetail = "PROC_MON_FILTER_MAIN_FOREGROUND_DETAIL=stage:drop;"
     + "validation:passed;before:other-process;request:accepted;"
     + "after:other-process;wait-ms:2000";
+  const dropForegroundWindow = "PROC_MON_FILTER_FOREGROUND_WINDOW=stage:drop;"
+    + "class:dialog;owner:main;visible:true;enabled:true";
   const shortcut = "PROC_MON_FILTER_INITIAL_SHORTCUT=command:filter-dialog;state:sent";
   const captured = appendBoundedWindowsFilterOutput(
-    `${"x".repeat(9000)}\n${scan}\n${initialFocus}\n${shortcutFocus}\n${shortcutDismissFocus}\n${dropFocus}\n${dropFocusDetail}\n${shortcut}\n`,
+    `${"x".repeat(9000)}\n${scan}\n${initialFocus}\n${shortcutFocus}\n${shortcutDismissFocus}\n${dropFocus}\n${dropFocusDetail}\n${dropForegroundWindow}\n${shortcut}\n`,
     `${"y".repeat(12000)}\n`,
   );
   assert.equal(captured.length, windowsFilterOutputLimit);
@@ -192,6 +194,7 @@ test("AC-05: bounded output retains and parses the final window-scan summary", (
   assert.ok(captured.includes(shortcutDismissFocus));
   assert.ok(captured.includes(dropFocus));
   assert.ok(captured.includes(dropFocusDetail));
+  assert.ok(captured.includes(dropForegroundWindow));
   assert.ok(captured.includes(shortcut));
   assert.ok(
     describeWindowsFilterDiagnostics(captured).includes(
@@ -207,6 +210,7 @@ test("AC-05: bounded output retains and parses the final window-scan summary", (
         + "; shortcut-dismiss-main-window-foreground-gate=failed"
         + "; drop-main-window-foreground-gate=failed"
         + "; drop-main-window-foreground-detail=validation:passed;before:other-process;request:accepted;after:other-process;wait-ms:2000"
+        + "; drop-foreground-window=class:dialog;owner:main;visible:true;enabled:true"
         + "; initial-filter-dialog=keyboard-shortcut",
     ),
   );
@@ -627,6 +631,18 @@ test("AC-05: configuration save observations expose states, not paths or dialog 
   assert.equal(
     describeWindowsFilterDiagnostics(
       "PROC_MON_FILTER_MAIN_FOREGROUND_DETAIL=stage:drop;validation:passed;before:C:\\private;request:accepted;after:other-process;wait-ms:2000",
+    ),
+    "",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_FOREGROUND_WINDOW=stage:drop;class:dialog;owner:main;visible:true;enabled:false",
+    ),
+    "; drop-foreground-window=class:dialog;owner:main;visible:true;enabled:false",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_FOREGROUND_WINDOW=stage:drop;class:C:\\private;owner:main;visible:true;enabled:false",
     ),
     "",
   );

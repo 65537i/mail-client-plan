@@ -14,11 +14,12 @@ export function appendBoundedWindowsFilterOutput(current, chunk) {
   if (combined.length <= windowsFilterOutputLimit) return combined;
   const evidence = new Map();
   for (const match of combined.matchAll(
-    /^(PROC_MON_FILTER_CONFIG_PATHS|PROC_MON_FILTER_RELOADED_RULES|PROC_MON_FILTER_RELOADED_UI|PROC_MON_FILTER_RELOADED_DROP|PROC_MON_FILTER_WINDOW_SCAN|PROC_MON_FILTER_MAIN_FOREGROUND|PROC_MON_FILTER_MAIN_FOREGROUND_DETAIL|PROC_MON_FILTER_INITIAL_SHORTCUT)=[^\r\n]{1,1024}\r?$/gm,
+    /^(PROC_MON_FILTER_CONFIG_PATHS|PROC_MON_FILTER_RELOADED_RULES|PROC_MON_FILTER_RELOADED_UI|PROC_MON_FILTER_RELOADED_DROP|PROC_MON_FILTER_WINDOW_SCAN|PROC_MON_FILTER_MAIN_FOREGROUND|PROC_MON_FILTER_MAIN_FOREGROUND_DETAIL|PROC_MON_FILTER_FOREGROUND_WINDOW|PROC_MON_FILTER_INITIAL_SHORTCUT)=[^\r\n]{1,1024}\r?$/gm,
   )) {
     const stage = match[1] === "PROC_MON_FILTER_MAIN_FOREGROUND"
       ? match[0].match(/stage:(initial|shortcut|shortcut-dismiss|drop|export);/)?.[1] ?? "legacy"
       : match[1] === "PROC_MON_FILTER_MAIN_FOREGROUND_DETAIL"
+        || match[1] === "PROC_MON_FILTER_FOREGROUND_WINDOW"
         ? match[0].match(/stage:(drop);/)?.[1] ?? null
         : null;
     const key = stage ? `${match[1]}:${stage}` : match[1];
@@ -498,6 +499,15 @@ export function describeWindowsFilterDiagnostics(output) {
   for (const match of mainForegroundDetail) {
     diagnostics.push(
       `drop-main-window-foreground-detail=validation:${match[1]};before:${match[2]};request:${match[3]};after:${match[4]};wait-ms:${Number(match[5])}`,
+    );
+  }
+
+  const foregroundWindow = output.matchAll(
+    /^PROC_MON_FILTER_FOREGROUND_WINDOW=stage:drop;class:(main|dialog|other|unavailable);owner:(main|other|none|unavailable);visible:(true|false|unavailable);enabled:(true|false|unavailable)\r?$/gm,
+  );
+  for (const match of foregroundWindow) {
+    diagnostics.push(
+      `drop-foreground-window=class:${match[1]};owner:${match[2]};visible:${match[3]};enabled:${match[4]}`,
     );
   }
 
