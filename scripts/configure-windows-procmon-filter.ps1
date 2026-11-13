@@ -2830,6 +2830,8 @@ function Write-ProcmonForegroundDialogObservation(
     fileExport = $false
     filePath = $false
     fileAccessDenied = $false
+    fileBusy = $false
+    fileOpenFailure = $false
   }
   $textTruncated = $false
   try {
@@ -2922,6 +2924,16 @@ function Write-ProcmonForegroundDialogObservation(
               "cannot access", "unable to access"
             )
           )
+          $textHints.fileBusy = $textHints.fileBusy -or (
+            Test-ForegroundDialogTextHint $text @(
+              "in use", "busy", "sharing violation", "locked", "already open"
+            )
+          )
+          $textHints.fileOpenFailure = $textHints.fileOpenFailure -or (
+            Test-ForegroundDialogTextHint $text @(
+              "failed to open", "unable to open", "cannot open", "could not open", "error opening"
+            )
+          )
         }
         "ControlType.Edit" { $editCount++ }
         "ControlType.ComboBox" { $comboCount++ }
@@ -2968,6 +2980,8 @@ function Write-ProcmonForegroundDialogObservation(
   $state += ";hints-file-export:$($textHints.fileExport.ToString().ToLowerInvariant())"
   $state += ";hints-file-path:$($textHints.filePath.ToString().ToLowerInvariant())"
   $state += ";hints-file-access-denied:$($textHints.fileAccessDenied.ToString().ToLowerInvariant())"
+  $state += ";hints-file-busy:$($textHints.fileBusy.ToString().ToLowerInvariant())"
+  $state += ";hints-file-open-failure:$($textHints.fileOpenFailure.ToString().ToLowerInvariant())"
   $state += ";text-truncated:$($textTruncated.ToString().ToLowerInvariant());truncated:$truncated"
   [Console]::Out.WriteLine(
     "PROC_MON_FILTER_FOREGROUND_DIALOG_UI=stage:drop;state:$state"

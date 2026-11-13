@@ -363,6 +363,8 @@ test("AC-05: Procmon window discovery retries transient UIA ownership reads befo
     ["fileExport", ["export", ".csv"]],
     ["filePath", ["path", "directory", "folder"]],
     ["fileAccessDenied", ["access denied", "permission denied", "not permitted", "unauthorized", "cannot access", "unable to access"]],
+    ["fileBusy", ["in use", "busy", "sharing violation", "locked", "already open"]],
+    ["fileOpenFailure", ["failed to open", "unable to open", "cannot open", "could not open", "error opening"]],
   ]) {
     const hintStart = foregroundDialogObservation.indexOf(`$textHints.${hint} =`);
     assert.notEqual(hintStart, -1, `Missing ${hint} classification`);
