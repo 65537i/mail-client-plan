@@ -513,7 +513,7 @@ export function describeWindowsFilterDiagnostics(output) {
   }
 
   const foregroundDialogUi = output.matchAll(
-    /^PROC_MON_FILTER_FOREGROUND_DIALOG_UI=stage:drop;state:available;items:(\d{1,3});buttons:(\d{1,3});texts:(\d{1,3});edits:(\d{1,3});combos:(\d{1,3});other-controls:(\d{1,3});ok:(\d{1,3});cancel:(\d{1,3});retry:(\d{1,3});yes:(\d{1,3});no:(\d{1,3});other-buttons:(\d{1,3});hints-error:(true|false);hints-warning:(true|false);hints-filter:(true|false);hints-capture:(true|false);hints-filesystem:(true|false);hints-privilege:(true|false);hints-confirmation:(true|false);text-truncated:(true|false);truncated:(true|false)\r?$/gm,
+    /^PROC_MON_FILTER_FOREGROUND_DIALOG_UI=stage:drop;state:available;items:(\d{1,3});buttons:(\d{1,3});texts:(\d{1,3});edits:(\d{1,3});combos:(\d{1,3});other-controls:(\d{1,3});ok:(\d{1,3});cancel:(\d{1,3});retry:(\d{1,3});yes:(\d{1,3});no:(\d{1,3});other-buttons:(\d{1,3});hints-error:(true|false);hints-warning:(true|false);hints-filter:(true|false);hints-capture:(true|false);hints-filesystem:(true|false);hints-privilege:(true|false);hints-confirmation:(true|false);hints-file-missing:(true|false);hints-file-operation:(true|false);hints-file-format:(true|false);text-truncated:(true|false);truncated:(true|false)\r?$/gm,
   );
   for (const match of foregroundDialogUi) {
     const counts = match.slice(1, 13).map(Number);
@@ -526,7 +526,7 @@ export function describeWindowsFilterDiagnostics(output) {
       continue;
     }
     diagnostics.push(
-      `drop-foreground-dialog-ui=state:available;items:${items};buttons:${buttons};texts:${texts};edits:${edits};combos:${combos};other-controls:${otherControls};ok:${ok};cancel:${cancel};retry:${retry};yes:${yes};no:${no};other-buttons:${otherButtons};hints-error:${match[13]};hints-warning:${match[14]};hints-filter:${match[15]};hints-capture:${match[16]};hints-filesystem:${match[17]};hints-privilege:${match[18]};hints-confirmation:${match[19]};text-truncated:${match[20]};truncated:${match[21]}`,
+      `drop-foreground-dialog-ui=state:available;items:${items};buttons:${buttons};texts:${texts};edits:${edits};combos:${combos};other-controls:${otherControls};ok:${ok};cancel:${cancel};retry:${retry};yes:${yes};no:${no};other-buttons:${otherButtons};hints-error:${match[13]};hints-warning:${match[14]};hints-filter:${match[15]};hints-capture:${match[16]};hints-filesystem:${match[17]};hints-privilege:${match[18]};hints-confirmation:${match[19]};hints-file-missing:${match[20]};hints-file-operation:${match[21]};hints-file-format:${match[22]};text-truncated:${match[23]};truncated:${match[24]}`,
     );
   }
 

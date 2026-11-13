@@ -2817,6 +2817,9 @@ function Write-ProcmonForegroundDialogObservation(
     filesystem = $false
     privilege = $false
     confirmation = $false
+    fileMissing = $false
+    fileOperation = $false
+    fileFormat = $false
   }
   $textTruncated = $false
   try {
@@ -2859,6 +2862,21 @@ function Write-ProcmonForegroundDialogObservation(
           $textHints.confirmation = $textHints.confirmation -or (
             Test-ForegroundDialogTextHint $text @("confirm", "overwrite")
           )
+          $textHints.fileMissing = $textHints.fileMissing -or (
+            Test-ForegroundDialogTextHint $text @(
+              "not found", "cannot find", "could not find", "does not exist", "no such file", "missing"
+            )
+          )
+          $textHints.fileOperation = $textHints.fileOperation -or (
+            Test-ForegroundDialogTextHint $text @(
+              "open", "read", "write", "load", "save"
+            )
+          )
+          $textHints.fileFormat = $textHints.fileFormat -or (
+            Test-ForegroundDialogTextHint $text @(
+              "format", "corrupt", "invalid", "malformed"
+            )
+          )
         }
         "ControlType.Edit" { $editCount++ }
         "ControlType.ComboBox" { $comboCount++ }
@@ -2892,6 +2910,9 @@ function Write-ProcmonForegroundDialogObservation(
   $state += ";hints-filesystem:$($textHints.filesystem.ToString().ToLowerInvariant())"
   $state += ";hints-privilege:$($textHints.privilege.ToString().ToLowerInvariant())"
   $state += ";hints-confirmation:$($textHints.confirmation.ToString().ToLowerInvariant())"
+  $state += ";hints-file-missing:$($textHints.fileMissing.ToString().ToLowerInvariant())"
+  $state += ";hints-file-operation:$($textHints.fileOperation.ToString().ToLowerInvariant())"
+  $state += ";hints-file-format:$($textHints.fileFormat.ToString().ToLowerInvariant())"
   $state += ";text-truncated:$($textTruncated.ToString().ToLowerInvariant());truncated:$truncated"
   [Console]::Out.WriteLine(
     "PROC_MON_FILTER_FOREGROUND_DIALOG_UI=stage:drop;state:$state"
