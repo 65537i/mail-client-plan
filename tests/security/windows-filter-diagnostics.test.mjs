@@ -182,9 +182,12 @@ test("AC-05: bounded output retains and parses the final window-scan summary", (
     + "after:other-process;wait-ms:2000";
   const dropForegroundWindow = "PROC_MON_FILTER_FOREGROUND_WINDOW=stage:drop;"
     + "class:dialog;owner:main;visible:true;enabled:true;title-match:different";
+  const dropForegroundDialogUi = "PROC_MON_FILTER_FOREGROUND_DIALOG_UI=stage:drop;"
+    + "state:available;items:7;buttons:1;texts:2;edits:0;combos:0;other-controls:4;"
+    + "ok:1;cancel:0;retry:0;yes:0;no:0;other-buttons:0;truncated:false";
   const shortcut = "PROC_MON_FILTER_INITIAL_SHORTCUT=command:filter-dialog;state:sent";
   const captured = appendBoundedWindowsFilterOutput(
-    `${"x".repeat(9000)}\n${scan}\n${initialFocus}\n${shortcutFocus}\n${shortcutDismissFocus}\n${dropFocus}\n${dropFocusDetail}\n${dropForegroundWindow}\n${shortcut}\n`,
+    `${"x".repeat(9000)}\n${scan}\n${initialFocus}\n${shortcutFocus}\n${shortcutDismissFocus}\n${dropFocus}\n${dropFocusDetail}\n${dropForegroundWindow}\n${dropForegroundDialogUi}\n${shortcut}\n`,
     `${"y".repeat(12000)}\n`,
   );
   assert.equal(captured.length, windowsFilterOutputLimit);
@@ -195,6 +198,7 @@ test("AC-05: bounded output retains and parses the final window-scan summary", (
   assert.ok(captured.includes(dropFocus));
   assert.ok(captured.includes(dropFocusDetail));
   assert.ok(captured.includes(dropForegroundWindow));
+  assert.ok(captured.includes(dropForegroundDialogUi));
   assert.ok(captured.includes(shortcut));
   assert.ok(
     describeWindowsFilterDiagnostics(captured).includes(
@@ -211,6 +215,7 @@ test("AC-05: bounded output retains and parses the final window-scan summary", (
         + "; drop-main-window-foreground-gate=failed"
         + "; drop-main-window-foreground-detail=validation:passed;before:other-process;request:accepted;after:other-process;wait-ms:2000"
         + "; drop-foreground-window=class:dialog;owner:main;visible:true;enabled:true;title-match:different"
+        + "; drop-foreground-dialog-ui=state:available;items:7;buttons:1;texts:2;edits:0;combos:0;other-controls:4;ok:1;cancel:0;retry:0;yes:0;no:0;other-buttons:0;truncated:false"
         + "; initial-filter-dialog=keyboard-shortcut",
     ),
   );
@@ -646,6 +651,26 @@ test("AC-05: configuration save observations expose states, not paths or dialog 
     ),
     "; drop-foreground-window=class:dialog;owner:main;visible:true;enabled:true;title-match:same",
   );
+  const dialogUi =
+    "PROC_MON_FILTER_FOREGROUND_DIALOG_UI=stage:drop;state:available;items:7;buttons:1;texts:2;edits:0;combos:0;other-controls:4;ok:1;cancel:0;retry:0;yes:0;no:0;other-buttons:0;truncated:false";
+  assert.equal(
+    describeWindowsFilterDiagnostics(dialogUi),
+    "; drop-foreground-dialog-ui=state:available;items:7;buttons:1;texts:2;edits:0;combos:0;other-controls:4;ok:1;cancel:0;retry:0;yes:0;no:0;other-buttons:0;truncated:false",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_FOREGROUND_DIALOG_UI=stage:drop;state:unavailable;reason:uia-com",
+    ),
+    "; drop-foreground-dialog-ui=state:unavailable;reason:uia-com",
+  );
+  for (const unsafe of [
+    dialogUi.replace("items:7", "items:129"),
+    dialogUi.replace("ok:1", "ok:2"),
+    `${dialogUi};title:private`,
+    "PROC_MON_FILTER_FOREGROUND_DIALOG_UI=stage:drop;state:unavailable;reason:C:\\private",
+  ]) {
+    assert.equal(describeWindowsFilterDiagnostics(unsafe), "");
+  }
   assert.equal(
     describeWindowsFilterDiagnostics(
       "PROC_MON_FILTER_FOREGROUND_WINDOW=stage:drop;class:C:\\private;owner:main;visible:true;enabled:false;title-match:different",

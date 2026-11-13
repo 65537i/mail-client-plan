@@ -341,6 +341,13 @@ test("AC-05: Procmon window discovery retries transient UIA ownership reads befo
   assert.match(configuration, /DllImport\("user32\.dll", EntryPoint = "GetWindowTextW", CharSet = CharSet\.Unicode, ExactSpelling = true\)/);
   assert.match(configuration, /public static string DescribeForegroundWindow\([\s\S]*GetWindowProcessId\(hWnd\) != ownerProcessId[\s\S]*GetClassName\(hWnd, className, className\.Capacity\)[\s\S]*"dialog"[\s\S]*WindowOwner[\s\S]*IsWindowVisible\(hWnd\)[\s\S]*IsWindowEnabled\(hWnd\)[\s\S]*GetWindowText\(hWnd, title, title\.Capacity\)[\s\S]*StringComparison\.Ordinal[\s\S]*GetWindowProcessId\(hWnd\) != ownerProcessId[\s\S]*class:\{0\};owner:\{1\};visible:\{2\};enabled:\{3\};title-match:\{4\}/);
   assert.match(foregroundHelper, /DescribeForegroundWindow\(\s*\$foregroundHandle,\s*\$Process\.Id,\s*\$mainWindowHandle,\s*\$FilterDialogTitle\s*\)/);
+  const foregroundDialogObservation = configuration.match(
+    /function Write-ProcmonForegroundDialogObservation\([\s\S]*?(?=\r?\nfunction )/,
+  )?.[0] ?? "";
+  assert.match(foregroundDialogObservation, /GetWindowProcessId\(\$WindowHandle\)[\s\S]*FromHandle\(\$WindowHandle\)[\s\S]*\$dialog\.Current\.ProcessId -ne \$OwnerProcessId/);
+  assert.match(foregroundDialogObservation, /TreeScope\]::Children[\s\S]*Math\]::Min\(\$children\.Count, 128\)[\s\S]*"ControlType.Button"[\s\S]*Get-ForegroundDialogButtonLabel[\s\S]*"ControlType.Text"[\s\S]*PROC_MON_FILTER_FOREGROUND_DIALOG_UI=stage:drop/);
+  assert.match(configuration, /function Get-ForegroundDialogButtonLabel\(\[string\]\$Name\) \{\s*switch -CaseSensitive \(\$Name\) \{\s*"OK" \{ return "ok" \}\s*"Cancel" \{ return "cancel" \}\s*"Retry" \{ return "retry" \}\s*"Yes" \{ return "yes" \}\s*"No" \{ return "no" \}/);
+  assert.doesNotMatch(foregroundDialogObservation, /WriteLine\([^)]*\$elementState\.Name/);
   assert.match(foregroundHelper, /\[ValidateSet\("none", "drop"\)\]\[string\]\$DiagnosticStage = "none"/);
   assert.match(foregroundHelper, /\[System\.IntPtr\]\$FilterDialogHandle = \[IntPtr\]::Zero/);
   assert.match(foregroundHelper, /\$FilterDialogHandle -ne \[IntPtr\]::Zero[\s\S]*"filter-dialog"/);

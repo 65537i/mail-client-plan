@@ -1782,6 +1782,9 @@ function Set-VerifiedProcmonMainWindowForeground(
     [Console]::Out.WriteLine(
       "PROC_MON_FILTER_FOREGROUND_WINDOW=stage:drop;$foregroundDetails"
     )
+    if ($foregroundDetails -like "class:dialog;owner:main;*") {
+      Write-ProcmonForegroundDialogObservation $foregroundHandle $Process.Id
+    }
   }
   return [IntPtr]::Zero
 }
@@ -2725,6 +2728,120 @@ function Get-ControlNameLabel([System.Windows.Automation.AutomationElement]$Elem
     "Process Monitor" { return "ProcessMonitor" }
     default { return "Other" }
   }
+}
+
+function Get-ForegroundDialogButtonLabel([string]$Name) {
+  switch -CaseSensitive ($Name) {
+    "OK" { return "ok" }
+    "Cancel" { return "cancel" }
+    "Retry" { return "retry" }
+    "Yes" { return "yes" }
+    "No" { return "no" }
+    default { return "other" }
+  }
+}
+
+function Write-ProcmonForegroundDialogObservation(
+  [System.IntPtr]$WindowHandle,
+  [int]$OwnerProcessId
+) {
+  $reason = $null
+  $children = $null
+  try {
+    if (
+      $WindowHandle -eq [IntPtr]::Zero -or
+      [ProcmonNativeMenu]::GetWindowProcessId($WindowHandle) -ne $OwnerProcessId
+    ) {
+      $reason = "owner-mismatch"
+    } else {
+      $dialog = [System.Windows.Automation.AutomationElement]::FromHandle($WindowHandle)
+      if ($null -eq $dialog) {
+        $reason = "uia-element-unavailable"
+      } elseif ($dialog.Current.ProcessId -ne $OwnerProcessId) {
+        $reason = "owner-mismatch"
+      } else {
+        $children = $dialog.FindAll(
+          [System.Windows.Automation.TreeScope]::Children,
+          [System.Windows.Automation.Condition]::TrueCondition
+        )
+        if ($null -eq $children) {
+          $reason = "uia-element-unavailable"
+        }
+      }
+    }
+  } catch [System.Windows.Automation.ElementNotAvailableException] {
+    $reason = "uia-element-unavailable"
+  } catch [System.Runtime.InteropServices.COMException] {
+    $reason = "uia-com"
+  } catch [System.InvalidOperationException] {
+    $reason = "uia-invalid-operation"
+  } catch [System.ArgumentException] {
+    $reason = "uia-argument"
+  }
+
+  if ($null -ne $reason) {
+    [Console]::Out.WriteLine(
+      "PROC_MON_FILTER_FOREGROUND_DIALOG_UI=stage:drop;state:unavailable;reason:$reason"
+    )
+    return
+  }
+
+  $itemScanCount = [Math]::Min($children.Count, 128)
+  $buttonCount = 0
+  $textCount = 0
+  $editCount = 0
+  $comboCount = 0
+  $otherControlCount = 0
+  $buttonLabels = @{
+    ok = 0
+    cancel = 0
+    retry = 0
+    yes = 0
+    no = 0
+    other = 0
+  }
+  try {
+    for ($index = 0; $index -lt $itemScanCount; $index++) {
+      $elementState = $children[$index].Current
+      if ($elementState.ProcessId -ne $OwnerProcessId) {
+        continue
+      }
+      switch ($elementState.ControlType.ProgrammaticName) {
+        "ControlType.Button" {
+          $buttonCount++
+          $buttonLabel = Get-ForegroundDialogButtonLabel $elementState.Name
+          $buttonLabels[$buttonLabel]++
+        }
+        "ControlType.Text" { $textCount++ }
+        "ControlType.Edit" { $editCount++ }
+        "ControlType.ComboBox" { $comboCount++ }
+        default { $otherControlCount++ }
+      }
+    }
+  } catch [System.Windows.Automation.ElementNotAvailableException] {
+    $reason = "uia-element-unavailable"
+  } catch [System.Runtime.InteropServices.COMException] {
+    $reason = "uia-com"
+  } catch [System.InvalidOperationException] {
+    $reason = "uia-invalid-operation"
+  } catch [System.ArgumentException] {
+    $reason = "uia-argument"
+  }
+  if ($null -ne $reason) {
+    [Console]::Out.WriteLine(
+      "PROC_MON_FILTER_FOREGROUND_DIALOG_UI=stage:drop;state:unavailable;reason:$reason"
+    )
+    return
+  }
+  $truncated = ($children.Count -gt $itemScanCount).ToString().ToLowerInvariant()
+  $state = "available;items:$itemScanCount;buttons:$buttonCount;texts:$textCount"
+  $state += ";edits:$editCount;combos:$comboCount;other-controls:$otherControlCount"
+  $state += ";ok:$($buttonLabels.ok);cancel:$($buttonLabels.cancel);retry:$($buttonLabels.retry)"
+  $state += ";yes:$($buttonLabels.yes);no:$($buttonLabels.no);other-buttons:$($buttonLabels.other)"
+  $state += ";truncated:$truncated"
+  [Console]::Out.WriteLine(
+    "PROC_MON_FILTER_FOREGROUND_DIALOG_UI=stage:drop;state:$state"
+  )
 }
 
 function Write-MenuItemsObservation(

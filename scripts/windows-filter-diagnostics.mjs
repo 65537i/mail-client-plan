@@ -14,12 +14,13 @@ export function appendBoundedWindowsFilterOutput(current, chunk) {
   if (combined.length <= windowsFilterOutputLimit) return combined;
   const evidence = new Map();
   for (const match of combined.matchAll(
-    /^(PROC_MON_FILTER_CONFIG_PATHS|PROC_MON_FILTER_RELOADED_RULES|PROC_MON_FILTER_RELOADED_UI|PROC_MON_FILTER_RELOADED_DROP|PROC_MON_FILTER_WINDOW_SCAN|PROC_MON_FILTER_MAIN_FOREGROUND|PROC_MON_FILTER_MAIN_FOREGROUND_DETAIL|PROC_MON_FILTER_FOREGROUND_WINDOW|PROC_MON_FILTER_INITIAL_SHORTCUT)=[^\r\n]{1,1024}\r?$/gm,
+    /^(PROC_MON_FILTER_CONFIG_PATHS|PROC_MON_FILTER_RELOADED_RULES|PROC_MON_FILTER_RELOADED_UI|PROC_MON_FILTER_RELOADED_DROP|PROC_MON_FILTER_WINDOW_SCAN|PROC_MON_FILTER_MAIN_FOREGROUND|PROC_MON_FILTER_MAIN_FOREGROUND_DETAIL|PROC_MON_FILTER_FOREGROUND_WINDOW|PROC_MON_FILTER_FOREGROUND_DIALOG_UI|PROC_MON_FILTER_INITIAL_SHORTCUT)=[^\r\n]{1,1024}\r?$/gm,
   )) {
     const stage = match[1] === "PROC_MON_FILTER_MAIN_FOREGROUND"
       ? match[0].match(/stage:(initial|shortcut|shortcut-dismiss|drop|export);/)?.[1] ?? "legacy"
       : match[1] === "PROC_MON_FILTER_MAIN_FOREGROUND_DETAIL"
         || match[1] === "PROC_MON_FILTER_FOREGROUND_WINDOW"
+        || match[1] === "PROC_MON_FILTER_FOREGROUND_DIALOG_UI"
         ? match[0].match(/stage:(drop);/)?.[1] ?? null
         : null;
     const key = stage ? `${match[1]}:${stage}` : match[1];
@@ -508,6 +509,33 @@ export function describeWindowsFilterDiagnostics(output) {
   for (const match of foregroundWindow) {
     diagnostics.push(
       `drop-foreground-window=class:${match[1]};owner:${match[2]};visible:${match[3]};enabled:${match[4]};title-match:${match[5]}`,
+    );
+  }
+
+  const foregroundDialogUi = output.matchAll(
+    /^PROC_MON_FILTER_FOREGROUND_DIALOG_UI=stage:drop;state:available;items:(\d{1,3});buttons:(\d{1,3});texts:(\d{1,3});edits:(\d{1,3});combos:(\d{1,3});other-controls:(\d{1,3});ok:(\d{1,3});cancel:(\d{1,3});retry:(\d{1,3});yes:(\d{1,3});no:(\d{1,3});other-buttons:(\d{1,3});truncated:(true|false)\r?$/gm,
+  );
+  for (const match of foregroundDialogUi) {
+    const counts = match.slice(1, 13).map(Number);
+    const [items, buttons, texts, edits, combos, otherControls, ok, cancel, retry, yes, no, otherButtons] = counts;
+    if (
+      counts.some((count) => count > 128)
+      || buttons + texts + edits + combos + otherControls > items
+      || ok + cancel + retry + yes + no + otherButtons !== buttons
+    ) {
+      continue;
+    }
+    diagnostics.push(
+      `drop-foreground-dialog-ui=state:available;items:${items};buttons:${buttons};texts:${texts};edits:${edits};combos:${combos};other-controls:${otherControls};ok:${ok};cancel:${cancel};retry:${retry};yes:${yes};no:${no};other-buttons:${otherButtons};truncated:${match[13]}`,
+    );
+  }
+
+  const foregroundDialogUiUnavailable = output.matchAll(
+    /^PROC_MON_FILTER_FOREGROUND_DIALOG_UI=stage:drop;state:unavailable;reason:(invalid-window|owner-mismatch|uia-com|uia-element-unavailable|uia-invalid-operation|uia-argument)\r?$/gm,
+  );
+  for (const match of foregroundDialogUiUnavailable) {
+    diagnostics.push(
+      `drop-foreground-dialog-ui=state:unavailable;reason:${match[1]}`,
     );
   }
 
