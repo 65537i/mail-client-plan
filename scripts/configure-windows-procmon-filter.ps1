@@ -2741,6 +2741,15 @@ function Get-ForegroundDialogButtonLabel([string]$Name) {
   }
 }
 
+function Test-ForegroundDialogTextHint([string]$Text, [string[]]$Terms) {
+  foreach ($term in $Terms) {
+    if ($Text.IndexOf($term, [StringComparison]::OrdinalIgnoreCase) -ge 0) {
+      return $true
+    }
+  }
+  return $false
+}
+
 function Write-ProcmonForegroundDialogObservation(
   [System.IntPtr]$WindowHandle,
   [int]$OwnerProcessId
@@ -2800,6 +2809,16 @@ function Write-ProcmonForegroundDialogObservation(
     no = 0
     other = 0
   }
+  $textHints = @{
+    error = $false
+    warning = $false
+    filter = $false
+    capture = $false
+    filesystem = $false
+    privilege = $false
+    confirmation = $false
+  }
+  $textTruncated = $false
   try {
     for ($index = 0; $index -lt $itemScanCount; $index++) {
       $elementState = $children[$index].Current
@@ -2812,7 +2831,35 @@ function Write-ProcmonForegroundDialogObservation(
           $buttonLabel = Get-ForegroundDialogButtonLabel $elementState.Name
           $buttonLabels[$buttonLabel]++
         }
-        "ControlType.Text" { $textCount++ }
+        "ControlType.Text" {
+          $textCount++
+          $text = [string]$elementState.Name
+          if ($text.Length -gt 4096) {
+            $text = $text.Substring(0, 4096)
+            $textTruncated = $true
+          }
+          $textHints.error = $textHints.error -or (
+            Test-ForegroundDialogTextHint $text @("error", "failed", "unable")
+          )
+          $textHints.warning = $textHints.warning -or (
+            Test-ForegroundDialogTextHint $text @("warning", "caution")
+          )
+          $textHints.filter = $textHints.filter -or (
+            Test-ForegroundDialogTextHint $text @("filter", "drop")
+          )
+          $textHints.capture = $textHints.capture -or (
+            Test-ForegroundDialogTextHint $text @("capture", "record")
+          )
+          $textHints.filesystem = $textHints.filesystem -or (
+            Test-ForegroundDialogTextHint $text @("file", "path")
+          )
+          $textHints.privilege = $textHints.privilege -or (
+            Test-ForegroundDialogTextHint $text @("driver", "administrator", "permission")
+          )
+          $textHints.confirmation = $textHints.confirmation -or (
+            Test-ForegroundDialogTextHint $text @("confirm", "overwrite")
+          )
+        }
         "ControlType.Edit" { $editCount++ }
         "ControlType.ComboBox" { $comboCount++ }
         default { $otherControlCount++ }
@@ -2838,7 +2885,14 @@ function Write-ProcmonForegroundDialogObservation(
   $state += ";edits:$editCount;combos:$comboCount;other-controls:$otherControlCount"
   $state += ";ok:$($buttonLabels.ok);cancel:$($buttonLabels.cancel);retry:$($buttonLabels.retry)"
   $state += ";yes:$($buttonLabels.yes);no:$($buttonLabels.no);other-buttons:$($buttonLabels.other)"
-  $state += ";truncated:$truncated"
+  $state += ";hints-error:$($textHints.error.ToString().ToLowerInvariant())"
+  $state += ";hints-warning:$($textHints.warning.ToString().ToLowerInvariant())"
+  $state += ";hints-filter:$($textHints.filter.ToString().ToLowerInvariant())"
+  $state += ";hints-capture:$($textHints.capture.ToString().ToLowerInvariant())"
+  $state += ";hints-filesystem:$($textHints.filesystem.ToString().ToLowerInvariant())"
+  $state += ";hints-privilege:$($textHints.privilege.ToString().ToLowerInvariant())"
+  $state += ";hints-confirmation:$($textHints.confirmation.ToString().ToLowerInvariant())"
+  $state += ";text-truncated:$($textTruncated.ToString().ToLowerInvariant());truncated:$truncated"
   [Console]::Out.WriteLine(
     "PROC_MON_FILTER_FOREGROUND_DIALOG_UI=stage:drop;state:$state"
   )

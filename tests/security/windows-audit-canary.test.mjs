@@ -347,7 +347,10 @@ test("AC-05: Procmon window discovery retries transient UIA ownership reads befo
   assert.match(foregroundDialogObservation, /GetWindowProcessId\(\$WindowHandle\)[\s\S]*FromHandle\(\$WindowHandle\)[\s\S]*\$dialog\.Current\.ProcessId -ne \$OwnerProcessId/);
   assert.match(foregroundDialogObservation, /TreeScope\]::Children[\s\S]*Math\]::Min\(\$children\.Count, 128\)[\s\S]*"ControlType.Button"[\s\S]*Get-ForegroundDialogButtonLabel[\s\S]*"ControlType.Text"[\s\S]*PROC_MON_FILTER_FOREGROUND_DIALOG_UI=stage:drop/);
   assert.match(configuration, /function Get-ForegroundDialogButtonLabel\(\[string\]\$Name\) \{\s*switch -CaseSensitive \(\$Name\) \{\s*"OK" \{ return "ok" \}\s*"Cancel" \{ return "cancel" \}\s*"Retry" \{ return "retry" \}\s*"Yes" \{ return "yes" \}\s*"No" \{ return "no" \}/);
+  assert.match(configuration, /function Test-ForegroundDialogTextHint\([\s\S]*\$Text\.IndexOf\(\$term, \[StringComparison\]::OrdinalIgnoreCase\)/);
+  assert.match(foregroundDialogObservation, /\$text\.Length -gt 4096[\s\S]*\$text\.Substring\(0, 4096\)[\s\S]*hints-error:\$\(\$textHints\.error[\s\S]*text-truncated:/);
   assert.doesNotMatch(foregroundDialogObservation, /WriteLine\([^)]*\$elementState\.Name/);
+  assert.doesNotMatch(foregroundDialogObservation, /WriteLine\([^)]*\$text\b/);
   assert.match(foregroundHelper, /\[ValidateSet\("none", "drop"\)\]\[string\]\$DiagnosticStage = "none"/);
   assert.match(foregroundHelper, /\[System\.IntPtr\]\$FilterDialogHandle = \[IntPtr\]::Zero/);
   assert.match(foregroundHelper, /\$FilterDialogHandle -ne \[IntPtr\]::Zero[\s\S]*"filter-dialog"/);
