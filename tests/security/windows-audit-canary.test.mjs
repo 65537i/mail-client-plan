@@ -349,7 +349,7 @@ test("AC-05: Procmon window discovery retries transient UIA ownership reads befo
   assert.match(configuration, /function Get-ForegroundDialogButtonLabel\(\[string\]\$Name\) \{\s*switch -CaseSensitive \(\$Name\) \{\s*"OK" \{ return "ok" \}\s*"Cancel" \{ return "cancel" \}\s*"Retry" \{ return "retry" \}\s*"Yes" \{ return "yes" \}\s*"No" \{ return "no" \}/);
   assert.match(configuration, /function Test-ForegroundDialogTextHint\([\s\S]*\$Text\.IndexOf\(\$term, \[StringComparison\]::OrdinalIgnoreCase\)/);
   assert.match(foregroundDialogObservation, /\$text\.Length -gt 4096[\s\S]*\$text\.Substring\(0, 4096\)[\s\S]*hints-error:\$\(\$textHints\.error[\s\S]*text-truncated:/);
-  assert.match(foregroundDialogObservation, /fileMissing[\s\S]*"not found", "cannot find", "could not find", "does not exist", "no such file", "missing"[\s\S]*fileOperation[\s\S]*"open", "read", "write", "load", "save"[\s\S]*fileFormat[\s\S]*"format", "corrupt", "invalid", "malformed"/);
+  assert.match(foregroundDialogObservation, /fileMissing[\s\S]*"not found", "cannot find", "could not find", "does not exist", "no such file", "missing"[\s\S]*fileOperation[\s\S]*"open", "read", "write", "load", "save"[\s\S]*fileFormat[\s\S]*"format", "corrupt", "invalid", "malformed"[\s\S]*fileOpen[\s\S]*fileRead[\s\S]*fileWrite[\s\S]*fileLoad[\s\S]*fileSave/);
   assert.doesNotMatch(foregroundDialogObservation, /WriteLine\([^)]*\$elementState\.Name/);
   assert.doesNotMatch(foregroundDialogObservation, /WriteLine\([^)]*\$text\b/);
   assert.match(foregroundHelper, /\[ValidateSet\("none", "drop"\)\]\[string\]\$DiagnosticStage = "none"/);

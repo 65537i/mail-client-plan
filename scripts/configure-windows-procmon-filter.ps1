@@ -2820,6 +2820,11 @@ function Write-ProcmonForegroundDialogObservation(
     fileMissing = $false
     fileOperation = $false
     fileFormat = $false
+    fileOpen = $false
+    fileRead = $false
+    fileWrite = $false
+    fileLoad = $false
+    fileSave = $false
   }
   $textTruncated = $false
   try {
@@ -2877,6 +2882,21 @@ function Write-ProcmonForegroundDialogObservation(
               "format", "corrupt", "invalid", "malformed"
             )
           )
+          $textHints.fileOpen = $textHints.fileOpen -or (
+            Test-ForegroundDialogTextHint $text @("open")
+          )
+          $textHints.fileRead = $textHints.fileRead -or (
+            Test-ForegroundDialogTextHint $text @("read")
+          )
+          $textHints.fileWrite = $textHints.fileWrite -or (
+            Test-ForegroundDialogTextHint $text @("write")
+          )
+          $textHints.fileLoad = $textHints.fileLoad -or (
+            Test-ForegroundDialogTextHint $text @("load")
+          )
+          $textHints.fileSave = $textHints.fileSave -or (
+            Test-ForegroundDialogTextHint $text @("save")
+          )
         }
         "ControlType.Edit" { $editCount++ }
         "ControlType.ComboBox" { $comboCount++ }
@@ -2913,6 +2933,11 @@ function Write-ProcmonForegroundDialogObservation(
   $state += ";hints-file-missing:$($textHints.fileMissing.ToString().ToLowerInvariant())"
   $state += ";hints-file-operation:$($textHints.fileOperation.ToString().ToLowerInvariant())"
   $state += ";hints-file-format:$($textHints.fileFormat.ToString().ToLowerInvariant())"
+  $state += ";hints-file-open:$($textHints.fileOpen.ToString().ToLowerInvariant())"
+  $state += ";hints-file-read:$($textHints.fileRead.ToString().ToLowerInvariant())"
+  $state += ";hints-file-write:$($textHints.fileWrite.ToString().ToLowerInvariant())"
+  $state += ";hints-file-load:$($textHints.fileLoad.ToString().ToLowerInvariant())"
+  $state += ";hints-file-save:$($textHints.fileSave.ToString().ToLowerInvariant())"
   $state += ";text-truncated:$($textTruncated.ToString().ToLowerInvariant());truncated:$truncated"
   [Console]::Out.WriteLine(
     "PROC_MON_FILTER_FOREGROUND_DIALOG_UI=stage:drop;state:$state"
