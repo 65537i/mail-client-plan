@@ -190,6 +190,8 @@ test("AC-05: bounded output retains and parses the final window-scan summary", (
     + "hints-file-missing:false;hints-file-operation:false;hints-file-format:false;"
     + "hints-file-open:false;hints-file-read:false;hints-file-write:false;"
     + "hints-file-load:false;hints-file-save:false;"
+    + "hints-file-config:false;hints-file-capture:false;hints-file-export:false;"
+    + "hints-file-path:false;hints-file-access-denied:false;"
     + "text-truncated:false;truncated:false";
   const shortcut = "PROC_MON_FILTER_INITIAL_SHORTCUT=command:filter-dialog;state:sent";
   const captured = appendBoundedWindowsFilterOutput(
@@ -221,7 +223,7 @@ test("AC-05: bounded output retains and parses the final window-scan summary", (
         + "; drop-main-window-foreground-gate=failed"
         + "; drop-main-window-foreground-detail=validation:passed;before:other-process;request:accepted;after:other-process;wait-ms:2000"
         + "; drop-foreground-window=class:dialog;owner:main;visible:true;enabled:true;title-match:different"
-        + "; drop-foreground-dialog-ui=state:available;items:7;buttons:1;texts:2;edits:0;combos:0;other-controls:4;ok:1;cancel:0;retry:0;yes:0;no:0;other-buttons:0;hints-error:false;hints-warning:false;hints-filter:false;hints-capture:false;hints-filesystem:false;hints-privilege:false;hints-confirmation:false;hints-file-missing:false;hints-file-operation:false;hints-file-format:false;hints-file-open:false;hints-file-read:false;hints-file-write:false;hints-file-load:false;hints-file-save:false;text-truncated:false;truncated:false"
+        + "; drop-foreground-dialog-ui=state:available;items:7;buttons:1;texts:2;edits:0;combos:0;other-controls:4;ok:1;cancel:0;retry:0;yes:0;no:0;other-buttons:0;hints-error:false;hints-warning:false;hints-filter:false;hints-capture:false;hints-filesystem:false;hints-privilege:false;hints-confirmation:false;hints-file-missing:false;hints-file-operation:false;hints-file-format:false;hints-file-open:false;hints-file-read:false;hints-file-write:false;hints-file-load:false;hints-file-save:false;hints-file-config:false;hints-file-capture:false;hints-file-export:false;hints-file-path:false;hints-file-access-denied:false;text-truncated:false;truncated:false"
         + "; initial-filter-dialog=keyboard-shortcut",
     ),
   );
@@ -658,10 +660,10 @@ test("AC-05: configuration save observations expose states, not paths or dialog 
     "; drop-foreground-window=class:dialog;owner:main;visible:true;enabled:true;title-match:same",
   );
   const dialogUi =
-    "PROC_MON_FILTER_FOREGROUND_DIALOG_UI=stage:drop;state:available;items:7;buttons:1;texts:2;edits:0;combos:0;other-controls:4;ok:1;cancel:0;retry:0;yes:0;no:0;other-buttons:0;hints-error:true;hints-warning:false;hints-filter:true;hints-capture:false;hints-filesystem:false;hints-privilege:false;hints-confirmation:false;hints-file-missing:true;hints-file-operation:true;hints-file-format:false;hints-file-open:true;hints-file-read:false;hints-file-write:false;hints-file-load:false;hints-file-save:false;text-truncated:false;truncated:false";
+    "PROC_MON_FILTER_FOREGROUND_DIALOG_UI=stage:drop;state:available;items:7;buttons:1;texts:2;edits:0;combos:0;other-controls:4;ok:1;cancel:0;retry:0;yes:0;no:0;other-buttons:0;hints-error:true;hints-warning:false;hints-filter:true;hints-capture:false;hints-filesystem:false;hints-privilege:false;hints-confirmation:false;hints-file-missing:true;hints-file-operation:true;hints-file-format:false;hints-file-open:true;hints-file-read:false;hints-file-write:false;hints-file-load:false;hints-file-save:false;hints-file-config:true;hints-file-capture:false;hints-file-export:false;hints-file-path:true;hints-file-access-denied:true;text-truncated:false;truncated:false";
   assert.equal(
     describeWindowsFilterDiagnostics(dialogUi),
-    "; drop-foreground-dialog-ui=state:available;items:7;buttons:1;texts:2;edits:0;combos:0;other-controls:4;ok:1;cancel:0;retry:0;yes:0;no:0;other-buttons:0;hints-error:true;hints-warning:false;hints-filter:true;hints-capture:false;hints-filesystem:false;hints-privilege:false;hints-confirmation:false;hints-file-missing:true;hints-file-operation:true;hints-file-format:false;hints-file-open:true;hints-file-read:false;hints-file-write:false;hints-file-load:false;hints-file-save:false;text-truncated:false;truncated:false",
+    "; drop-foreground-dialog-ui=state:available;items:7;buttons:1;texts:2;edits:0;combos:0;other-controls:4;ok:1;cancel:0;retry:0;yes:0;no:0;other-buttons:0;hints-error:true;hints-warning:false;hints-filter:true;hints-capture:false;hints-filesystem:false;hints-privilege:false;hints-confirmation:false;hints-file-missing:true;hints-file-operation:true;hints-file-format:false;hints-file-open:true;hints-file-read:false;hints-file-write:false;hints-file-load:false;hints-file-save:false;hints-file-config:true;hints-file-capture:false;hints-file-export:false;hints-file-path:true;hints-file-access-denied:true;text-truncated:false;truncated:false",
   );
   assert.equal(
     describeWindowsFilterDiagnostics(

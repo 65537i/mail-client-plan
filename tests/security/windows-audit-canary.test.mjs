@@ -349,7 +349,32 @@ test("AC-05: Procmon window discovery retries transient UIA ownership reads befo
   assert.match(configuration, /function Get-ForegroundDialogButtonLabel\(\[string\]\$Name\) \{\s*switch -CaseSensitive \(\$Name\) \{\s*"OK" \{ return "ok" \}\s*"Cancel" \{ return "cancel" \}\s*"Retry" \{ return "retry" \}\s*"Yes" \{ return "yes" \}\s*"No" \{ return "no" \}/);
   assert.match(configuration, /function Test-ForegroundDialogTextHint\([\s\S]*\$Text\.IndexOf\(\$term, \[StringComparison\]::OrdinalIgnoreCase\)/);
   assert.match(foregroundDialogObservation, /\$text\.Length -gt 4096[\s\S]*\$text\.Substring\(0, 4096\)[\s\S]*hints-error:\$\(\$textHints\.error[\s\S]*text-truncated:/);
-  assert.match(foregroundDialogObservation, /fileMissing[\s\S]*"not found", "cannot find", "could not find", "does not exist", "no such file", "missing"[\s\S]*fileOperation[\s\S]*"open", "read", "write", "load", "save"[\s\S]*fileFormat[\s\S]*"format", "corrupt", "invalid", "malformed"[\s\S]*fileOpen[\s\S]*fileRead[\s\S]*fileWrite[\s\S]*fileLoad[\s\S]*fileSave/);
+  for (const [hint, terms] of [
+    ["fileMissing", ["not found", "cannot find", "could not find", "does not exist", "no such file", "missing"]],
+    ["fileOperation", ["open", "read", "write", "load", "save"]],
+    ["fileFormat", ["format", "corrupt", "invalid", "malformed"]],
+    ["fileOpen", ["open"]],
+    ["fileRead", ["read"]],
+    ["fileWrite", ["write"]],
+    ["fileLoad", ["load"]],
+    ["fileSave", ["save"]],
+    ["fileConfig", ["config", "configuration", "settings", ".pmc"]],
+    ["fileCapture", ["backing file", ".pml"]],
+    ["fileExport", ["export", ".csv"]],
+    ["filePath", ["path", "directory", "folder"]],
+    ["fileAccessDenied", ["access denied", "permission denied", "not permitted", "unauthorized", "cannot access", "unable to access"]],
+  ]) {
+    const hintStart = foregroundDialogObservation.indexOf(`$textHints.${hint} =`);
+    assert.notEqual(hintStart, -1, `Missing ${hint} classification`);
+    const nextHint = foregroundDialogObservation.indexOf("\n          $textHints.", hintStart + 1);
+    const hintBlock = foregroundDialogObservation.slice(
+      hintStart,
+      nextHint === -1 ? undefined : nextHint,
+    );
+    for (const term of terms) {
+      assert.ok(hintBlock.includes(`"${term}"`), `Missing ${hint} term ${term}`);
+    }
+  }
   assert.doesNotMatch(foregroundDialogObservation, /WriteLine\([^)]*\$elementState\.Name/);
   assert.doesNotMatch(foregroundDialogObservation, /WriteLine\([^)]*\$text\b/);
   assert.match(foregroundHelper, /\[ValidateSet\("none", "drop"\)\]\[string\]\$DiagnosticStage = "none"/);

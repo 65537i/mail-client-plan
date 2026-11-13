@@ -2825,6 +2825,11 @@ function Write-ProcmonForegroundDialogObservation(
     fileWrite = $false
     fileLoad = $false
     fileSave = $false
+    fileConfig = $false
+    fileCapture = $false
+    fileExport = $false
+    filePath = $false
+    fileAccessDenied = $false
   }
   $textTruncated = $false
   try {
@@ -2897,6 +2902,26 @@ function Write-ProcmonForegroundDialogObservation(
           $textHints.fileSave = $textHints.fileSave -or (
             Test-ForegroundDialogTextHint $text @("save")
           )
+          $textHints.fileConfig = $textHints.fileConfig -or (
+            Test-ForegroundDialogTextHint $text @(
+              "config", "configuration", "settings", ".pmc"
+            )
+          )
+          $textHints.fileCapture = $textHints.fileCapture -or (
+            Test-ForegroundDialogTextHint $text @("backing file", ".pml")
+          )
+          $textHints.fileExport = $textHints.fileExport -or (
+            Test-ForegroundDialogTextHint $text @("export", ".csv")
+          )
+          $textHints.filePath = $textHints.filePath -or (
+            Test-ForegroundDialogTextHint $text @("path", "directory", "folder")
+          )
+          $textHints.fileAccessDenied = $textHints.fileAccessDenied -or (
+            Test-ForegroundDialogTextHint $text @(
+              "access denied", "permission denied", "not permitted", "unauthorized",
+              "cannot access", "unable to access"
+            )
+          )
         }
         "ControlType.Edit" { $editCount++ }
         "ControlType.ComboBox" { $comboCount++ }
@@ -2938,6 +2963,11 @@ function Write-ProcmonForegroundDialogObservation(
   $state += ";hints-file-write:$($textHints.fileWrite.ToString().ToLowerInvariant())"
   $state += ";hints-file-load:$($textHints.fileLoad.ToString().ToLowerInvariant())"
   $state += ";hints-file-save:$($textHints.fileSave.ToString().ToLowerInvariant())"
+  $state += ";hints-file-config:$($textHints.fileConfig.ToString().ToLowerInvariant())"
+  $state += ";hints-file-capture:$($textHints.fileCapture.ToString().ToLowerInvariant())"
+  $state += ";hints-file-export:$($textHints.fileExport.ToString().ToLowerInvariant())"
+  $state += ";hints-file-path:$($textHints.filePath.ToString().ToLowerInvariant())"
+  $state += ";hints-file-access-denied:$($textHints.fileAccessDenied.ToString().ToLowerInvariant())"
   $state += ";text-truncated:$($textTruncated.ToString().ToLowerInvariant());truncated:$truncated"
   [Console]::Out.WriteLine(
     "PROC_MON_FILTER_FOREGROUND_DIALOG_UI=stage:drop;state:$state"
