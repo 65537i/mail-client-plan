@@ -338,8 +338,9 @@ test("AC-05: Procmon window discovery retries transient UIA ownership reads befo
   assert.match(foregroundHelper, /SetForegroundWindow\(\$mainWindowHandle\)/);
   assert.match(foregroundHelper, /GetForegroundWindow\(\)[\s\S]*GetWindowProcessId\(\$foregroundHandle\) -eq \$Process\.Id/);
   assert.match(configuration, /DllImport\("user32\.dll", EntryPoint = "GetClassNameW", CharSet = CharSet\.Unicode, ExactSpelling = true\)/);
-  assert.match(configuration, /public static string DescribeForegroundWindow\([\s\S]*GetWindowProcessId\(hWnd\) != ownerProcessId[\s\S]*GetClassName\(hWnd, className, className\.Capacity\)[\s\S]*"dialog"[\s\S]*WindowOwner[\s\S]*IsWindowVisible\(hWnd\)[\s\S]*IsWindowEnabled\(hWnd\)[\s\S]*GetWindowProcessId\(hWnd\) != ownerProcessId[\s\S]*class:\{0\};owner:\{1\};visible:\{2\};enabled:\{3\}/);
-  assert.match(foregroundHelper, /DescribeForegroundWindow\(\s*\$foregroundHandle,\s*\$Process\.Id,\s*\$mainWindowHandle\s*\)/);
+  assert.match(configuration, /DllImport\("user32\.dll", EntryPoint = "GetWindowTextW", CharSet = CharSet\.Unicode, ExactSpelling = true\)/);
+  assert.match(configuration, /public static string DescribeForegroundWindow\([\s\S]*GetWindowProcessId\(hWnd\) != ownerProcessId[\s\S]*GetClassName\(hWnd, className, className\.Capacity\)[\s\S]*"dialog"[\s\S]*WindowOwner[\s\S]*IsWindowVisible\(hWnd\)[\s\S]*IsWindowEnabled\(hWnd\)[\s\S]*GetWindowText\(hWnd, title, title\.Capacity\)[\s\S]*StringComparison\.Ordinal[\s\S]*GetWindowProcessId\(hWnd\) != ownerProcessId[\s\S]*class:\{0\};owner:\{1\};visible:\{2\};enabled:\{3\};title-match:\{4\}/);
+  assert.match(foregroundHelper, /DescribeForegroundWindow\(\s*\$foregroundHandle,\s*\$Process\.Id,\s*\$mainWindowHandle,\s*\$FilterDialogTitle\s*\)/);
   assert.match(foregroundHelper, /\[ValidateSet\("none", "drop"\)\]\[string\]\$DiagnosticStage = "none"/);
   assert.match(foregroundHelper, /\[System\.IntPtr\]\$FilterDialogHandle = \[IntPtr\]::Zero/);
   assert.match(foregroundHelper, /\$FilterDialogHandle -ne \[IntPtr\]::Zero[\s\S]*"filter-dialog"/);
@@ -349,7 +350,7 @@ test("AC-05: Procmon window discovery retries transient UIA ownership reads befo
   assert.match(configuration, /if \(\$menuState\.IsKeyboardFocusable\) \{\s*try \{\s*\$filterMenu\.SetFocus\(\)[\s\S]*?\$menuOpenAttempted = \$true[\s\S]*?\$invokePattern\.Invoke\(\)[\s\S]*?\} else \{\s*\[Console\]::Out\.WriteLine\("PROC_MON_FILTER_MENU_FOCUS=skipped-not-keyboard-focusable"\)\s*\}/);
   assert.match(configuration, /Set-Stage "verify-main-foreground-for-filter-shortcut"[\s\S]*?"PROC_MON_FILTER_MAIN_FOREGROUND=stage:shortcut;gate:\$shortcutForegroundGate"[\s\S]*?if \(\$shortcutForegroundGate -ne "passed"\)[\s\S]*?if \(\$menuOpenAttempted\) \{[\s\S]*?SendWait\("\{ESC\}"\)[\s\S]*?"PROC_MON_FILTER_MAIN_FOREGROUND=stage:shortcut-dismiss;gate:\$dismissForegroundGate"[\s\S]*?Set-Stage "open-filter-dialog-shortcut"[\s\S]*?SendWait\("\^l"\)[\s\S]*?Wait-FilterDialog \$process \$main/);
   assert.match(configuration, /Set-Stage "focus-main-for-drop-filtered-events"\s+\$mainWindowHandle = Set-VerifiedProcmonMainWindowForeground `\r?\n\s+\$main \$process -DiagnosticStage "drop"/);
-  assert.match(configuration, /\$filterDialogHandle = \[IntPtr\]\$filterDialog\.Current\.NativeWindowHandle[\s\S]*Set-VerifiedProcmonMainWindowForeground `\r?\n\s+\$main \$process -DiagnosticStage "drop" -FilterDialogHandle \$filterDialogHandle/);
+  assert.match(configuration, /\$filterDialogTitle = \[string\]\$filterDialog\.Current\.Name\s+\$filterDialogHandle = \[IntPtr\]\$filterDialog\.Current\.NativeWindowHandle[\s\S]*Set-VerifiedProcmonMainWindowForeground `\r?\n\s+\$main \$process -DiagnosticStage "drop" -FilterDialogHandle \$filterDialogHandle `\r?\n\s+-FilterDialogTitle \$filterDialogTitle/);
   assert.match(configuration, /Set-Stage "focus-main-for-export"\s+\$mainWindowHandle = Set-VerifiedProcmonMainWindowForeground \$main \$process/);
   assert.match(configuration, /Set-Stage "activate-reloaded-main-window"\s+\$mainWindowHandle = Set-VerifiedProcmonMainWindowForeground \$main \$process/);
   assert.doesNotMatch(configuration, /\$main\.SetFocus\(\)/);

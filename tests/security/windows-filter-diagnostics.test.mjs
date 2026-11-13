@@ -181,7 +181,7 @@ test("AC-05: bounded output retains and parses the final window-scan summary", (
     + "validation:passed;before:other-process;request:accepted;"
     + "after:other-process;wait-ms:2000";
   const dropForegroundWindow = "PROC_MON_FILTER_FOREGROUND_WINDOW=stage:drop;"
-    + "class:dialog;owner:main;visible:true;enabled:true";
+    + "class:dialog;owner:main;visible:true;enabled:true;title-match:different";
   const shortcut = "PROC_MON_FILTER_INITIAL_SHORTCUT=command:filter-dialog;state:sent";
   const captured = appendBoundedWindowsFilterOutput(
     `${"x".repeat(9000)}\n${scan}\n${initialFocus}\n${shortcutFocus}\n${shortcutDismissFocus}\n${dropFocus}\n${dropFocusDetail}\n${dropForegroundWindow}\n${shortcut}\n`,
@@ -210,7 +210,7 @@ test("AC-05: bounded output retains and parses the final window-scan summary", (
         + "; shortcut-dismiss-main-window-foreground-gate=failed"
         + "; drop-main-window-foreground-gate=failed"
         + "; drop-main-window-foreground-detail=validation:passed;before:other-process;request:accepted;after:other-process;wait-ms:2000"
-        + "; drop-foreground-window=class:dialog;owner:main;visible:true;enabled:true"
+        + "; drop-foreground-window=class:dialog;owner:main;visible:true;enabled:true;title-match:different"
         + "; initial-filter-dialog=keyboard-shortcut",
     ),
   );
@@ -636,13 +636,25 @@ test("AC-05: configuration save observations expose states, not paths or dialog 
   );
   assert.equal(
     describeWindowsFilterDiagnostics(
-      "PROC_MON_FILTER_FOREGROUND_WINDOW=stage:drop;class:dialog;owner:main;visible:true;enabled:false",
+      "PROC_MON_FILTER_FOREGROUND_WINDOW=stage:drop;class:dialog;owner:main;visible:true;enabled:false;title-match:different",
     ),
-    "; drop-foreground-window=class:dialog;owner:main;visible:true;enabled:false",
+    "; drop-foreground-window=class:dialog;owner:main;visible:true;enabled:false;title-match:different",
   );
   assert.equal(
     describeWindowsFilterDiagnostics(
-      "PROC_MON_FILTER_FOREGROUND_WINDOW=stage:drop;class:C:\\private;owner:main;visible:true;enabled:false",
+      "PROC_MON_FILTER_FOREGROUND_WINDOW=stage:drop;class:dialog;owner:main;visible:true;enabled:true;title-match:same",
+    ),
+    "; drop-foreground-window=class:dialog;owner:main;visible:true;enabled:true;title-match:same",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_FOREGROUND_WINDOW=stage:drop;class:C:\\private;owner:main;visible:true;enabled:false;title-match:different",
+    ),
+    "",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_FOREGROUND_WINDOW=stage:drop;class:dialog;owner:main;visible:true;enabled:false;title-match:C:\\private",
     ),
     "",
   );

@@ -503,11 +503,11 @@ export function describeWindowsFilterDiagnostics(output) {
   }
 
   const foregroundWindow = output.matchAll(
-    /^PROC_MON_FILTER_FOREGROUND_WINDOW=stage:drop;class:(main|dialog|other|unavailable);owner:(main|other|none|unavailable);visible:(true|false|unavailable);enabled:(true|false|unavailable)\r?$/gm,
+    /^PROC_MON_FILTER_FOREGROUND_WINDOW=stage:drop;class:(main|dialog|other|unavailable);owner:(main|other|none|unavailable);visible:(true|false|unavailable);enabled:(true|false|unavailable);title-match:(same|different|unavailable)\r?$/gm,
   );
   for (const match of foregroundWindow) {
     diagnostics.push(
-      `drop-foreground-window=class:${match[1]};owner:${match[2]};visible:${match[3]};enabled:${match[4]}`,
+      `drop-foreground-window=class:${match[1]};owner:${match[2]};visible:${match[3]};enabled:${match[4]};title-match:${match[5]}`,
     );
   }
 

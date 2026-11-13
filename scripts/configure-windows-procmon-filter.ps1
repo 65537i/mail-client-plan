@@ -165,14 +165,18 @@ public static class ProcmonNativeMenu
     [DllImport("user32.dll", EntryPoint = "GetClassNameW", CharSet = CharSet.Unicode, ExactSpelling = true)]
     private static extern int GetClassName(IntPtr hWnd, StringBuilder className, int maximum);
 
+    [DllImport("user32.dll", EntryPoint = "GetWindowTextW", CharSet = CharSet.Unicode, ExactSpelling = true)]
+    private static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int maximum);
+
     public static string DescribeForegroundWindow(
         IntPtr hWnd,
         int ownerProcessId,
-        IntPtr mainWindowHandle
+        IntPtr mainWindowHandle,
+        string filterDialogTitle
     )
     {
         const string unavailable =
-            "class:unavailable;owner:unavailable;visible:unavailable;enabled:unavailable";
+            "class:unavailable;owner:unavailable;visible:unavailable;enabled:unavailable;title-match:unavailable";
         if (hWnd == IntPtr.Zero || GetWindowProcessId(hWnd) != ownerProcessId)
             return unavailable;
 
@@ -191,15 +195,30 @@ public static class ProcmonNativeMenu
             : ownerHandle == mainWindowHandle ? "main" : "other";
         bool visible = IsWindowVisible(hWnd);
         bool enabled = IsWindowEnabled(hWnd);
+        string titleMatch = "unavailable";
+        if (!String.IsNullOrEmpty(filterDialogTitle))
+        {
+            var title = new StringBuilder(256);
+            int titleLength = GetWindowText(hWnd, title, title.Capacity);
+            if (titleLength > 0 && titleLength < title.Capacity - 1)
+            {
+                titleMatch = String.Equals(
+                    title.ToString(),
+                    filterDialogTitle,
+                    StringComparison.Ordinal
+                ) ? "same" : "different";
+            }
+        }
         if (GetWindowProcessId(hWnd) != ownerProcessId)
             return unavailable;
 
         return String.Format(
-            "class:{0};owner:{1};visible:{2};enabled:{3}",
+            "class:{0};owner:{1};visible:{2};enabled:{3};title-match:{4}",
             classState,
             ownerState,
             visible ? "true" : "false",
-            enabled ? "true" : "false"
+            enabled ? "true" : "false",
+            titleMatch
         );
     }
 
@@ -1672,7 +1691,8 @@ function Set-VerifiedProcmonMainWindowForeground(
   [System.Diagnostics.Process]$Process,
   [int]$TimeoutSeconds = 2,
   [ValidateSet("none", "drop")][string]$DiagnosticStage = "none",
-  [System.IntPtr]$FilterDialogHandle = [IntPtr]::Zero
+  [System.IntPtr]$FilterDialogHandle = [IntPtr]::Zero,
+  [string]$FilterDialogTitle = ""
 ) {
   $mainWindowState = $MainWindow.Current
   $mainWindowHandle = [IntPtr]$mainWindowState.NativeWindowHandle
@@ -1756,7 +1776,8 @@ function Set-VerifiedProcmonMainWindowForeground(
     $foregroundDetails = [ProcmonNativeMenu]::DescribeForegroundWindow(
       $foregroundHandle,
       $Process.Id,
-      $mainWindowHandle
+      $mainWindowHandle,
+      $FilterDialogTitle
     )
     [Console]::Out.WriteLine(
       "PROC_MON_FILTER_FOREGROUND_WINDOW=stage:drop;$foregroundDetails"
@@ -3071,12 +3092,14 @@ try {
   $ok = Wait-Element $filterDialog ([System.Windows.Automation.PropertyCondition]::new(
     [System.Windows.Automation.AutomationElement]::NameProperty, "OK"
   )) 5
+  $filterDialogTitle = [string]$filterDialog.Current.Name
   $filterDialogHandle = [IntPtr]$filterDialog.Current.NativeWindowHandle
   $ok.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
 
   Set-Stage "focus-main-for-drop-filtered-events"
   $mainWindowHandle = Set-VerifiedProcmonMainWindowForeground `
-    $main $process -DiagnosticStage "drop" -FilterDialogHandle $filterDialogHandle
+    $main $process -DiagnosticStage "drop" -FilterDialogHandle $filterDialogHandle `
+    -FilterDialogTitle $filterDialogTitle
   $mainForegroundGate = if ($mainWindowHandle -eq [IntPtr]::Zero) {
     "failed"
   } else {
