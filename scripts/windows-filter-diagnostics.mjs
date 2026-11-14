@@ -2,6 +2,8 @@ const allowedTypes = /^(?:MenuBar|Menu|MenuItem|Window|Pane|ToolBar|Button|Text|
 const allowedNames = /^(?:Event|FileMenu|Filter|FilterCommand|SaveFilterCommand|ExportConfigCommand|DropFilteredEvents|HighlightFilteredEvents|MenuBar|ProcessMonitor|Other)$/;
 export const windowsFilterOutputLimit = 8192;
 export const reloadedFilterUiEvidencePattern = /^reloaded-filter-ui=items:\d+;lists:\d+;data-grids:\d+;tables:\d+;list-items:\d+;data-items:\d+(?:;dialog-window-rows:\d+;other-window-rows:\d+;unscoped-rows:\d+(?:;combo-option-rows:\d+;rule-containers:\d+;rule-row-candidates:\d+;rule-container-unclassified-rows:\d+)?)?;rows:2;truncated:false$/;
+const windowsProcmonProcessStatePattern =
+  /^PROC_MON_PROCESS_STATE=stage:(before-filter-setup|after-filter-setup|after-capture-stop|after-csv-export);named:(0|[1-9]\d{0,2});instances:(0|[1-9]\d{0,2});path-unavailable:(0|[1-9]\d{0,2})$/;
 const windowsFilterOutputHeadLimit = 3072;
 const windowsFilterOutputTruncationMarker = "\nPROC_MON_FILTER_OUTPUT_TRUNCATED=true\n";
 const windowsFilterOutputTailLimit =
@@ -9,15 +11,43 @@ const windowsFilterOutputTailLimit =
   - windowsFilterOutputHeadLimit
   - windowsFilterOutputTruncationMarker.length;
 
+export function parseWindowsProcmonProcessState(output) {
+  const line = output.endsWith("\r\n")
+    ? output.slice(0, -2)
+    : output.endsWith("\n")
+      ? output.slice(0, -1)
+      : output;
+  const match = windowsProcmonProcessStatePattern.exec(line);
+  if (!match) return null;
+  const named = Number(match[2]);
+  const instances = Number(match[3]);
+  const pathUnavailable = Number(match[4]);
+  if (instances + pathUnavailable > named) return null;
+  return {
+    stage: match[1],
+    named,
+    instances,
+    pathUnavailable,
+  };
+}
+
 export function appendBoundedWindowsFilterOutput(current, chunk) {
   const combined = current + chunk;
   if (combined.length <= windowsFilterOutputLimit) return combined;
   const evidence = new Map();
   for (const match of combined.matchAll(
-    /^(PROC_MON_FILTER_CONFIG_PATHS|PROC_MON_FILTER_RELOADED_RULES|PROC_MON_FILTER_RELOADED_UI|PROC_MON_FILTER_RELOADED_DROP)=[^\r\n]{1,1024}\r?$/gm,
+    /^(PROC_MON_FILTER_CONFIG_PATHS|PROC_MON_FILTER_RELOADED_RULES|PROC_MON_FILTER_RELOADED_UI|PROC_MON_FILTER_RELOADED_DROP|PROC_MON_FILTER_WINDOW_SCAN|PROC_MON_FILTER_MAIN_FOREGROUND|PROC_MON_FILTER_MAIN_FOREGROUND_DETAIL|PROC_MON_FILTER_FOREGROUND_WINDOW|PROC_MON_FILTER_FOREGROUND_DIALOG_UI|PROC_MON_FILTER_INITIAL_SHORTCUT)=[^\r\n]{1,1024}\r?$/gm,
   )) {
-    if (!evidence.has(match[1]) && describeWindowsFilterDiagnostics(match[0])) {
-      evidence.set(match[1], match[0].replace(/\r$/, ""));
+    const stage = match[1] === "PROC_MON_FILTER_MAIN_FOREGROUND"
+      ? match[0].match(/stage:(initial|shortcut|shortcut-dismiss|drop|export);/)?.[1] ?? "legacy"
+      : match[1] === "PROC_MON_FILTER_MAIN_FOREGROUND_DETAIL"
+        || match[1] === "PROC_MON_FILTER_FOREGROUND_WINDOW"
+        || match[1] === "PROC_MON_FILTER_FOREGROUND_DIALOG_UI"
+        ? match[0].match(/stage:(drop);/)?.[1] ?? null
+        : null;
+    const key = stage ? `${match[1]}:${stage}` : match[1];
+    if (!evidence.has(key) && describeWindowsFilterDiagnostics(match[0])) {
+      evidence.set(key, match[0].replace(/\r$/, ""));
     }
   }
   const retainedEvidence = evidence.size ? `${[...evidence.values()].join("\n")}\n` : "";
@@ -453,15 +483,86 @@ export function describeWindowsFilterDiagnostics(output) {
   }
 
   const windowScan = output.match(
-    /^PROC_MON_FILTER_WINDOW_SCAN=stage:(initial|reload);phase:(refresh-process|check-process|enumerate-uia-windows|read-uia-window-owner|read-main-window-handle|read-main-window-owner|wait|foreground-owner);process-exited:(true|false);root-windows:(\d{1,4});uia-owned-windows:(\d{1,4});main-handle:(available|unavailable);foreground-owner:(same|other|unavailable)\r?$/m,
+    /^PROC_MON_FILTER_WINDOW_SCAN=stage:(initial|reload);phase:(create-window-condition|refresh-process|check-process|enumerate-uia-windows|get-uia-window-element|read-uia-window-current|read-uia-window-owner|read-main-window-handle|read-main-window-owner|wait|foreground-owner|window-found);process-exited:(true|false);window-found:(true|false);root-windows:(\d{1,4});uia-owned-windows:(\d{1,4});main-handle:(available|unavailable);foreground-owner:(same|other|unavailable)\r?$/m,
   );
   if (windowScan) {
-    const [rootWindows, ownedWindows] = windowScan.slice(4, 6).map(Number);
+    const [rootWindows, ownedWindows] = windowScan.slice(5, 7).map(Number);
     if (rootWindows <= 9999 && ownedWindows <= rootWindows) {
       diagnostics.push(
-        `${windowScan[1]}-window-scan=phase:${windowScan[2]};process-exited:${windowScan[3]};root-windows:${rootWindows};uia-owned-windows:${ownedWindows};main-handle:${windowScan[6]};foreground-owner:${windowScan[7]}`,
+        `${windowScan[1]}-window-scan=phase:${windowScan[2]};process-exited:${windowScan[3]};window-found:${windowScan[4]};root-windows:${rootWindows};uia-owned-windows:${ownedWindows};main-handle:${windowScan[7]};foreground-owner:${windowScan[8]}`,
       );
     }
+  }
+
+  const windowScanTransients = output.match(
+    /^PROC_MON_FILTER_WINDOW_SCAN_TRANSIENTS=stage:(initial|reload);count:(\d{1,4});phase:(not-started|create-window-condition|refresh-process|check-process|enumerate-uia-windows|get-uia-window-element|read-uia-window-current|read-uia-window-owner|read-main-window-handle|read-main-window-owner|wait|foreground-owner);type:(ArgumentException|COMException|ElementNotAvailableException|InvalidOperationException|MethodInvocationException|TypeInitializationException|Other|none)\r?$/m,
+  );
+  const transientCount = windowScanTransients ? Number(windowScanTransients[2]) : -1;
+  const transientPhase = windowScanTransients?.[3];
+  const transientType = windowScanTransients?.[4];
+  if (windowScanTransients && transientCount <= 9999) {
+    diagnostics.push(
+      `${windowScanTransients[1]}-window-scan-transients=count:${transientCount};phase:${transientPhase};type:${transientType}`,
+    );
+  }
+
+  const mainForeground = output.matchAll(
+    /^PROC_MON_FILTER_MAIN_FOREGROUND=(?:stage:(initial|shortcut|shortcut-dismiss|drop|export);)?gate:(passed|failed)\r?$/gm,
+  );
+  for (const match of mainForeground) {
+    const name = match[1]
+      ? `${match[1]}-main-window-foreground-gate`
+      : "main-window-foreground-gate";
+    diagnostics.push(`${name}=${match[2]}`);
+  }
+
+  const mainForegroundDetail = output.matchAll(
+    /^PROC_MON_FILTER_MAIN_FOREGROUND_DETAIL=stage:drop;validation:(passed|process-mismatch|handle-missing|window-owner-mismatch);before:(target|filter-dialog|same-process-other|other-process|unavailable);request:(accepted|rejected|not-attempted);after:(target|filter-dialog|same-process-other|other-process|unavailable);wait-ms:(\d{1,4})\r?$/gm,
+  );
+  for (const match of mainForegroundDetail) {
+    diagnostics.push(
+      `drop-main-window-foreground-detail=validation:${match[1]};before:${match[2]};request:${match[3]};after:${match[4]};wait-ms:${Number(match[5])}`,
+    );
+  }
+
+  const foregroundWindow = output.matchAll(
+    /^PROC_MON_FILTER_FOREGROUND_WINDOW=stage:drop;class:(main|dialog|other|unavailable);owner:(main|other|none|unavailable);visible:(true|false|unavailable);enabled:(true|false|unavailable);title-match:(same|different|unavailable)\r?$/gm,
+  );
+  for (const match of foregroundWindow) {
+    diagnostics.push(
+      `drop-foreground-window=class:${match[1]};owner:${match[2]};visible:${match[3]};enabled:${match[4]};title-match:${match[5]}`,
+    );
+  }
+
+  const foregroundDialogUi = output.matchAll(
+    /^PROC_MON_FILTER_FOREGROUND_DIALOG_UI=stage:drop;state:available;items:(\d{1,3});buttons:(\d{1,3});texts:(\d{1,3});edits:(\d{1,3});combos:(\d{1,3});other-controls:(\d{1,3});ok:(\d{1,3});cancel:(\d{1,3});retry:(\d{1,3});yes:(\d{1,3});no:(\d{1,3});other-buttons:(\d{1,3});hints-error:(true|false);hints-warning:(true|false);hints-filter:(true|false);hints-capture:(true|false);hints-filesystem:(true|false);hints-privilege:(true|false);hints-confirmation:(true|false);hints-file-missing:(true|false);hints-file-operation:(true|false);hints-file-format:(true|false);hints-file-open:(true|false);hints-file-read:(true|false);hints-file-write:(true|false);hints-file-load:(true|false);hints-file-save:(true|false);hints-file-config:(true|false);hints-file-capture:(true|false);hints-file-export:(true|false);hints-file-path:(true|false);hints-file-access-denied:(true|false);hints-file-busy:(true|false);hints-file-open-failure:(true|false);text-truncated:(true|false);truncated:(true|false)\r?$/gm,
+  );
+  for (const match of foregroundDialogUi) {
+    const counts = match.slice(1, 13).map(Number);
+    const [items, buttons, texts, edits, combos, otherControls, ok, cancel, retry, yes, no, otherButtons] = counts;
+    if (
+      counts.some((count) => count > 128)
+      || buttons + texts + edits + combos + otherControls > items
+      || ok + cancel + retry + yes + no + otherButtons !== buttons
+    ) {
+      continue;
+    }
+    diagnostics.push(
+      `drop-foreground-dialog-ui=state:available;items:${items};buttons:${buttons};texts:${texts};edits:${edits};combos:${combos};other-controls:${otherControls};ok:${ok};cancel:${cancel};retry:${retry};yes:${yes};no:${no};other-buttons:${otherButtons};hints-error:${match[13]};hints-warning:${match[14]};hints-filter:${match[15]};hints-capture:${match[16]};hints-filesystem:${match[17]};hints-privilege:${match[18]};hints-confirmation:${match[19]};hints-file-missing:${match[20]};hints-file-operation:${match[21]};hints-file-format:${match[22]};hints-file-open:${match[23]};hints-file-read:${match[24]};hints-file-write:${match[25]};hints-file-load:${match[26]};hints-file-save:${match[27]};hints-file-config:${match[28]};hints-file-capture:${match[29]};hints-file-export:${match[30]};hints-file-path:${match[31]};hints-file-access-denied:${match[32]};hints-file-busy:${match[33]};hints-file-open-failure:${match[34]};text-truncated:${match[35]};truncated:${match[36]}`,
+    );
+  }
+
+  const foregroundDialogUiUnavailable = output.matchAll(
+    /^PROC_MON_FILTER_FOREGROUND_DIALOG_UI=stage:drop;state:unavailable;reason:(invalid-window|owner-mismatch|uia-com|uia-element-unavailable|uia-invalid-operation|uia-argument)\r?$/gm,
+  );
+  for (const match of foregroundDialogUiUnavailable) {
+    diagnostics.push(
+      `drop-foreground-dialog-ui=state:unavailable;reason:${match[1]}`,
+    );
+  }
+
+  if (/^PROC_MON_FILTER_INITIAL_SHORTCUT=command:filter-dialog;state:sent\r?$/m.test(output)) {
+    diagnostics.push("initial-filter-dialog=keyboard-shortcut");
   }
 
   const reloadedFilterUi = output.match(

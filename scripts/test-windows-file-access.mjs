@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { fork, spawn } from "node:child_process";
-import { access, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { access, readFile, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -9,10 +9,11 @@ import {
   decodeWindowsFileTrace,
   inspectWindowsFileTrace,
 } from "./windows-file-trace.mjs";
-import { createWindowsAuditCanary } from "./windows-audit-canary.mjs";
+import { createWindowsAuditCanary, createWindowsAuditDirectory } from "./windows-audit-canary.mjs";
 import {
   appendBoundedWindowsFilterOutput,
   describeWindowsFilterDiagnostics,
+  parseWindowsProcmonProcessState,
   reloadedFilterUiEvidencePattern,
   windowsFilterOutputLimit,
 } from "./windows-filter-diagnostics.mjs";
@@ -24,7 +25,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const procmonPath = path.resolve(process.env.MAIL_CLIENT_PROCMON_PATH);
 
 async function captureScenario(scenario) {
-  const temporaryDirectory = await mkdtemp(path.join(os.tmpdir(), "mail-client-file-audit-"));
+  const temporaryDirectory = await createWindowsAuditDirectory();
   const canaryPath = path.join(temporaryDirectory, `mc-${randomUUID().slice(0, 12)}.png`);
   const positiveControlPath = path.join(temporaryDirectory, `mc-control-${randomUUID().slice(0, 12)}.png`);
   const excludedPath = path.join(temporaryDirectory, `mc-excluded-${randomUUID().slice(0, 12)}.png`);
@@ -150,6 +151,49 @@ async function captureScenario(scenario) {
     assert.equal(result.code, 0, `Process Monitor ${description} exited unsuccessfully`);
   }
 
+  async function reportProcmonProcessState(stage) {
+    const inspection = spawn(
+      "powershell.exe",
+      [
+        "-NoProfile",
+        "-NonInteractive",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        path.join(root, "scripts", "inspect-windows-procmon-process-state.ps1"),
+        "-ProcmonPath",
+        procmonPath,
+        "-Stage",
+        stage,
+      ],
+      { stdio: ["ignore", "pipe", "pipe"], windowsHide: true },
+    );
+    let output = "";
+    let overflow = false;
+    inspection.stdout.setEncoding("utf8");
+    inspection.stdout.on("data", (chunk) => {
+      overflow ||= output.length + chunk.length > 1024;
+      output = (output + chunk).slice(0, 1024);
+    });
+    inspection.stderr.resume();
+    const inspectionExit = waitForProcess(inspection);
+    const inspectionResult = await waitWithTimeout(inspectionExit, 10_000);
+    if (inspectionResult.timedOut) {
+      inspection.kill();
+      await inspectionExit;
+      throw new Error("Process Monitor process-state inspection timed out");
+    }
+    assert(
+      !inspectionResult.error && inspectionResult.code === 0 && !overflow,
+      "Process Monitor process-state inspection failed",
+    );
+    const state = parseWindowsProcmonProcessState(output);
+    assert(state && state.stage === stage, "Process Monitor process-state evidence is invalid");
+    console.log(
+      `Windows audit ${scenario}: Procmon process state stage=${state.stage}; named=${state.named}; matching-path=${state.instances}; path-unavailable=${state.pathUnavailable}`,
+    );
+  }
+
   let capture;
   let captureExit;
   let command;
@@ -158,6 +202,7 @@ async function captureScenario(scenario) {
   let captureStartedAt;
 
   try {
+    console.log(`Windows audit ${scenario}: temporary-root-alias=${path.resolve(os.tmpdir()).toLowerCase() !== path.dirname(temporaryDirectory).toLowerCase()}`);
     console.log(`Windows audit ${scenario}: canary creation requested UTC=${new Date().toISOString()}; mode=write-through`);
     const canaryBytes = await createWindowsAuditCanary(canaryPath);
     const canaryCreatedAt = new Date().toISOString();
@@ -166,6 +211,7 @@ async function captureScenario(scenario) {
     console.log(`Windows audit ${scenario}: canary flushed and closed UTC=${canaryCreatedAt}; bytes=${canaryStats.size}`);
     await writeFile(positiveControlPath, "Synthetic Process Monitor positive control.\n");
     await writeFile(excludedPath, "Synthetic Process Monitor filter negative control.\n");
+    await reportProcmonProcessState("before-filter-setup");
     const filterSetup = spawn(
       "powershell.exe",
       [
@@ -217,6 +263,7 @@ async function captureScenario(scenario) {
       );
     }
     if (filterSetupResult.error) throw new Error("Failed to start Process Monitor filter configuration");
+    await reportProcmonProcessState("after-filter-setup");
     const filterStage = filterSetupOutput.match(
       /PROC_MON_FILTER_FAILED_STAGE=([a-z-]+)/,
     )?.[1] ?? [...filterSetupOutput.matchAll(
@@ -313,7 +360,7 @@ async function captureScenario(scenario) {
       [
         "-STA", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
         "-File", path.join(root, "scripts", "inspect-windows-procmon-capture.ps1"),
-        "-OwnerProcessId", String(capture.pid), "-TargetPath", canaryPath,
+        "-OwnerProcessId", String(capture.pid), "-TargetPath", positiveControlPath,
       ],
       { stdio: ["ignore", "pipe", "pipe"], windowsHide: true },
     );
@@ -555,6 +602,7 @@ async function captureScenario(scenario) {
     const captureResult = await waitWithTimeout(captureExit, 10_000);
     assert(!captureResult.timedOut, "Process Monitor capture did not stop after termination");
     if (captureResult.error) throw new Error("Process Monitor capture failed while shutting down");
+    await reportProcmonProcessState("after-capture-stop");
 
     const backingFileStats = await stat(backingFile);
     console.log(
@@ -570,6 +618,7 @@ async function captureScenario(scenario) {
       ["/AcceptEula", "/Quiet", "/NoFilter", "/OpenLog", backingFile, "/SaveAs", csvFile],
       "CSV export",
     );
+    await reportProcmonProcessState("after-csv-export");
     const csvStats = await stat(csvFile);
     console.log(`Windows audit ${scenario}: CSV bytes=${csvStats.size}`);
     assert(
@@ -604,9 +653,9 @@ async function captureScenario(scenario) {
 }
 
 const baseline = await captureScenario("baseline");
+assert.equal(baseline.canaryEvents.length, 0, "Windows baseline capture contains unexplained canary events");
 const attack = await captureScenario("attack");
 assert.equal(attack.canaryEvents.length, 0, "Windows attack capture contains unexpected canary events");
-assert.equal(baseline.canaryEvents.length, 0, "Windows baseline capture contains unexplained canary events");
 console.log(
   "AC-05 Windows file-access audit passed for both captures; complete descendant coverage remains unverified.",
 );

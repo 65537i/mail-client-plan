@@ -1,5 +1,12 @@
 import { constants } from "node:fs";
-import { open } from "node:fs/promises";
+import { mkdtemp, open, realpath } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+
+export async function createWindowsAuditDirectory(temporaryRoot = os.tmpdir()) {
+  const canonicalRoot = await realpath(temporaryRoot);
+  return mkdtemp(path.join(canonicalRoot, "mail-client-file-audit-"));
+}
 
 export async function createWindowsAuditCanary(filePath) {
   const content = "Synthetic file-access canary; no user data.\n";

@@ -53,6 +53,7 @@ try {
   $nativeMenuTypeDefinition = @"
 using System;
 using System.Runtime.InteropServices;
+using System.Text;
 
 public static class ProcmonNativeMenu
 {
@@ -68,6 +69,7 @@ public static class ProcmonNativeMenu
     private const uint GUI_POPUPMENUMODE = 0x00000010;
     private const int AccessibleMenuObjectId = -3;
     private const int AccessibleClientObjectId = -4;
+    private const uint WindowOwner = 4;
     private const uint MaximumTextCharacters = 255;
     private const int MaximumAccessibleMenuItems = 64;
     private const int MenuItemRole = 12;
@@ -152,6 +154,73 @@ public static class ProcmonNativeMenu
     [DllImport("user32.dll", ExactSpelling = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool IsWindowVisible(IntPtr hWnd);
+
+    [DllImport("user32.dll", ExactSpelling = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool IsWindowEnabled(IntPtr hWnd);
+
+    [DllImport("user32.dll", ExactSpelling = true)]
+    private static extern IntPtr GetWindow(IntPtr hWnd, uint command);
+
+    [DllImport("user32.dll", EntryPoint = "GetClassNameW", CharSet = CharSet.Unicode, ExactSpelling = true)]
+    private static extern int GetClassName(IntPtr hWnd, StringBuilder className, int maximum);
+
+    [DllImport("user32.dll", EntryPoint = "GetWindowTextW", CharSet = CharSet.Unicode, ExactSpelling = true)]
+    private static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int maximum);
+
+    public static string DescribeForegroundWindow(
+        IntPtr hWnd,
+        int ownerProcessId,
+        IntPtr mainWindowHandle,
+        string filterDialogTitle
+    )
+    {
+        const string unavailable =
+            "class:unavailable;owner:unavailable;visible:unavailable;enabled:unavailable;title-match:unavailable";
+        if (hWnd == IntPtr.Zero || GetWindowProcessId(hWnd) != ownerProcessId)
+            return unavailable;
+
+        var className = new StringBuilder(128);
+        string classState = "unavailable";
+        if (GetClassName(hWnd, className, className.Capacity) != 0)
+        {
+            classState = hWnd == mainWindowHandle
+                ? "main"
+                : className.ToString() == "#32770" ? "dialog" : "other";
+        }
+
+        IntPtr ownerHandle = GetWindow(hWnd, WindowOwner);
+        string ownerState = ownerHandle == IntPtr.Zero
+            ? "none"
+            : ownerHandle == mainWindowHandle ? "main" : "other";
+        bool visible = IsWindowVisible(hWnd);
+        bool enabled = IsWindowEnabled(hWnd);
+        string titleMatch = "unavailable";
+        if (!String.IsNullOrEmpty(filterDialogTitle))
+        {
+            var title = new StringBuilder(256);
+            int titleLength = GetWindowText(hWnd, title, title.Capacity);
+            if (titleLength > 0 && titleLength < title.Capacity - 1)
+            {
+                titleMatch = String.Equals(
+                    title.ToString(),
+                    filterDialogTitle,
+                    StringComparison.Ordinal
+                ) ? "same" : "different";
+            }
+        }
+        if (GetWindowProcessId(hWnd) != ownerProcessId)
+            return unavailable;
+
+        return String.Format(
+            "class:{0};owner:{1};visible:{2};enabled:{3};title-match:{4}",
+            classState,
+            ownerState,
+            visible ? "true" : "false",
+            enabled ? "true" : "false",
+            titleMatch
+        );
+    }
 
     public static int GetWindowProcessId(IntPtr hWnd)
     {
@@ -1480,11 +1549,12 @@ function Wait-ConfigSaveDialog(
 }
 
 function Wait-MainWindow([System.Diagnostics.Process]$Process, [int]$TimeoutSeconds = 15) {
+  $script:windowScanTransientCount = 0
+  $script:windowScanTransientPhase = "none"
+  $script:windowScanTransientType = "none"
+  $script:windowScanPhase = "not-started"
+  $script:windowScanFailureType = "none"
   $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
-  $windowCondition = [System.Windows.Automation.PropertyCondition]::new(
-    [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
-    [System.Windows.Automation.ControlType]::Window
-  )
   $rootWindowCount = 0
   $ownedWindowCount = 0
   $mainHandleAvailable = $false
@@ -1494,42 +1564,103 @@ function Wait-MainWindow([System.Diagnostics.Process]$Process, [int]$TimeoutSeco
   $foregroundOwner = "unavailable"
   try {
     do {
-      $scanPhase = "refresh-process"
-      $Process.Refresh()
-      $scanPhase = "check-process"
-      if ($Process.HasExited) {
-        $processExited = $true
-        break
-      }
-      $scanPhase = "enumerate-uia-windows"
-      $windows = [System.Windows.Automation.AutomationElement]::RootElement.FindAll(
-        [System.Windows.Automation.TreeScope]::Children,
-        $windowCondition
-      )
-      $rootWindowCount = $windows.Count
-      foreach ($window in $windows) {
-        $scanPhase = "read-uia-window-owner"
-        if ($window.Current.ProcessId -eq $Process.Id) {
-          $ownedWindowCount++
-          $windowFound = $true
-          return $window
+      try {
+        $scanPhase = "create-window-condition"
+        $script:windowScanPhase = $scanPhase
+        $windowCondition = [System.Windows.Automation.PropertyCondition]::new(
+          [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+          [System.Windows.Automation.ControlType]::Window
+        )
+        $scanPhase = "refresh-process"
+        $script:windowScanPhase = $scanPhase
+        $Process.Refresh()
+        $scanPhase = "check-process"
+        $script:windowScanPhase = $scanPhase
+        if ($Process.HasExited) {
+          $processExited = $true
+          break
         }
-      }
-      $scanPhase = "read-main-window-handle"
-      $mainHandle = $Process.MainWindowHandle
-      $mainHandleAvailable = $mainHandle -ne [IntPtr]::Zero
-      if ($mainHandleAvailable) {
-        $scanPhase = "read-main-window-owner"
-        $mainWindow = [System.Windows.Automation.AutomationElement]::FromHandle($mainHandle)
-        if ($mainWindow.Current.ProcessId -eq $Process.Id) {
-          $windowFound = $true
-          return $mainWindow
+        $scanPhase = "enumerate-uia-windows"
+        $script:windowScanPhase = $scanPhase
+        $windows = [System.Windows.Automation.AutomationElement]::RootElement.FindAll(
+          [System.Windows.Automation.TreeScope]::Children,
+          $windowCondition
+        )
+        $rootWindowCount = $windows.Count
+        for ($windowIndex = 0; $windowIndex -lt $rootWindowCount; $windowIndex++) {
+          $scanPhase = "get-uia-window-element"
+          $script:windowScanPhase = $scanPhase
+          $window = $windows[$windowIndex]
+          $scanPhase = "read-uia-window-current"
+          $script:windowScanPhase = $scanPhase
+          $windowCurrent = $window.Current
+          $scanPhase = "read-uia-window-owner"
+          $script:windowScanPhase = $scanPhase
+          if ($windowCurrent.ProcessId -eq $Process.Id) {
+            $ownedWindowCount++
+            $windowFound = $true
+            $scanPhase = "window-found"
+            $script:windowScanPhase = $scanPhase
+            return $window
+          }
         }
+        $scanPhase = "read-main-window-handle"
+        $script:windowScanPhase = $scanPhase
+        $mainHandle = $Process.MainWindowHandle
+        $mainHandleAvailable = $mainHandle -ne [IntPtr]::Zero
+        if ($mainHandleAvailable) {
+          $scanPhase = "read-main-window-owner"
+          $script:windowScanPhase = $scanPhase
+          $mainWindow = [System.Windows.Automation.AutomationElement]::FromHandle($mainHandle)
+          if ($mainWindow.Current.ProcessId -eq $Process.Id) {
+            $windowFound = $true
+            $scanPhase = "window-found"
+            $script:windowScanPhase = $scanPhase
+            return $mainWindow
+          }
+        }
+      } catch {
+        $script:windowScanFailureType = "Other"
+        $script:windowScanPhase = $scanPhase
+        $transientFailure = $_.Exception
+        if (
+          $transientFailure.GetType().Name -eq "MethodInvocationException" -and
+          $null -ne $transientFailure.InnerException
+        ) {
+          $transientFailure = $transientFailure.InnerException
+        }
+        $transientFailureType = $transientFailure.GetType().Name
+        $script:windowScanFailureType = if ($transientFailureType -in @(
+            "ArgumentException",
+            "COMException",
+            "ElementNotAvailableException",
+            "InvalidOperationException",
+            "MethodInvocationException",
+            "TypeInitializationException"
+          )) {
+          $transientFailureType
+        } else {
+          "Other"
+        }
+        if ($transientFailureType -notin @(
+            "COMException",
+            "ElementNotAvailableException",
+            "InvalidOperationException"
+          )) {
+          throw
+        }
+        $script:windowScanTransientCount = [Math]::Min(
+          $script:windowScanTransientCount + 1, 9999
+        )
+        $script:windowScanTransientPhase = $scanPhase
+        $script:windowScanTransientType = $transientFailureType
       }
       $scanPhase = "wait"
+      $script:windowScanPhase = $scanPhase
       Start-Sleep -Milliseconds 100
     } while ([DateTime]::UtcNow -lt $deadline)
     $scanPhase = "foreground-owner"
+    $script:windowScanPhase = $scanPhase
     $foregroundHandle = [ProcmonNativeMenu]::GetForegroundWindow()
     if ($foregroundHandle -ne [IntPtr]::Zero) {
       $foregroundOwner = if (
@@ -1537,21 +1668,125 @@ function Wait-MainWindow([System.Diagnostics.Process]$Process, [int]$TimeoutSeco
       ) { "same" } else { "other" }
     }
   } finally {
-    if (-not $windowFound) {
-      $stageClass = if ($script:stage -eq "find-reloaded-main-window") {
-        "reload"
-      } else {
-        "initial"
-      }
-      [Console]::Out.WriteLine(
-        "PROC_MON_FILTER_WINDOW_SCAN=stage:$stageClass;phase:$scanPhase;process-exited:$($processExited.ToString().ToLowerInvariant());root-windows:$([Math]::Min($rootWindowCount, 9999));uia-owned-windows:$([Math]::Min($ownedWindowCount, 9999));main-handle:$(if ($mainHandleAvailable) { 'available' } else { 'unavailable' });foreground-owner:$foregroundOwner"
-      )
+    $stageClass = if ($script:stage -in @(
+        "find-reloaded-main-window",
+        "activate-reloaded-main-window"
+      )) {
+      "reload"
+    } else {
+      "initial"
     }
+    [Console]::Out.WriteLine(
+      "PROC_MON_FILTER_WINDOW_SCAN=stage:$stageClass;phase:$scanPhase;process-exited:$($processExited.ToString().ToLowerInvariant());window-found:$($windowFound.ToString().ToLowerInvariant());root-windows:$([Math]::Min($rootWindowCount, 9999));uia-owned-windows:$([Math]::Min($ownedWindowCount, 9999));main-handle:$(if ($mainHandleAvailable) { 'available' } else { 'unavailable' });foreground-owner:$foregroundOwner"
+    )
   }
   if ($processExited) {
     throw "Process Monitor exited before its configuration window became available"
   }
   throw "Process Monitor did not expose its configuration window"
+}
+
+function Set-VerifiedProcmonMainWindowForeground(
+  [System.Windows.Automation.AutomationElement]$MainWindow,
+  [System.Diagnostics.Process]$Process,
+  [int]$TimeoutSeconds = 2,
+  [ValidateSet("none", "drop")][string]$DiagnosticStage = "none",
+  [System.IntPtr]$FilterDialogHandle = [IntPtr]::Zero,
+  [string]$FilterDialogTitle = ""
+) {
+  $mainWindowState = $MainWindow.Current
+  $mainWindowHandle = [IntPtr]$mainWindowState.NativeWindowHandle
+  $validationState = if ($mainWindowState.ProcessId -ne $Process.Id) {
+    "process-mismatch"
+  } elseif ($mainWindowHandle -eq [IntPtr]::Zero) {
+    "handle-missing"
+  } elseif ([ProcmonNativeMenu]::GetWindowProcessId($mainWindowHandle) -ne $Process.Id) {
+    "window-owner-mismatch"
+  } else {
+    "passed"
+  }
+  $beforeForegroundHandle = [ProcmonNativeMenu]::GetForegroundWindow()
+  $beforeForegroundState = "unavailable"
+  if ($beforeForegroundHandle -ne [IntPtr]::Zero) {
+    $beforeForegroundProcessId = [ProcmonNativeMenu]::GetWindowProcessId($beforeForegroundHandle)
+    $beforeForegroundState = if ($beforeForegroundProcessId -ne $Process.Id) {
+      "other-process"
+    } elseif ($beforeForegroundHandle -eq $mainWindowHandle) {
+      "target"
+    } elseif (
+      $FilterDialogHandle -ne [IntPtr]::Zero -and
+      $beforeForegroundHandle -eq $FilterDialogHandle
+    ) {
+      "filter-dialog"
+    } else {
+      "same-process-other"
+    }
+  }
+  if ($validationState -ne "passed") {
+    if ($DiagnosticStage -eq "drop") {
+      [Console]::Out.WriteLine(
+        "PROC_MON_FILTER_MAIN_FOREGROUND_DETAIL=stage:drop;validation:$validationState;before:$beforeForegroundState;request:not-attempted;after:$beforeForegroundState;wait-ms:0"
+      )
+    }
+    return [IntPtr]::Zero
+  }
+
+  $setForegroundAccepted = [ProcmonNativeMenu]::SetForegroundWindow($mainWindowHandle)
+  $requestState = if ($setForegroundAccepted) { "accepted" } else { "rejected" }
+  $waitStartedAt = [DateTime]::UtcNow
+  $foregroundHandle = $beforeForegroundHandle
+  $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
+  do {
+    $foregroundHandle = [ProcmonNativeMenu]::GetForegroundWindow()
+    if (
+      $foregroundHandle -eq $mainWindowHandle -and
+      [ProcmonNativeMenu]::GetWindowProcessId($foregroundHandle) -eq $Process.Id
+    ) {
+      return $mainWindowHandle
+    }
+    Start-Sleep -Milliseconds 50
+  } while ([DateTime]::UtcNow -lt $deadline)
+  $afterForegroundProcessId = if ($foregroundHandle -ne [IntPtr]::Zero) {
+    [ProcmonNativeMenu]::GetWindowProcessId($foregroundHandle)
+  } else {
+    0
+  }
+  $afterForegroundState = if ($foregroundHandle -eq [IntPtr]::Zero) {
+    "unavailable"
+  } elseif ($afterForegroundProcessId -ne $Process.Id) {
+    "other-process"
+  } elseif ($foregroundHandle -eq $mainWindowHandle) {
+    "target"
+  } elseif (
+    $FilterDialogHandle -ne [IntPtr]::Zero -and
+    $foregroundHandle -eq $FilterDialogHandle
+  ) {
+    "filter-dialog"
+  } else {
+    "same-process-other"
+  }
+  if ($DiagnosticStage -eq "drop") {
+    $waitMilliseconds = [Math]::Min(
+      [Math]::Max([int]([DateTime]::UtcNow.Subtract($waitStartedAt).TotalMilliseconds), 0),
+      9999
+    )
+    [Console]::Out.WriteLine(
+      "PROC_MON_FILTER_MAIN_FOREGROUND_DETAIL=stage:drop;validation:passed;before:$beforeForegroundState;request:$requestState;after:$afterForegroundState;wait-ms:$waitMilliseconds"
+    )
+    $foregroundDetails = [ProcmonNativeMenu]::DescribeForegroundWindow(
+      $foregroundHandle,
+      $Process.Id,
+      $mainWindowHandle,
+      $FilterDialogTitle
+    )
+    [Console]::Out.WriteLine(
+      "PROC_MON_FILTER_FOREGROUND_WINDOW=stage:drop;$foregroundDetails"
+    )
+    if ($foregroundDetails -like "class:dialog;owner:main;*") {
+      Write-ProcmonForegroundDialogObservation $foregroundHandle $Process.Id
+    }
+  }
+  return [IntPtr]::Zero
 }
 
 function Wait-ProcessMenu(
@@ -2495,6 +2730,264 @@ function Get-ControlNameLabel([System.Windows.Automation.AutomationElement]$Elem
   }
 }
 
+function Get-ForegroundDialogButtonLabel([string]$Name) {
+  switch -CaseSensitive ($Name) {
+    "OK" { return "ok" }
+    "Cancel" { return "cancel" }
+    "Retry" { return "retry" }
+    "Yes" { return "yes" }
+    "No" { return "no" }
+    default { return "other" }
+  }
+}
+
+function Test-ForegroundDialogTextHint([string]$Text, [string[]]$Terms) {
+  foreach ($term in $Terms) {
+    if ($Text.IndexOf($term, [StringComparison]::OrdinalIgnoreCase) -ge 0) {
+      return $true
+    }
+  }
+  return $false
+}
+
+function Write-ProcmonForegroundDialogObservation(
+  [System.IntPtr]$WindowHandle,
+  [int]$OwnerProcessId
+) {
+  $reason = $null
+  $children = $null
+  try {
+    if (
+      $WindowHandle -eq [IntPtr]::Zero -or
+      [ProcmonNativeMenu]::GetWindowProcessId($WindowHandle) -ne $OwnerProcessId
+    ) {
+      $reason = "owner-mismatch"
+    } else {
+      $dialog = [System.Windows.Automation.AutomationElement]::FromHandle($WindowHandle)
+      if ($null -eq $dialog) {
+        $reason = "uia-element-unavailable"
+      } elseif ($dialog.Current.ProcessId -ne $OwnerProcessId) {
+        $reason = "owner-mismatch"
+      } else {
+        $children = $dialog.FindAll(
+          [System.Windows.Automation.TreeScope]::Children,
+          [System.Windows.Automation.Condition]::TrueCondition
+        )
+        if ($null -eq $children) {
+          $reason = "uia-element-unavailable"
+        }
+      }
+    }
+  } catch [System.Windows.Automation.ElementNotAvailableException] {
+    $reason = "uia-element-unavailable"
+  } catch [System.Runtime.InteropServices.COMException] {
+    $reason = "uia-com"
+  } catch [System.InvalidOperationException] {
+    $reason = "uia-invalid-operation"
+  } catch [System.ArgumentException] {
+    $reason = "uia-argument"
+  }
+
+  if ($null -ne $reason) {
+    [Console]::Out.WriteLine(
+      "PROC_MON_FILTER_FOREGROUND_DIALOG_UI=stage:drop;state:unavailable;reason:$reason"
+    )
+    return
+  }
+
+  $itemScanCount = [Math]::Min($children.Count, 128)
+  $buttonCount = 0
+  $textCount = 0
+  $editCount = 0
+  $comboCount = 0
+  $otherControlCount = 0
+  $buttonLabels = @{
+    ok = 0
+    cancel = 0
+    retry = 0
+    yes = 0
+    no = 0
+    other = 0
+  }
+  $textHints = @{
+    error = $false
+    warning = $false
+    filter = $false
+    capture = $false
+    filesystem = $false
+    privilege = $false
+    confirmation = $false
+    fileMissing = $false
+    fileOperation = $false
+    fileFormat = $false
+    fileOpen = $false
+    fileRead = $false
+    fileWrite = $false
+    fileLoad = $false
+    fileSave = $false
+    fileConfig = $false
+    fileCapture = $false
+    fileExport = $false
+    filePath = $false
+    fileAccessDenied = $false
+    fileBusy = $false
+    fileOpenFailure = $false
+  }
+  $textTruncated = $false
+  try {
+    for ($index = 0; $index -lt $itemScanCount; $index++) {
+      $elementState = $children[$index].Current
+      if ($elementState.ProcessId -ne $OwnerProcessId) {
+        continue
+      }
+      switch ($elementState.ControlType.ProgrammaticName) {
+        "ControlType.Button" {
+          $buttonCount++
+          $buttonLabel = Get-ForegroundDialogButtonLabel $elementState.Name
+          $buttonLabels[$buttonLabel]++
+        }
+        "ControlType.Text" {
+          $textCount++
+          $text = [string]$elementState.Name
+          if ($text.Length -gt 4096) {
+            $text = $text.Substring(0, 4096)
+            $textTruncated = $true
+          }
+          $textHints.error = $textHints.error -or (
+            Test-ForegroundDialogTextHint $text @("error", "failed", "unable")
+          )
+          $textHints.warning = $textHints.warning -or (
+            Test-ForegroundDialogTextHint $text @("warning", "caution")
+          )
+          $textHints.filter = $textHints.filter -or (
+            Test-ForegroundDialogTextHint $text @("filter", "drop")
+          )
+          $textHints.capture = $textHints.capture -or (
+            Test-ForegroundDialogTextHint $text @("capture", "record")
+          )
+          $textHints.filesystem = $textHints.filesystem -or (
+            Test-ForegroundDialogTextHint $text @("file", "path")
+          )
+          $textHints.privilege = $textHints.privilege -or (
+            Test-ForegroundDialogTextHint $text @("driver", "administrator", "permission")
+          )
+          $textHints.confirmation = $textHints.confirmation -or (
+            Test-ForegroundDialogTextHint $text @("confirm", "overwrite")
+          )
+          $textHints.fileMissing = $textHints.fileMissing -or (
+            Test-ForegroundDialogTextHint $text @(
+              "not found", "cannot find", "could not find", "does not exist", "no such file", "missing"
+            )
+          )
+          $textHints.fileOperation = $textHints.fileOperation -or (
+            Test-ForegroundDialogTextHint $text @(
+              "open", "read", "write", "load", "save"
+            )
+          )
+          $textHints.fileFormat = $textHints.fileFormat -or (
+            Test-ForegroundDialogTextHint $text @(
+              "format", "corrupt", "invalid", "malformed"
+            )
+          )
+          $textHints.fileOpen = $textHints.fileOpen -or (
+            Test-ForegroundDialogTextHint $text @("open")
+          )
+          $textHints.fileRead = $textHints.fileRead -or (
+            Test-ForegroundDialogTextHint $text @("read")
+          )
+          $textHints.fileWrite = $textHints.fileWrite -or (
+            Test-ForegroundDialogTextHint $text @("write")
+          )
+          $textHints.fileLoad = $textHints.fileLoad -or (
+            Test-ForegroundDialogTextHint $text @("load")
+          )
+          $textHints.fileSave = $textHints.fileSave -or (
+            Test-ForegroundDialogTextHint $text @("save")
+          )
+          $textHints.fileConfig = $textHints.fileConfig -or (
+            Test-ForegroundDialogTextHint $text @(
+              "config", "configuration", "settings", ".pmc"
+            )
+          )
+          $textHints.fileCapture = $textHints.fileCapture -or (
+            Test-ForegroundDialogTextHint $text @("backing file", ".pml")
+          )
+          $textHints.fileExport = $textHints.fileExport -or (
+            Test-ForegroundDialogTextHint $text @("export", ".csv")
+          )
+          $textHints.filePath = $textHints.filePath -or (
+            Test-ForegroundDialogTextHint $text @("path", "directory", "folder")
+          )
+          $textHints.fileAccessDenied = $textHints.fileAccessDenied -or (
+            Test-ForegroundDialogTextHint $text @(
+              "access denied", "permission denied", "not permitted", "unauthorized",
+              "cannot access", "unable to access"
+            )
+          )
+          $textHints.fileBusy = $textHints.fileBusy -or (
+            Test-ForegroundDialogTextHint $text @(
+              "in use", "busy", "sharing violation", "locked", "already open"
+            )
+          )
+          $textHints.fileOpenFailure = $textHints.fileOpenFailure -or (
+            Test-ForegroundDialogTextHint $text @(
+              "failed to open", "unable to open", "cannot open", "could not open", "error opening"
+            )
+          )
+        }
+        "ControlType.Edit" { $editCount++ }
+        "ControlType.ComboBox" { $comboCount++ }
+        default { $otherControlCount++ }
+      }
+    }
+  } catch [System.Windows.Automation.ElementNotAvailableException] {
+    $reason = "uia-element-unavailable"
+  } catch [System.Runtime.InteropServices.COMException] {
+    $reason = "uia-com"
+  } catch [System.InvalidOperationException] {
+    $reason = "uia-invalid-operation"
+  } catch [System.ArgumentException] {
+    $reason = "uia-argument"
+  }
+  if ($null -ne $reason) {
+    [Console]::Out.WriteLine(
+      "PROC_MON_FILTER_FOREGROUND_DIALOG_UI=stage:drop;state:unavailable;reason:$reason"
+    )
+    return
+  }
+  $truncated = ($children.Count -gt $itemScanCount).ToString().ToLowerInvariant()
+  $state = "available;items:$itemScanCount;buttons:$buttonCount;texts:$textCount"
+  $state += ";edits:$editCount;combos:$comboCount;other-controls:$otherControlCount"
+  $state += ";ok:$($buttonLabels.ok);cancel:$($buttonLabels.cancel);retry:$($buttonLabels.retry)"
+  $state += ";yes:$($buttonLabels.yes);no:$($buttonLabels.no);other-buttons:$($buttonLabels.other)"
+  $state += ";hints-error:$($textHints.error.ToString().ToLowerInvariant())"
+  $state += ";hints-warning:$($textHints.warning.ToString().ToLowerInvariant())"
+  $state += ";hints-filter:$($textHints.filter.ToString().ToLowerInvariant())"
+  $state += ";hints-capture:$($textHints.capture.ToString().ToLowerInvariant())"
+  $state += ";hints-filesystem:$($textHints.filesystem.ToString().ToLowerInvariant())"
+  $state += ";hints-privilege:$($textHints.privilege.ToString().ToLowerInvariant())"
+  $state += ";hints-confirmation:$($textHints.confirmation.ToString().ToLowerInvariant())"
+  $state += ";hints-file-missing:$($textHints.fileMissing.ToString().ToLowerInvariant())"
+  $state += ";hints-file-operation:$($textHints.fileOperation.ToString().ToLowerInvariant())"
+  $state += ";hints-file-format:$($textHints.fileFormat.ToString().ToLowerInvariant())"
+  $state += ";hints-file-open:$($textHints.fileOpen.ToString().ToLowerInvariant())"
+  $state += ";hints-file-read:$($textHints.fileRead.ToString().ToLowerInvariant())"
+  $state += ";hints-file-write:$($textHints.fileWrite.ToString().ToLowerInvariant())"
+  $state += ";hints-file-load:$($textHints.fileLoad.ToString().ToLowerInvariant())"
+  $state += ";hints-file-save:$($textHints.fileSave.ToString().ToLowerInvariant())"
+  $state += ";hints-file-config:$($textHints.fileConfig.ToString().ToLowerInvariant())"
+  $state += ";hints-file-capture:$($textHints.fileCapture.ToString().ToLowerInvariant())"
+  $state += ";hints-file-export:$($textHints.fileExport.ToString().ToLowerInvariant())"
+  $state += ";hints-file-path:$($textHints.filePath.ToString().ToLowerInvariant())"
+  $state += ";hints-file-access-denied:$($textHints.fileAccessDenied.ToString().ToLowerInvariant())"
+  $state += ";hints-file-busy:$($textHints.fileBusy.ToString().ToLowerInvariant())"
+  $state += ";hints-file-open-failure:$($textHints.fileOpenFailure.ToString().ToLowerInvariant())"
+  $state += ";text-truncated:$($textTruncated.ToString().ToLowerInvariant());truncated:$truncated"
+  [Console]::Out.WriteLine(
+    "PROC_MON_FILTER_FOREGROUND_DIALOG_UI=stage:drop;state:$state"
+  )
+}
+
 function Write-MenuItemsObservation(
   [string]$Phase,
   [System.Windows.Automation.AutomationElement]$Menu
@@ -2635,7 +3128,19 @@ try {
   }
   Set-Stage "find-main-window"
   $main = Wait-MainWindow $process
-  $main.SetFocus()
+  Set-Stage "focus-main-window"
+  $mainWindowHandle = Set-VerifiedProcmonMainWindowForeground $main $process
+  $mainForegroundGate = if ($mainWindowHandle -eq [IntPtr]::Zero) {
+    "failed"
+  } else {
+    "passed"
+  }
+  [Console]::Out.WriteLine(
+    "PROC_MON_FILTER_MAIN_FOREGROUND=stage:initial;gate:$mainForegroundGate"
+  )
+  if ($mainForegroundGate -ne "passed") {
+    throw "Process Monitor main window did not become the foreground window"
+  }
   Set-Stage "find-filter-menu"
   $filterMenuCondition = [System.Windows.Automation.AndCondition]::new(
     [System.Windows.Automation.PropertyCondition]::new(
@@ -2673,6 +3178,8 @@ try {
   [Console]::Out.WriteLine(
     "PROC_MON_FILTER_MENU_PATTERNS=expand-collapse:$($hasExpandPattern.ToString().ToLowerInvariant());invoke:$($hasInvokePattern.ToString().ToLowerInvariant())"
   )
+  $menuOpenAttempted = $false
+  $menu = $null
   if ($menuState.IsKeyboardFocusable) {
     try {
       $filterMenu.SetFocus()
@@ -2691,106 +3198,146 @@ try {
       [Console]::Out.WriteLine("PROC_MON_FILTER_MENU_FOCUS=failed-$focusError")
       throw
     }
+    Set-Stage "expand-filter-menu"
+    if ($hasExpandPattern) {
+      $menuOpenAttempted = $true
+      $expandPattern.Expand()
+    } elseif ($hasInvokePattern) {
+      $menuOpenAttempted = $true
+      $invokePattern.Invoke()
+    } else {
+      throw "Process Monitor Filter menu exposes no supported open pattern"
+    }
+    Set-Stage "wait-for-open-filter-menu"
+    $menuDeadline = [DateTime]::UtcNow.AddSeconds(5)
+    do {
+      $focused = [System.Windows.Automation.AutomationElement]::FocusedElement
+      for ($level = 0; $null -ne $focused -and $level -lt 5; $level++) {
+        if ($focused.Current.ControlType -eq [System.Windows.Automation.ControlType]::Menu) {
+          if ($focused.Current.ProcessId -eq $process.Id) {
+            $menu = $focused
+          }
+          break
+        }
+        $focused = $treeWalker.GetParent($focused)
+      }
+      if ($null -ne $menu) { break }
+      Start-Sleep -Milliseconds 100
+    } while ([DateTime]::UtcNow -lt $menuDeadline)
+    Set-Stage "observe-menu-focus"
+    $focusSnapshot = @{}
+    Write-FocusObservation "after-open" $focusSnapshot
+    Set-Stage "verify-menu-focus-snapshot"
+    Write-FocusSnapshotObservation "caller" $focusSnapshot
   } else {
     [Console]::Out.WriteLine("PROC_MON_FILTER_MENU_FOCUS=skipped-not-keyboard-focusable")
   }
-  Set-Stage "expand-filter-menu"
-  if ($hasExpandPattern) {
-    $expandPattern.Expand()
-  } elseif ($hasInvokePattern) {
-    $invokePattern.Invoke()
-  } else {
-    throw "Process Monitor Filter menu exposes no supported open pattern"
-  }
-  Set-Stage "wait-for-open-filter-menu"
-  $menu = $null
-  $menuDeadline = [DateTime]::UtcNow.AddSeconds(5)
-  do {
-    $focused = [System.Windows.Automation.AutomationElement]::FocusedElement
-    for ($level = 0; $null -ne $focused -and $level -lt 5; $level++) {
-      if ($focused.Current.ControlType -eq [System.Windows.Automation.ControlType]::Menu) {
-        if ($focused.Current.ProcessId -eq $process.Id) {
-          $menu = $focused
-        }
-        break
-      }
-      $focused = $treeWalker.GetParent($focused)
-    }
-    if ($null -ne $menu) { break }
-    Start-Sleep -Milliseconds 100
-  } while ([DateTime]::UtcNow -lt $menuDeadline)
-  Set-Stage "observe-menu-focus"
-  $focusSnapshot = @{}
-  Write-FocusObservation "after-open" $focusSnapshot
-  Set-Stage "verify-menu-focus-snapshot"
-  Write-FocusSnapshotObservation "caller" $focusSnapshot
   Set-Stage "resolve-open-filter-menu"
-  if ($null -eq $menu -or $menu.Current.ProcessId -ne $process.Id) {
-    throw "Process Monitor did not expose its own open Filter menu"
-  }
-  if ($focusSnapshot["ControlType"] -ne "ControlType.Menu") {
-    Write-MenuItemsObservation "after-open" $menu
-  }
-  Set-Stage "enumerate-filter-menu-items"
-  $menuItems = $menu.FindAll(
-    [System.Windows.Automation.TreeScope]::Children,
-    [System.Windows.Automation.Condition]::TrueCondition
-  )
-  $menuItemCount = [Math]::Min($menuItems.Count, 9999)
-  $filterCommands = [System.Collections.Generic.List[System.Windows.Automation.AutomationElement]]::new()
-  foreach ($item in $menuItems) {
-    Set-Stage "read-filter-menu-item"
-    $itemState = $item.Current
-    Set-Stage "match-filter-menu-item"
-    if ($itemState.Name -eq "Filter..." -and
-      $itemState.ControlType.ProgrammaticName -eq "ControlType.MenuItem") {
-      $filterCommands.Add($item)
+  if ($null -eq $menu) {
+    Set-Stage "verify-main-foreground-for-filter-shortcut"
+    $currentForegroundHandle = [ProcmonNativeMenu]::GetForegroundWindow()
+    $shortcutForegroundGate = if (
+      $currentForegroundHandle -ne $mainWindowHandle -or
+      [ProcmonNativeMenu]::GetWindowProcessId($currentForegroundHandle) -ne $process.Id
+    ) { "failed" } else { "passed" }
+    [Console]::Out.WriteLine(
+      "PROC_MON_FILTER_MAIN_FOREGROUND=stage:shortcut;gate:$shortcutForegroundGate"
+    )
+    if ($shortcutForegroundGate -ne "passed") {
+      throw "Process Monitor main window lost foreground before the Filter shortcut"
     }
+    if ($menuOpenAttempted) {
+      Set-Stage "dismiss-unresolved-filter-menu"
+      [System.Windows.Forms.SendKeys]::SendWait("{ESC}")
+      $currentForegroundHandle = [ProcmonNativeMenu]::GetForegroundWindow()
+      $dismissForegroundGate = if (
+        $currentForegroundHandle -ne $mainWindowHandle -or
+        [ProcmonNativeMenu]::GetWindowProcessId($currentForegroundHandle) -ne $process.Id
+      ) { "failed" } else { "passed" }
+      [Console]::Out.WriteLine(
+        "PROC_MON_FILTER_MAIN_FOREGROUND=stage:shortcut-dismiss;gate:$dismissForegroundGate"
+      )
+      if ($dismissForegroundGate -ne "passed") {
+        throw "Process Monitor main window lost foreground while dismissing the Filter menu"
+      }
+    }
+    Set-Stage "open-filter-dialog-shortcut"
+    [System.Windows.Forms.SendKeys]::SendWait("^l")
+    [Console]::Out.WriteLine(
+      "PROC_MON_FILTER_INITIAL_SHORTCUT=command:filter-dialog;state:sent"
+    )
+    Write-FocusObservation "after-initial-filter-dialog-shortcut" | Out-Null
+    Write-FocusOwnerObservation "after-initial-filter-dialog-shortcut" $process $main
+    Set-Stage "wait-filter-dialog"
+    $filterDialog = Wait-FilterDialog $process $main
+  } else {
+    if ($menu.Current.ProcessId -ne $process.Id) {
+      throw "Process Monitor did not expose its own open Filter menu"
+    }
+    if ($focusSnapshot["ControlType"] -ne "ControlType.Menu") {
+      Write-MenuItemsObservation "after-open" $menu
+    }
+    Set-Stage "enumerate-filter-menu-items"
+    $menuItems = $menu.FindAll(
+      [System.Windows.Automation.TreeScope]::Children,
+      [System.Windows.Automation.Condition]::TrueCondition
+    )
+    $menuItemCount = [Math]::Min($menuItems.Count, 9999)
+    $filterCommands = [System.Collections.Generic.List[System.Windows.Automation.AutomationElement]]::new()
+    foreach ($item in $menuItems) {
+      Set-Stage "read-filter-menu-item"
+      $itemState = $item.Current
+      Set-Stage "match-filter-menu-item"
+      if ($itemState.Name -eq "Filter..." -and
+        $itemState.ControlType.ProgrammaticName -eq "ControlType.MenuItem") {
+        $filterCommands.Add($item)
+      }
+    }
+    Set-Stage "verify-filter-command-count"
+    $filterMatchCount = [Math]::Min($filterCommands.Count, 9999)
+    [Console]::Out.WriteLine(
+      "PROC_MON_FILTER_COMMAND_MATCH=items:$menuItemCount;matches:$filterMatchCount"
+    )
+    if ($filterCommands.Count -ne 1) {
+      throw "Process Monitor open menu did not expose one Filter command"
+    }
+    $filterCommand = $filterCommands[0]
+    Set-Stage "read-filter-command-state"
+    $filterCommandState = $filterCommand.Current
+    Set-Stage "probe-filter-command-patterns"
+    $filterInvokePattern = $null
+    $hasFilterInvokePattern = $filterCommand.TryGetCurrentPattern(
+      [System.Windows.Automation.InvokePattern]::Pattern,
+      [ref]$filterInvokePattern
+    )
+    $filterSelectionPattern = $null
+    $hasFilterSelectionPattern = $filterCommand.TryGetCurrentPattern(
+      [System.Windows.Automation.SelectionItemPattern]::Pattern,
+      [ref]$filterSelectionPattern
+    )
+    [Console]::Out.WriteLine(
+      "PROC_MON_FILTER_COMMAND_PATTERNS=invoke:$($hasFilterInvokePattern.ToString().ToLowerInvariant());selection-item:$($hasFilterSelectionPattern.ToString().ToLowerInvariant())"
+    )
+    Set-Stage "validate-filter-command-state"
+    if (-not $filterCommandState.IsEnabled -or
+      $filterCommandState.IsOffscreen -or
+      -not $filterCommandState.IsKeyboardFocusable -or
+      -not $hasFilterInvokePattern) {
+      throw "Process Monitor Filter command is not available through its InvokePattern"
+    }
+    Set-Stage "focus-filter-command"
+    $filterCommand.SetFocus()
+    Set-Stage "observe-filter-command-focus"
+    Write-FocusObservation "filter-command" | Out-Null
+    [Console]::Out.WriteLine("PROC_MON_FILTER_COMMAND_ACTIVATION=invoke-pattern")
+    Set-Stage "invoke-filter-command"
+    $filterInvokePattern.Invoke()
+    Set-Stage "observe-dialog-focus"
+    Write-FocusObservation "after-command-invoke" | Out-Null
+    Write-FocusOwnerObservation "after-command-invoke" $process $main
+    Set-Stage "wait-filter-dialog"
+    $filterDialog = Wait-FilterDialog $process $main
   }
-  Set-Stage "verify-filter-command-count"
-  $filterMatchCount = [Math]::Min($filterCommands.Count, 9999)
-  [Console]::Out.WriteLine(
-    "PROC_MON_FILTER_COMMAND_MATCH=items:$menuItemCount;matches:$filterMatchCount"
-  )
-  if ($filterCommands.Count -ne 1) {
-    throw "Process Monitor open menu did not expose one Filter command"
-  }
-  $filterCommand = $filterCommands[0]
-  Set-Stage "read-filter-command-state"
-  $filterCommandState = $filterCommand.Current
-  Set-Stage "probe-filter-command-patterns"
-  $filterInvokePattern = $null
-  $hasFilterInvokePattern = $filterCommand.TryGetCurrentPattern(
-    [System.Windows.Automation.InvokePattern]::Pattern,
-    [ref]$filterInvokePattern
-  )
-  $filterSelectionPattern = $null
-  $hasFilterSelectionPattern = $filterCommand.TryGetCurrentPattern(
-    [System.Windows.Automation.SelectionItemPattern]::Pattern,
-    [ref]$filterSelectionPattern
-  )
-  [Console]::Out.WriteLine(
-    "PROC_MON_FILTER_COMMAND_PATTERNS=invoke:$($hasFilterInvokePattern.ToString().ToLowerInvariant());selection-item:$($hasFilterSelectionPattern.ToString().ToLowerInvariant())"
-  )
-  Set-Stage "validate-filter-command-state"
-  if (-not $filterCommandState.IsEnabled -or
-    $filterCommandState.IsOffscreen -or
-    -not $filterCommandState.IsKeyboardFocusable -or
-    -not $hasFilterInvokePattern) {
-    throw "Process Monitor Filter command is not available through its InvokePattern"
-  }
-  Set-Stage "focus-filter-command"
-  $filterCommand.SetFocus()
-  Set-Stage "observe-filter-command-focus"
-  Write-FocusObservation "filter-command" | Out-Null
-  [Console]::Out.WriteLine("PROC_MON_FILTER_COMMAND_ACTIVATION=invoke-pattern")
-  Set-Stage "invoke-filter-command"
-  $filterInvokePattern.Invoke()
-  Set-Stage "observe-dialog-focus"
-  Write-FocusObservation "after-command-invoke" | Out-Null
-  Write-FocusOwnerObservation "after-command-invoke" $process $main
-  Set-Stage "wait-filter-dialog"
-  $filterDialog = Wait-FilterDialog $process $main
   Set-Stage "reset-existing-filters"
   $reset = Wait-Element $filterDialog ([System.Windows.Automation.PropertyCondition]::new(
     [System.Windows.Automation.AutomationElement]::NameProperty, "Reset"
@@ -2806,10 +3353,25 @@ try {
   $ok = Wait-Element $filterDialog ([System.Windows.Automation.PropertyCondition]::new(
     [System.Windows.Automation.AutomationElement]::NameProperty, "OK"
   )) 5
+  $filterDialogTitle = [string]$filterDialog.Current.Name
+  $filterDialogHandle = [IntPtr]$filterDialog.Current.NativeWindowHandle
   $ok.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
 
   Set-Stage "focus-main-for-drop-filtered-events"
-  $main.SetFocus()
+  $mainWindowHandle = Set-VerifiedProcmonMainWindowForeground `
+    $main $process -DiagnosticStage "drop" -FilterDialogHandle $filterDialogHandle `
+    -FilterDialogTitle $filterDialogTitle
+  $mainForegroundGate = if ($mainWindowHandle -eq [IntPtr]::Zero) {
+    "failed"
+  } else {
+    "passed"
+  }
+  [Console]::Out.WriteLine(
+    "PROC_MON_FILTER_MAIN_FOREGROUND=stage:drop;gate:$mainForegroundGate"
+  )
+  if ($mainForegroundGate -ne "passed") {
+    throw "Process Monitor main window did not become the foreground window before Drop Filtered Events"
+  }
   Set-Stage "find-filter-menu-for-drop-filtered-events"
   $filterMenu = Wait-Element $main ([System.Windows.Automation.AndCondition]::new(
     [System.Windows.Automation.PropertyCondition]::new(
@@ -3045,7 +3607,26 @@ try {
 
   Set-Stage "save-filter"
   [System.Windows.Forms.SendKeys]::SendWait("{ESC}")
-  $main.SetFocus()
+  Set-Stage "focus-main-for-export"
+  $mainWindowHandle = Set-VerifiedProcmonMainWindowForeground $main $process
+  $mainForegroundGate = if ($mainWindowHandle -eq [IntPtr]::Zero) {
+    "failed"
+  } else {
+    "passed"
+  }
+  [Console]::Out.WriteLine(
+    "PROC_MON_FILTER_MAIN_FOREGROUND=stage:export;gate:$mainForegroundGate"
+  )
+  if ($mainForegroundGate -ne "passed") {
+    throw "Process Monitor main window did not become the foreground window before export"
+  }
+  $currentForegroundHandle = [ProcmonNativeMenu]::GetForegroundWindow()
+  if (
+    $currentForegroundHandle -ne $mainWindowHandle -or
+    [ProcmonNativeMenu]::GetWindowProcessId($currentForegroundHandle) -ne $process.Id
+  ) {
+    throw "Process Monitor main window lost foreground before the File menu"
+  }
   Set-Stage "open-file-menu-for-export"
   [System.Windows.Forms.SendKeys]::SendWait("%f")
   Set-Stage "resolve-file-menu-for-export"
@@ -3243,26 +3824,11 @@ try {
   Set-Stage "find-reloaded-main-window"
   $main = Wait-MainWindow $process
   Set-Stage "activate-reloaded-main-window"
-  $mainWindowHandle = [IntPtr]$main.Current.NativeWindowHandle
-  $mainForegroundGate = "failed"
-  if (
-    $main.Current.ProcessId -eq $process.Id -and
-    $mainWindowHandle -ne [IntPtr]::Zero -and
-    [ProcmonNativeMenu]::GetWindowProcessId($mainWindowHandle) -eq $process.Id
-  ) {
-    [ProcmonNativeMenu]::SetForegroundWindow($mainWindowHandle) | Out-Null
-    $mainForegroundDeadline = [DateTime]::UtcNow.AddSeconds(2)
-    do {
-      $foregroundHandle = [ProcmonNativeMenu]::GetForegroundWindow()
-      if (
-        $foregroundHandle -eq $mainWindowHandle -and
-        [ProcmonNativeMenu]::GetWindowProcessId($foregroundHandle) -eq $process.Id
-      ) {
-        $mainForegroundGate = "passed"
-        break
-      }
-      Start-Sleep -Milliseconds 50
-    } while ([DateTime]::UtcNow -lt $mainForegroundDeadline)
+  $mainWindowHandle = Set-VerifiedProcmonMainWindowForeground $main $process
+  $mainForegroundGate = if ($mainWindowHandle -eq [IntPtr]::Zero) {
+    "failed"
+  } else {
+    "passed"
   }
   [Console]::Out.WriteLine("PROC_MON_FILTER_RELOAD_MAIN_FOREGROUND=gate:$mainForegroundGate")
   if ($mainForegroundGate -ne "passed") {
@@ -3301,7 +3867,20 @@ try {
     [Console]::Out.WriteLine("PROC_MON_FILTER_LIVE_VERIFIED=rules:exact-two;drop:on")
   }
 } catch {
-  [Console]::Out.WriteLine("PROC_MON_FILTER_FAILED_STAGE=$stage")
+  [Console]::Out.WriteLine("PROC_MON_FILTER_FAILED_STAGE=$script:stage")
+  if (
+    $script:stage -in @("find-main-window", "find-reloaded-main-window") -and
+    $null -ne $script:windowScanTransientCount
+  ) {
+    $stageClass = if ($script:stage -eq "find-reloaded-main-window") {
+      "reload"
+    } else {
+      "initial"
+    }
+    [Console]::Out.WriteLine(
+      "PROC_MON_FILTER_WINDOW_SCAN_TRANSIENTS=stage:$stageClass;count:$script:windowScanTransientCount;phase:$script:windowScanPhase;type:$script:windowScanFailureType"
+    )
+  }
   $failureException = $_.Exception
   if (
     $failureException.GetType().Name -eq "MethodInvocationException" -and

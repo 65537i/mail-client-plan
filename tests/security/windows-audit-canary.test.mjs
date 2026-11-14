@@ -1,9 +1,50 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm, stat, unlink } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, realpath, rm, stat, symlink, unlink } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { createWindowsAuditCanary } from "../../scripts/windows-audit-canary.mjs";
+import vm from "node:vm";
+import { createWindowsAuditCanary, createWindowsAuditDirectory } from "../../scripts/windows-audit-canary.mjs";
+
+test("AC-05: audit paths use the canonical temporary root before exact filters are constructed", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "mc-path-test-"));
+  try {
+    const target = path.join(directory, "target");
+    const alias = path.join(directory, "alias");
+    await mkdir(target);
+    await symlink(target, alias, process.platform === "win32" ? "junction" : "dir");
+    const canonicalTarget = await realpath(target);
+    const auditDirectory = await createWindowsAuditDirectory(alias);
+    assert.equal(path.dirname(auditDirectory), canonicalTarget);
+    assert.equal(await realpath(auditDirectory), auditDirectory);
+    assert.match(path.basename(auditDirectory), /^mail-client-file-audit-/);
+    assert.equal((await stat(auditDirectory)).isDirectory(), true);
+    const canary = path.join(auditDirectory, "canary.png");
+    await createWindowsAuditCanary(canary);
+    assert.equal(await realpath(canary), canary);
+    await assert.rejects(createWindowsAuditDirectory(path.join(target, "missing")), { code: "ENOENT" });
+    assert.deepEqual(await readdir(target), [path.basename(auditDirectory)]);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+  const driver = await readFile(new URL("../../scripts/test-windows-file-access.mjs", import.meta.url), "utf8");
+  assert.match(driver, /const temporaryDirectory = await createWindowsAuditDirectory\(\)/);
+  for (const name of ["canaryPath", "positiveControlPath", "excludedPath", "backingFile", "csvFile", "filterConfig"]) {
+    assert.match(driver, new RegExp(`const ${name} = path\\.join\\(temporaryDirectory,`));
+  }
+  assert.doesNotMatch(driver, /mkdtemp\(/);
+  assert.match(driver, /temporary-root-alias=\$\{path\.resolve\(os\.tmpdir\(\)\)\.toLowerCase\(\) !== path\.dirname\(temporaryDirectory\)\.toLowerCase\(\)\}/);
+});
+
+test("AC-05: default audit directory resolves Windows short temporary paths without emitting them", async () => {
+  const directory = await createWindowsAuditDirectory();
+  try {
+    assert.equal(path.dirname(directory), await realpath(os.tmpdir()));
+    assert.equal(directory, await realpath(directory));
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
 
 test("AC-05: SCM driver inventory is bounded and identifies Procmon by service name or image path", async () => {
   const [inspection, driver] = await Promise.all([
@@ -135,7 +176,10 @@ test("AC-05: Filter Manager inventory is an independent bounded read-only driver
   assert.match(inspection, /target-volume-attached:\$attached;target-volume-instances:\$targetVolumeInstances/);
   assert.match(inspection, /PROC_MON_CAPTURE_FILTER_MANAGER=\$filterManagerEvidence/);
   assert.doesNotMatch(inspection, /fltmc\.exe\s+(?:load|unload|attach|detach)|WriteLine\([^)]*(?:\$line|\$filterManagerPath|\$volumeName|\$candidateName)/i);
-  assert.match(driver, /"-OwnerProcessId", String\(capture\.pid\), "-TargetPath", canaryPath/);
+  assert.match(driver, /"-OwnerProcessId", String\(capture\.pid\), "-TargetPath", positiveControlPath/);
+  assert.doesNotMatch(driver, /"-TargetPath", canaryPath/);
+  assert.match(driver, /const canaryPath = path\.join\(temporaryDirectory,/);
+  assert.match(driver, /const positiveControlPath = path\.join\(temporaryDirectory,/);
   assert.match(driver, /PROC_MON_CAPTURE_FILTER_MANAGER_COMMAND=exit-code:\(0\|\[1-9\]\\d\{0,2\}\|out-of-range\)/);
   assert.match(driver, /PROC_MON_CAPTURE_FILTER_MANAGER_PARSE=\(started\|empty-output\|line-limit\|line-shape\|duplicate-header\|instance-list-header\|volume-heading\|volume-heading-drive-path\|volume-heading-drive-decorated-parenthesis\|volume-heading-drive-decorated-bracket\|volume-heading-drive-decorated-quoted\|volume-heading-drive-decorated-volume-name\|volume-heading-drive-decorated-volume-guid\|volume-heading-drive-decorated-volume-id\|volume-heading-drive-decorated-volume-colon-guid\|volume-heading-drive-decorated-volume-colon-device\|volume-heading-drive-decorated-volume-colon-object-manager\|volume-heading-drive-decorated-volume-colon-drive\|volume-heading-drive-decorated-volume-colon-empty\|volume-heading-drive-decorated-volume-colon-text\|volume-heading-drive-decorated-volume-colon-numeric\|volume-heading-drive-decorated-volume-colon-other\|volume-heading-drive-decorated-volume-path\|volume-heading-drive-decorated-volume-other\|volume-heading-drive-decorated-device\|volume-heading-drive-decorated-harddisk\|volume-heading-drive-decorated-text\|volume-heading-drive-decorated-numeric\|volume-heading-drive-decorated-path\|volume-heading-drive-decorated-punctuation\|volume-heading-drive-decorated-other\|volume-heading-drive-other\|volume-heading-guid-prefix\|volume-heading-device-prefix\|volume-heading-object-manager-prefix\|volume-heading-rooted\|volume-heading-other\|instances-heading\|instance-heading\|filter-manager-heading\|filter-heading\|unexpected-preamble\|separator-shape\|row-shape\|invalid-count\|count-limit\|inventory-limit\|incomplete-table\|valid\)/);
   assert.match(driver, /Filter Manager parse state \$\{filterManagerParseState\}/);
@@ -213,6 +257,34 @@ test("AC-05: Filter Manager inventory is an independent bounded read-only driver
   assert.match(driver, /Number\(filterManagerEvidence\[0\]\[4\]\) <= Number\(filterManagerEvidence\[0\]\[1\]\) \* 64/);
 });
 
+test("AC-05: baseline canary failure stops before preparing the attack capture", async () => {
+  const driver = await readFile(new URL("../../scripts/test-windows-file-access.mjs", import.meta.url), "utf8");
+  assert.match(driver, /const baseline = await captureScenario\("baseline"\);\s*assert.equal\(baseline.canaryEvents.length, 0, "Windows baseline capture contains unexplained canary events"\);\s*const attack = await captureScenario\("attack"\);/);
+  for (const [baselineCount, attackCount] of [[1, 0], [0, 1], [0, 0]]) {
+    const calls = [];
+    let successMessages = 0;
+    const execution = vm.runInNewContext(
+      `(async () => { ${driver.slice(driver.indexOf('const baseline = await captureScenario("baseline");'))} })()`,
+      {
+        assert,
+        captureScenario: async (scenario) => {
+          calls.push(scenario);
+          return { canaryEvents: Array(scenario === "baseline" ? baselineCount : attackCount).fill({}) };
+        },
+        console: { log: () => { successMessages++; } },
+      },
+    );
+    if (baselineCount || attackCount) {
+      await assert.rejects(execution, /Windows (baseline|attack) capture contains/);
+      assert.equal(successMessages, 0);
+    } else {
+      await execution;
+      assert.equal(successMessages, 1);
+    }
+    assert.deepEqual(calls, baselineCount ? ["baseline"] : ["baseline", "attack"]);
+  }
+});
+
 test("AC-05: live filter verification attaches to the capture PID and preserves its lifetime", async () => {
   const [configuration, driver] = await Promise.all([
     readFile(new URL("../../scripts/configure-windows-procmon-filter.ps1", import.meta.url), "utf8"),
@@ -229,6 +301,98 @@ test("AC-05: live filter verification attaches to the capture PID and preserves 
   assert.match(driver, /positive-control read completed[\s\S]*await readCaptureListCount\("after-positive-control", true\)[\s\S]*const excludedControl = spawn/);
   assert.match(driver, /const alternateControl = spawn\(\s*"powershell\.exe"[\s\S]*\[System\.IO\.File\]::ReadAllBytes\(\$env:MAIL_CLIENT_FILE_CANARY\)[\s\S]*MAIL_CLIENT_FILE_CANARY: positiveControlPath[\s\S]*await readCaptureListCount\("after-alternate-control", true\)[\s\S]*const excludedControl = spawn/);
   assert.match(driver, /WDIO finished[\s\S]*await verifyLiveCaptureFilter\("after-wdio"\)[\s\S]*await readCaptureListCount\("final"\)/);
+});
+
+test("AC-05: Procmon window discovery retries transient UIA ownership reads before failing", async () => {
+  const configuration = await readFile(new URL("../../scripts/configure-windows-procmon-filter.ps1", import.meta.url), "utf8");
+  assert.match(configuration, /function Wait-MainWindow/);
+  assert.match(configuration, /\$script:windowScanTransientCount = 0[\s\S]*\$script:windowScanTransientPhase = "none"[\s\S]*\$script:windowScanTransientType = "none"/);
+  assert.match(configuration, /} catch \{\s*\$script:windowScanFailureType = "Other"\s+\$script:windowScanPhase = \$scanPhase\s+\$transientFailure = \$_.Exception/);
+  for (const phase of [
+    "refresh-process",
+    "check-process",
+    "enumerate-uia-windows",
+    "get-uia-window-element",
+    "read-uia-window-current",
+    "read-uia-window-owner",
+    "window-found",
+    "read-main-window-handle",
+    "read-main-window-owner",
+    "wait",
+  ]) {
+    assert.match(
+      configuration,
+      new RegExp(`\\$scanPhase = "${phase}"\\s+\\$script:windowScanPhase = \\$scanPhase`),
+      `Procmon window scan must persist the ${phase} phase before invoking the operation`,
+    );
+  }
+  assert.match(configuration, /catch \{[\s\S]*\$transientFailureType -notin @\([\s\S]*"COMException"[\s\S]*"ElementNotAvailableException"[\s\S]*"InvalidOperationException"[\s\S]*\)\s*\) \{\s*throw\s*\}[\s\S]*\$script:windowScanTransientCount = \[Math\]::Min\(\s*\$script:windowScanTransientCount \+ 1, 9999\s*\)/);
+  assert.match(configuration, /\$script:windowScanFailureType = if \(\$transientFailureType -in @\([\s\S]*"TypeInitializationException"[\s\S]*\)\) \{\s*\$transientFailureType\s*\} else \{\s*"Other"\s*\}[\s\S]*if \(\$transientFailureType -notin @\(/);
+  assert.match(configuration, /PROC_MON_FILTER_WINDOW_SCAN_TRANSIENTS=stage:\$stageClass;count:\$script:windowScanTransientCount;phase:\$script:windowScanPhase;type:\$script:windowScanFailureType/);
+  assert.match(configuration, /\} catch \{\s*\[Console\]::Out\.WriteLine\("PROC_MON_FILTER_FAILED_STAGE=\$script:stage"\)[\s\S]*PROC_MON_FILTER_WINDOW_SCAN_TRANSIENTS=/);
+  const foregroundHelper = configuration.match(
+    /function Set-VerifiedProcmonMainWindowForeground\(([\s\S]*?)\r?\n\}\r?\n\r?\nfunction Wait-ProcessMenu/,
+  )?.[1] ?? "";
+  assert.match(foregroundHelper, /\$mainWindowState\.ProcessId -ne \$Process\.Id/);
+  assert.match(foregroundHelper, /GetWindowProcessId\(\$mainWindowHandle\) -ne \$Process\.Id/);
+  assert.match(foregroundHelper, /SetForegroundWindow\(\$mainWindowHandle\)/);
+  assert.match(foregroundHelper, /GetForegroundWindow\(\)[\s\S]*GetWindowProcessId\(\$foregroundHandle\) -eq \$Process\.Id/);
+  assert.match(configuration, /DllImport\("user32\.dll", EntryPoint = "GetClassNameW", CharSet = CharSet\.Unicode, ExactSpelling = true\)/);
+  assert.match(configuration, /DllImport\("user32\.dll", EntryPoint = "GetWindowTextW", CharSet = CharSet\.Unicode, ExactSpelling = true\)/);
+  assert.match(configuration, /public static string DescribeForegroundWindow\([\s\S]*GetWindowProcessId\(hWnd\) != ownerProcessId[\s\S]*GetClassName\(hWnd, className, className\.Capacity\)[\s\S]*"dialog"[\s\S]*WindowOwner[\s\S]*IsWindowVisible\(hWnd\)[\s\S]*IsWindowEnabled\(hWnd\)[\s\S]*GetWindowText\(hWnd, title, title\.Capacity\)[\s\S]*StringComparison\.Ordinal[\s\S]*GetWindowProcessId\(hWnd\) != ownerProcessId[\s\S]*class:\{0\};owner:\{1\};visible:\{2\};enabled:\{3\};title-match:\{4\}/);
+  assert.match(foregroundHelper, /DescribeForegroundWindow\(\s*\$foregroundHandle,\s*\$Process\.Id,\s*\$mainWindowHandle,\s*\$FilterDialogTitle\s*\)/);
+  const foregroundDialogObservation = configuration.match(
+    /function Write-ProcmonForegroundDialogObservation\([\s\S]*?(?=\r?\nfunction )/,
+  )?.[0] ?? "";
+  assert.match(foregroundDialogObservation, /GetWindowProcessId\(\$WindowHandle\)[\s\S]*FromHandle\(\$WindowHandle\)[\s\S]*\$dialog\.Current\.ProcessId -ne \$OwnerProcessId/);
+  assert.match(foregroundDialogObservation, /TreeScope\]::Children[\s\S]*Math\]::Min\(\$children\.Count, 128\)[\s\S]*"ControlType.Button"[\s\S]*Get-ForegroundDialogButtonLabel[\s\S]*"ControlType.Text"[\s\S]*PROC_MON_FILTER_FOREGROUND_DIALOG_UI=stage:drop/);
+  assert.match(configuration, /function Get-ForegroundDialogButtonLabel\(\[string\]\$Name\) \{\s*switch -CaseSensitive \(\$Name\) \{\s*"OK" \{ return "ok" \}\s*"Cancel" \{ return "cancel" \}\s*"Retry" \{ return "retry" \}\s*"Yes" \{ return "yes" \}\s*"No" \{ return "no" \}/);
+  assert.match(configuration, /function Test-ForegroundDialogTextHint\([\s\S]*\$Text\.IndexOf\(\$term, \[StringComparison\]::OrdinalIgnoreCase\)/);
+  assert.match(foregroundDialogObservation, /\$text\.Length -gt 4096[\s\S]*\$text\.Substring\(0, 4096\)[\s\S]*hints-error:\$\(\$textHints\.error[\s\S]*text-truncated:/);
+  for (const [hint, terms] of [
+    ["fileMissing", ["not found", "cannot find", "could not find", "does not exist", "no such file", "missing"]],
+    ["fileOperation", ["open", "read", "write", "load", "save"]],
+    ["fileFormat", ["format", "corrupt", "invalid", "malformed"]],
+    ["fileOpen", ["open"]],
+    ["fileRead", ["read"]],
+    ["fileWrite", ["write"]],
+    ["fileLoad", ["load"]],
+    ["fileSave", ["save"]],
+    ["fileConfig", ["config", "configuration", "settings", ".pmc"]],
+    ["fileCapture", ["backing file", ".pml"]],
+    ["fileExport", ["export", ".csv"]],
+    ["filePath", ["path", "directory", "folder"]],
+    ["fileAccessDenied", ["access denied", "permission denied", "not permitted", "unauthorized", "cannot access", "unable to access"]],
+    ["fileBusy", ["in use", "busy", "sharing violation", "locked", "already open"]],
+    ["fileOpenFailure", ["failed to open", "unable to open", "cannot open", "could not open", "error opening"]],
+  ]) {
+    const hintStart = foregroundDialogObservation.indexOf(`$textHints.${hint} =`);
+    assert.notEqual(hintStart, -1, `Missing ${hint} classification`);
+    const nextHint = foregroundDialogObservation.indexOf("\n          $textHints.", hintStart + 1);
+    const hintBlock = foregroundDialogObservation.slice(
+      hintStart,
+      nextHint === -1 ? undefined : nextHint,
+    );
+    for (const term of terms) {
+      assert.ok(hintBlock.includes(`"${term}"`), `Missing ${hint} term ${term}`);
+    }
+  }
+  assert.doesNotMatch(foregroundDialogObservation, /WriteLine\([^)]*\$elementState\.Name/);
+  assert.doesNotMatch(foregroundDialogObservation, /WriteLine\([^)]*\$text\b/);
+  assert.match(foregroundHelper, /\[ValidateSet\("none", "drop"\)\]\[string\]\$DiagnosticStage = "none"/);
+  assert.match(foregroundHelper, /\[System\.IntPtr\]\$FilterDialogHandle = \[IntPtr\]::Zero/);
+  assert.match(foregroundHelper, /\$FilterDialogHandle -ne \[IntPtr\]::Zero[\s\S]*"filter-dialog"/);
+  assert.match(foregroundHelper, /PROC_MON_FILTER_MAIN_FOREGROUND_DETAIL=stage:drop;validation:\$validationState;before:\$beforeForegroundState;request:not-attempted;after:\$beforeForegroundState;wait-ms:0/);
+  assert.match(foregroundHelper, /PROC_MON_FILTER_MAIN_FOREGROUND_DETAIL=stage:drop;validation:passed;before:\$beforeForegroundState;request:\$requestState;after:\$afterForegroundState;wait-ms:\$waitMilliseconds/);
+  assert.match(configuration, /Set-Stage "find-main-window"\s+\$main = Wait-MainWindow \$process\s+Set-Stage "focus-main-window"\s+\$mainWindowHandle = Set-VerifiedProcmonMainWindowForeground \$main \$process/);
+  assert.match(configuration, /if \(\$menuState\.IsKeyboardFocusable\) \{\s*try \{\s*\$filterMenu\.SetFocus\(\)[\s\S]*?\$menuOpenAttempted = \$true[\s\S]*?\$invokePattern\.Invoke\(\)[\s\S]*?\} else \{\s*\[Console\]::Out\.WriteLine\("PROC_MON_FILTER_MENU_FOCUS=skipped-not-keyboard-focusable"\)\s*\}/);
+  assert.match(configuration, /Set-Stage "verify-main-foreground-for-filter-shortcut"[\s\S]*?"PROC_MON_FILTER_MAIN_FOREGROUND=stage:shortcut;gate:\$shortcutForegroundGate"[\s\S]*?if \(\$shortcutForegroundGate -ne "passed"\)[\s\S]*?if \(\$menuOpenAttempted\) \{[\s\S]*?SendWait\("\{ESC\}"\)[\s\S]*?"PROC_MON_FILTER_MAIN_FOREGROUND=stage:shortcut-dismiss;gate:\$dismissForegroundGate"[\s\S]*?Set-Stage "open-filter-dialog-shortcut"[\s\S]*?SendWait\("\^l"\)[\s\S]*?Wait-FilterDialog \$process \$main/);
+  assert.match(configuration, /Set-Stage "focus-main-for-drop-filtered-events"\s+\$mainWindowHandle = Set-VerifiedProcmonMainWindowForeground `\r?\n\s+\$main \$process -DiagnosticStage "drop"/);
+  assert.match(configuration, /\$filterDialogTitle = \[string\]\$filterDialog\.Current\.Name\s+\$filterDialogHandle = \[IntPtr\]\$filterDialog\.Current\.NativeWindowHandle[\s\S]*Set-VerifiedProcmonMainWindowForeground `\r?\n\s+\$main \$process -DiagnosticStage "drop" -FilterDialogHandle \$filterDialogHandle `\r?\n\s+-FilterDialogTitle \$filterDialogTitle/);
+  assert.match(configuration, /Set-Stage "focus-main-for-export"\s+\$mainWindowHandle = Set-VerifiedProcmonMainWindowForeground \$main \$process/);
+  assert.match(configuration, /Set-Stage "activate-reloaded-main-window"\s+\$mainWindowHandle = Set-VerifiedProcmonMainWindowForeground \$main \$process/);
+  assert.doesNotMatch(configuration, /\$main\.SetFocus\(\)/);
+  assert.match(configuration, /finally \{\s+\$stageClass = if \(\$script:stage -in @\([\s\S]*"activate-reloaded-main-window"[\s\S]*\)\)[\s\S]*PROC_MON_FILTER_WINDOW_SCAN=.*window-found:/);
 });
 
 test("AC-05: only offline export clears display filters and all exported paths remain validated", async () => {
