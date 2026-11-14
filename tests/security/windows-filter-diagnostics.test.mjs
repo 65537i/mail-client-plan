@@ -64,6 +64,12 @@ test("AC-05: modal-window snapshots compare only bounded Procmon dialog counts a
     ),
     "; filter-modal-windows-before-filter-ok=unavailable:uia-com",
   );
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_MODAL_WINDOWS=stage:before-filter-ok;state:starting",
+    ),
+    "; filter-modal-windows-before-filter-ok=starting",
+  );
   for (const invalid of [
     before.replace("windows:1", "windows:33"),
     before.replace("windows:1", "windows:0"),
@@ -1102,6 +1108,7 @@ test("AC-05: Windows filter output retains diagnostics within a strict 8192-char
 
 test("AC-05: truncation preserves mandatory evidence across chunk boundaries within 8192 characters", () => {
   const lines = [
+    "PROC_MON_FILTER_MODAL_WINDOWS=stage:before-filter-ok;state:starting",
     "PROC_MON_FILTER_MODAL_WINDOWS=stage:before-filter-ok;state:available;windows:1;filter-dialog:found;standard-dialogs:0;main-owned-dialogs:0;visible-standard-dialogs:0;enabled-standard-dialogs:0;truncated:false",
     "PROC_MON_FILTER_MODAL_WINDOWS=stage:after-filter-ok;state:available;windows:2;filter-dialog:missing;standard-dialogs:1;main-owned-dialogs:1;visible-standard-dialogs:1;enabled-standard-dialogs:1;truncated:false",
     "PROC_MON_FILTER_CONFIG_PATHS=canary:1;control:1",
@@ -1117,6 +1124,7 @@ test("AC-05: truncation preserves mandatory evidence across chunk boundaries wit
       assert.ok(captured.length <= windowsFilterOutputLimit);
     }
     const diagnostics = describeWindowsFilterDiagnostics(captured);
+    assert.ok(diagnostics.includes("; filter-modal-windows-before-filter-ok=starting"));
     assert.ok(diagnostics.includes("; filter-modal-windows-before-filter-ok=windows:1;filter-dialog:found;standard-dialogs:0;main-owned-dialogs:0;visible-standard-dialogs:0;enabled-standard-dialogs:0;truncated:false"));
     assert.ok(diagnostics.includes("; filter-modal-windows-after-filter-ok=windows:2;filter-dialog:missing;standard-dialogs:1;main-owned-dialogs:1;visible-standard-dialogs:1;enabled-standard-dialogs:1;truncated:false"));
     assert.ok(diagnostics.includes("; config-filter-paths=canary:1;control:1"));

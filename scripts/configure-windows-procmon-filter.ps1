@@ -2995,6 +2995,9 @@ function Write-ProcmonModalWindowInventory(
   [System.IntPtr]$FilterDialogHandle
 ) {
   $reason = $null
+  [Console]::Out.WriteLine(
+    "PROC_MON_FILTER_MODAL_WINDOWS=stage:$Stage;state:starting"
+  )
   try {
     $windowCondition = [System.Windows.Automation.PropertyCondition]::new(
       [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
@@ -3454,9 +3457,9 @@ try {
   Set-Stage "set-control-filter"
   Set-FilterRule $filterDialog $ControlPath $process.Id
   Set-Stage "apply-filters"
+  Write-ProcmonModalWindowInventory "before-filter-ok" $main $process [IntPtr]::Zero
   $filterDialogTitle = [string]$filterDialog.Current.Name
   $filterDialogHandle = [IntPtr]$filterDialog.Current.NativeWindowHandle
-  Write-ProcmonModalWindowInventory "before-filter-ok" $main $process $filterDialogHandle
   $ok = Wait-Element $filterDialog ([System.Windows.Automation.PropertyCondition]::new(
     [System.Windows.Automation.AutomationElement]::NameProperty, "OK"
   )) 5
