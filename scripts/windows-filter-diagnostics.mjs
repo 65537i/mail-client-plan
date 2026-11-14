@@ -5,7 +5,7 @@ export const reloadedFilterUiEvidencePattern = /^reloaded-filter-ui=items:\d+;li
 const windowsProcmonProcessStatePattern =
   /^PROC_MON_PROCESS_STATE=stage:(before-filter-setup|after-filter-setup|after-capture-stop|after-csv-export);named:(0|[1-9]\d{0,2});instances:(0|[1-9]\d{0,2});path-unavailable:(0|[1-9]\d{0,2})$/;
 const procmonModalWindowsPattern =
-  /^PROC_MON_FILTER_MODAL_WINDOWS=stage:(before-filter-ok|after-filter-ok);state:available;windows:(0|[1-9]\d?);filter-dialog:(found|missing|unavailable);standard-dialogs:(0|[1-9]\d?);main-owned-dialogs:(0|[1-9]\d?);visible-standard-dialogs:(0|[1-9]\d?);enabled-standard-dialogs:(0|[1-9]\d?);truncated:(true|false)$/;
+  /^PROC_MON_FILTER_MODAL_WINDOWS=stage:(before-filter-ok|after-filter-ok);state:available;windows:(0|[1-9]\d?);filter-dialog:(found|missing|unavailable);standard-dialogs:(0|[1-9]\d?);main-owned-dialogs:(0|[1-9]\d?);visible-standard-dialogs:(0|[1-9]\d?);enabled-standard-dialogs:(0|[1-9]\d?);truncated:(true|false)$/gm;
 const windowsFilterOutputHeadLimit = 3072;
 const windowsFilterOutputTruncationMarker = "\nPROC_MON_FILTER_OUTPUT_TRUNCATED=true\n";
 const windowsFilterOutputTailLimit =
