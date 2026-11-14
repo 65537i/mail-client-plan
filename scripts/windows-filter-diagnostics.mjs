@@ -2,12 +2,34 @@ const allowedTypes = /^(?:MenuBar|Menu|MenuItem|Window|Pane|ToolBar|Button|Text|
 const allowedNames = /^(?:Event|FileMenu|Filter|FilterCommand|SaveFilterCommand|ExportConfigCommand|DropFilteredEvents|HighlightFilteredEvents|MenuBar|ProcessMonitor|Other)$/;
 export const windowsFilterOutputLimit = 8192;
 export const reloadedFilterUiEvidencePattern = /^reloaded-filter-ui=items:\d+;lists:\d+;data-grids:\d+;tables:\d+;list-items:\d+;data-items:\d+(?:;dialog-window-rows:\d+;other-window-rows:\d+;unscoped-rows:\d+(?:;combo-option-rows:\d+;rule-containers:\d+;rule-row-candidates:\d+;rule-container-unclassified-rows:\d+)?)?;rows:2;truncated:false$/;
+const windowsProcmonProcessStatePattern =
+  /^PROC_MON_PROCESS_STATE=stage:(before-filter-setup|after-filter-setup|after-capture-stop|after-csv-export);named:(0|[1-9]\d{0,2});instances:(0|[1-9]\d{0,2});path-unavailable:(0|[1-9]\d{0,2})$/;
 const windowsFilterOutputHeadLimit = 3072;
 const windowsFilterOutputTruncationMarker = "\nPROC_MON_FILTER_OUTPUT_TRUNCATED=true\n";
 const windowsFilterOutputTailLimit =
   windowsFilterOutputLimit
   - windowsFilterOutputHeadLimit
   - windowsFilterOutputTruncationMarker.length;
+
+export function parseWindowsProcmonProcessState(output) {
+  const line = output.endsWith("\r\n")
+    ? output.slice(0, -2)
+    : output.endsWith("\n")
+      ? output.slice(0, -1)
+      : output;
+  const match = windowsProcmonProcessStatePattern.exec(line);
+  if (!match) return null;
+  const named = Number(match[2]);
+  const instances = Number(match[3]);
+  const pathUnavailable = Number(match[4]);
+  if (instances + pathUnavailable > named) return null;
+  return {
+    stage: match[1],
+    named,
+    instances,
+    pathUnavailable,
+  };
+}
 
 export function appendBoundedWindowsFilterOutput(current, chunk) {
   const combined = current + chunk;

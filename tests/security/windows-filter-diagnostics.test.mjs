@@ -3,9 +3,37 @@ import test from "node:test";
 import {
   appendBoundedWindowsFilterOutput,
   describeWindowsFilterDiagnostics,
+  parseWindowsProcmonProcessState,
   reloadedFilterUiEvidencePattern,
   windowsFilterOutputLimit,
 } from "../../scripts/windows-filter-diagnostics.mjs";
+
+test("AC-05: Procmon process-state diagnostics retain only bounded counts and stages", () => {
+  assert.deepEqual(
+    parseWindowsProcmonProcessState(
+      "PROC_MON_PROCESS_STATE=stage:after-csv-export;named:1;instances:1;path-unavailable:0\r\n",
+    ),
+    { stage: "after-csv-export", named: 1, instances: 1, pathUnavailable: 0 },
+  );
+  assert.deepEqual(
+    parseWindowsProcmonProcessState(
+      "PROC_MON_PROCESS_STATE=stage:before-filter-setup;named:2;instances:0;path-unavailable:2",
+    ),
+    { stage: "before-filter-setup", named: 2, instances: 0, pathUnavailable: 2 },
+  );
+  for (const invalid of [
+    "PROC_MON_PROCESS_STATE=stage:private;named:1;instances:1;path-unavailable:0",
+    "PROC_MON_PROCESS_STATE=stage:after-csv-export;named:1000;instances:0;path-unavailable:0",
+    "PROC_MON_PROCESS_STATE=stage:after-csv-export;named:1;instances:1000;path-unavailable:0",
+    "PROC_MON_PROCESS_STATE=stage:after-csv-export;named:1;instances:0;path-unavailable:1000",
+    "PROC_MON_PROCESS_STATE=stage:after-csv-export;named:1;instances:2;path-unavailable:0",
+    "PROC_MON_PROCESS_STATE=stage:after-csv-export;named:1;instances:0;path-unavailable:2",
+    "PROC_MON_PROCESS_STATE=stage:after-csv-export;named:1;instances:1;path-unavailable:0;path=C:\\private",
+    "PROC_MON_PROCESS_STATE=stage:after-csv-export;named:1;instances:1;path-unavailable:0\nextra",
+  ]) {
+    assert.equal(parseWindowsProcmonProcessState(invalid), null);
+  }
+});
 
 test("AC-05: export timeout observations distinguish missing dialogs from failed inspection", () => {
   const line = "PROC_MON_FILTER_SAVE_RESULT=phase:export-timeout;foreground:procmon-main;same-process-dialogs:0;other-process-windows:1;buttons:save:0;cancel:0;yes:0;no:0;ok:0;retry:0;close:0;truncated:false";

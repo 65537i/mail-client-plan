@@ -13,6 +13,7 @@ import { createWindowsAuditCanary, createWindowsAuditDirectory } from "./windows
 import {
   appendBoundedWindowsFilterOutput,
   describeWindowsFilterDiagnostics,
+  parseWindowsProcmonProcessState,
   reloadedFilterUiEvidencePattern,
   windowsFilterOutputLimit,
 } from "./windows-filter-diagnostics.mjs";
@@ -150,6 +151,49 @@ async function captureScenario(scenario) {
     assert.equal(result.code, 0, `Process Monitor ${description} exited unsuccessfully`);
   }
 
+  async function reportProcmonProcessState(stage) {
+    const inspection = spawn(
+      "powershell.exe",
+      [
+        "-NoProfile",
+        "-NonInteractive",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        path.join(root, "scripts", "inspect-windows-procmon-process-state.ps1"),
+        "-ProcmonPath",
+        procmonPath,
+        "-Stage",
+        stage,
+      ],
+      { stdio: ["ignore", "pipe", "pipe"], windowsHide: true },
+    );
+    let output = "";
+    let overflow = false;
+    inspection.stdout.setEncoding("utf8");
+    inspection.stdout.on("data", (chunk) => {
+      overflow ||= output.length + chunk.length > 1024;
+      output = (output + chunk).slice(0, 1024);
+    });
+    inspection.stderr.resume();
+    const inspectionExit = waitForProcess(inspection);
+    const inspectionResult = await waitWithTimeout(inspectionExit, 10_000);
+    if (inspectionResult.timedOut) {
+      inspection.kill();
+      await inspectionExit;
+      throw new Error("Process Monitor process-state inspection timed out");
+    }
+    assert(
+      !inspectionResult.error && inspectionResult.code === 0 && !overflow,
+      "Process Monitor process-state inspection failed",
+    );
+    const state = parseWindowsProcmonProcessState(output);
+    assert(state && state.stage === stage, "Process Monitor process-state evidence is invalid");
+    console.log(
+      `Windows audit ${scenario}: Procmon process state stage=${state.stage}; named=${state.named}; matching-path=${state.instances}; path-unavailable=${state.pathUnavailable}`,
+    );
+  }
+
   let capture;
   let captureExit;
   let command;
@@ -167,6 +211,7 @@ async function captureScenario(scenario) {
     console.log(`Windows audit ${scenario}: canary flushed and closed UTC=${canaryCreatedAt}; bytes=${canaryStats.size}`);
     await writeFile(positiveControlPath, "Synthetic Process Monitor positive control.\n");
     await writeFile(excludedPath, "Synthetic Process Monitor filter negative control.\n");
+    await reportProcmonProcessState("before-filter-setup");
     const filterSetup = spawn(
       "powershell.exe",
       [
@@ -218,6 +263,7 @@ async function captureScenario(scenario) {
       );
     }
     if (filterSetupResult.error) throw new Error("Failed to start Process Monitor filter configuration");
+    await reportProcmonProcessState("after-filter-setup");
     const filterStage = filterSetupOutput.match(
       /PROC_MON_FILTER_FAILED_STAGE=([a-z-]+)/,
     )?.[1] ?? [...filterSetupOutput.matchAll(
@@ -556,6 +602,7 @@ async function captureScenario(scenario) {
     const captureResult = await waitWithTimeout(captureExit, 10_000);
     assert(!captureResult.timedOut, "Process Monitor capture did not stop after termination");
     if (captureResult.error) throw new Error("Process Monitor capture failed while shutting down");
+    await reportProcmonProcessState("after-capture-stop");
 
     const backingFileStats = await stat(backingFile);
     console.log(
@@ -571,6 +618,7 @@ async function captureScenario(scenario) {
       ["/AcceptEula", "/Quiet", "/NoFilter", "/OpenLog", backingFile, "/SaveAs", csvFile],
       "CSV export",
     );
+    await reportProcmonProcessState("after-csv-export");
     const csvStats = await stat(csvFile);
     console.log(`Windows audit ${scenario}: CSV bytes=${csvStats.size}`);
     assert(
