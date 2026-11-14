@@ -2988,6 +2988,110 @@ function Write-ProcmonForegroundDialogObservation(
   )
 }
 
+function Write-ProcmonModalWindowInventory(
+  [ValidateSet("before-filter-ok", "after-filter-ok")][string]$Stage,
+  [System.Windows.Automation.AutomationElement]$MainWindow,
+  [System.Diagnostics.Process]$Process,
+  [System.IntPtr]$FilterDialogHandle
+) {
+  $reason = $null
+  try {
+    $windowCondition = [System.Windows.Automation.PropertyCondition]::new(
+      [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+      [System.Windows.Automation.ControlType]::Window
+    )
+    $rootWindows = [System.Windows.Automation.AutomationElement]::RootElement.FindAll(
+      [System.Windows.Automation.TreeScope]::Children,
+      $windowCondition
+    )
+    $embeddedWindows = $MainWindow.FindAll(
+      [System.Windows.Automation.TreeScope]::Descendants,
+      $windowCondition
+    )
+    $mainWindowHandle = [IntPtr]$MainWindow.Current.NativeWindowHandle
+    $seenHandles = [System.Collections.Generic.HashSet[int]]::new()
+    $windowCount = 0
+    $standardDialogCount = 0
+    $mainOwnedDialogCount = 0
+    $visibleDialogCount = 0
+    $enabledDialogCount = 0
+    $filterDialogFound = $false
+    $truncated = $false
+    foreach ($window in @($rootWindows) + @($embeddedWindows)) {
+      $windowState = $window.Current
+      if ($windowState.ProcessId -ne $Process.Id) {
+        continue
+      }
+      if ($windowState.NativeWindowHandle -eq 0) {
+        continue
+      }
+      if (-not $seenHandles.Add($windowState.NativeWindowHandle)) {
+        continue
+      }
+      if ($seenHandles.Count -gt 32) {
+        $truncated = $true
+        break
+      }
+      $windowHandle = [IntPtr]$windowState.NativeWindowHandle
+      if ($windowHandle -eq $mainWindowHandle) {
+        continue
+      }
+      $windowCount = $windowCount + 1
+      if (
+        $FilterDialogHandle -ne [IntPtr]::Zero -and
+        $windowHandle -eq $FilterDialogHandle
+      ) {
+        $filterDialogFound = $true
+        continue
+      }
+      $details = [ProcmonNativeMenu]::DescribeForegroundWindow(
+        $windowHandle,
+        $Process.Id,
+        $mainWindowHandle,
+        ""
+      )
+      if ($details -match "^class:dialog;owner:") {
+        $standardDialogCount = $standardDialogCount + 1
+        if ($details -match "^class:dialog;owner:main;") {
+          $mainOwnedDialogCount = $mainOwnedDialogCount + 1
+        }
+        if ($details -match ";visible:true;") {
+          $visibleDialogCount = $visibleDialogCount + 1
+        }
+        if ($details -match ";enabled:true;") {
+          $enabledDialogCount = $enabledDialogCount + 1
+        }
+      }
+    }
+  } catch [System.Windows.Automation.ElementNotAvailableException] {
+    $reason = "uia-element-unavailable"
+  } catch [System.Runtime.InteropServices.COMException] {
+    $reason = "uia-com"
+  } catch [System.InvalidOperationException] {
+    $reason = "uia-invalid-operation"
+  } catch [System.ArgumentException] {
+    $reason = "uia-argument"
+  }
+  if ($null -ne $reason) {
+    [Console]::Out.WriteLine(
+      "PROC_MON_FILTER_MODAL_WINDOWS=stage:$Stage;state:unavailable;reason:$reason"
+    )
+    return
+  }
+  $filterDialogState = if ($FilterDialogHandle -eq [IntPtr]::Zero) {
+    "unavailable"
+  } elseif ($filterDialogFound) {
+    "found"
+  } elseif ($truncated) {
+    "unavailable"
+  } else {
+    "missing"
+  }
+  [Console]::Out.WriteLine(
+    "PROC_MON_FILTER_MODAL_WINDOWS=stage:$Stage;state:available;windows:$windowCount;filter-dialog:$filterDialogState;standard-dialogs:$standardDialogCount;main-owned-dialogs:$mainOwnedDialogCount;visible-standard-dialogs:$visibleDialogCount;enabled-standard-dialogs:$enabledDialogCount;truncated:$($truncated.ToString().ToLowerInvariant())"
+  )
+}
+
 function Write-MenuItemsObservation(
   [string]$Phase,
   [System.Windows.Automation.AutomationElement]$Menu
@@ -3355,7 +3459,9 @@ try {
   )) 5
   $filterDialogTitle = [string]$filterDialog.Current.Name
   $filterDialogHandle = [IntPtr]$filterDialog.Current.NativeWindowHandle
+  Write-ProcmonModalWindowInventory "before-filter-ok" $main $process $filterDialogHandle
   $ok.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
+  Write-ProcmonModalWindowInventory "after-filter-ok" $main $process $filterDialogHandle
 
   Set-Stage "focus-main-for-drop-filtered-events"
   $mainWindowHandle = Set-VerifiedProcmonMainWindowForeground `

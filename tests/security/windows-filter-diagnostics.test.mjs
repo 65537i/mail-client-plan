@@ -35,6 +35,48 @@ test("AC-05: Procmon process-state diagnostics retain only bounded counts and st
   }
 });
 
+test("AC-05: modal-window snapshots compare only bounded Procmon dialog counts around Filter OK", () => {
+  const before = "PROC_MON_FILTER_MODAL_WINDOWS=stage:before-filter-ok;state:available;"
+    + "windows:1;filter-dialog:found;standard-dialogs:0;main-owned-dialogs:0;"
+    + "visible-standard-dialogs:0;enabled-standard-dialogs:0;truncated:false";
+  const after = "PROC_MON_FILTER_MODAL_WINDOWS=stage:after-filter-ok;state:available;"
+    + "windows:2;filter-dialog:missing;standard-dialogs:1;main-owned-dialogs:1;"
+    + "visible-standard-dialogs:1;enabled-standard-dialogs:1;truncated:false";
+  const diagnostics = describeWindowsFilterDiagnostics(`${before}\n${after}`);
+  assert.ok(diagnostics.includes(
+    "; filter-modal-windows-before-filter-ok=windows:1;filter-dialog:found;"
+      + "standard-dialogs:0;main-owned-dialogs:0;visible-standard-dialogs:0;"
+      + "enabled-standard-dialogs:0;truncated:false",
+  ));
+  assert.ok(diagnostics.includes(
+    "; filter-modal-windows-after-filter-ok=windows:2;filter-dialog:missing;"
+      + "standard-dialogs:1;main-owned-dialogs:1;visible-standard-dialogs:1;"
+      + "enabled-standard-dialogs:1;truncated:false",
+  ));
+  assert.ok(describeWindowsFilterDiagnostics(
+    "PROC_MON_FILTER_MODAL_WINDOWS=stage:after-filter-ok;state:available;"
+      + "windows:32;filter-dialog:unavailable;standard-dialogs:0;main-owned-dialogs:0;"
+      + "visible-standard-dialogs:0;enabled-standard-dialogs:0;truncated:true",
+  ).includes("; filter-modal-windows-after-filter-ok=windows:32;filter-dialog:unavailable;"));
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_MODAL_WINDOWS=stage:before-filter-ok;state:unavailable;reason:uia-com",
+    ),
+    "; filter-modal-windows-before-filter-ok=unavailable:uia-com",
+  );
+  for (const invalid of [
+    before.replace("windows:1", "windows:33"),
+    before.replace("windows:1", "windows:0"),
+    after.replace("main-owned-dialogs:1", "main-owned-dialogs:2"),
+    after.replace("visible-standard-dialogs:1", "visible-standard-dialogs:2"),
+    `${before};handle=0x1234`,
+    before.replace("stage:before-filter-ok", "stage:private"),
+    "PROC_MON_FILTER_MODAL_WINDOWS=stage:after-filter-ok;state:unavailable;reason:PrivateException",
+  ]) {
+    assert.equal(describeWindowsFilterDiagnostics(invalid), "");
+  }
+});
+
 test("AC-05: export timeout observations distinguish missing dialogs from failed inspection", () => {
   const line = "PROC_MON_FILTER_SAVE_RESULT=phase:export-timeout;foreground:procmon-main;same-process-dialogs:0;other-process-windows:1;buttons:save:0;cancel:0;yes:0;no:0;ok:0;retry:0;close:0;truncated:false";
   assert.equal(
@@ -1060,6 +1102,8 @@ test("AC-05: Windows filter output retains diagnostics within a strict 8192-char
 
 test("AC-05: truncation preserves mandatory evidence across chunk boundaries within 8192 characters", () => {
   const lines = [
+    "PROC_MON_FILTER_MODAL_WINDOWS=stage:before-filter-ok;state:available;windows:1;filter-dialog:found;standard-dialogs:0;main-owned-dialogs:0;visible-standard-dialogs:0;enabled-standard-dialogs:0;truncated:false",
+    "PROC_MON_FILTER_MODAL_WINDOWS=stage:after-filter-ok;state:available;windows:2;filter-dialog:missing;standard-dialogs:1;main-owned-dialogs:1;visible-standard-dialogs:1;enabled-standard-dialogs:1;truncated:false",
     "PROC_MON_FILTER_CONFIG_PATHS=canary:1;control:1",
     "PROC_MON_FILTER_RELOADED_RULES=rows:2;canary:1;control:1;path:2;is:2;include:2;unclassified:0",
     "PROC_MON_FILTER_RELOADED_UI=items:86;lists:4;data-grids:1;tables:0;list-items:41;data-items:2;dialog-window-rows:43;other-window-rows:0;unscoped-rows:0;combo-option-rows:41;rule-containers:1;rule-row-candidates:2;rule-container-unclassified-rows:0;rows:2;truncated:false",
@@ -1073,6 +1117,8 @@ test("AC-05: truncation preserves mandatory evidence across chunk boundaries wit
       assert.ok(captured.length <= windowsFilterOutputLimit);
     }
     const diagnostics = describeWindowsFilterDiagnostics(captured);
+    assert.ok(diagnostics.includes("; filter-modal-windows-before-filter-ok=windows:1;filter-dialog:found;standard-dialogs:0;main-owned-dialogs:0;visible-standard-dialogs:0;enabled-standard-dialogs:0;truncated:false"));
+    assert.ok(diagnostics.includes("; filter-modal-windows-after-filter-ok=windows:2;filter-dialog:missing;standard-dialogs:1;main-owned-dialogs:1;visible-standard-dialogs:1;enabled-standard-dialogs:1;truncated:false"));
     assert.ok(diagnostics.includes("; config-filter-paths=canary:1;control:1"));
     assert.ok(diagnostics.includes("; reloaded-filter-rules=rows:2;canary:1;control:1;path:2;is:2;include:2;unclassified:0"));
     assert.ok(diagnostics.includes("; reloaded-drop-filtered-events=on"));

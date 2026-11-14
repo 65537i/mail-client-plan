@@ -4,6 +4,8 @@ export const windowsFilterOutputLimit = 8192;
 export const reloadedFilterUiEvidencePattern = /^reloaded-filter-ui=items:\d+;lists:\d+;data-grids:\d+;tables:\d+;list-items:\d+;data-items:\d+(?:;dialog-window-rows:\d+;other-window-rows:\d+;unscoped-rows:\d+(?:;combo-option-rows:\d+;rule-containers:\d+;rule-row-candidates:\d+;rule-container-unclassified-rows:\d+)?)?;rows:2;truncated:false$/;
 const windowsProcmonProcessStatePattern =
   /^PROC_MON_PROCESS_STATE=stage:(before-filter-setup|after-filter-setup|after-capture-stop|after-csv-export);named:(0|[1-9]\d{0,2});instances:(0|[1-9]\d{0,2});path-unavailable:(0|[1-9]\d{0,2})$/;
+const procmonModalWindowsPattern =
+  /^PROC_MON_FILTER_MODAL_WINDOWS=stage:(before-filter-ok|after-filter-ok);state:available;windows:(0|[1-9]\d?);filter-dialog:(found|missing|unavailable);standard-dialogs:(0|[1-9]\d?);main-owned-dialogs:(0|[1-9]\d?);visible-standard-dialogs:(0|[1-9]\d?);enabled-standard-dialogs:(0|[1-9]\d?);truncated:(true|false)$/;
 const windowsFilterOutputHeadLimit = 3072;
 const windowsFilterOutputTruncationMarker = "\nPROC_MON_FILTER_OUTPUT_TRUNCATED=true\n";
 const windowsFilterOutputTailLimit =
@@ -36,15 +38,20 @@ export function appendBoundedWindowsFilterOutput(current, chunk) {
   if (combined.length <= windowsFilterOutputLimit) return combined;
   const evidence = new Map();
   for (const match of combined.matchAll(
-    /^(PROC_MON_FILTER_CONFIG_PATHS|PROC_MON_FILTER_RELOADED_RULES|PROC_MON_FILTER_RELOADED_UI|PROC_MON_FILTER_RELOADED_DROP|PROC_MON_FILTER_WINDOW_SCAN|PROC_MON_FILTER_MAIN_FOREGROUND|PROC_MON_FILTER_MAIN_FOREGROUND_DETAIL|PROC_MON_FILTER_FOREGROUND_WINDOW|PROC_MON_FILTER_FOREGROUND_DIALOG_UI|PROC_MON_FILTER_INITIAL_SHORTCUT)=[^\r\n]{1,1024}\r?$/gm,
+    /^(PROC_MON_FILTER_CONFIG_PATHS|PROC_MON_FILTER_RELOADED_RULES|PROC_MON_FILTER_RELOADED_UI|PROC_MON_FILTER_RELOADED_DROP|PROC_MON_FILTER_WINDOW_SCAN|PROC_MON_FILTER_MAIN_FOREGROUND|PROC_MON_FILTER_MAIN_FOREGROUND_DETAIL|PROC_MON_FILTER_FOREGROUND_WINDOW|PROC_MON_FILTER_FOREGROUND_DIALOG_UI|PROC_MON_FILTER_MODAL_WINDOWS|PROC_MON_FILTER_INITIAL_SHORTCUT)=[^\r\n]{1,1024}\r?$/gm,
   )) {
-    const stage = match[1] === "PROC_MON_FILTER_MAIN_FOREGROUND"
-      ? match[0].match(/stage:(initial|shortcut|shortcut-dismiss|drop|export);/)?.[1] ?? "legacy"
-      : match[1] === "PROC_MON_FILTER_MAIN_FOREGROUND_DETAIL"
-        || match[1] === "PROC_MON_FILTER_FOREGROUND_WINDOW"
-        || match[1] === "PROC_MON_FILTER_FOREGROUND_DIALOG_UI"
-        ? match[0].match(/stage:(drop);/)?.[1] ?? null
-        : null;
+    let stage = null;
+    if (match[1] === "PROC_MON_FILTER_MAIN_FOREGROUND") {
+      stage = match[0].match(/stage:(initial|shortcut|shortcut-dismiss|drop|export);/)?.[1] ?? "legacy";
+    } else if (match[1] === "PROC_MON_FILTER_MODAL_WINDOWS") {
+      stage = match[0].match(/stage:(before-filter-ok|after-filter-ok);/)?.[1] ?? null;
+    } else if (
+      match[1] === "PROC_MON_FILTER_MAIN_FOREGROUND_DETAIL"
+      || match[1] === "PROC_MON_FILTER_FOREGROUND_WINDOW"
+      || match[1] === "PROC_MON_FILTER_FOREGROUND_DIALOG_UI"
+    ) {
+      stage = match[0].match(/stage:(drop);/)?.[1] ?? null;
+    }
     const key = stage ? `${match[1]}:${stage}` : match[1];
     if (!evidence.has(key) && describeWindowsFilterDiagnostics(match[0])) {
       evidence.set(key, match[0].replace(/\r$/, ""));
@@ -971,5 +978,40 @@ export function describeWindowsFilterDiagnostics(output) {
   }
   focusObservations.sort((left, right) => left.index - right.index);
   diagnostics.push(...focusObservations.map(({ value }) => value));
+  for (const match of output.matchAll(procmonModalWindowsPattern)) {
+    const [
+      ,
+      stage,
+      rawWindows,
+      filterDialog,
+      rawStandardDialogs,
+      rawMainOwnedDialogs,
+      rawVisibleDialogs,
+      rawEnabledDialogs,
+      truncated,
+    ] = match;
+    const windows = Number(rawWindows);
+    const standardDialogs = Number(rawStandardDialogs);
+    const mainOwnedDialogs = Number(rawMainOwnedDialogs);
+    const visibleDialogs = Number(rawVisibleDialogs);
+    const enabledDialogs = Number(rawEnabledDialogs);
+    if (
+      windows <= 32
+      && (filterDialog !== "found" || windows > 0)
+      && standardDialogs <= windows
+      && mainOwnedDialogs <= standardDialogs
+      && visibleDialogs <= standardDialogs
+      && enabledDialogs <= standardDialogs
+    ) {
+      diagnostics.push(
+        `filter-modal-windows-${stage}=windows:${windows};filter-dialog:${filterDialog};standard-dialogs:${standardDialogs};main-owned-dialogs:${mainOwnedDialogs};visible-standard-dialogs:${visibleDialogs};enabled-standard-dialogs:${enabledDialogs};truncated:${truncated}`,
+      );
+    }
+  }
+  for (const match of output.matchAll(
+    /^PROC_MON_FILTER_MODAL_WINDOWS=stage:(before-filter-ok|after-filter-ok);state:unavailable;reason:(uia-element-unavailable|uia-com|uia-invalid-operation|uia-argument)\r?$/gm,
+  )) {
+    diagnostics.push(`filter-modal-windows-${match[1]}=unavailable:${match[2]}`);
+  }
   return diagnostics.length > 0 ? `; ${diagnostics.join("; ")}` : "";
 }
