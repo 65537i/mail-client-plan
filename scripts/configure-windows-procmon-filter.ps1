@@ -3454,12 +3454,12 @@ try {
   Set-Stage "set-control-filter"
   Set-FilterRule $filterDialog $ControlPath $process.Id
   Set-Stage "apply-filters"
-  $ok = Wait-Element $filterDialog ([System.Windows.Automation.PropertyCondition]::new(
-    [System.Windows.Automation.AutomationElement]::NameProperty, "OK"
-  )) 5
   $filterDialogTitle = [string]$filterDialog.Current.Name
   $filterDialogHandle = [IntPtr]$filterDialog.Current.NativeWindowHandle
   Write-ProcmonModalWindowInventory "before-filter-ok" $main $process $filterDialogHandle
+  $ok = Wait-Element $filterDialog ([System.Windows.Automation.PropertyCondition]::new(
+    [System.Windows.Automation.AutomationElement]::NameProperty, "OK"
+  )) 5
   $ok.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
   Write-ProcmonModalWindowInventory "after-filter-ok" $main $process $filterDialogHandle
 
