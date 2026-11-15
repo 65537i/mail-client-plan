@@ -53,7 +53,9 @@ export function appendBoundedWindowsFilterOutput(current, chunk) {
       stage = match[0].match(/stage:(drop);/)?.[1] ?? null;
     }
     const state = match[1] === "PROC_MON_FILTER_MODAL_WINDOWS"
-      ? match[0].match(/state:(starting|available|unavailable)(?:;|$)/)?.[1] ?? null
+      ? match[0].match(
+        /state:(starting|root-query-starting|root-query-complete|embedded-query-starting|embedded-query-complete|available|unavailable)(?:;|$)/,
+      )?.[1] ?? null
       : null;
     const key = stage
       ? `${match[1]}:${stage}${state ? `:${state}` : ""}`
@@ -984,9 +986,9 @@ export function describeWindowsFilterDiagnostics(output) {
   focusObservations.sort((left, right) => left.index - right.index);
   diagnostics.push(...focusObservations.map(({ value }) => value));
   for (const match of output.matchAll(
-    /^PROC_MON_FILTER_MODAL_WINDOWS=stage:(before-filter-ok|after-filter-ok);state:starting\r?$/gm,
+    /^PROC_MON_FILTER_MODAL_WINDOWS=stage:(before-filter-ok|after-filter-ok);state:(starting|root-query-starting|root-query-complete|embedded-query-starting|embedded-query-complete)\r?$/gm,
   )) {
-    diagnostics.push(`filter-modal-windows-${match[1]}=starting`);
+    diagnostics.push(`filter-modal-windows-${match[1]}=${match[2]}`);
   }
   for (const match of output.matchAll(procmonModalWindowsPattern)) {
     const [

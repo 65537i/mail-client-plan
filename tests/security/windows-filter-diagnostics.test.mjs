@@ -64,12 +64,20 @@ test("AC-05: modal-window snapshots compare only bounded Procmon dialog counts a
     ),
     "; filter-modal-windows-before-filter-ok=unavailable:uia-com",
   );
-  assert.equal(
-    describeWindowsFilterDiagnostics(
-      "PROC_MON_FILTER_MODAL_WINDOWS=stage:before-filter-ok;state:starting",
-    ),
-    "; filter-modal-windows-before-filter-ok=starting",
-  );
+  for (const state of [
+    "starting",
+    "root-query-starting",
+    "root-query-complete",
+    "embedded-query-starting",
+    "embedded-query-complete",
+  ]) {
+    assert.equal(
+      describeWindowsFilterDiagnostics(
+        `PROC_MON_FILTER_MODAL_WINDOWS=stage:before-filter-ok;state:${state}`,
+      ),
+      `; filter-modal-windows-before-filter-ok=${state}`,
+    );
+  }
   for (const invalid of [
     before.replace("windows:1", "windows:33"),
     before.replace("windows:1", "windows:0"),
@@ -77,6 +85,7 @@ test("AC-05: modal-window snapshots compare only bounded Procmon dialog counts a
     after.replace("visible-standard-dialogs:1", "visible-standard-dialogs:2"),
     `${before};handle=0x1234`,
     before.replace("stage:before-filter-ok", "stage:private"),
+    "PROC_MON_FILTER_MODAL_WINDOWS=stage:before-filter-ok;state:private",
     "PROC_MON_FILTER_MODAL_WINDOWS=stage:after-filter-ok;state:unavailable;reason:PrivateException",
   ]) {
     assert.equal(describeWindowsFilterDiagnostics(invalid), "");
@@ -1109,6 +1118,10 @@ test("AC-05: Windows filter output retains diagnostics within a strict 8192-char
 test("AC-05: truncation preserves mandatory evidence across chunk boundaries within 8192 characters", () => {
   const lines = [
     "PROC_MON_FILTER_MODAL_WINDOWS=stage:before-filter-ok;state:starting",
+    "PROC_MON_FILTER_MODAL_WINDOWS=stage:before-filter-ok;state:root-query-starting",
+    "PROC_MON_FILTER_MODAL_WINDOWS=stage:before-filter-ok;state:root-query-complete",
+    "PROC_MON_FILTER_MODAL_WINDOWS=stage:before-filter-ok;state:embedded-query-starting",
+    "PROC_MON_FILTER_MODAL_WINDOWS=stage:before-filter-ok;state:embedded-query-complete",
     "PROC_MON_FILTER_MODAL_WINDOWS=stage:before-filter-ok;state:available;windows:1;filter-dialog:found;standard-dialogs:0;main-owned-dialogs:0;visible-standard-dialogs:0;enabled-standard-dialogs:0;truncated:false",
     "PROC_MON_FILTER_MODAL_WINDOWS=stage:after-filter-ok;state:available;windows:2;filter-dialog:missing;standard-dialogs:1;main-owned-dialogs:1;visible-standard-dialogs:1;enabled-standard-dialogs:1;truncated:false",
     "PROC_MON_FILTER_CONFIG_PATHS=canary:1;control:1",
@@ -1125,6 +1138,10 @@ test("AC-05: truncation preserves mandatory evidence across chunk boundaries wit
     }
     const diagnostics = describeWindowsFilterDiagnostics(captured);
     assert.ok(diagnostics.includes("; filter-modal-windows-before-filter-ok=starting"));
+    assert.ok(diagnostics.includes("; filter-modal-windows-before-filter-ok=root-query-starting"));
+    assert.ok(diagnostics.includes("; filter-modal-windows-before-filter-ok=root-query-complete"));
+    assert.ok(diagnostics.includes("; filter-modal-windows-before-filter-ok=embedded-query-starting"));
+    assert.ok(diagnostics.includes("; filter-modal-windows-before-filter-ok=embedded-query-complete"));
     assert.ok(diagnostics.includes("; filter-modal-windows-before-filter-ok=windows:1;filter-dialog:found;standard-dialogs:0;main-owned-dialogs:0;visible-standard-dialogs:0;enabled-standard-dialogs:0;truncated:false"));
     assert.ok(diagnostics.includes("; filter-modal-windows-after-filter-ok=windows:2;filter-dialog:missing;standard-dialogs:1;main-owned-dialogs:1;visible-standard-dialogs:1;enabled-standard-dialogs:1;truncated:false"));
     assert.ok(diagnostics.includes("; config-filter-paths=canary:1;control:1"));

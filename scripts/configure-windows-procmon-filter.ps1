@@ -3003,13 +3003,25 @@ function Write-ProcmonModalWindowInventory(
       [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
       [System.Windows.Automation.ControlType]::Window
     )
+    [Console]::Out.WriteLine(
+      "PROC_MON_FILTER_MODAL_WINDOWS=stage:$Stage;state:root-query-starting"
+    )
     $rootWindows = [System.Windows.Automation.AutomationElement]::RootElement.FindAll(
       [System.Windows.Automation.TreeScope]::Children,
       $windowCondition
     )
+    [Console]::Out.WriteLine(
+      "PROC_MON_FILTER_MODAL_WINDOWS=stage:$Stage;state:root-query-complete"
+    )
+    [Console]::Out.WriteLine(
+      "PROC_MON_FILTER_MODAL_WINDOWS=stage:$Stage;state:embedded-query-starting"
+    )
     $embeddedWindows = $MainWindow.FindAll(
       [System.Windows.Automation.TreeScope]::Descendants,
       $windowCondition
+    )
+    [Console]::Out.WriteLine(
+      "PROC_MON_FILTER_MODAL_WINDOWS=stage:$Stage;state:embedded-query-complete"
     )
     $mainWindowHandle = [IntPtr]$MainWindow.Current.NativeWindowHandle
     $seenHandles = [System.Collections.Generic.HashSet[int]]::new()
