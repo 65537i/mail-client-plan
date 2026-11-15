@@ -3457,7 +3457,7 @@ try {
   Set-Stage "set-control-filter"
   Set-FilterRule $filterDialog $ControlPath $process.Id
   Set-Stage "apply-filters"
-  Write-ProcmonModalWindowInventory "before-filter-ok" $main $process [IntPtr]::Zero
+  Write-ProcmonModalWindowInventory "before-filter-ok" $main $process ([IntPtr]::Zero)
   $filterDialogTitle = [string]$filterDialog.Current.Name
   $filterDialogHandle = [IntPtr]$filterDialog.Current.NativeWindowHandle
   $ok = Wait-Element $filterDialog ([System.Windows.Automation.PropertyCondition]::new(
