@@ -5,7 +5,7 @@ export const reloadedFilterUiEvidencePattern = /^reloaded-filter-ui=items:\d+;li
 const windowsProcmonProcessStatePattern =
   /^PROC_MON_PROCESS_STATE=stage:(before-filter-setup|after-filter-setup|after-capture-stop|after-csv-export);named:(0|[1-9]\d{0,2});instances:(0|[1-9]\d{0,2});path-unavailable:(0|[1-9]\d{0,2})$/;
 const procmonModalWindowsPattern =
-  /^PROC_MON_FILTER_MODAL_WINDOWS=stage:(before-filter-ok|after-filter-ok);state:available;windows:(0|[1-9]\d?);filter-dialog:(found|missing|unavailable);standard-dialogs:(0|[1-9]\d?);main-owned-dialogs:(0|[1-9]\d?);visible-standard-dialogs:(0|[1-9]\d?);enabled-standard-dialogs:(0|[1-9]\d?);truncated:(true|false)$/gm;
+  /^PROC_MON_FILTER_MODAL_WINDOWS=stage:(before-filter-ok|after-filter-ok);state:available;scope:root-children;windows:(0|[1-9]\d?);filter-dialog:(found|unavailable);standard-dialogs:(0|[1-9]\d?);main-owned-dialogs:(0|[1-9]\d?);visible-standard-dialogs:(0|[1-9]\d?);enabled-standard-dialogs:(0|[1-9]\d?);truncated:(true|false)$/gm;
 const windowsFilterOutputHeadLimit = 3072;
 const windowsFilterOutputTruncationMarker = "\nPROC_MON_FILTER_OUTPUT_TRUNCATED=true\n";
 const windowsFilterOutputTailLimit =
@@ -54,7 +54,7 @@ export function appendBoundedWindowsFilterOutput(current, chunk) {
     }
     const state = match[1] === "PROC_MON_FILTER_MODAL_WINDOWS"
       ? match[0].match(
-        /state:(starting|root-query-starting|root-query-complete|embedded-query-starting|embedded-query-complete|available|unavailable)(?:;|$)/,
+        /state:(starting|root-query-starting|root-query-complete|available|unavailable)(?:;|$)/,
       )?.[1] ?? null
       : null;
     const key = stage
@@ -986,7 +986,7 @@ export function describeWindowsFilterDiagnostics(output) {
   focusObservations.sort((left, right) => left.index - right.index);
   diagnostics.push(...focusObservations.map(({ value }) => value));
   for (const match of output.matchAll(
-    /^PROC_MON_FILTER_MODAL_WINDOWS=stage:(before-filter-ok|after-filter-ok);state:(starting|root-query-starting|root-query-complete|embedded-query-starting|embedded-query-complete)\r?$/gm,
+    /^PROC_MON_FILTER_MODAL_WINDOWS=stage:(before-filter-ok|after-filter-ok);state:(starting|root-query-starting|root-query-complete)\r?$/gm,
   )) {
     diagnostics.push(`filter-modal-windows-${match[1]}=${match[2]}`);
   }
@@ -1016,7 +1016,7 @@ export function describeWindowsFilterDiagnostics(output) {
       && enabledDialogs <= standardDialogs
     ) {
       diagnostics.push(
-        `filter-modal-windows-${stage}=windows:${windows};filter-dialog:${filterDialog};standard-dialogs:${standardDialogs};main-owned-dialogs:${mainOwnedDialogs};visible-standard-dialogs:${visibleDialogs};enabled-standard-dialogs:${enabledDialogs};truncated:${truncated}`,
+        `filter-modal-windows-${stage}=scope:root-children;windows:${windows};filter-dialog:${filterDialog};standard-dialogs:${standardDialogs};main-owned-dialogs:${mainOwnedDialogs};visible-standard-dialogs:${visibleDialogs};enabled-standard-dialogs:${enabledDialogs};truncated:${truncated}`,
       );
     }
   }

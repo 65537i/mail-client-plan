@@ -392,8 +392,9 @@ test("AC-05: Procmon window discovery retries transient UIA ownership reads befo
   const modalInventory = configuration.match(
     /function Write-ProcmonModalWindowInventory\([\s\S]*?(?=\r?\nfunction )/,
   )?.[0] ?? "";
-  assert.match(modalInventory, /RootElement\.FindAll[\s\S]*\$MainWindow\.FindAll[\s\S]*HashSet\[int\][\s\S]*DescribeForegroundWindow[\s\S]*windows:\$windowCount;filter-dialog:\$filterDialogState;standard-dialogs:\$standardDialogCount;main-owned-dialogs:\$mainOwnedDialogCount;visible-standard-dialogs:\$visibleDialogCount;enabled-standard-dialogs:\$enabledDialogCount;truncated:/);
-  assert.match(modalInventory, /state:root-query-starting[\s\S]*RootElement\.FindAll[\s\S]*state:root-query-complete[\s\S]*state:embedded-query-starting[\s\S]*\$MainWindow\.FindAll[\s\S]*state:embedded-query-complete/);
+  assert.match(modalInventory, /RootElement\.FindAll[\s\S]*HashSet\[int\][\s\S]*DescribeForegroundWindow[\s\S]*scope:root-children;windows:\$windowCount;filter-dialog:\$filterDialogState;standard-dialogs:\$standardDialogCount;main-owned-dialogs:\$mainOwnedDialogCount;visible-standard-dialogs:\$visibleDialogCount;enabled-standard-dialogs:\$enabledDialogCount;truncated:/);
+  assert.match(modalInventory, /state:root-query-starting[\s\S]*RootElement\.FindAll[\s\S]*state:root-query-complete/);
+  assert.doesNotMatch(modalInventory, /\$MainWindow\.FindAll/);
   assert.doesNotMatch(modalInventory, /WriteLine\([^)]*\$(?:windowState\.Name|windowHandle|Process\.Id)/);
   assert.match(configuration, /Set-Stage "apply-filters"\s+Write-ProcmonModalWindowInventory "before-filter-ok" \$main \$process \(\[IntPtr\]::Zero\)\s+\$filterDialogTitle = \[string\]\$filterDialog\.Current\.Name\s+\$filterDialogHandle = \[IntPtr\]\$filterDialog\.Current\.NativeWindowHandle\s+\$ok = Wait-Element \$filterDialog[\s\S]*?NameProperty, "OK"/);
   assert.match(configuration, /\$ok\.GetCurrentPattern\(\[System\.Windows\.Automation\.InvokePattern\]::Pattern\)\.Invoke\(\)\s+Write-ProcmonModalWindowInventory "after-filter-ok" \$main \$process \$filterDialogHandle\s+Set-Stage "focus-main-for-drop-filtered-events"/);

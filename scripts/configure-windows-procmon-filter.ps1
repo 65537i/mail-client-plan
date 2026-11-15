@@ -3013,16 +3013,6 @@ function Write-ProcmonModalWindowInventory(
     [Console]::Out.WriteLine(
       "PROC_MON_FILTER_MODAL_WINDOWS=stage:$Stage;state:root-query-complete"
     )
-    [Console]::Out.WriteLine(
-      "PROC_MON_FILTER_MODAL_WINDOWS=stage:$Stage;state:embedded-query-starting"
-    )
-    $embeddedWindows = $MainWindow.FindAll(
-      [System.Windows.Automation.TreeScope]::Descendants,
-      $windowCondition
-    )
-    [Console]::Out.WriteLine(
-      "PROC_MON_FILTER_MODAL_WINDOWS=stage:$Stage;state:embedded-query-complete"
-    )
     $mainWindowHandle = [IntPtr]$MainWindow.Current.NativeWindowHandle
     $seenHandles = [System.Collections.Generic.HashSet[int]]::new()
     $windowCount = 0
@@ -3032,7 +3022,7 @@ function Write-ProcmonModalWindowInventory(
     $enabledDialogCount = 0
     $filterDialogFound = $false
     $truncated = $false
-    foreach ($window in @($rootWindows) + @($embeddedWindows)) {
+    foreach ($window in @($rootWindows)) {
       $windowState = $window.Current
       if ($windowState.ProcessId -ne $Process.Id) {
         continue
@@ -3100,10 +3090,10 @@ function Write-ProcmonModalWindowInventory(
   } elseif ($truncated) {
     "unavailable"
   } else {
-    "missing"
+    "unavailable"
   }
   [Console]::Out.WriteLine(
-    "PROC_MON_FILTER_MODAL_WINDOWS=stage:$Stage;state:available;windows:$windowCount;filter-dialog:$filterDialogState;standard-dialogs:$standardDialogCount;main-owned-dialogs:$mainOwnedDialogCount;visible-standard-dialogs:$visibleDialogCount;enabled-standard-dialogs:$enabledDialogCount;truncated:$($truncated.ToString().ToLowerInvariant())"
+    "PROC_MON_FILTER_MODAL_WINDOWS=stage:$Stage;state:available;scope:root-children;windows:$windowCount;filter-dialog:$filterDialogState;standard-dialogs:$standardDialogCount;main-owned-dialogs:$mainOwnedDialogCount;visible-standard-dialogs:$visibleDialogCount;enabled-standard-dialogs:$enabledDialogCount;truncated:$($truncated.ToString().ToLowerInvariant())"
   )
 }
 

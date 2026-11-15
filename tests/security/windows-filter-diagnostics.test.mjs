@@ -36,28 +36,28 @@ test("AC-05: Procmon process-state diagnostics retain only bounded counts and st
 });
 
 test("AC-05: modal-window snapshots compare only bounded Procmon dialog counts around Filter OK", () => {
-  const before = "PROC_MON_FILTER_MODAL_WINDOWS=stage:before-filter-ok;state:available;"
+  const before = "PROC_MON_FILTER_MODAL_WINDOWS=stage:before-filter-ok;state:available;scope:root-children;"
     + "windows:1;filter-dialog:found;standard-dialogs:0;main-owned-dialogs:0;"
     + "visible-standard-dialogs:0;enabled-standard-dialogs:0;truncated:false";
-  const after = "PROC_MON_FILTER_MODAL_WINDOWS=stage:after-filter-ok;state:available;"
-    + "windows:2;filter-dialog:missing;standard-dialogs:1;main-owned-dialogs:1;"
+  const after = "PROC_MON_FILTER_MODAL_WINDOWS=stage:after-filter-ok;state:available;scope:root-children;"
+    + "windows:2;filter-dialog:unavailable;standard-dialogs:1;main-owned-dialogs:1;"
     + "visible-standard-dialogs:1;enabled-standard-dialogs:1;truncated:false";
   const diagnostics = describeWindowsFilterDiagnostics(`${before}\n${after}`);
   assert.ok(diagnostics.includes(
-    "; filter-modal-windows-before-filter-ok=windows:1;filter-dialog:found;"
+    "; filter-modal-windows-before-filter-ok=scope:root-children;windows:1;filter-dialog:found;"
       + "standard-dialogs:0;main-owned-dialogs:0;visible-standard-dialogs:0;"
       + "enabled-standard-dialogs:0;truncated:false",
   ));
   assert.ok(diagnostics.includes(
-    "; filter-modal-windows-after-filter-ok=windows:2;filter-dialog:missing;"
+    "; filter-modal-windows-after-filter-ok=scope:root-children;windows:2;filter-dialog:unavailable;"
       + "standard-dialogs:1;main-owned-dialogs:1;visible-standard-dialogs:1;"
       + "enabled-standard-dialogs:1;truncated:false",
   ));
   assert.ok(describeWindowsFilterDiagnostics(
-    "PROC_MON_FILTER_MODAL_WINDOWS=stage:after-filter-ok;state:available;"
+    "PROC_MON_FILTER_MODAL_WINDOWS=stage:after-filter-ok;state:available;scope:root-children;"
       + "windows:32;filter-dialog:unavailable;standard-dialogs:0;main-owned-dialogs:0;"
       + "visible-standard-dialogs:0;enabled-standard-dialogs:0;truncated:true",
-  ).includes("; filter-modal-windows-after-filter-ok=windows:32;filter-dialog:unavailable;"));
+  ).includes("; filter-modal-windows-after-filter-ok=scope:root-children;windows:32;filter-dialog:unavailable;"));
   assert.equal(
     describeWindowsFilterDiagnostics(
       "PROC_MON_FILTER_MODAL_WINDOWS=stage:before-filter-ok;state:unavailable;reason:uia-com",
@@ -68,8 +68,6 @@ test("AC-05: modal-window snapshots compare only bounded Procmon dialog counts a
     "starting",
     "root-query-starting",
     "root-query-complete",
-    "embedded-query-starting",
-    "embedded-query-complete",
   ]) {
     assert.equal(
       describeWindowsFilterDiagnostics(
@@ -86,6 +84,7 @@ test("AC-05: modal-window snapshots compare only bounded Procmon dialog counts a
     `${before};handle=0x1234`,
     before.replace("stage:before-filter-ok", "stage:private"),
     "PROC_MON_FILTER_MODAL_WINDOWS=stage:before-filter-ok;state:private",
+    before.replace("scope:root-children", "scope:descendants"),
     "PROC_MON_FILTER_MODAL_WINDOWS=stage:after-filter-ok;state:unavailable;reason:PrivateException",
   ]) {
     assert.equal(describeWindowsFilterDiagnostics(invalid), "");
@@ -1122,8 +1121,8 @@ test("AC-05: truncation preserves mandatory evidence across chunk boundaries wit
     "PROC_MON_FILTER_MODAL_WINDOWS=stage:before-filter-ok;state:root-query-complete",
     "PROC_MON_FILTER_MODAL_WINDOWS=stage:before-filter-ok;state:embedded-query-starting",
     "PROC_MON_FILTER_MODAL_WINDOWS=stage:before-filter-ok;state:embedded-query-complete",
-    "PROC_MON_FILTER_MODAL_WINDOWS=stage:before-filter-ok;state:available;windows:1;filter-dialog:found;standard-dialogs:0;main-owned-dialogs:0;visible-standard-dialogs:0;enabled-standard-dialogs:0;truncated:false",
-    "PROC_MON_FILTER_MODAL_WINDOWS=stage:after-filter-ok;state:available;windows:2;filter-dialog:missing;standard-dialogs:1;main-owned-dialogs:1;visible-standard-dialogs:1;enabled-standard-dialogs:1;truncated:false",
+    "PROC_MON_FILTER_MODAL_WINDOWS=stage:before-filter-ok;state:available;scope:root-children;windows:1;filter-dialog:found;standard-dialogs:0;main-owned-dialogs:0;visible-standard-dialogs:0;enabled-standard-dialogs:0;truncated:false",
+    "PROC_MON_FILTER_MODAL_WINDOWS=stage:after-filter-ok;state:available;scope:root-children;windows:2;filter-dialog:unavailable;standard-dialogs:1;main-owned-dialogs:1;visible-standard-dialogs:1;enabled-standard-dialogs:1;truncated:false",
     "PROC_MON_FILTER_CONFIG_PATHS=canary:1;control:1",
     "PROC_MON_FILTER_RELOADED_RULES=rows:2;canary:1;control:1;path:2;is:2;include:2;unclassified:0",
     "PROC_MON_FILTER_RELOADED_UI=items:86;lists:4;data-grids:1;tables:0;list-items:41;data-items:2;dialog-window-rows:43;other-window-rows:0;unscoped-rows:0;combo-option-rows:41;rule-containers:1;rule-row-candidates:2;rule-container-unclassified-rows:0;rows:2;truncated:false",
@@ -1140,10 +1139,8 @@ test("AC-05: truncation preserves mandatory evidence across chunk boundaries wit
     assert.ok(diagnostics.includes("; filter-modal-windows-before-filter-ok=starting"));
     assert.ok(diagnostics.includes("; filter-modal-windows-before-filter-ok=root-query-starting"));
     assert.ok(diagnostics.includes("; filter-modal-windows-before-filter-ok=root-query-complete"));
-    assert.ok(diagnostics.includes("; filter-modal-windows-before-filter-ok=embedded-query-starting"));
-    assert.ok(diagnostics.includes("; filter-modal-windows-before-filter-ok=embedded-query-complete"));
-    assert.ok(diagnostics.includes("; filter-modal-windows-before-filter-ok=windows:1;filter-dialog:found;standard-dialogs:0;main-owned-dialogs:0;visible-standard-dialogs:0;enabled-standard-dialogs:0;truncated:false"));
-    assert.ok(diagnostics.includes("; filter-modal-windows-after-filter-ok=windows:2;filter-dialog:missing;standard-dialogs:1;main-owned-dialogs:1;visible-standard-dialogs:1;enabled-standard-dialogs:1;truncated:false"));
+    assert.ok(diagnostics.includes("; filter-modal-windows-before-filter-ok=scope:root-children;windows:1;filter-dialog:found;standard-dialogs:0;main-owned-dialogs:0;visible-standard-dialogs:0;enabled-standard-dialogs:0;truncated:false"));
+    assert.ok(diagnostics.includes("; filter-modal-windows-after-filter-ok=scope:root-children;windows:2;filter-dialog:unavailable;standard-dialogs:1;main-owned-dialogs:1;visible-standard-dialogs:1;enabled-standard-dialogs:1;truncated:false"));
     assert.ok(diagnostics.includes("; config-filter-paths=canary:1;control:1"));
     assert.ok(diagnostics.includes("; reloaded-filter-rules=rows:2;canary:1;control:1;path:2;is:2;include:2;unclassified:0"));
     assert.ok(diagnostics.includes("; reloaded-drop-filtered-events=on"));
