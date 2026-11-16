@@ -23,8 +23,9 @@ assert(process.env.MAIL_CLIENT_PROCMON_PATH, "MAIL_CLIENT_PROCMON_PATH is requir
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const procmonPath = path.resolve(process.env.MAIL_CLIENT_PROCMON_PATH);
+let retainedBaselineTemporaryDirectory;
 
-async function captureScenario(scenario) {
+async function captureScenario(scenario, { retainTemporaryDirectory = false } = {}) {
   const temporaryDirectory = await createWindowsAuditDirectory();
   const canaryPath = path.join(temporaryDirectory, `mc-${randomUUID().slice(0, 12)}.png`);
   const positiveControlPath = path.join(temporaryDirectory, `mc-control-${randomUUID().slice(0, 12)}.png`);
@@ -198,6 +199,7 @@ async function captureScenario(scenario) {
   let captureExit;
   let command;
   let commandExit;
+  let completed = false;
   const preparedAt = performance.now();
   let captureStartedAt;
 
@@ -630,6 +632,7 @@ async function captureScenario(scenario) {
     console.log(
       `Windows audit ${scenario}: positive-control ReadFile events=${result.positiveControlEvents}; canary events=${result.canaryEvents.length}; diagnostics=${JSON.stringify(result.canaryDiagnostics)}`,
     );
+    completed = true;
     return result;
   } finally {
     try {
@@ -646,16 +649,26 @@ async function captureScenario(scenario) {
           await commandExit;
         }
       } finally {
-        await rm(temporaryDirectory, { recursive: true, force: true });
+        if (scenario === "baseline" && retainTemporaryDirectory && completed) {
+          retainedBaselineTemporaryDirectory = temporaryDirectory;
+        } else {
+          await rm(temporaryDirectory, { recursive: true, force: true });
+        }
       }
     }
   }
 }
 
-const baseline = await captureScenario("baseline");
-assert.equal(baseline.canaryEvents.length, 0, "Windows baseline capture contains unexplained canary events");
-const attack = await captureScenario("attack");
-assert.equal(attack.canaryEvents.length, 0, "Windows attack capture contains unexpected canary events");
-console.log(
-  "AC-05 Windows file-access audit passed for both captures; complete descendant coverage remains unverified.",
-);
+try {
+  const baseline = await captureScenario("baseline", { retainTemporaryDirectory: true });
+  assert.equal(baseline.canaryEvents.length, 0, "Windows baseline capture contains unexplained canary events");
+  const attack = await captureScenario("attack");
+  assert.equal(attack.canaryEvents.length, 0, "Windows attack capture contains unexpected canary events");
+  console.log(
+    "AC-05 Windows file-access audit passed for both captures; complete descendant coverage remains unverified.",
+  );
+} finally {
+  if (retainedBaselineTemporaryDirectory) {
+    await rm(retainedBaselineTemporaryDirectory, { recursive: true, force: true });
+  }
+}

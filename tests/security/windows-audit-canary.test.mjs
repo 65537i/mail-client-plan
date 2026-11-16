@@ -259,18 +259,26 @@ test("AC-05: Filter Manager inventory is an independent bounded read-only driver
 
 test("AC-05: baseline canary failure stops before preparing the attack capture", async () => {
   const driver = await readFile(new URL("../../scripts/test-windows-file-access.mjs", import.meta.url), "utf8");
-  assert.match(driver, /const baseline = await captureScenario\("baseline"\);\s*assert.equal\(baseline.canaryEvents.length, 0, "Windows baseline capture contains unexplained canary events"\);\s*const attack = await captureScenario\("attack"\);/);
+  assert.match(driver, /const baseline = await captureScenario\("baseline", \{ retainTemporaryDirectory: true \}\);\s*assert.equal\(baseline.canaryEvents.length, 0, "Windows baseline capture contains unexplained canary events"\);\s*const attack = await captureScenario\("attack"\);/);
+  assert.match(driver, /async function captureScenario\(scenario, \{ retainTemporaryDirectory = false \} = \{\}\)/);
+  assert.match(driver, /completed = true;\s*return result;/);
+  assert.match(driver, /if \(scenario === "baseline" && retainTemporaryDirectory && completed\) \{\s*retainedBaselineTemporaryDirectory = temporaryDirectory;\s*\} else \{\s*await rm\(temporaryDirectory, \{ recursive: true, force: true \}\);\s*\}/);
+  assert.match(driver, /finally \{\s*if \(retainedBaselineTemporaryDirectory\) \{\s*await rm\(retainedBaselineTemporaryDirectory, \{ recursive: true, force: true \}\);\s*\}/);
+  const baselineSequence = driver.indexOf('const baseline = await captureScenario("baseline", { retainTemporaryDirectory: true });');
+  const baselineSequenceStart = driver.lastIndexOf("try {", baselineSequence);
+  assert.notEqual(baselineSequenceStart, -1);
   for (const [baselineCount, attackCount] of [[1, 0], [0, 1], [0, 0]]) {
     const calls = [];
     let successMessages = 0;
     const execution = vm.runInNewContext(
-      `(async () => { ${driver.slice(driver.indexOf('const baseline = await captureScenario("baseline");'))} })()`,
+      `(async () => { let retainedBaselineTemporaryDirectory; ${driver.slice(baselineSequenceStart)} })()`,
       {
         assert,
         captureScenario: async (scenario) => {
           calls.push(scenario);
           return { canaryEvents: Array(scenario === "baseline" ? baselineCount : attackCount).fill({}) };
         },
+        rm: async () => {},
         console: { log: () => { successMessages++; } },
       },
     );
