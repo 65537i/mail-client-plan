@@ -3502,6 +3502,8 @@ try {
   }
   Set-Stage "open-drop-filtered-events-menu"
   $dropMenuPattern.Invoke()
+  Set-Stage "observe-drop-menu-focus"
+  Write-FocusObservation "after-drop-menu-invoke"
   Set-Stage "resolve-drop-filtered-events-menu"
   $dropMenu = $null
   $dropMenuDeadline = [DateTime]::UtcNow.AddSeconds(5)

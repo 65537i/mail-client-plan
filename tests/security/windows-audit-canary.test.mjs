@@ -389,6 +389,7 @@ test("AC-05: Procmon window discovery retries transient UIA ownership reads befo
   assert.match(configuration, /Set-Stage "verify-main-foreground-for-filter-shortcut"[\s\S]*?"PROC_MON_FILTER_MAIN_FOREGROUND=stage:shortcut;gate:\$shortcutForegroundGate"[\s\S]*?if \(\$shortcutForegroundGate -ne "passed"\)[\s\S]*?if \(\$menuOpenAttempted\) \{[\s\S]*?SendWait\("\{ESC\}"\)[\s\S]*?"PROC_MON_FILTER_MAIN_FOREGROUND=stage:shortcut-dismiss;gate:\$dismissForegroundGate"[\s\S]*?Set-Stage "open-filter-dialog-shortcut"[\s\S]*?SendWait\("\^l"\)[\s\S]*?Wait-FilterDialog \$process \$main/);
   assert.match(configuration, /Set-Stage "focus-main-for-drop-filtered-events"\s+\$mainWindowHandle = Set-VerifiedProcmonMainWindowForeground `\r?\n\s+\$main \$process -DiagnosticStage "drop"/);
   assert.match(configuration, /\$filterDialogTitle = \[string\]\$filterDialog\.Current\.Name\s+\$filterDialogHandle = \[IntPtr\]\$filterDialog\.Current\.NativeWindowHandle[\s\S]*Set-VerifiedProcmonMainWindowForeground `\r?\n\s+\$main \$process -DiagnosticStage "drop" -FilterDialogHandle \$filterDialogHandle `\r?\n\s+-FilterDialogTitle \$filterDialogTitle/);
+  assert.match(configuration, /\$dropMenuPattern\.Invoke\(\)\s+Set-Stage "observe-drop-menu-focus"\s+Write-FocusObservation "after-drop-menu-invoke"\s+Set-Stage "resolve-drop-filtered-events-menu"/);
   const modalInventory = configuration.match(
     /function Write-ProcmonModalWindowInventory\([\s\S]*?(?=\r?\nfunction )/,
   )?.[0] ?? "";
