@@ -38,34 +38,35 @@ export function appendBoundedWindowsFilterOutput(current, chunk) {
   if (combined.length <= windowsFilterOutputLimit) return combined;
   const evidence = new Map();
   for (const match of combined.matchAll(
-    /^(PROC_MON_FILTER_CONFIG_PATHS|PROC_MON_FILTER_RELOADED_RULES|PROC_MON_FILTER_RELOADED_UI|PROC_MON_FILTER_RELOADED_DROP|PROC_MON_FILTER_WINDOW_SCAN|PROC_MON_FILTER_MAIN_FOREGROUND|PROC_MON_FILTER_MAIN_FOREGROUND_DETAIL|PROC_MON_FILTER_FOREGROUND_WINDOW|PROC_MON_FILTER_FOREGROUND_DIALOG_UI|PROC_MON_FILTER_MODAL_WINDOWS|PROC_MON_FILTER_INITIAL_SHORTCUT|PROC_MON_FILTER_FOCUSED_CONTROL)=[^\r\n]{1,1024}\r?$/gm,
+    /^(PROC_MON_FILTER_CONFIG_PATHS|PROC_MON_FILTER_RELOADED_RULES|PROC_MON_FILTER_RELOADED_UI|PROC_MON_FILTER_RELOADED_DROP|PROC_MON_FILTER_WINDOW_SCAN|PROC_MON_FILTER_MAIN_FOREGROUND|PROC_MON_FILTER_MAIN_FOREGROUND_DETAIL|PROC_MON_FILTER_FOREGROUND_WINDOW|PROC_MON_FILTER_FOREGROUND_DIALOG_UI|PROC_MON_FILTER_MODAL_WINDOWS|PROC_MON_FILTER_INITIAL_SHORTCUT|PROC_MON_FILTER_FOCUSED_CONTROL)=[^\r\n]{1,1024}\r?\n/gm,
   )) {
+    const line = match[0].replace(/\r?\n$/, "");
     let stage = null;
     if (match[1] === "PROC_MON_FILTER_MAIN_FOREGROUND") {
-      stage = match[0].match(/stage:(initial|shortcut|shortcut-dismiss|drop|export);/)?.[1] ?? "legacy";
+      stage = line.match(/stage:(initial|shortcut|shortcut-dismiss|drop|export);/)?.[1] ?? "legacy";
     } else if (match[1] === "PROC_MON_FILTER_MODAL_WINDOWS") {
-      stage = match[0].match(/stage:(before-filter-ok|after-filter-ok);/)?.[1] ?? null;
+      stage = line.match(/stage:(before-filter-ok|after-filter-ok);/)?.[1] ?? null;
     } else if (
       match[1] === "PROC_MON_FILTER_MAIN_FOREGROUND_DETAIL"
       || match[1] === "PROC_MON_FILTER_FOREGROUND_WINDOW"
       || match[1] === "PROC_MON_FILTER_FOREGROUND_DIALOG_UI"
     ) {
-      stage = match[0].match(/stage:(drop);/)?.[1] ?? null;
+      stage = line.match(/stage:(drop);/)?.[1] ?? null;
     } else if (match[1] === "PROC_MON_FILTER_FOCUSED_CONTROL") {
-      stage = match[0].match(
+      stage = line.match(
         /^PROC_MON_FILTER_FOCUSED_CONTROL=(after-drop-menu-invoke);/,
       )?.[1] ?? null;
     }
     const state = match[1] === "PROC_MON_FILTER_MODAL_WINDOWS"
-      ? match[0].match(
+      ? line.match(
         /state:(starting|root-query-starting|root-query-complete|available|unavailable)(?:;|$)/,
       )?.[1] ?? null
       : null;
     const key = stage
       ? `${match[1]}:${stage}${state ? `:${state}` : ""}`
       : match[1];
-    if (!evidence.has(key) && describeWindowsFilterDiagnostics(match[0])) {
-      evidence.set(key, match[0].replace(/\r$/, ""));
+    if (!evidence.has(key) && describeWindowsFilterDiagnostics(line)) {
+      evidence.set(key, line);
     }
   }
   const retainedEvidence = evidence.size ? `${[...evidence.values()].join("\n")}\n` : "";
