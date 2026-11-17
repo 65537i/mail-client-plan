@@ -1,5 +1,5 @@
 import { constants } from "node:fs";
-import { mkdtemp, open, realpath } from "node:fs/promises";
+import { mkdtemp, open, readdir, realpath, rm, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -22,4 +22,32 @@ export async function createWindowsAuditCanary(filePath) {
     await file.close();
   }
   return Buffer.byteLength(content);
+}
+
+export async function retainOnlyWindowsAuditBackingFile(temporaryDirectory, backingFile) {
+  const resolvedDirectory = path.resolve(temporaryDirectory);
+  const resolvedBackingFile = path.resolve(backingFile);
+  if (path.dirname(resolvedBackingFile) !== resolvedDirectory) {
+    throw new Error("Windows audit backing file must be inside its temporary directory");
+  }
+
+  const backingFileName = path.basename(resolvedBackingFile);
+  const entries = await readdir(resolvedDirectory);
+  if (!entries.includes(backingFileName)) {
+    throw new Error("Windows audit backing file is missing");
+  }
+  if (!(await stat(resolvedBackingFile)).isFile()) {
+    throw new Error("Windows audit backing file is not a file");
+  }
+
+  for (const entry of entries) {
+    if (entry !== backingFileName) {
+      await rm(path.join(resolvedDirectory, entry), { recursive: true, force: true });
+    }
+  }
+
+  const remainingEntries = await readdir(resolvedDirectory);
+  if (remainingEntries.length !== 1 || remainingEntries[0] !== backingFileName) {
+    throw new Error("Windows audit temporary directory contains unexpected files");
+  }
 }

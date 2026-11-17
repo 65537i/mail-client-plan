@@ -1,10 +1,14 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, readdir, realpath, rm, stat, symlink, unlink } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, realpath, rm, stat, symlink, unlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import vm from "node:vm";
-import { createWindowsAuditCanary, createWindowsAuditDirectory } from "../../scripts/windows-audit-canary.mjs";
+import {
+  createWindowsAuditCanary,
+  createWindowsAuditDirectory,
+  retainOnlyWindowsAuditBackingFile,
+} from "../../scripts/windows-audit-canary.mjs";
 
 test("AC-05: audit paths use the canonical temporary root before exact filters are constructed", async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), "mc-path-test-"));
@@ -43,6 +47,44 @@ test("AC-05: default audit directory resolves Windows short temporary paths with
     assert.equal(directory, await realpath(directory));
   } finally {
     await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("AC-05: baseline retention keeps only the PML backing file", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "mc-pml-retention-test-"));
+  const backingFile = path.join(directory, "process-monitor.pml");
+  try {
+    await writeFile(backingFile, "synthetic baseline PML");
+    await writeFile(path.join(directory, "process-monitor.csv"), "synthetic export");
+    const sidecarDirectory = path.join(directory, "sidecar");
+    await mkdir(sidecarDirectory);
+    await writeFile(path.join(sidecarDirectory, "canary-only.pmc"), "synthetic configuration");
+
+    await retainOnlyWindowsAuditBackingFile(directory, backingFile);
+
+    assert.deepEqual(await readdir(directory), ["process-monitor.pml"]);
+    assert.equal(await readFile(backingFile, "utf8"), "synthetic baseline PML");
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("AC-05: baseline PML retention refuses a backing file outside its temporary directory", async () => {
+  const parentDirectory = await mkdtemp(path.join(os.tmpdir(), "mc-pml-boundary-test-"));
+  const directory = path.join(parentDirectory, "capture");
+  const backingFile = path.join(parentDirectory, "outside.pml");
+  try {
+    await mkdir(directory);
+    await writeFile(path.join(directory, "process-monitor.csv"), "synthetic export");
+    await writeFile(backingFile, "synthetic baseline PML");
+
+    await assert.rejects(
+      retainOnlyWindowsAuditBackingFile(directory, backingFile),
+      /backing file must be inside its temporary directory/,
+    );
+    assert.deepEqual(await readdir(directory), ["process-monitor.csv"]);
+  } finally {
+    await rm(parentDirectory, { recursive: true, force: true });
   }
 });
 
@@ -259,12 +301,12 @@ test("AC-05: Filter Manager inventory is an independent bounded read-only driver
 
 test("AC-05: baseline canary failure stops before preparing the attack capture", async () => {
   const driver = await readFile(new URL("../../scripts/test-windows-file-access.mjs", import.meta.url), "utf8");
-  assert.match(driver, /const baseline = await captureScenario\("baseline", \{ retainTemporaryDirectory: true \}\);\s*assert.equal\(baseline.canaryEvents.length, 0, "Windows baseline capture contains unexplained canary events"\);\s*const attack = await captureScenario\("attack"\);/);
-  assert.match(driver, /async function captureScenario\(scenario, \{ retainTemporaryDirectory = false \} = \{\}\)/);
+  assert.match(driver, /const baseline = await captureScenario\("baseline", \{ retainPml: true \}\);\s*assert.equal\(baseline.canaryEvents.length, 0, "Windows baseline capture contains unexplained canary events"\);\s*const attack = await captureScenario\("attack"\);/);
+  assert.match(driver, /async function captureScenario\(scenario, \{ retainPml = false \} = \{\}\)/);
   assert.match(driver, /completed = true;\s*return result;/);
-  assert.match(driver, /if \(scenario === "baseline" && retainTemporaryDirectory && completed\) \{\s*retainedBaselineTemporaryDirectory = temporaryDirectory;\s*\} else \{\s*await rm\(temporaryDirectory, \{ recursive: true, force: true \}\);\s*\}/);
+  assert.match(driver, /if \(scenario === "baseline" && retainPml && completed\) \{\s*retainedBaselineTemporaryDirectory = temporaryDirectory;\s*await retainOnlyWindowsAuditBackingFile\(temporaryDirectory, backingFile\);\s*\} else \{\s*await rm\(temporaryDirectory, \{ recursive: true, force: true \}\);\s*\}/);
   assert.match(driver, /finally \{\s*if \(retainedBaselineTemporaryDirectory\) \{\s*await rm\(retainedBaselineTemporaryDirectory, \{ recursive: true, force: true \}\);\s*\}/);
-  const baselineSequence = driver.indexOf('const baseline = await captureScenario("baseline", { retainTemporaryDirectory: true });');
+  const baselineSequence = driver.indexOf('const baseline = await captureScenario("baseline", { retainPml: true });');
   const baselineSequenceStart = driver.lastIndexOf("try {", baselineSequence);
   assert.notEqual(baselineSequenceStart, -1);
   for (const [baselineCount, attackCount] of [[1, 0], [0, 1], [0, 0]]) {
