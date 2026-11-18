@@ -12,7 +12,7 @@ import {
 import {
   createWindowsAuditCanary,
   createWindowsAuditDirectory,
-  retainOnlyWindowsAuditBackingFile,
+  retainEmptyWindowsAuditDirectory,
 } from "./windows-audit-canary.mjs";
 import {
   appendBoundedWindowsFilterOutput,
@@ -29,7 +29,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const procmonPath = path.resolve(process.env.MAIL_CLIENT_PROCMON_PATH);
 let retainedBaselineTemporaryDirectory;
 
-async function captureScenario(scenario, { retainPml = false } = {}) {
+async function captureScenario(scenario, { retainEmptyDirectory = false } = {}) {
   const temporaryDirectory = await createWindowsAuditDirectory();
   const canaryPath = path.join(temporaryDirectory, `mc-${randomUUID().slice(0, 12)}.png`);
   const positiveControlPath = path.join(temporaryDirectory, `mc-control-${randomUUID().slice(0, 12)}.png`);
@@ -653,9 +653,10 @@ async function captureScenario(scenario, { retainPml = false } = {}) {
           await commandExit;
         }
       } finally {
-        if (scenario === "baseline" && retainPml && completed) {
+        if (scenario === "baseline" && retainEmptyDirectory && completed) {
           retainedBaselineTemporaryDirectory = temporaryDirectory;
-          await retainOnlyWindowsAuditBackingFile(temporaryDirectory, backingFile);
+          await retainEmptyWindowsAuditDirectory(temporaryDirectory);
+          console.log("Windows audit baseline retention: empty temporary directory retained; PML absent");
         } else {
           await rm(temporaryDirectory, { recursive: true, force: true });
         }
@@ -665,7 +666,7 @@ async function captureScenario(scenario, { retainPml = false } = {}) {
 }
 
 try {
-  const baseline = await captureScenario("baseline", { retainPml: true });
+  const baseline = await captureScenario("baseline", { retainEmptyDirectory: true });
   assert.equal(baseline.canaryEvents.length, 0, "Windows baseline capture contains unexplained canary events");
   const attack = await captureScenario("attack");
   assert.equal(attack.canaryEvents.length, 0, "Windows attack capture contains unexpected canary events");

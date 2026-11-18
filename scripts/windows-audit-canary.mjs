@@ -1,5 +1,5 @@
 import { constants } from "node:fs";
-import { mkdtemp, open, readdir, realpath, rm, stat } from "node:fs/promises";
+import { lstat, mkdtemp, open, readdir, realpath, rm, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -49,5 +49,20 @@ export async function retainOnlyWindowsAuditBackingFile(temporaryDirectory, back
   const remainingEntries = await readdir(resolvedDirectory);
   if (remainingEntries.length !== 1 || remainingEntries[0] !== backingFileName) {
     throw new Error("Windows audit temporary directory contains unexpected files");
+  }
+}
+
+export async function retainEmptyWindowsAuditDirectory(temporaryDirectory) {
+  const resolvedDirectory = path.resolve(temporaryDirectory);
+  if (!(await lstat(resolvedDirectory)).isDirectory()) {
+    throw new Error("Windows audit temporary path must be a directory");
+  }
+
+  for (const entry of await readdir(resolvedDirectory)) {
+    await rm(path.join(resolvedDirectory, entry), { recursive: true, force: true });
+  }
+
+  if ((await readdir(resolvedDirectory)).length !== 0) {
+    throw new Error("Windows audit temporary directory is not empty");
   }
 }

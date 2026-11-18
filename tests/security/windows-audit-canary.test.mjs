@@ -7,6 +7,7 @@ import vm from "node:vm";
 import {
   createWindowsAuditCanary,
   createWindowsAuditDirectory,
+  retainEmptyWindowsAuditDirectory,
   retainOnlyWindowsAuditBackingFile,
 } from "../../scripts/windows-audit-canary.mjs";
 
@@ -64,6 +65,25 @@ test("AC-05: baseline retention keeps only the PML backing file", async () => {
 
     assert.deepEqual(await readdir(directory), ["process-monitor.pml"]);
     assert.equal(await readFile(backingFile, "utf8"), "synthetic baseline PML");
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("AC-05: baseline directory-only retention removes the PML and all other contents", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "mc-empty-retention-test-"));
+  const backingFile = path.join(directory, "process-monitor.pml");
+  try {
+    await writeFile(backingFile, "synthetic baseline PML");
+    const sidecarDirectory = path.join(directory, "sidecar");
+    await mkdir(sidecarDirectory);
+    await writeFile(path.join(sidecarDirectory, "canary-only.pmc"), "synthetic configuration");
+
+    await retainEmptyWindowsAuditDirectory(directory);
+
+    assert.equal((await stat(directory)).isDirectory(), true);
+    assert.deepEqual(await readdir(directory), []);
+    await assert.rejects(readFile(backingFile), { code: "ENOENT" });
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
@@ -301,12 +321,12 @@ test("AC-05: Filter Manager inventory is an independent bounded read-only driver
 
 test("AC-05: baseline canary failure stops before preparing the attack capture", async () => {
   const driver = await readFile(new URL("../../scripts/test-windows-file-access.mjs", import.meta.url), "utf8");
-  assert.match(driver, /const baseline = await captureScenario\("baseline", \{ retainPml: true \}\);\s*assert.equal\(baseline.canaryEvents.length, 0, "Windows baseline capture contains unexplained canary events"\);\s*const attack = await captureScenario\("attack"\);/);
-  assert.match(driver, /async function captureScenario\(scenario, \{ retainPml = false \} = \{\}\)/);
+  assert.match(driver, /const baseline = await captureScenario\("baseline", \{ retainEmptyDirectory: true \}\);\s*assert.equal\(baseline.canaryEvents.length, 0, "Windows baseline capture contains unexplained canary events"\);\s*const attack = await captureScenario\("attack"\);/);
+  assert.match(driver, /async function captureScenario\(scenario, \{ retainEmptyDirectory = false \} = \{\}\)/);
   assert.match(driver, /completed = true;\s*return result;/);
-  assert.match(driver, /if \(scenario === "baseline" && retainPml && completed\) \{\s*retainedBaselineTemporaryDirectory = temporaryDirectory;\s*await retainOnlyWindowsAuditBackingFile\(temporaryDirectory, backingFile\);\s*\} else \{\s*await rm\(temporaryDirectory, \{ recursive: true, force: true \}\);\s*\}/);
+  assert.match(driver, /if \(scenario === "baseline" && retainEmptyDirectory && completed\) \{\s*retainedBaselineTemporaryDirectory = temporaryDirectory;\s*await retainEmptyWindowsAuditDirectory\(temporaryDirectory\);\s*console\.log\("Windows audit baseline retention: empty temporary directory retained; PML absent"\);\s*\} else \{\s*await rm\(temporaryDirectory, \{ recursive: true, force: true \}\);\s*\}/);
   assert.match(driver, /finally \{\s*if \(retainedBaselineTemporaryDirectory\) \{\s*await rm\(retainedBaselineTemporaryDirectory, \{ recursive: true, force: true \}\);\s*\}/);
-  const baselineSequence = driver.indexOf('const baseline = await captureScenario("baseline", { retainPml: true });');
+  const baselineSequence = driver.indexOf('const baseline = await captureScenario("baseline", { retainEmptyDirectory: true });');
   const baselineSequenceStart = driver.lastIndexOf("try {", baselineSequence);
   assert.notEqual(baselineSequenceStart, -1);
   for (const [baselineCount, attackCount] of [[1, 0], [0, 1], [0, 0]]) {
