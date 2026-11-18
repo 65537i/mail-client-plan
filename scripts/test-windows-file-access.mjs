@@ -29,7 +29,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const procmonPath = path.resolve(process.env.MAIL_CLIENT_PROCMON_PATH);
 let retainedBaselineTemporaryDirectory;
 
-async function captureScenario(scenario, { retainEmptyDirectory = false, verifyDirectoryRemoval = false } = {}) {
+async function captureScenario(scenario, { retainEmptyDirectory = false } = {}) {
   const temporaryDirectory = await createWindowsAuditDirectory();
   const canaryPath = path.join(temporaryDirectory, `mc-${randomUUID().slice(0, 12)}.png`);
   const positiveControlPath = path.join(temporaryDirectory, `mc-control-${randomUUID().slice(0, 12)}.png`);
@@ -659,10 +659,6 @@ async function captureScenario(scenario, { retainEmptyDirectory = false, verifyD
           console.log("Windows audit baseline retention: empty temporary directory retained; PML absent");
         } else {
           await rm(temporaryDirectory, { recursive: true, force: true });
-          if (scenario === "baseline" && verifyDirectoryRemoval) {
-            await assert.rejects(access(temporaryDirectory), { code: "ENOENT" });
-            console.log("Windows audit baseline cleanup: temporary directory removed before attack");
-          }
         }
       }
     }
@@ -670,7 +666,7 @@ async function captureScenario(scenario, { retainEmptyDirectory = false, verifyD
 }
 
 try {
-  const baseline = await captureScenario("baseline", { verifyDirectoryRemoval: true });
+  const baseline = await captureScenario("baseline", { retainEmptyDirectory: true });
   assert.equal(baseline.canaryEvents.length, 0, "Windows baseline capture contains unexplained canary events");
   const attack = await captureScenario("attack");
   assert.equal(attack.canaryEvents.length, 0, "Windows attack capture contains unexpected canary events");

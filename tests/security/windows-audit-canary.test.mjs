@@ -321,13 +321,12 @@ test("AC-05: Filter Manager inventory is an independent bounded read-only driver
 
 test("AC-05: baseline canary failure stops before preparing the attack capture", async () => {
   const driver = await readFile(new URL("../../scripts/test-windows-file-access.mjs", import.meta.url), "utf8");
-  assert.match(driver, /const baseline = await captureScenario\("baseline", \{ verifyDirectoryRemoval: true \}\);\s*assert.equal\(baseline.canaryEvents.length, 0, "Windows baseline capture contains unexplained canary events"\);\s*const attack = await captureScenario\("attack"\);/);
-  assert.match(driver, /async function captureScenario\(scenario, \{ retainEmptyDirectory = false, verifyDirectoryRemoval = false \} = \{\}\)/);
+  assert.match(driver, /const baseline = await captureScenario\("baseline", \{ retainEmptyDirectory: true \}\);\s*assert.equal\(baseline.canaryEvents.length, 0, "Windows baseline capture contains unexplained canary events"\);\s*const attack = await captureScenario\("attack"\);/);
+  assert.match(driver, /async function captureScenario\(scenario, \{ retainEmptyDirectory = false \} = \{\}\)/);
   assert.match(driver, /completed = true;\s*return result;/);
-  assert.match(driver, /if \(scenario === "baseline" && retainEmptyDirectory && completed\) \{\s*retainedBaselineTemporaryDirectory = temporaryDirectory;\s*await retainEmptyWindowsAuditDirectory\(temporaryDirectory\);\s*console\.log\("Windows audit baseline retention: empty temporary directory retained; PML absent"\);\s*\} else \{\s*await rm\(temporaryDirectory, \{ recursive: true, force: true \}\);\s*if \(scenario === "baseline" && verifyDirectoryRemoval\) \{\s*await assert\.rejects\(access\(temporaryDirectory\), \{ code: "ENOENT" \}\);\s*console\.log\("Windows audit baseline cleanup: temporary directory removed before attack"\);\s*\}\s*\}/);
-  assert.match(driver, /if \(scenario === "baseline" && verifyDirectoryRemoval\) \{\s*await assert\.rejects\(access\(temporaryDirectory\), \{ code: "ENOENT" \}\);\s*console\.log\("Windows audit baseline cleanup: temporary directory removed before attack"\);\s*\}/);
+  assert.match(driver, /if \(scenario === "baseline" && retainEmptyDirectory && completed\) \{\s*retainedBaselineTemporaryDirectory = temporaryDirectory;\s*await retainEmptyWindowsAuditDirectory\(temporaryDirectory\);\s*console\.log\("Windows audit baseline retention: empty temporary directory retained; PML absent"\);\s*\} else \{\s*await rm\(temporaryDirectory, \{ recursive: true, force: true \}\);\s*\}/);
   assert.match(driver, /finally \{\s*if \(retainedBaselineTemporaryDirectory\) \{\s*await rm\(retainedBaselineTemporaryDirectory, \{ recursive: true, force: true \}\);\s*\}/);
-  const baselineSequence = driver.indexOf('const baseline = await captureScenario("baseline", { verifyDirectoryRemoval: true });');
+  const baselineSequence = driver.indexOf('const baseline = await captureScenario("baseline", { retainEmptyDirectory: true });');
   const baselineSequenceStart = driver.lastIndexOf("try {", baselineSequence);
   assert.notEqual(baselineSequenceStart, -1);
   for (const [baselineCount, attackCount] of [[1, 0], [0, 1], [0, 0]]) {
