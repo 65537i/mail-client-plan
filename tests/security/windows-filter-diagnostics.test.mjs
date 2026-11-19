@@ -3,9 +3,93 @@ import test from "node:test";
 import {
   appendBoundedWindowsFilterOutput,
   describeWindowsFilterDiagnostics,
+  parseWindowsProcmonProcessState,
   reloadedFilterUiEvidencePattern,
   windowsFilterOutputLimit,
 } from "../../scripts/windows-filter-diagnostics.mjs";
+
+test("AC-05: Procmon process-state diagnostics retain only bounded counts and stages", () => {
+  assert.deepEqual(
+    parseWindowsProcmonProcessState(
+      "PROC_MON_PROCESS_STATE=stage:after-csv-export;named:1;instances:1;path-unavailable:0\r\n",
+    ),
+    { stage: "after-csv-export", named: 1, instances: 1, pathUnavailable: 0 },
+  );
+  assert.deepEqual(
+    parseWindowsProcmonProcessState(
+      "PROC_MON_PROCESS_STATE=stage:before-filter-setup;named:2;instances:0;path-unavailable:2",
+    ),
+    { stage: "before-filter-setup", named: 2, instances: 0, pathUnavailable: 2 },
+  );
+  for (const invalid of [
+    "PROC_MON_PROCESS_STATE=stage:private;named:1;instances:1;path-unavailable:0",
+    "PROC_MON_PROCESS_STATE=stage:after-csv-export;named:1000;instances:0;path-unavailable:0",
+    "PROC_MON_PROCESS_STATE=stage:after-csv-export;named:1;instances:1000;path-unavailable:0",
+    "PROC_MON_PROCESS_STATE=stage:after-csv-export;named:1;instances:0;path-unavailable:1000",
+    "PROC_MON_PROCESS_STATE=stage:after-csv-export;named:1;instances:2;path-unavailable:0",
+    "PROC_MON_PROCESS_STATE=stage:after-csv-export;named:1;instances:0;path-unavailable:2",
+    "PROC_MON_PROCESS_STATE=stage:after-csv-export;named:1;instances:1;path-unavailable:0;path=C:\\private",
+    "PROC_MON_PROCESS_STATE=stage:after-csv-export;named:1;instances:1;path-unavailable:0\nextra",
+  ]) {
+    assert.equal(parseWindowsProcmonProcessState(invalid), null);
+  }
+});
+
+test("AC-05: modal-window snapshots compare only bounded Procmon dialog counts around Filter OK", () => {
+  const before = "PROC_MON_FILTER_MODAL_WINDOWS=stage:before-filter-ok;state:available;scope:root-children;"
+    + "windows:1;filter-dialog:found;standard-dialogs:0;main-owned-dialogs:0;"
+    + "visible-standard-dialogs:0;enabled-standard-dialogs:0;truncated:false";
+  const after = "PROC_MON_FILTER_MODAL_WINDOWS=stage:after-filter-ok;state:available;scope:root-children;"
+    + "windows:2;filter-dialog:unavailable;standard-dialogs:1;main-owned-dialogs:1;"
+    + "visible-standard-dialogs:1;enabled-standard-dialogs:1;truncated:false";
+  const diagnostics = describeWindowsFilterDiagnostics(`${before}\n${after}`);
+  assert.ok(diagnostics.includes(
+    "; filter-modal-windows-before-filter-ok=scope:root-children;windows:1;filter-dialog:found;"
+      + "standard-dialogs:0;main-owned-dialogs:0;visible-standard-dialogs:0;"
+      + "enabled-standard-dialogs:0;truncated:false",
+  ));
+  assert.ok(diagnostics.includes(
+    "; filter-modal-windows-after-filter-ok=scope:root-children;windows:2;filter-dialog:unavailable;"
+      + "standard-dialogs:1;main-owned-dialogs:1;visible-standard-dialogs:1;"
+      + "enabled-standard-dialogs:1;truncated:false",
+  ));
+  assert.ok(describeWindowsFilterDiagnostics(
+    "PROC_MON_FILTER_MODAL_WINDOWS=stage:after-filter-ok;state:available;scope:root-children;"
+      + "windows:32;filter-dialog:unavailable;standard-dialogs:0;main-owned-dialogs:0;"
+      + "visible-standard-dialogs:0;enabled-standard-dialogs:0;truncated:true",
+  ).includes("; filter-modal-windows-after-filter-ok=scope:root-children;windows:32;filter-dialog:unavailable;"));
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_MODAL_WINDOWS=stage:before-filter-ok;state:unavailable;reason:uia-com",
+    ),
+    "; filter-modal-windows-before-filter-ok=unavailable:uia-com",
+  );
+  for (const state of [
+    "starting",
+    "root-query-starting",
+    "root-query-complete",
+  ]) {
+    assert.equal(
+      describeWindowsFilterDiagnostics(
+        `PROC_MON_FILTER_MODAL_WINDOWS=stage:before-filter-ok;state:${state}`,
+      ),
+      `; filter-modal-windows-before-filter-ok=${state}`,
+    );
+  }
+  for (const invalid of [
+    before.replace("windows:1", "windows:33"),
+    before.replace("windows:1", "windows:0"),
+    after.replace("main-owned-dialogs:1", "main-owned-dialogs:2"),
+    after.replace("visible-standard-dialogs:1", "visible-standard-dialogs:2"),
+    `${before};handle=0x1234`,
+    before.replace("stage:before-filter-ok", "stage:private"),
+    "PROC_MON_FILTER_MODAL_WINDOWS=stage:before-filter-ok;state:private",
+    before.replace("scope:root-children", "scope:descendants"),
+    "PROC_MON_FILTER_MODAL_WINDOWS=stage:after-filter-ok;state:unavailable;reason:PrivateException",
+  ]) {
+    assert.equal(describeWindowsFilterDiagnostics(invalid), "");
+  }
+});
 
 test("AC-05: export timeout observations distinguish missing dialogs from failed inspection", () => {
   const line = "PROC_MON_FILTER_SAVE_RESULT=phase:export-timeout;foreground:procmon-main;same-process-dialogs:0;other-process-windows:1;buttons:save:0;cancel:0;yes:0;no:0;ok:0;retry:0;close:0;truncated:false";
@@ -106,22 +190,127 @@ test("AC-05: reloaded Windows filter rule summaries retain bounded counts only",
 test("AC-05: reload window diagnostics retain only bounded process state", () => {
   const summary = "PROC_MON_FILTER_WINDOW_SCAN="
     + "stage:reload;phase:enumerate-uia-windows;process-exited:false;"
-    + "root-windows:2;uia-owned-windows:0;"
+    + "window-found:false;root-windows:2;uia-owned-windows:0;"
     + "main-handle:unavailable;foreground-owner:other";
   assert.equal(
     describeWindowsFilterDiagnostics(summary),
     "; reload-window-scan=phase:enumerate-uia-windows;process-exited:false;"
-      + "root-windows:2;uia-owned-windows:0;"
+      + "window-found:false;root-windows:2;uia-owned-windows:0;"
       + "main-handle:unavailable;foreground-owner:other",
   );
   assert.equal(
     describeWindowsFilterDiagnostics([
-      "PROC_MON_FILTER_WINDOW_SCAN=stage:reload;phase:wait;process-exited:false;root-windows:2;uia-owned-windows:3;main-handle:unavailable;foreground-owner:other",
-      "PROC_MON_FILTER_WINDOW_SCAN=stage:reload;phase:wait;process-exited:false;root-windows:10000;uia-owned-windows:0;main-handle:unavailable;foreground-owner:other",
-      "PROC_MON_FILTER_WINDOW_SCAN=stage:reload;phase:private;process-exited:false;root-windows:2;uia-owned-windows:0;main-handle:unavailable;foreground-owner:other",
-      "PROC_MON_FILTER_WINDOW_SCAN=stage:reload;phase:wait;process-exited:false;root-windows:2;uia-owned-windows:0;main-handle:unavailable;foreground-owner:other;handle=0x1234",
+      "PROC_MON_FILTER_WINDOW_SCAN=stage:reload;phase:wait;process-exited:false;window-found:false;root-windows:2;uia-owned-windows:3;main-handle:unavailable;foreground-owner:other",
+      "PROC_MON_FILTER_WINDOW_SCAN=stage:reload;phase:wait;process-exited:false;window-found:false;root-windows:10000;uia-owned-windows:0;main-handle:unavailable;foreground-owner:other",
+      "PROC_MON_FILTER_WINDOW_SCAN=stage:reload;phase:private;process-exited:false;window-found:false;root-windows:2;uia-owned-windows:0;main-handle:unavailable;foreground-owner:other",
+      "PROC_MON_FILTER_WINDOW_SCAN=stage:reload;phase:wait;process-exited:false;window-found:false;root-windows:2;uia-owned-windows:0;main-handle:unavailable;foreground-owner:other;handle=0x1234",
     ].join("\n")),
     "",
+  );
+});
+
+test("AC-05: transient window-discovery retries retain only bounded classifications", () => {
+  const valid = "PROC_MON_FILTER_WINDOW_SCAN_TRANSIENTS="
+    + "stage:initial;count:12;phase:read-uia-window-owner;type:ElementNotAvailableException";
+  assert.equal(
+    describeWindowsFilterDiagnostics(valid),
+    "; initial-window-scan-transients=count:12;phase:read-uia-window-owner;type:ElementNotAvailableException",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_WINDOW_SCAN_TRANSIENTS=stage:reload;count:0;phase:create-window-condition;type:none",
+    ),
+    "; reload-window-scan-transients=count:0;phase:create-window-condition;type:none",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_WINDOW_SCAN_TRANSIENTS=stage:initial;count:0;phase:get-uia-window-element;type:none",
+    ),
+    "; initial-window-scan-transients=count:0;phase:get-uia-window-element;type:none",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_WINDOW_SCAN_TRANSIENTS=stage:initial;count:0;phase:read-uia-window-current;type:none",
+    ),
+    "; initial-window-scan-transients=count:0;phase:read-uia-window-current;type:none",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_WINDOW_SCAN_TRANSIENTS=stage:initial;count:0;phase:create-window-condition;type:TypeInitializationException",
+    ),
+    "; initial-window-scan-transients=count:0;phase:create-window-condition;type:TypeInitializationException",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics([
+      "PROC_MON_FILTER_WINDOW_SCAN_TRANSIENTS=stage:initial;count:10000;phase:wait;type:InvalidOperationException",
+      "PROC_MON_FILTER_WINDOW_SCAN_TRANSIENTS=stage:initial;count:1;phase:wait;type:SecretException",
+      "PROC_MON_FILTER_WINDOW_SCAN_TRANSIENTS=stage:private;count:1;phase:read-uia-window-owner;type:COMException",
+      "PROC_MON_FILTER_WINDOW_SCAN_TRANSIENTS=stage:reload;count:1;phase:enumerate-uia-windows;type:none;path=C:\\private",
+      "PROC_MON_FILTER_WINDOW_SCAN_TRANSIENTS=stage:reload;count:0;phase:private;type:none",
+      "PROC_MON_FILTER_WINDOW_SCAN_TRANSIENTS=stage:initial;count:0;phase:create-window-condition;type:PrivateException",
+    ].join("\n")),
+    "",
+  );
+});
+
+test("AC-05: bounded output retains and parses the final window-scan summary", () => {
+  const scan = "PROC_MON_FILTER_WINDOW_SCAN=stage:initial;phase:window-found;"
+    + "process-exited:false;window-found:true;root-windows:23;uia-owned-windows:1;"
+    + "main-handle:unavailable;foreground-owner:other";
+  const initialFocus = "PROC_MON_FILTER_MAIN_FOREGROUND=stage:initial;gate:passed";
+  const shortcutFocus = "PROC_MON_FILTER_MAIN_FOREGROUND=stage:shortcut;gate:passed";
+  const shortcutDismissFocus = "PROC_MON_FILTER_MAIN_FOREGROUND=stage:shortcut-dismiss;gate:failed";
+  const dropFocus = "PROC_MON_FILTER_MAIN_FOREGROUND=stage:drop;gate:failed";
+  const dropFocusDetail = "PROC_MON_FILTER_MAIN_FOREGROUND_DETAIL=stage:drop;"
+    + "validation:passed;before:other-process;request:accepted;"
+    + "after:other-process;wait-ms:2000";
+  const dropForegroundWindow = "PROC_MON_FILTER_FOREGROUND_WINDOW=stage:drop;"
+    + "class:dialog;owner:main;visible:true;enabled:true;title-match:different";
+  const dropForegroundDialogUi = "PROC_MON_FILTER_FOREGROUND_DIALOG_UI=stage:drop;"
+    + "state:available;items:7;buttons:1;texts:2;edits:0;combos:0;other-controls:4;"
+    + "ok:1;cancel:0;retry:0;yes:0;no:0;other-buttons:0;"
+    + "hints-error:false;hints-warning:false;hints-filter:false;hints-capture:false;"
+    + "hints-filesystem:false;hints-privilege:false;hints-confirmation:false;"
+    + "hints-file-missing:false;hints-file-operation:false;hints-file-format:false;"
+    + "hints-file-open:false;hints-file-read:false;hints-file-write:false;"
+    + "hints-file-load:false;hints-file-save:false;"
+    + "hints-file-config:false;hints-file-capture:false;hints-file-export:false;"
+    + "hints-file-path:false;hints-file-access-denied:false;"
+    + "hints-file-busy:false;hints-file-open-failure:false;"
+    + "text-truncated:false;truncated:false";
+  const shortcut = "PROC_MON_FILTER_INITIAL_SHORTCUT=command:filter-dialog;state:sent";
+  const captured = appendBoundedWindowsFilterOutput(
+    `${"x".repeat(9000)}\n${scan}\n${initialFocus}\n${shortcutFocus}\n${shortcutDismissFocus}\n${dropFocus}\n${dropFocusDetail}\n${dropForegroundWindow}\n${dropForegroundDialogUi}\n${shortcut}\n`,
+    `${"y".repeat(12000)}\n`,
+  );
+  assert.equal(captured.length, windowsFilterOutputLimit);
+  assert.ok(captured.includes(scan));
+  assert.ok(captured.includes(initialFocus));
+  assert.ok(captured.includes(shortcutFocus));
+  assert.ok(captured.includes(shortcutDismissFocus));
+  assert.ok(captured.includes(dropFocus));
+  assert.ok(captured.includes(dropFocusDetail));
+  assert.ok(captured.includes(dropForegroundWindow));
+  assert.ok(captured.includes(dropForegroundDialogUi));
+  assert.ok(captured.includes(shortcut));
+  assert.ok(
+    describeWindowsFilterDiagnostics(captured).includes(
+      "; initial-window-scan=phase:window-found;process-exited:false;"
+        + "window-found:true;root-windows:23;uia-owned-windows:1;"
+        + "main-handle:unavailable;foreground-owner:other",
+    ),
+  );
+  assert.ok(
+    describeWindowsFilterDiagnostics(captured).includes(
+      "; initial-main-window-foreground-gate=passed"
+        + "; shortcut-main-window-foreground-gate=passed"
+        + "; shortcut-dismiss-main-window-foreground-gate=failed"
+        + "; drop-main-window-foreground-gate=failed"
+        + "; drop-main-window-foreground-detail=validation:passed;before:other-process;request:accepted;after:other-process;wait-ms:2000"
+        + "; drop-foreground-window=class:dialog;owner:main;visible:true;enabled:true;title-match:different"
+        + "; drop-foreground-dialog-ui=state:available;items:7;buttons:1;texts:2;edits:0;combos:0;other-controls:4;ok:1;cancel:0;retry:0;yes:0;no:0;other-buttons:0;hints-error:false;hints-warning:false;hints-filter:false;hints-capture:false;hints-filesystem:false;hints-privilege:false;hints-confirmation:false;hints-file-missing:false;hints-file-operation:false;hints-file-format:false;hints-file-open:false;hints-file-read:false;hints-file-write:false;hints-file-load:false;hints-file-save:false;hints-file-config:false;hints-file-capture:false;hints-file-export:false;hints-file-path:false;hints-file-access-denied:false;hints-file-busy:false;hints-file-open-failure:false;text-truncated:false;truncated:false"
+        + "; initial-filter-dialog=keyboard-shortcut",
+    ),
   );
 });
 
@@ -261,6 +450,7 @@ test("AC-05: Windows filter diagnostics retain safe focused-control observations
     "PROC_MON_FILTER_FOCUSED_CONTROL=after-invoke;type:Button;name:Other;offscreen:false;keyboard-focusable:true;tree=Button:Other>Window:ProcessMonitor",
     "PROC_MON_FILTER_FOCUSED_CONTROL=after-invoke;type:Text;name:C:\\private\\mail;offscreen:false;keyboard-focusable:true;tree=Text:Other",
     "PROC_MON_FILTER_FOCUSED_CONTROL=after-command-invoke;type:Window;name:ProcessMonitor;offscreen:false;keyboard-focusable:false;tree=Window:ProcessMonitor",
+    "PROC_MON_FILTER_FOCUSED_CONTROL=after-drop-menu-invoke;type:Menu;name:Filter;offscreen:false;keyboard-focusable:true;tree=Menu:Filter>Window:ProcessMonitor",
     "PROC_MON_FILTER_FOCUSED_CONTROL=after-reload-menu-invoke;type:MenuItem;name:Filter;offscreen:false;keyboard-focusable:true;tree=MenuItem:Filter>Menu:Other",
     "PROC_MON_FILTER_FOCUSED_CONTROL=after-reload-menu-invoke;type:Button;name:C:\\private\\mail;offscreen:false;keyboard-focusable:true;tree=Button:Other",
     "PROC_MON_FILTER_FOCUSED_CONTROL=after-reload-menu-expand;type:Button;name:Other;offscreen:false;keyboard-focusable:true;tree=Button:Other>Window:ProcessMonitor",
@@ -281,6 +471,7 @@ test("AC-05: Windows filter diagnostics retain safe focused-control observations
       + "; focus-after-invoke=Window:ProcessMonitor;offscreen:false;keyboard-focusable:false;tree=Window:ProcessMonitor"
       + "; focus-after-invoke=Button:Other;offscreen:false;keyboard-focusable:true;tree=Button:Other>Window:ProcessMonitor"
       + "; focus-after-command-invoke=Window:ProcessMonitor;offscreen:false;keyboard-focusable:false;tree=Window:ProcessMonitor"
+      + "; focus-after-drop-menu-invoke=Menu:Filter;offscreen:false;keyboard-focusable:true;tree=Menu:Filter>Window:ProcessMonitor"
       + "; focus-after-reload-menu-invoke=MenuItem:Filter;offscreen:false;keyboard-focusable:true;tree=MenuItem:Filter>Menu:Other"
       + "; focus-after-reload-menu-expand=Button:Other;offscreen:false;keyboard-focusable:true;tree=Button:Other>Window:ProcessMonitor"
       + "; focus-after-reload-menu-select=Button:Other;offscreen:false;keyboard-focusable:true;tree=Button:Other>Window:ProcessMonitor"
@@ -505,6 +696,108 @@ test("AC-05: configuration save observations expose states, not paths or dialog 
   );
   assert.equal(
     describeWindowsFilterDiagnostics("PROC_MON_FILTER_RELOAD_MAIN_FOREGROUND=gate:C:\\private"),
+    "",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_MAIN_FOREGROUND=stage:initial;gate:passed",
+    ),
+    "; initial-main-window-foreground-gate=passed",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_MAIN_FOREGROUND=stage:shortcut;gate:passed",
+    ),
+    "; shortcut-main-window-foreground-gate=passed",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_MAIN_FOREGROUND=stage:shortcut-dismiss;gate:failed",
+    ),
+    "; shortcut-dismiss-main-window-foreground-gate=failed",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_MAIN_FOREGROUND_DETAIL=stage:drop;validation:passed;before:other-process;request:accepted;after:other-process;wait-ms:2000",
+    ),
+    "; drop-main-window-foreground-detail=validation:passed;before:other-process;request:accepted;after:other-process;wait-ms:2000",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_MAIN_FOREGROUND_DETAIL=stage:drop;validation:passed;before:filter-dialog;request:accepted;after:filter-dialog;wait-ms:2000",
+    ),
+    "; drop-main-window-foreground-detail=validation:passed;before:filter-dialog;request:accepted;after:filter-dialog;wait-ms:2000",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_MAIN_FOREGROUND_DETAIL=stage:drop;validation:passed;before:C:\\private;request:accepted;after:other-process;wait-ms:2000",
+    ),
+    "",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_FOREGROUND_WINDOW=stage:drop;class:dialog;owner:main;visible:true;enabled:false;title-match:different",
+    ),
+    "; drop-foreground-window=class:dialog;owner:main;visible:true;enabled:false;title-match:different",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_FOREGROUND_WINDOW=stage:drop;class:dialog;owner:main;visible:true;enabled:true;title-match:same",
+    ),
+    "; drop-foreground-window=class:dialog;owner:main;visible:true;enabled:true;title-match:same",
+  );
+  const dialogUi =
+    "PROC_MON_FILTER_FOREGROUND_DIALOG_UI=stage:drop;state:available;items:7;buttons:1;texts:2;edits:0;combos:0;other-controls:4;ok:1;cancel:0;retry:0;yes:0;no:0;other-buttons:0;hints-error:true;hints-warning:false;hints-filter:true;hints-capture:false;hints-filesystem:false;hints-privilege:false;hints-confirmation:false;hints-file-missing:true;hints-file-operation:true;hints-file-format:false;hints-file-open:true;hints-file-read:false;hints-file-write:false;hints-file-load:false;hints-file-save:false;hints-file-config:true;hints-file-capture:false;hints-file-export:false;hints-file-path:true;hints-file-access-denied:true;hints-file-busy:true;hints-file-open-failure:true;text-truncated:false;truncated:false";
+  assert.equal(
+    describeWindowsFilterDiagnostics(dialogUi),
+    "; drop-foreground-dialog-ui=state:available;items:7;buttons:1;texts:2;edits:0;combos:0;other-controls:4;ok:1;cancel:0;retry:0;yes:0;no:0;other-buttons:0;hints-error:true;hints-warning:false;hints-filter:true;hints-capture:false;hints-filesystem:false;hints-privilege:false;hints-confirmation:false;hints-file-missing:true;hints-file-operation:true;hints-file-format:false;hints-file-open:true;hints-file-read:false;hints-file-write:false;hints-file-load:false;hints-file-save:false;hints-file-config:true;hints-file-capture:false;hints-file-export:false;hints-file-path:true;hints-file-access-denied:true;hints-file-busy:true;hints-file-open-failure:true;text-truncated:false;truncated:false",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_FOREGROUND_DIALOG_UI=stage:drop;state:unavailable;reason:uia-com",
+    ),
+    "; drop-foreground-dialog-ui=state:unavailable;reason:uia-com",
+  );
+  for (const unsafe of [
+    dialogUi.replace("items:7", "items:129"),
+    dialogUi.replace("ok:1", "ok:2"),
+    `${dialogUi};title:private`,
+    "PROC_MON_FILTER_FOREGROUND_DIALOG_UI=stage:drop;state:unavailable;reason:C:\\private",
+  ]) {
+    assert.equal(describeWindowsFilterDiagnostics(unsafe), "");
+  }
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_FOREGROUND_WINDOW=stage:drop;class:C:\\private;owner:main;visible:true;enabled:false;title-match:different",
+    ),
+    "",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_FOREGROUND_WINDOW=stage:drop;class:dialog;owner:main;visible:true;enabled:false;title-match:C:\\private",
+    ),
+    "",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_MAIN_FOREGROUND=stage:export;gate:C:\\private",
+    ),
+    "",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics("PROC_MON_FILTER_MAIN_FOREGROUND=gate:passed"),
+    "; main-window-foreground-gate=passed",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_INITIAL_SHORTCUT=command:filter-dialog;state:sent",
+    ),
+    "; initial-filter-dialog=keyboard-shortcut",
+  );
+  assert.equal(
+    describeWindowsFilterDiagnostics(
+      "PROC_MON_FILTER_INITIAL_SHORTCUT=command:private;state:sent",
+    ),
     "",
   );
   assert.equal(
@@ -825,10 +1118,18 @@ test("AC-05: Windows filter output retains diagnostics within a strict 8192-char
 
 test("AC-05: truncation preserves mandatory evidence across chunk boundaries within 8192 characters", () => {
   const lines = [
+    "PROC_MON_FILTER_MODAL_WINDOWS=stage:before-filter-ok;state:starting",
+    "PROC_MON_FILTER_MODAL_WINDOWS=stage:before-filter-ok;state:root-query-starting",
+    "PROC_MON_FILTER_MODAL_WINDOWS=stage:before-filter-ok;state:root-query-complete",
+    "PROC_MON_FILTER_MODAL_WINDOWS=stage:before-filter-ok;state:embedded-query-starting",
+    "PROC_MON_FILTER_MODAL_WINDOWS=stage:before-filter-ok;state:embedded-query-complete",
+    "PROC_MON_FILTER_MODAL_WINDOWS=stage:before-filter-ok;state:available;scope:root-children;windows:1;filter-dialog:found;standard-dialogs:0;main-owned-dialogs:0;visible-standard-dialogs:0;enabled-standard-dialogs:0;truncated:false",
+    "PROC_MON_FILTER_MODAL_WINDOWS=stage:after-filter-ok;state:available;scope:root-children;windows:2;filter-dialog:unavailable;standard-dialogs:1;main-owned-dialogs:1;visible-standard-dialogs:1;enabled-standard-dialogs:1;truncated:false",
     "PROC_MON_FILTER_CONFIG_PATHS=canary:1;control:1",
     "PROC_MON_FILTER_RELOADED_RULES=rows:2;canary:1;control:1;path:2;is:2;include:2;unclassified:0",
     "PROC_MON_FILTER_RELOADED_UI=items:86;lists:4;data-grids:1;tables:0;list-items:41;data-items:2;dialog-window-rows:43;other-window-rows:0;unscoped-rows:0;combo-option-rows:41;rule-containers:1;rule-row-candidates:2;rule-container-unclassified-rows:0;rows:2;truncated:false",
     "PROC_MON_FILTER_RELOADED_DROP=checked:on",
+    "PROC_MON_FILTER_FOCUSED_CONTROL=after-drop-menu-invoke;type:Menu;name:Filter;offscreen:false;keyboard-focusable:true;tree=Menu:Filter>Window:ProcessMonitor",
   ];
   for (const chunkSize of [1, 7, 64, 4096, 65536]) {
     const stream = `${"x".repeat(9000)}\n${lines.join("\n")}\n${"y".repeat(12000)}\n`;
@@ -838,9 +1139,15 @@ test("AC-05: truncation preserves mandatory evidence across chunk boundaries wit
       assert.ok(captured.length <= windowsFilterOutputLimit);
     }
     const diagnostics = describeWindowsFilterDiagnostics(captured);
+    assert.ok(diagnostics.includes("; filter-modal-windows-before-filter-ok=starting"));
+    assert.ok(diagnostics.includes("; filter-modal-windows-before-filter-ok=root-query-starting"));
+    assert.ok(diagnostics.includes("; filter-modal-windows-before-filter-ok=root-query-complete"));
+    assert.ok(diagnostics.includes("; filter-modal-windows-before-filter-ok=scope:root-children;windows:1;filter-dialog:found;standard-dialogs:0;main-owned-dialogs:0;visible-standard-dialogs:0;enabled-standard-dialogs:0;truncated:false"));
+    assert.ok(diagnostics.includes("; filter-modal-windows-after-filter-ok=scope:root-children;windows:2;filter-dialog:unavailable;standard-dialogs:1;main-owned-dialogs:1;visible-standard-dialogs:1;enabled-standard-dialogs:1;truncated:false"));
     assert.ok(diagnostics.includes("; config-filter-paths=canary:1;control:1"));
     assert.ok(diagnostics.includes("; reloaded-filter-rules=rows:2;canary:1;control:1;path:2;is:2;include:2;unclassified:0"));
     assert.ok(diagnostics.includes("; reloaded-drop-filtered-events=on"));
+    assert.ok(diagnostics.includes("; focus-after-drop-menu-invoke=Menu:Filter;offscreen:false;keyboard-focusable:true;tree=Menu:Filter>Window:ProcessMonitor"));
     const ui = diagnostics.split("; ").find(value => value.startsWith("reloaded-filter-ui="));
     assert.match(ui, reloadedFilterUiEvidencePattern);
     assert.equal(captured.length, windowsFilterOutputLimit);
