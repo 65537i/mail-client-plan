@@ -4962,12 +4962,13 @@ function Set-VerifiedProcmonMainWindowForeground(
 ) {
   $windowHandle = [IntPtr]$Window.Current.NativeWindowHandle
   $foregroundGate = "failed"
+  $requestResult = "not-called"
   if (
     $Window.Current.ProcessId -eq $Process.Id -and
     $windowHandle -ne [IntPtr]::Zero -and
     [ProcmonNativeMenu]::GetWindowProcessId($windowHandle) -eq $Process.Id
   ) {
-    [ProcmonNativeMenu]::SetForegroundWindow($windowHandle) | Out-Null
+    $requestResult = if ([ProcmonNativeMenu]::SetForegroundWindow($windowHandle)) { "nonzero" } else { "zero" }
     $foregroundDeadline = [DateTime]::UtcNow.AddSeconds(2)
     do {
       $foregroundHandle = [ProcmonNativeMenu]::GetForegroundWindow()
@@ -4985,8 +4986,12 @@ function Set-VerifiedProcmonMainWindowForeground(
     "PROC_MON_FILTER_${DiagnosticName}_FOREGROUND=gate:$foregroundGate"
   )
   if ($foregroundGate -ne "passed") {
+    if ($requestResult -eq "not-called") {
+      [Console]::Out.WriteLine("PROC_MON_FILTER_FOREGROUND_CONTEXT=phase:$($DiagnosticName.ToLowerInvariant());request:not-called")
+      throw "Process Monitor $DiagnosticName foreground target ownership could not be verified"
+    }
     [Console]::Out.WriteLine(
-      "PROC_MON_FILTER_FOREGROUND_CONTEXT=phase:$($DiagnosticName.ToLowerInvariant());$([ProcmonNativeMenu]::ReadForegroundContext($windowHandle, $Process.Id))"
+      "PROC_MON_FILTER_FOREGROUND_CONTEXT=phase:$($DiagnosticName.ToLowerInvariant());$([ProcmonNativeMenu]::ReadForegroundContext($windowHandle, $Process.Id));request:$requestResult"
     )
     throw "Process Monitor $DiagnosticName window did not become the foreground window"
   }

@@ -42,6 +42,7 @@ test("AC-05: target input and foreground menu context is complete, allowlisted, 
   }
   for (const invalid of [
     `${legacy};target-input:true`,
+    `${legacy};target-input:true;foreground-menu:false;request:private`,
     `${legacy};foreground-menu:false`,
     `${legacy};target-input:private;foreground-menu:false`,
     `${legacy};target-input:true;foreground-menu:123`,
@@ -50,6 +51,14 @@ test("AC-05: target input and foreground menu context is complete, allowlisted, 
     assert.equal(describeWindowsFilterDiagnostics(invalid), "");
     const retained = appendBoundedWindowsFilterOutput("x".repeat(9000), `\n${invalid}\n${"y".repeat(9000)}`);
     assert.equal(describeWindowsFilterDiagnostics(retained), "");
+  }
+  for (const raw of [
+    `${legacy};target-input:true;foreground-menu:false;request:zero`,
+    `${legacy};target-input:true;foreground-menu:false;request:nonzero`,
+    "PROC_MON_FILTER_FOREGROUND_CONTEXT=phase:main;request:not-called",
+  ]) {
+    const retained = appendBoundedWindowsFilterOutput("x".repeat(9000), `\n${raw}\n${"y".repeat(9000)}`);
+    assert.equal(describeWindowsFilterDiagnostics(retained), `; foreground-context=${raw.split("=")[1]}`);
   }
 });
 
