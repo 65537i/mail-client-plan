@@ -56,7 +56,7 @@ struct Model {
         ++value;
     }
 
-    void Observe(const Record& event) {
+    void Observe(const Record& event, bool fromControlChild = false) {
         if (event.id == 10) { Bind(keys, event.key, event.target); return; }
         if (event.id == 11) { keys.erase(event.key); return; }
         if (event.id == 12) {
@@ -71,10 +71,12 @@ struct Model {
         const Target byObject = object == objects.end() ? Target::other : object->second;
         const Target byKey = key == keys.end() ? Target::other : key->second;
         Require(byObject == Target::other || byKey == Target::other || byObject == byKey, "correlation-conflict");
-        Count(byObject != Target::other ? byObject : byKey,
-            event.id == 15 ? Operation::read : Operation::query);
+        const Target target = byObject != Target::other ? byObject : byKey;
+        Count(target, event.id == 15 ? Operation::read : Operation::query);
+        if (fromControlChild && target == Target::control && event.id == 15) childRead = true;
     }
 
+    bool childRead = false;
     bool ControlReady() const {
         return counts[0][0] > 0 && counts[0][1] > 0 && counts[0][2] > 0;
     }
@@ -228,6 +230,7 @@ struct Consumer {
     HANDLE worker = nullptr;
     ULONGLONG deadline = 0;
     bool stopped = false;
+    DWORD childPid = 0;
 
     explicit Consumer(const Files& input) : files(input) {}
 
@@ -253,7 +256,7 @@ struct Consumer {
                     record.key = DecodePointer(Property(event, L"FileKey"));
             }
             std::lock_guard<std::mutex> lock(self.mutex);
-            self.model.Observe(record);
+            self.model.Observe(record, self.childPid != 0 && event->EventHeader.ProcessId == self.childPid);
         } catch (const Failure& failure) {
             self.error.store(failure.stage);
         } catch (...) {
@@ -366,10 +369,47 @@ void Exercise(const std::wstring& path) {
     Require(success && closed, "control-operation");
 }
 
-int Capture(bool touchCanary) {
+struct NodeReader {
+    PROCESS_INFORMATION process{};
+
+    void Prepare(const wchar_t* node, const Files& files) {
+        std::wstring command = L"\"" + std::wstring(node) +
+            L"\" -e \"const b=require('node:fs').readFileSync(process.argv[1]);"
+            L"if(b.toString('hex')!=='45545701')process.exitCode=1\" \"" + files.paths[0] + L"\"";
+        STARTUPINFOW startup{};
+        startup.cb = sizeof(startup);
+        wchar_t environment[] = L"\0";
+        Require(CreateProcessW(node, command.data(), nullptr, nullptr, FALSE,
+            CREATE_SUSPENDED | CREATE_NO_WINDOW | CREATE_UNICODE_ENVIRONMENT, environment,
+            files.directory.c_str(), &startup, &process) != FALSE, "node-create");
+    }
+
+    void Read() {
+        Require(ResumeThread(process.hThread) == 1, "node-resume");
+        DWORD status = 1;
+        Require(WaitForSingleObject(process.hProcess, 2500) == WAIT_OBJECT_0 &&
+            GetExitCodeProcess(process.hProcess, &status) && status == 0, "node-read");
+    }
+
+    ~NodeReader() {
+        if (!process.hProcess) return;
+        if (WaitForSingleObject(process.hProcess, 0) != WAIT_OBJECT_0) {
+            if (!TerminateProcess(process.hProcess, 1) ||
+                WaitForSingleObject(process.hProcess, 2500) != WAIT_OBJECT_0)
+                std::fputs("ETW_CONTROLS_ERROR=node-cleanup\n", stderr);
+        }
+        CloseHandle(process.hThread);
+        CloseHandle(process.hProcess);
+    }
+};
+
+int Capture(bool touchCanary, const wchar_t* node = nullptr) {
     Files files;
     files.Prepare();
+    NodeReader reader;
+    if (node) reader.Prepare(node, files);
     Consumer consumer(files);
+    consumer.childPid = reader.process.dwProcessId;
     consumer.Start();
     // Positive events, not just EnableTraceEx2 success, establish the consumer-ready barrier.
     const ULONGLONG readyDeadline = GetTickCount64() + 3000;
@@ -379,6 +419,7 @@ int Capture(bool touchCanary) {
     }
     Require(consumer.Snapshot().ControlReady(), "ready-control-missing");
     Require(!consumer.Snapshot().CanaryObserved(), "early-canary");
+    if (node) reader.Read();
     Exercise(files.paths[0]);
     Exercise(files.paths[2]);
     if (touchCanary) Exercise(files.paths[1]);
@@ -393,7 +434,9 @@ int Capture(bool touchCanary) {
     Require(failure == nullptr, failure);
     const Model final = consumer.model;
     const int verdict = Evaluate(final, touchCanary);
+    if (node) Require(final.childRead, "node-etw-read-missing");
     Require(files.Cleanup(), "fixture-cleanup");
+    if (node) std::puts("ETW_NODE_CONTROL=child-read:observed");
     std::printf("ETW_CONTROLS_POC=scope:controls-only;scenario:%s;control-create:%lu;"
         "control-read:%lu;control-query:%lu;canary-verdict:%s;loss:zero;cleanup:complete\n",
         touchCanary ? "touched" : "untouched", final.counts[0][0], final.counts[0][1],
@@ -410,6 +453,14 @@ template<typename Action> void Reject(Action action, const char* expected) {
 }
 
 void SelfTest() {
+    Model child;
+    child.Observe({12, 1, 0, Target::control});
+    child.Observe({15, 1, 0});           // Parent reads the control.
+    child.Observe({15, 2, 0}, true);     // Child reads an unrelated object.
+    child.Observe({22, 1, 0}, true);     // Child only queries the control.
+    Require(!child.childRead, "fixture-child-read-false-positive");
+    child.Observe({15, 1, 0}, true);
+    Require(child.childRead, "fixture-child-read-missing");
     Model empty;
     Reject([&] { Evaluate(empty, false); }, "control-missing");
     Model model;
@@ -479,6 +530,17 @@ void SelfTest() {
 int wmain(int argc, wchar_t** argv) {
     try {
         if (argc == 2 && wcscmp(argv[1], L"--self-test") == 0) SelfTest();
+        else if (argc == 3 && wcscmp(argv[1], L"--node-read-fixture") == 0) {
+            Files files;
+            files.Prepare();
+            NodeReader reader;
+            reader.Prepare(argv[2], files);
+            reader.Read();
+            Require(files.Cleanup(), "fixture-cleanup");
+            std::puts("ETW_NODE_FIXTURE=child-read:completed;capture:not-started");
+        }
+        else if (argc == 3 && wcscmp(argv[1], L"--capture-node-read") == 0)
+            return Capture(false, argv[2]);
         else if (argc == 3 && wcscmp(argv[1], L"--capture-controls") == 0 &&
             (wcscmp(argv[2], L"untouched") == 0 || wcscmp(argv[2], L"touched") == 0))
             return Capture(wcscmp(argv[2], L"touched") == 0);

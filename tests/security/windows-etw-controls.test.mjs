@@ -63,3 +63,15 @@ test("AC-05 candidate: readiness, zero-loss drain and both canary scenarios are 
   assert.match(wrapper, /\/W4 \/WX/);
   assert.match(wrapper, /finally \{[\s\S]*Remove-Item -LiteralPath \$temporary -Recurse -Force -ErrorAction Stop/);
 });
+
+test("AC-05 candidate: a separate Node process must read the exact positive-control file", () => {
+  assert.match(source, /event->EventHeader\.ProcessId == self\.childPid/);
+  assert.match(source, /fromControlChild && target == Target::control && event\.id == 15/);
+  assert.match(source, /Require\(final\.childRead, "node-etw-read-missing"\)/);
+  assert.match(source, /readFileSync\(process\.argv\[1\]\)/);
+  assert.match(source, /fixture-child-read-false-positive/);
+  assert.match(source, /fixture-child-read-missing/);
+  assert.match(wrapper, /\[switch\]\$NodeReadControl/);
+  assert.match(wrapper, /Node read control requires the untouched scenario/);
+  assert.match(wrapper, /--capture-node-read/);
+});

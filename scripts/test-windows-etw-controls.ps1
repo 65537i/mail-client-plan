@@ -1,10 +1,12 @@
 param(
   [switch]$Capture,
+  [switch]$NodeReadControl,
   [ValidateSet("untouched", "touched")][string]$Scenario = "untouched"
 )
 
 $ErrorActionPreference = "Stop"
 if ($env:OS -cne "Windows_NT") { throw "ETW controls require Windows" }
+if ($NodeReadControl -and $Scenario -ne "untouched") { throw "Node read control requires the untouched scenario" }
 $compiler = Get-Command cl.exe -ErrorAction Stop
 $temporary = Join-Path ([IO.Path]::GetTempPath()) ("mail-client-etw-build-" + [guid]::NewGuid().ToString("N"))
 [IO.Directory]::CreateDirectory($temporary) | Out-Null
@@ -17,7 +19,12 @@ try {
   if ($LASTEXITCODE -ne 0) { throw "ETW controls compilation failed" }
   & $executable --self-test
   if ($LASTEXITCODE -ne 0) { throw "ETW controls fixtures failed" }
-  if ($Capture) {
+  if ($NodeReadControl) {
+    $node = (Get-Command node.exe -CommandType Application -ErrorAction Stop).Source
+    $mode = if ($Capture) { "--capture-node-read" } else { "--node-read-fixture" }
+    & $executable $mode $node
+    if ($LASTEXITCODE -ne 0) { throw "Node read control failed" }
+  } elseif ($Capture) {
     & $executable --capture-controls $Scenario
     $expectedExit = if ($Scenario -ceq "touched") { 2 } else { 0 }
     if ($LASTEXITCODE -ne $expectedExit) { throw "ETW controls capture or expected rejection failed" }

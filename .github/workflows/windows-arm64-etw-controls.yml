@@ -74,6 +74,12 @@ jobs:
           & $env:ComSpec /d /c $command
           if ($LASTEXITCODE -ne 0) { throw "Untouched ETW controls failed" }
 
+      - name: Capture child Node read control
+        run: |
+          $command = 'call "{0}" arm64 >nul && powershell.exe -STA -NoProfile -NonInteractive -ExecutionPolicy Bypass -File scripts\test-windows-etw-controls.ps1 -NodeReadControl -Capture' -f $env:ETW_VCVARS
+          & $env:ComSpec /d /c $command
+          if ($LASTEXITCODE -ne 0) { throw "Child Node ETW control failed" }
+
       - name: Capture and reject touched synthetic canary
         run: |
           $command = 'call "{0}" arm64 >nul && powershell.exe -STA -NoProfile -NonInteractive -ExecutionPolicy Bypass -File scripts\test-windows-etw-controls.ps1 -Capture -Scenario touched' -f $env:ETW_VCVARS

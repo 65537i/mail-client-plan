@@ -29,10 +29,12 @@ test("ETW hosted PoC: real controls and native prerequisites cannot be skipped o
   assert.match(workflow, /RUNNER_ARCH -cne "ARM64"[\s\S]*ProcessArchitecture[\s\S]*Administrator/);
   assert.match(workflow, /Microsoft.VisualStudio.Component.VC.Tools.ARM64/);
   assert.match(workflow, /VC\\Auxiliary\\Build\\vcvarsall.bat/);
-  assert.equal(workflow.match(/call "\{0\}" arm64 >nul && powershell.exe/g)?.length, 2);
+  assert.equal(workflow.match(/call "\{0\}" arm64 >nul && powershell.exe/g)?.length, 3);
   assert.equal(workflow.match(/-Capture -Scenario untouched/g)?.length, 1);
   assert.equal(workflow.match(/-Capture -Scenario touched/g)?.length, 1);
-  assert.ok(workflow.indexOf("-Scenario untouched") < workflow.indexOf("-Scenario touched"));
+  assert.match(workflow, /Capture child Node read control[\s\S]*-NodeReadControl -Capture/);
+  assert.ok(workflow.indexOf("-Scenario untouched") < workflow.indexOf("-NodeReadControl -Capture"));
+  assert.ok(workflow.indexOf("-NodeReadControl -Capture") < workflow.indexOf("-Scenario touched"));
   assert.match(workflow, /node --test tests\/security\/windows-etw-controls.test.mjs tests\/ci\/windows-arm64-etw-controls.test.mjs\n/);
   assert.doesNotMatch(workflow, /tauri build|test:security:file-access:windows|wpr.exe|tracerpt|\.etl/);
 });
