@@ -2,6 +2,8 @@
 
 ## 1. ワークフロー構成
 
+PRのCI結果を文書に記録するだけのときは、検証したコミットからpushするHEADまでの差分が文書のみであることを確認し、先頭（HEAD）コミットのメッセージに `[skip ci]` を付ける。`pull_request` のパス判定はPR全体の差分を見るため、コード変更を含むPRでは文書だけの追記でも再実行され得る。未検証のコード・テスト・設定変更がある場合や、最新HEADで必須チェックの結果が必要な場合は付けない。スキップは合格ではない。
+
 ### Windows exact-path audit directories
 
 Windowsの完全一致Path Include条件は、`os.tmpdir()`の文字列表記をそのまま使わず、実体パスへ解決した親directoryで`mkdtemp`してから生成する。[directory helper](../scripts/windows-audit-canary.mjs)は`realpath`失敗を伝播し、別名パスへfallbackしない。[driver](../scripts/test-windows-file-access.mjs)はcanary/control/excluded/config/PML/CSVの全パスを同じ実体directoryから作り、診断は`temporary-root-alias=true|false`だけを出す。8.3短縮名やjunctionの別名をCSV比較側で緩く受理する修正ではなく、capture前のexact filter作成を正す。
