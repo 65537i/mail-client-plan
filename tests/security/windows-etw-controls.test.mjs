@@ -74,4 +74,7 @@ test("AC-05 candidate: a separate Node process must read the exact positive-cont
   assert.match(wrapper, /\[switch\]\$NodeReadControl/);
   assert.match(wrapper, /Node read control requires the untouched scenario/);
   assert.match(wrapper, /--capture-node-read/);
+  assert.match(wrapper, /\$nodeArgument = '"\{0\}"' -f \$node/);
+  assert.match(wrapper, /Start-Process -FilePath \$executable -ArgumentList @\(\$mode, \$nodeArgument\) -Wait -PassThru -NoNewWindow/);
+  assert.doesNotMatch(wrapper, /& \$executable \$mode \$node/);
 });
