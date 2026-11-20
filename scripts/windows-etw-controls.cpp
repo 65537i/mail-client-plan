@@ -375,7 +375,7 @@ struct NodeReader {
     void Prepare(const wchar_t* node, const Files& files) {
         std::wstring command = L"\"" + std::wstring(node) +
             L"\" -e \"const b=require('node:fs').readFileSync(process.argv[1]);"
-            L"if(b.toString('hex')!=='45545701')process.exitCode=1\" \"" + files.paths[0] + L"\"";
+            L"if(b.toString('hex')!=='45545701')process.exitCode=42\" \"" + files.paths[0] + L"\"";
         STARTUPINFOW startup{};
         startup.cb = sizeof(startup);
         wchar_t environment[] = L"\0";
@@ -386,9 +386,12 @@ struct NodeReader {
 
     void Read() {
         Require(ResumeThread(process.hThread) == 1, "node-resume");
-        DWORD status = 1;
-        Require(WaitForSingleObject(process.hProcess, 2500) == WAIT_OBJECT_0 &&
-            GetExitCodeProcess(process.hProcess, &status) && status == 0, "node-read");
+        const DWORD wait = WaitForSingleObject(process.hProcess, 2500);
+        if (wait == WAIT_TIMEOUT) throw Failure{"node-timeout"};
+        Require(wait == WAIT_OBJECT_0, "node-wait");
+        DWORD status = 0;
+        Require(GetExitCodeProcess(process.hProcess, &status) != FALSE, "node-exit-code");
+        if (status != 0) throw Failure{status == 42 ? "node-content-mismatch" : "node-exit"};
     }
 
     ~NodeReader() {

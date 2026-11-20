@@ -69,6 +69,10 @@ test("AC-05 candidate: a separate Node process must read the exact positive-cont
   assert.match(source, /fromControlChild && target == Target::control && event\.id == 15/);
   assert.match(source, /Require\(final\.childRead, "node-etw-read-missing"\)/);
   assert.match(source, /readFileSync\(process\.argv\[1\]\)/);
+  assert.match(source, /if \(wait == WAIT_TIMEOUT\) throw Failure\{"node-timeout"\}/);
+  assert.match(source, /Require\(wait == WAIT_OBJECT_0, "node-wait"\)/);
+  assert.match(source, /GetExitCodeProcess\(process\.hProcess, &status\) != FALSE, "node-exit-code"/);
+  assert.match(source, /status == 42 \? "node-content-mismatch" : "node-exit"/);
   assert.match(source, /fixture-child-read-false-positive/);
   assert.match(source, /fixture-child-read-missing/);
   assert.match(wrapper, /\[switch\]\$NodeReadControl/);
