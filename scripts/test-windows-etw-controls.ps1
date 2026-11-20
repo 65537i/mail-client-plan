@@ -22,8 +22,9 @@ try {
   if ($NodeReadControl) {
     $node = (Get-Command node.exe -CommandType Application -ErrorAction Stop).Source
     $mode = if ($Capture) { "--capture-node-read" } else { "--node-read-fixture" }
-    & $executable $mode $node
-    if ($LASTEXITCODE -ne 0) { throw "Node read control failed" }
+    $nodeArgument = '"{0}"' -f $node
+    $process = Start-Process -FilePath $executable -ArgumentList @($mode, $nodeArgument) -Wait -PassThru -NoNewWindow
+    if ($process.ExitCode -ne 0) { throw "Node read control failed" }
   } elseif ($Capture) {
     & $executable --capture-controls $Scenario
     $expectedExit = if ($Scenario -ceq "touched") { 2 } else { 0 }

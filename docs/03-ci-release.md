@@ -19,7 +19,9 @@ powershell.exe -STA -NoProfile -NonInteractive -ExecutionPolicy Bypass -File .\s
 
 固定sessionが既存なら拒否し、自分のhandle以外を停止しない。real-time TDH decode後に合成対象のpath分類とobject/key関連だけを保持し、非対象path・任意payloadを保存/出力しない。上限はmapping 128、event 200,000、property 8192 bytes、64 buffers x 64 KiB、capture deadline 10秒と別枠のbounded consumer cleanup。create/read/queryの実受信をready条件とし、stop/drain・producer/consumer loss 0を要求する。object/key再利用・close/delete・相関衝突とschema versionも検査する。ただし未知/unmapped trafficを破棄するこのPoCは全process/operation coverageや任意canary-absenceを証明しない。native self-process controlsだけで、既存Node control・実WebView・failed-open/mapped accessは未検証。
 
-ローカルARM64でcompile/self-tests、既存native capture両scenario各1回、child Node fixture（captureなし）は成功したが、child Node ETW captureとhosted実行は未確認。新規workflowの調査branchからのdispatchはHTTP 404で未開始だった。[GitHub公式手順](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow)上、手動workflowには既定ブランチ配置が必要なため、PoC一式だけを独立PRにする。mergeや追加dispatchはこのPR準備に含めない。Windows/full-platform AC-05未達を維持する。証跡と未実施項目は[status](status.md)を参照。
+PR準備時点ではローカルARM64のcompile/self-tests、既存native capture両scenario各1回、child Node fixture（captureなし）は成功したが、child Node ETW captureとhosted実行は未確認だった。調査branchからのdispatchはHTTP 404で未開始であり、既定ブランチ配置後にhosted実行する方針としていた。Windows/full-platform AC-05未達を維持する。
+
+2026-11-20 hosted [Windows ARM64 ETW controls Run 1](https://github.com/65537i/mail-client-plan/actions/runs/44612836761/job/135873654249) はnative runner前提条件と8/8 contractsを通過し、untouched controlsのcreate/read/query各10、canary unobserved、loss zero、cleanup completeを確認した。child Node read stepはcapture前に`ETW_CONTROLS_ERROR=explicit-mode-required`で失敗し、touched-canary captureはskipされた。final cleanup verifierはsession / fixture不在を確認。Run 1はfailureであり、Node child ETW観測もWebView coverageも得られていない。後続修正ではNode modeと実行パスを明示的にquoted argument listで起動し、local non-capture fixtureを確認する。次のhosted captureは別途承認を要し、成功もAC-05合格を意味しない。証跡は[status](status.md)を参照。
 
 [Run 519](https://github.com/65537i/mail-client-plan/actions/runs/41306084970)（Windows 2025 x64 / webview）は長いInstance Nameで後続列がずれた行により`row-shape`停止。instance行はtoken順（先頭Filter / Altitude、末尾Frame / SprtFtrs / 任意VlStatus）で検証する方式へ変更した。
 
