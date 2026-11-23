@@ -3,10 +3,12 @@ import { appendFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 
 const platforms = [
-  { platform: "ubuntu-24.04-x64", runner: "ubuntu-24.04" },
-  { platform: "windows-2025-x64", runner: "windows-2025" },
-  { platform: "macos-14-arm64", runner: "macos-14" },
-  { platform: "macos-15-intel", runner: "macos-15-intel" },
+  { platform: "ubuntu-24.04-x64", runner: "ubuntu-24.04", arch: "x64" },
+  { platform: "ubuntu-24.04-arm64", runner: "ubuntu-24.04-arm", arch: "arm64" },
+  { platform: "windows-2025-x64", runner: "windows-2025", arch: "x64" },
+  { platform: "windows-11-arm64", runner: "windows-11-arm", arch: "arm64" },
+  { platform: "macos-15-intel", runner: "macos-15-intel", arch: "x64" },
+  { platform: "macos-15-arm64", runner: "macos-15", arch: "arm64" },
 ];
 
 export function nativeCiPlan(event, target = "", mode = "") {
@@ -33,7 +35,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   await appendFile(process.env.GITHUB_OUTPUT, `matrix=${JSON.stringify(plan.matrix)}\nmode=${plan.mode}\n`);
   await appendFile(
     process.env.GITHUB_STEP_SUMMARY,
-    `## Native validation scope\n\nMode: **${plan.mode}**\n\nTargets: ${plan.matrix.include.map((item) => item.platform).join(", ")}\n\n${plan.mode === "full" ? "Full checks for the selected targets; all four targets are required for cross-OS validation." : "Partial validation only. Production isolation, launch smoke tests and protocol integration are not covered. Run all targets with full mode before treating cross-OS validation as complete."}\n`,
+    `## Native validation scope\n\nMode: **${plan.mode}**\n\nTargets: ${plan.matrix.include.map((item) => item.platform).join(", ")}\n\n${plan.mode === "full" ? "Full checks for the selected targets; all six targets are required for cross-OS/architecture validation." : "Partial validation only. Production isolation, launch smoke tests and protocol integration are not covered. Run all targets with full mode before treating cross-OS/architecture validation as complete."}\n`,
   );
   console.log(`native CI: mode=${plan.mode}, targets=${plan.matrix.include.map((item) => item.platform).join(", ")}`);
 }

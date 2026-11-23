@@ -179,7 +179,7 @@ Run513で得た`wait-export-config-dialog`停止の切り分け用に、UIA wind
 | Workflow | 起動 | 必須処理 |
 |---|---|---|
 | verify | PR / main | format、lint、typecheck、unit、UI component、依存監査、secret scan、設定検査 |
-| native | main pushはUbuntuのbasic、PRは4 runnerのfull。手動は対象OS・モードを選択（既定all / full）。`docs/status.md`のみの変更では起動しない | basic / webview / fullを区別。fullでは従来のnative build・production検査・起動・protocol・実WebView試験を維持 |
+| native | main pushはUbuntu x64のbasic、PRは6 runnerのfull。手動はUbuntu/Windows/macOSのx64/ARM64対象とモードを選択（既定all / full）。`docs/status.md`のみの変更では起動しない | basic / webview / fullを区別。fullでは従来のnative build・production検査・起動・protocol・実WebView試験を維持 |
 | protocol | PR / main、Ubuntu | pinned IMAP/SMTP fixtureサーバ、TLS、fault injection、オフライン収束 |
 | desktop | PR / main、3OS | 実WebView E2E、HTML攻撃、IPC拒否、再起動。GUI環境が必要 |
 | compatibility | nightly / release | OS最低版/現行版、macOS 2 arch、WebView差異、長時間同期、fuzz corpus |
@@ -495,7 +495,7 @@ Run 238（`2f48084`、Windows / webview）はExport Configurationの発見・Inv
 
 Actions → native → Run workflowで最新のmainを選び、以下を指定する。旧runのRe-run jobsは旧commitを使うため、修正確認には新規実行を使う。
 
-- `target`: `all` / `ubuntu-24.04-x64` / `windows-2025-x64` / `macos-14-arm64` / `macos-15-intel`
+- `target`: `all` / `ubuntu-24.04-x64` / `ubuntu-24.04-arm64` / `windows-2025-x64` / `windows-11-arm64` / `macos-15-intel` / `macos-15-arm64`
 - `mode`:
   - `basic`: Rust format / workspace test / clippy、frontend typecheck / build。native release build、起動、protocol、実WebViewは未実行。
   - `webview`: security-test用Tauri build（frontend typecheck / buildを含む）と実WebView / SecretStore試験。Linux `strace`、macOS `fs_usage`、Windows Process Monitorによるfile-access監査を実行する。WindowsはRun 232までに初期MSAA stateからInvoke後の`checked:on`を確認したが、Save Filter command発見がtimeoutした。Alt+F後のfocused MenuItemは取得できたが、正確なmenu item一覧は未取得。保存経路は未完了で、次はallowlisted menu item summaryを確認する。canary event / capacity問題およびprocess coverageも未解決。production build、起動smoke、protocol、Rust workspace test / clippyは未実行。

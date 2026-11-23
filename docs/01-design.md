@@ -13,7 +13,7 @@
 - NFR-02: 不明な送信結果と同期競合を利用者へ伝え、データ喪失・自動重複送信を避ける。
 - NFR-03: 3OSのビルド、結合、実WebView、インストール・更新を別々に検証する。
 
-初期サポート候補はWindows 11 x64、Ubuntu 24.04 LTS x64、macOS 14以降のarm64 / x64。これは製品の提案範囲であり、依存版・実機検証後にPhase 00で確定する。Windows ARM64、Linux ARM64、他ディストリビューションは初版対象外。OSとWebViewのセキュリティ更新が必要。
+初期サポート候補はWindows 11 x64/ARM64、Ubuntu 24.04 LTS x64/ARM64、macOS 15 arm64/x64。これは製品の提案範囲であり、依存版・実機検証後にPhase 00で確定する。GitHub ActionsではWindows 11 ARM64、Ubuntu 24.04 ARM64、macOS 15 ARM64/Intelを公式runnerで追加検証し、実機署名、公証、IME、アクセシビリティ、最低サポートOSは別途手動検証する。他ディストリビューションは初版対象外。OSとWebViewのセキュリティ更新が必要。
 
 ## 2. 構成と責務
 

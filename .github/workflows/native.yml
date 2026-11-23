@@ -18,9 +18,11 @@ on:
         options:
           - all
           - ubuntu-24.04-x64
+          - ubuntu-24.04-arm64
           - windows-2025-x64
-          - macos-14-arm64
+          - windows-11-arm64
           - macos-15-intel
+          - macos-15-arm64
       mode:
         description: Validation scope (partial modes are not full validation)
         type: choice
@@ -215,7 +217,8 @@ jobs:
             -Uri "https://download.sysinternals.com/files/ProcessMonitor.zip" `
             -OutFile $archive
           Expand-Archive -LiteralPath $archive -DestinationPath $toolDirectory -Force
-          $procmon = Join-Path $toolDirectory "Procmon64.exe"
+          $procmonName = if ("${{ matrix.arch }}" -eq "arm64") { "Procmon64a.exe" } else { "Procmon64.exe" }
+          $procmon = Join-Path $toolDirectory $procmonName
           $signature = Get-AuthenticodeSignature -FilePath $procmon
           if ($signature.Status -ne "Valid" -or
               $signature.SignerCertificate.Subject -notmatch "^CN=Microsoft Corporation,") {

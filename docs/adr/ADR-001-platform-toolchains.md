@@ -26,7 +26,9 @@
 |---|---|
 | Ubuntu x64 | `ubuntu-24.04` |
 | Windows x64 | `windows-2025` |
-| macOS arm64 | `macos-14` |
+| Ubuntu arm64 | `ubuntu-24.04-arm` |
+| Windows arm64 | `windows-11-arm` |
+| macOS arm64 | `macos-15` |
 | macOS x64 | `macos-15-intel` |
 
 公開GitHub-hosted runnerの公式一覧でラベルとarchを確認した（2026-10-20）。private repositoryでの利用可否・料金はリポジトリのプランで別途確認する。runnerの新しいOSは最低対応OSの実機検証を代替しない。
@@ -59,9 +61,10 @@
 
 ## 結果と制限
 
-- `native.yml`は4 runner候補でformat、Rust test/clippy、frontend build、native build、smoke launch/exitを実行する。
+- `native.yml`は6 runner候補でformat、Rust test/clippy、frontend build、native build、smoke launch/exitを実行する。
 - Linux CIはWebKitGTK 4.1依存を導入する。Windows runnerのWebView2 / MSVC、macOS runnerのXcode提供環境はGitHub-hosted imageに依存する。
-- CI workflowはこの作業環境から実行できないため、4 runnerの実行結果は未確認。
+- Windows ARM64では`Procmon64a.exe`、x64では`Procmon64.exe`を署名検証して使用する。
+- CI workflowはこの作業環境から実行できないため、6 runnerの実行結果は未確認。
 - Tauri起動smoke testは`smoke-test` Cargo featureでのみ自動終了処理を有効にする。通常buildにはfeatureを含めない。
 - 署名、公証、installer、最低OSの実機確認は本ADRの対象外。
 
