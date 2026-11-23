@@ -10,7 +10,11 @@
     "vscode": {
       "extensions": [
         "rust-lang.rust-analyzer",
-        "Vue.volar"
+        "Vue.volar",
+        "GitHub.vscode-pull-request-github",
+        "github.vscode-github-actions",
+        "timonwong.shellcheck",
+        "ms-azuretools.vscode-docker"
       ]
     }
   }

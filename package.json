@@ -13,6 +13,7 @@
     "build:security-test": "vue-tsc --noEmit && vite build --mode security-test",
     "preview": "vite preview",
     "tauri": "tauri",
+    "check:workflows": "actionlint -color .github/workflows/*.yml",
     "check:production-security": "node scripts/check-production-build.mjs",
     "test:security:desktop": "tauri build --no-bundle --ci --features security-test --config src-tauri/tauri.security-test.conf.json && wdio run wdio.security.conf.mjs",
     "test:security:file-access": "node scripts/test-linux-file-access.mjs",

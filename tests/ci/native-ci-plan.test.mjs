@@ -50,6 +50,21 @@ test("native CI: Windows ARM uses the ARM Process Monitor executable", async () 
   assert.match(workflow, /ubuntu-24\.04-arm64[\s\S]*windows-11-arm64[\s\S]*macos-15-arm64/);
 });
 
+test("development container includes GitHub and workflow tools", async () => {
+  const [dockerfile, devcontainer, packageJson] = await Promise.all([
+    readFile(new URL("../../.devcontainer/Dockerfile", import.meta.url), "utf8"),
+    readFile(new URL("../../.devcontainer/devcontainer.json", import.meta.url), "utf8"),
+    readFile(new URL("../../package.json", import.meta.url), "utf8"),
+  ]);
+  assert.match(dockerfile, /\bgh\b/);
+  assert.match(dockerfile, /\bjq\b/);
+  assert.match(dockerfile, /\bshellcheck\b/);
+  assert.match(dockerfile, /actionlint\/cmd\/actionlint@v1\.7\.12/);
+  assert.match(devcontainer, /GitHub\.vscode-pull-request-github/);
+  assert.match(devcontainer, /github\.vscode-github-actions/);
+  assert.match(JSON.parse(packageJson).scripts["check:workflows"], /actionlint/);
+});
+
 test("native CI: rejects unsupported events and inputs rather than silently running a fallback", () => {
   for (const args of [
     ["schedule"], ["push", "all", "full"], ["pull_request", "", "basic"],

@@ -11,12 +11,16 @@ RUN apt-get update \
         curl \
         dbus-x11 \
         file \
+        gh \
+        golang-go \
+        jq \
         libayatana-appindicator3-dev \
         librsvg2-dev \
         libssl-dev \
         libwebkit2gtk-4.1-dev \
         libxdo-dev \
         pkg-config \
+        shellcheck \
         xauth \
         xvfb \
     && rm -rf /var/lib/apt/lists/*
@@ -24,6 +28,7 @@ RUN apt-get update \
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
     | sh -s -- -y --profile minimal --default-toolchain 1.99.1 --component clippy --component rustfmt \
     && npm install --global pnpm@12.14.0 \
+    && GOBIN=/usr/local/bin go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 \
     && chown -R node:node "${CARGO_HOME}" "${RUSTUP_HOME}"
 
 USER node
